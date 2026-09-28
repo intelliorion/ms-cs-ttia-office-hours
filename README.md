@@ -10,6 +10,15 @@ owns the initiative; TTIA advises, scores and routes. The agent advises hard,
 decides nothing, and never fills a field on the function's behalf, because a
 guessed value becomes a portfolio fact nobody remembers guessing.
 
+## Which version do I deploy?
+
+Open your agent in Copilot Studio and look at its layout:
+
+- **A side panel with Model, Skills, Tools, Knowledge, Connected agents,
+  Memory.** Use the skills version: the Deploy section below.
+- **Tabs such as Overview, Knowledge, Tools, Agents, Topics, and no Skills.**
+  This is the classic engine (standard harness). Use `classic/SETUP.md`.
+
 ## What's here
 
 ```
@@ -21,6 +30,8 @@ skills/ms-cs-ttia-value-report/           post-service skill: the value report
   SKILL.md
 scripts/build.sh                          validate both skills, zip them into dist/
 tests/preview-scenarios.md                13 scenarios to run in the Preview tab before publishing
+classic/                                  classic-engine version: instructions, 6 knowledge files, SETUP.md
+scripts/build-classic.sh                  regenerate classic/knowledge from the skills
 ```
 
 ## Why it is built this way

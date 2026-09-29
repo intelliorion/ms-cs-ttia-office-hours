@@ -1,13 +1,14 @@
-# Deploy on the classic engine (standard harness)
+# TTIA Office Hours — standard agent
 
-Use this version when your agent shows **Overview · Knowledge · Tools · Agents ·
-Topics** and has no **Skills** panel. (The **Add skill → manifest URL** option in
+Use this package when your Copilot Studio agent shows **Overview · Knowledge ·
+Tools · Agents · Topics** and has no **Skills** panel (the "standard harness").
+If you do have a Skills panel, use `../copilot-studio-github-agent/` instead. (The **Add skill → manifest URL** option in
 Settings is an older Bot Framework feature — ignore it; it does not take these
 files.)
 
 What changes versus the skills version:
 
-| | skills version | this version |
+| | GitHub Copilot harness agent | this package |
 |---|---|---|
 | procedure | `SKILL.md`, loaded when relevant | core flow in Instructions (5.8k of 8k chars) |
 | detail | inside the skill | six knowledge files, searched by topic |
@@ -19,7 +20,7 @@ What changes versus the skills version:
 ```bash
 git clone https://github.com/intelliorion/ms-cs-ttia-office-hours.git
 cd ms-cs-ttia-office-hours
-bash scripts/build-classic.sh      # regenerates classic/knowledge/*.md from the skills
+bash scripts/build.sh              # regenerates knowledge/*.md from the skills
 ```
 
 The generated files are also committed, so you can download them straight from
@@ -27,12 +28,13 @@ GitHub.
 
 ## 2. Instructions
 
-**Overview → Instructions → Edit.** Paste all of `classic/agent-instructions.md`.
+**Overview → Instructions → Edit.** Paste all of `agent-instructions.md`.
 Save.
 
 ## 3. Knowledge — upload six files
 
-**Knowledge → Add knowledge → upload file**, one at a time. Use these names and
+**Knowledge → Add knowledge → upload file**, one at a time, from `knowledge/`.
+Do not zip them — knowledge only accepts individual files. Use these names and
 descriptions exactly — the orchestrator uses the description to decide when to
 search each file.
 
@@ -65,7 +67,7 @@ fails, ask your admin to turn it on.
 
 ## 5. Test
 
-In the **Test** pane, run `tests/preview-scenarios.md`. On this engine,
+In the **Test** pane, run `../tests/preview-scenarios.md`. On this engine,
 scenario 12 expects the sheet and value case **in chat**, not Word files.
 Anything marked "fails if" blocks publishing.
 
@@ -85,6 +87,6 @@ pick up the new version.
 
 ## Keeping it in sync
 
-Edit the skills (`skills/*/SKILL.md`), then run `bash scripts/build-classic.sh`
-and re-upload the changed knowledge files. Edit `classic/agent-instructions.md`
+Edit the skills (`skills/*/SKILL.md`), then run `bash scripts/build.sh`
+and re-upload the changed knowledge files. Edit `agent-instructions.md`
 by hand — it is deliberately shorter than the skill.

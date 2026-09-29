@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Generate the classic-engine (standard harness) knowledge files from the skills,
-# so there is one source of truth. Output: classic/knowledge/*.md
+# Generate the standard-agent knowledge files from the skills, so there is one
+# source of truth. Output: copilot-studio-standard-agent/knowledge/*.md
 # Upload each file in Copilot Studio: Knowledge > Add knowledge > Upload file.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 intake="$root/skills/ms-cs-ttia-office-hours/SKILL.md"
 value="$root/skills/ms-cs-ttia-value-report/SKILL.md"
-out="$root/classic/knowledge"
+out="$root/copilot-studio-standard-agent/knowledge"
 mkdir -p "$out"
 
 # Print from the first line matching $2 up to (not including) the first later
@@ -121,10 +121,10 @@ MD
 # Checks: nothing from the skills-only world should survive into knowledge files.
 fail=0
 if grep -nE '\.docx|Word document|file-creation|code sandbox|references/|SKILL\.md|skill\b|<!--' "$out"/*.md; then
-  echo "✗ skills-only wording left in classic knowledge files"; fail=1
+  echo "✗ skills-only wording left in standard-agent knowledge files"; fail=1
 fi
-n=$(wc -m < "$root/classic/agent-instructions.md" | tr -d ' ')
-echo "classic/agent-instructions.md: $n characters (limit 8000)"
+n=$(wc -m < "$root/copilot-studio-standard-agent/agent-instructions.md" | tr -d ' ')
+echo "standard agent instructions: $n characters (limit 8000)"
 (( n <= 8000 )) || { echo "✗ over the limit"; fail=1; }
 wc -c "$out"/*.md
 exit $fail

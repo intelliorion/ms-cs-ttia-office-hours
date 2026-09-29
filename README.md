@@ -10,114 +10,80 @@ owns the initiative; TTIA advises, scores and routes. The agent advises hard,
 decides nothing, and never fills a field on the function's behalf, because a
 guessed value becomes a portfolio fact nobody remembers guessing.
 
-## Which version do I deploy?
+## Pick your package
 
-Open your agent in Copilot Studio and look at its layout:
+Copilot Studio builds each agent on one of two engines, and the agent keeps its
+engine for life. Open your agent and look at the layout:
 
-- **A side panel with Model, Skills, Tools, Knowledge, Connected agents,
-  Memory.** Use the skills version: the Deploy section below.
-- **Tabs such as Overview, Knowledge, Tools, Agents, Topics, and no Skills.**
-  This is the classic engine (standard harness). Use `classic/SETUP.md`.
+| what you see | engine | package |
+|---|---|---|
+| **Build** tab with a side panel: Model · **Skills** · Tools · Knowledge · Connected agents · Memory | GitHub Copilot harness (Microsoft's name; it is part of Copilot Studio) | [`copilot-studio-github-agent/`](copilot-studio-github-agent/SETUP.md) |
+| Tabs such as Overview · Knowledge · Tools · Agents · Topics, no Skills | standard harness | [`copilot-studio-standard-agent/`](copilot-studio-standard-agent/SETUP.md) |
 
-## What's here
+| | GitHub Copilot harness agent | standard agent |
+|---|---|---|
+| Instructions | 2.5k chars: identity, routing, hard rules | 5.8k chars: the whole core flow |
+| Procedure lives in | two uploaded skills (`upload/*.zip`) | six knowledge files (`knowledge/*.md`) |
+| How detail is used | skill loads in full when a request matches | knowledge is searched by topic |
+| Ready-case output | Word documents + sheet in chat | sheet and value case in chat |
+| Value report | its own skill | same agent, knowledge file 06 |
+| Best when | you have the Skills panel | you don't |
+
+Each package folder has a `SETUP.md` with every click, from creating the agent to
+publishing in Teams and Microsoft 365 Copilot.
+
+## Repository layout
 
 ```
-copilot-studio/agent-instructions.md      paste into the agent's Instructions (always on, ~2.5k chars)
-skills/ms-cs-ttia-office-hours/           intake skill: pathway, six questions, measure, verdict, form
-  SKILL.md
-  references/documents.md                 layout of the two Word documents
-skills/ms-cs-ttia-value-report/           post-service skill: the value report
-  SKILL.md
-scripts/build.sh                          validate both skills, zip them into dist/
-tests/preview-scenarios.md                13 scenarios to run in the Preview tab before publishing
-classic/                                  classic-engine version: instructions, 6 knowledge files, SETUP.md
-scripts/build-classic.sh                  regenerate classic/knowledge from the skills
+skills/                                   source of truth — edit these
+  ms-cs-ttia-office-hours/SKILL.md          intake: pathway, six questions, measure, verdict, form
+  ms-cs-ttia-office-hours/references/       Word document layout
+  ms-cs-ttia-value-report/SKILL.md          value report for initiatives in service
+copilot-studio-github-agent/              package 1 — built from skills/
+  SETUP.md · agent-instructions.md · upload/*.zip
+copilot-studio-standard-agent/            package 2 — built from skills/
+  SETUP.md · agent-instructions.md · knowledge/01..06-*.md
+scripts/build.sh                          validate and rebuild both packages
+tests/preview-scenarios.md                13 scenarios to pass before publishing either package
 ```
 
-## Why it is built this way
-
-- **It runs on the GitHub Copilot harness.** That is the Copilot Studio harness
-  that supports skills and creates Word/PDF files natively. The standard and
-  Copilot chat harnesses do not support skills.
-- **The 8,000-character Instructions limit still applies**, so the agent
-  instructions only cover identity, routing and the hard rules. The skills hold
-  the procedure and load only when a request matches their description.
-- **There are two skills rather than one**, because the orchestrator chooses a
-  skill by its description. Intake (before service) and the value report
-  (after service) are separate triggers, and each must refuse the other's job.
-- **Critical rules live in `SKILL.md`, not in reference files.** Microsoft does
-  not document how bundled reference files are read at runtime. Only the
-  document layout is in `references/`, and `SKILL.md` carries a fallback
-  summary in case it is not read.
-- **Outputs are Word documents, not HTML.** The harness creates Word and PDF
-  natively, and both print and forward cleanly.
-
-## Deploy
-
-1. `bash scripts/build.sh` validates the name and description rules, checks
-   referenced files exist, checks the Instructions length, and writes
-   `dist/ms-cs-ttia-office-hours.zip` and `dist/ms-cs-ttia-value-report.zip`,
-   each with `SKILL.md` at the archive root.
-2. In Copilot Studio, create an agent on the **GitHub Copilot harness**.
-3. **Instructions:** paste the contents of `copilot-studio/agent-instructions.md`.
-4. **Build → Skills → Add skill → Upload a skill**, once for each zip. If a zip
-   is rejected, upload the bare `SKILL.md` for that skill instead. The intake
-   skill still works without `references/documents.md` because of the fallback
-   summary.
-5. Optional **knowledge**: CSIC policy and pathway documents. Knowledge informs
-   advice but never supplies a form value. That rule is in both the
-   instructions and the skill.
-6. Run every scenario in `tests/preview-scenarios.md` in the **Preview** tab.
-   Anything marked "fails if" blocks publishing.
-7. Publish to Teams / Microsoft 365 Copilot.
-
-Suggested conversation starters:
-- *"Is my idea ready for CSIC?"*
-- *"Which delivery pathway fits this?"*
-- *"Help me fill in the CSIC intake form."*
-- *"Report the value of an initiative that's already live."*
-
-Billing: the GitHub Copilot harness consumes Copilot Credits for building,
-testing and running.
+After editing anything in `skills/`, run `bash scripts/build.sh` and commit the
+rebuilt packages. The two `agent-instructions.md` files are written by hand.
 
 ## Before go-live: TTIA to fill in
 
-- **Pathway durations.** `_TBC_` in `SKILL.md` Phase 2. Until they are filled
-  in, the agent names what drives the timeline and never gives a number.
-- **Dataiku reader licence rate.** Phase 2 uses about $10 per person per month
-  and tells users it is indicative. Confirm the current internal rate.
+- **Pathway durations** — `_TBC_` in `skills/ms-cs-ttia-office-hours/SKILL.md`
+  Phase 2. Until filled, the agent says what drives the timeline and never
+  gives a number.
+- **Dataiku reader licence rate** — about $10 per person per month, flagged to
+  users as indicative. Confirm the current internal rate.
 
 ## The six questions
 
 1. Who asked for this, by name?
-2. What does the status quo cost today, and is anyone recording it?
+2. What does the status quo cost today — and is anyone recording it?
 3. Who signs, and what is their bar?
 4. What is the smallest version that clears a control review?
 5. What breaks if it fails, and who is accountable?
 6. Does it survive a budget cycle and a reorg?
 
-It routes by stage rather than asking all six. **Q2 is asked every time**
-because it is the only one that gets harder to answer with time.
+It routes by stage rather than asking all six. **Q2 is asked every time** — it
+is the only one that gets harder to answer with time.
 
 ## What it produces
 
-- **Every conversation:** a verdict in chat. READY TO SUBMIT, NOT READY with
+- **Every conversation:** a verdict in chat — READY TO SUBMIT, NOT READY with
   typed blockers, or NOT AN INITIATIVE YET.
-- **Ready cases only:** the intake sheet in the form's own field order (Phase
-  10), then `CSIC-intake-{use-case}.docx` and `CSIC-case-{use-case}.docx`
-  (Phase 11). Every UNKNOWN carries an owner and a date.
+- **Ready cases only:** the intake sheet in the form's own field order and the
+  value case in the case tense; every UNKNOWN carries an owner and a date.
 - **Not-ready cases:** the blocker list only. A polished form makes a thin case
   look ready.
 
-## The loop
+The intake flow forces the baseline to be captured; the value report, run once
+the initiative is in service, refuses to overstate what was achieved.
 
-`ms-cs-ttia-office-hours` runs at intake and forces the baseline to be
-captured. `ms-cs-ttia-value-report` runs once the initiative is in service and
-refuses to overstate what was achieved. The gap between them is where most
-portfolio initiatives lose their evidence: the benefit is claimed months later
-against a baseline nobody recorded.
+## Also works in VS Code and Claude Code
 
-## Also works in Claude Code
-
-Copy a skill folder to `~/.claude/skills/<name>/`. The Copilot Studio-specific
-guidance (one question per message, memory and Word output) is harmless there.
+The `skills/` folders are standard Agent Skills. Copy them to
+`~/.copilot/skills/` (GitHub Copilot in VS Code, agent mode) or
+`~/.claude/skills/` (Claude Code).

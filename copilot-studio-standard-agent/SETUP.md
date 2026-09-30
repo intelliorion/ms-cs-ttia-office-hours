@@ -11,7 +11,7 @@ What changes versus the skills version:
 | | GitHub Copilot harness agent | this package |
 |---|---|---|
 | procedure | `SKILL.md`, loaded when relevant | core flow in Instructions (6.5k of 8k chars) |
-| detail | inside the skill | seven knowledge files, searched by topic |
+| detail | inside the skill | eight knowledge files, searched by topic |
 | intake + case output | Word documents | markdown in chat |
 | value report | separate skill | same agent, knowledge file 06 |
 
@@ -31,7 +31,7 @@ GitHub.
 **Overview → Instructions → Edit.** Paste all of `agent-instructions.md`.
 Save.
 
-## 3. Knowledge — upload seven files
+## 3. Knowledge — upload eight files
 
 **Knowledge → Add knowledge → upload file**, one at a time, from `knowledge/`.
 Do not zip them — knowledge only accepts individual files. Use these names and
@@ -47,6 +47,7 @@ search each file.
 | `04-verdict.md` | 04-verdict | Alternatives, pilot oversight, the intake verdict (ready, not ready, not an initiative), blocker types, the bar by stage, and escalation. |
 | `05-intake-form.md` | 05-intake-form | The CSIC intake form fields in order, dropdown guidance, REQUIREMENTS READINESS mapping, and how to write the value case for a ready submission. |
 | `06-value-report.md` | 06-value-report | How to report the value of a Corporate Services initiative already in service: intake record check, claim tiers, five cards, leadership questions. |
+| `07-value-story.md` | 07-value-story | The exact chat layout for the value case (intake) and the value report (in service): headings, claim table, tier layouts, closing line. Use whenever a value case, value report, value story or business case is produced. |
 
 Uploaded knowledge needs **Dataverse search** on in the environment. If upload
 fails, ask your admin to turn it on.

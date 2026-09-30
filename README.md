@@ -7,7 +7,7 @@ truth in `skills/`, packaged for every place people actually work:
 | where | how | see |
 |---|---|---|
 | Copilot Studio, GitHub Copilot harness (Build tab with a **Skills** panel) | upload two skill zips | [`copilot-studio-github-agent/SETUP.md`](copilot-studio-github-agent/SETUP.md) |
-| Copilot Studio, standard agent (Knowledge · Tools · Topics, no Skills) | paste instructions, upload seven knowledge files | [`copilot-studio-standard-agent/SETUP.md`](copilot-studio-standard-agent/SETUP.md) |
+| Copilot Studio, standard agent (Knowledge · Tools · Topics, no Skills) | paste instructions, upload eight knowledge files | [`copilot-studio-standard-agent/SETUP.md`](copilot-studio-standard-agent/SETUP.md) |
 | Claude Code | `bash scripts/install-local.sh --claude` | skills appear next session |
 | GitHub Copilot in VS Code (agent mode) and Copilot CLI | `bash scripts/install-local.sh --copilot` | reads `~/.copilot/skills` and `~/.agents/skills` |
 
@@ -68,12 +68,12 @@ Source: `skills/ms-cs-ttia-office-hours/references/ttia-team.md`.
 ```
 skills/                                   source of truth — edit these
   ms-cs-ttia-office-hours/SKILL.md          intake: pathway, six questions, measure, verdict, form
-  ms-cs-ttia-office-hours/references/       ttia-team.md (pillars) · documents.md (Word layout)
+  ms-cs-ttia-office-hours/references/       ttia-team.md · documents.md (Word layout) · value-story-chat.md (chat layout)
   ms-cs-ttia-value-report/SKILL.md          value report for initiatives in service
 copilot-studio-github-agent/              package 1 — built from skills/
   SETUP.md · agent-instructions.md · upload/*.zip
 copilot-studio-standard-agent/            package 2 — built from skills/
-  SETUP.md · agent-instructions.md · knowledge/00..06-*.md
+  SETUP.md · agent-instructions.md · knowledge/00..07-*.md
 scripts/build.sh                          validate and rebuild both packages
 scripts/install-local.sh                  install skills for Claude Code / VS Code Copilot / Copilot CLI
 tests/preview-scenarios.md                18 scenarios to pass before publishing any package
@@ -84,7 +84,7 @@ CHANGELOG.md                              what changed, when
 
 1. Edit `skills/*/SKILL.md` or a file under `references/`.
 2. Run `bash scripts/build.sh`. It validates the skill front matter, checks
-   every referenced file ships, regenerates the seven knowledge files, zips the
+   every referenced file ships, regenerates the eight knowledge files, zips the
    skills, and fails if either instructions file is over the 8,000-character
    limit.
 3. The two `agent-instructions.md` files are written by hand. If the change

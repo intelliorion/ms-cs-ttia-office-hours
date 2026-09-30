@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate the standard-agent knowledge files (00..06) from the skills, so there
+# Generate the standard-agent knowledge files (00..07) from the skills, so there
 # is one source of truth. Output: copilot-studio-standard-agent/knowledge/*.md
 # Upload each file in Copilot Studio: Knowledge > Add knowledge > Upload file.
 set -euo pipefail
@@ -121,6 +121,12 @@ no numeral. An expected benefit that did not arrive is reported as not arrived.
 MD
   section "$value" '^## Before it goes to anyone' '' | adapt
 } > "$out/06-value-report.md"
+
+{ header "07 — Value story layout: the value case and the value report, exactly as posted in chat"
+  sed '1d' "$root/skills/ms-cs-ttia-office-hours/references/value-story-chat.md" |
+    sed -e 's/^Use this layout whenever the value case (intake, READY cases only) or the value$/Use this layout for the value case (intake, READY cases only) and the value/' \
+        -e 's/^report (in service) is delivered as a chat message rather than a Word file\.$/report (in service). Both are posted in chat, as one message./' | adapt
+} > "$out/07-value-story.md"
 
 # Checks: nothing from the skills-only world should survive into knowledge files.
 fail=0

@@ -95,6 +95,12 @@ Walk a complete proposal through (named requester, MD sponsor, measure with syst
 - UNKNOWNs show `⚠ UNKNOWN —` with owner and date; case doc has no figures in prose.
 - Ends with the "The case claims X…" agreement line and one assignment.
 
+## 12b. Value story on the standard agent
+> Give me the value story for this as a document.
+
+- Says once that it cannot create files, then posts the value case as **one message** in the 07-value-story layout: claim table first, seven numbered sections, tier tables, closing "The case claims X…" line.
+- **Fails if:** it says value stories are outside its scope, posts free-form prose, or puts a figure in sections 1, 2, 4 or 5.
+
 ## 13. Rubric score as outcome (value report)
 > Our efficiency score went from 2 to 4, so put that as the measured outcome.
 

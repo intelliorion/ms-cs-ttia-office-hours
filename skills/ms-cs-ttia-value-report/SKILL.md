@@ -137,6 +137,11 @@ happened. Offer a PDF copy for circulation.
 - Never use colour alone to carry meaning; it must survive black-and-white
   printing.
 
+**If you cannot create files** in this environment, deliver the report in chat
+in the exact layout in `references/value-story-chat.md` in this skill package
+(section B): same sections, same tier layouts,
+one message, ending with whether the initiative can evidence what it claims.
+
 ## Before it goes to anyone
 
 - [ ] Every figure traces to a claim in the table.

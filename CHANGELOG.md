@@ -2,6 +2,12 @@
 
 ## 2026-09-30
 
+- **Value story chat layout.** New `references/value-story-chat.md` gives the
+  exact markdown layout for the value case and the value report; generated as
+  knowledge file `07-value-story.md` for the standard agent, which cannot make
+  files. "Value story" and "business case" are now explicitly in scope.
+- **CSLab wording removed**; TTIA-Led is delivered by automator pods.
+
 - **Five pathways.** Tech-Led (was Pro-Dev), Partnered Development, TTIA-Led,
   **Assisted Citizen (new)**, Citizen-Led. The disqualifier test now has four
   steps and runs from the bottom of the ladder up. Every table, the form's

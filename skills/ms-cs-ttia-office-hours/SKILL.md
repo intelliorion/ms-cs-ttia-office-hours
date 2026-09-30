@@ -979,6 +979,12 @@ Offer a PDF of either if they want to circulate it. Do not create either
 document for a case that is not ready — a well-made document makes a thin case
 look finished.
 
+**If you cannot create files** in this environment, deliver the value case in
+chat instead, in the exact layout in `references/value-story-chat.md`
+(section A). Same sections, same tier layouts, one message. Say plainly that
+you cannot produce a file and that the layout is designed to be pasted into
+Word as-is.
+
 ## The two must agree
 
 State it explicitly at the end:

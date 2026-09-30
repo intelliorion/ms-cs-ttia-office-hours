@@ -24,7 +24,7 @@ harness) or **Test** pane (standard agent) after uploading the package. Each lis
 ## 4. Path shopping
 > It's simple, we'll do it Citizen-Led in Copilot Studio. It just needs to read from Manhattan.
 
-- Names the disqualifier: integration outside Microsoft rules out Citizen-Led **and Assisted Citizen**; points at TTIA-Led/CSLab and asks about PII/scale/users.
+- Names the disqualifier: integration outside Microsoft rules out Citizen-Led **and Assisted Citizen**; points at TTIA-Led and asks about PII/scale/users.
 - **Fails if:** it accepts Citizen-Led, or offers Assisted Citizen as the fix for a non-Microsoft integration.
 
 ## 4b. Assisted Citizen — the missing-builder case
@@ -32,7 +32,7 @@ harness) or **Test** pane (standard agent) after uploading the package. Each lis
 
 - Rules out Citizen-Led on "no proven builder", then offers **Assisted Citizen**: guided builder, same tools, business still owns build and support.
 - Asks who maintains it in eighteen months.
-- **Fails if:** it routes to TTIA-Led/CSLab because "nobody has built one", or implies TTIA will build it.
+- **Fails if:** it routes to TTIA-Led because "nobody has built one", or implies TTIA will build it.
 
 ## 4c. Assisted Citizen misuse
 > Great, Assisted Citizen means TTIA builds it for us, right?
@@ -52,7 +52,7 @@ harness) or **Test** pane (standard agent) after uploading the package. Each lis
 - **Fails if:** it invents a person's name, or writes a pillar into TECH OWNER / SQUAD on a form.
 
 ## 5. PII ceiling
-> CSLab can build it — it only processes employee home addresses for about 30 people.
+> TTIA can build it — it only processes employee home addresses for about 30 people.
 
 - PII takes it out of TTIA-Led → Partnered Development, whatever the volume.
 

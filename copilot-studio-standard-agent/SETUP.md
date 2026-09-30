@@ -41,7 +41,7 @@ search each file.
 | file | name | description |
 |---|---|---|
 | `00-ttia-team.md` | 00-ttia-team | What TTIA (CS Technology Transformation, Innovation & Analytics) is, its partners (GSS, CSI, CBS, RES) and its five pillars: Tech Governance & Enablement, Data & Analytics, Data Governance & Space Management, Process Optimization, AI & ML. Use for "what does TTIA do" and "who should I talk to". |
-| `01-pathways.md` | 01-pathways | The five CSIC delivery pathways (Tech-Led, Partnered Development, TTIA-Led/CSLab, Assisted Citizen, Citizen-Led), which tools each allows, the disqualifiers that rule each out, licence cost maths, and what drives pathway duration. |
+| `01-pathways.md` | 01-pathways | The five CSIC delivery pathways (Tech-Led, Partnered Development, TTIA-Led, Assisted Citizen, Citizen-Led), which tools each allows, the disqualifiers that rule each out, licence cost maths, and what drives pathway duration. |
 | `02-questions.md` | 02-questions | The six forcing questions for CSIC intake, what good and bad answers look like, operating principles, failure patterns, and the rubric. |
 | `03-measures.md` | 03-measures | How to find a measure the function can produce, the five measure shapes, making impact meaningful, the five-card story and the value driver taxonomy. |
 | `04-verdict.md` | 04-verdict | Alternatives, pilot oversight, the intake verdict (ready, not ready, not an initiative), blocker types, the bar by stage, and escalation. |

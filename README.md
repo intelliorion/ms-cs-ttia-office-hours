@@ -41,7 +41,7 @@ from the bottom up and stops at the first path that is not disqualified.
 |---|---|---|---|
 | 1 | **Tech-Led** (was Pro-Dev) | Strategic platforms and major transformations | not enterprise-scale or strategically prioritised |
 | 2 | **Partnered Development** | Joint delivery with Technology using approved firm frameworks | no Technology team has accepted lifecycle ownership |
-| 3 | **TTIA-Led** | Targeted internal solutions and automator pods (CSLab) | PII, high risk, many users, large volume; no CS owner after handover |
+| 3 | **TTIA-Led** | Targeted internal solutions and automator pods | PII, high risk, many users, large volume; no CS owner after handover |
 | 4 | **Assisted Citizen** (new) | Guided builders using approved low-code and AI tools | no named builder who will stay with it; integration outside Microsoft |
 | 5 | **Citizen-Led** | Local solutions within clear controls and lifecycle expectations | no proven builder; nobody to maintain it; integration outside Microsoft |
 

@@ -7,7 +7,7 @@ description: >-
   approved, or still being built); asks whether it is
   worth doing or ready for CSIC; wants a business case pressure-tested; asks
   which delivery pathway applies (Tech-Led, Partnered Development, TTIA-Led,
-  Assisted Citizen, Citizen-Led, CSLab) or which tools they can use (Copilot, Copilot Studio, Power Apps,
+  Assisted Citizen, Citizen-Led, automator pods) or which tools they can use (Copilot, Copilot Studio, Power Apps,
   AI@MS, Dataiku, UiPath, Snowflake Cortex); needs a measure or baseline for a
   benefit; asks what TTIA does or which TTIA pillar to contact; or is filling
   in the CSIC intake form. Not for initiatives already
@@ -219,7 +219,7 @@ disqualified.
 |---|---|---|---|---|
 | 1 | **Tech-Led** | Strategic platforms and major transformations | Technology, dedicated team | Technology |
 | 2 | **Partnered Development** | Joint delivery with Technology using approved firm frameworks | Technology squad + CS partner developers | Technology (asset), CS (outcome) |
-| 3 | **TTIA-Led** | Targeted internal solutions and automator pods | TTIA (CSLab / automator pods) | Corporate Services, after handover |
+| 3 | **TTIA-Led** | Targeted internal solutions and automator pods | TTIA automator pods | Corporate Services, after handover |
 | 4 | **Assisted Citizen** | Guided builders using approved low-code and AI tools | a business builder, guided by TTIA | the business |
 | 5 | **Citizen-Led** | Local solutions within clear controls and lifecycle expectations | the business, on its own | the business |
 
@@ -265,7 +265,7 @@ too; the only disqualifier it removes is "no proven builder".
 ## 3 · TTIA-Led — TTIA builds, Corporate Services owns
 
 TTIA designs, builds and delivers **targeted internal solutions**, through
-**CSLab** and its **automator pods**, that **Corporate Services chooses to own
+its **automator pods**, that **Corporate Services chooses to own
 and support throughout their lifecycle**. It creates delivery capacity outside
 the traditional Technology Book of Work while keeping required governance and
 controls.
@@ -368,8 +368,7 @@ move up.
 
 ### 3. Can it be TTIA-Led?
 
-This is where **CSLab** and the **automator pods**, the TTIA delivery teams,
-engage. They handle what a citizen build cannot:
+This is where TTIA's **automator pods**, its delivery teams, engage. They handle what a citizen build cannot:
 
 - integration with existing data sources — **LDAP, Manhattan, Security**, and
   the like
@@ -387,9 +386,9 @@ Any one of those broken and it is not TTIA-Led, regardless of how keen anyone is
 
 Badge, access, HR, visitor and occupancy data usually identifies people. When
 the integration touches one of those, raise the PII question in the same breath
-as TTIA-Led — do not let them leave thinking CSLab is settled.
+as TTIA-Led — do not let them leave thinking TTIA-Led is settled.
 
-> "The integration is fine for CSLab. The PII is not. That takes this to
+> "The integration is fine for TTIA-Led. The PII is not. That takes this to
 > Partnered whatever the volume looks like."
 
 Remember the handover: **TTIA builds, Corporate Services owns and supports.** A
@@ -499,13 +498,13 @@ the sustainability answer: **whose cost centre carries it, every year.**
 |---|---|---|
 | 5 Citizen-Led | _TBC_ | builder availability; approval of the tool |
 | 4 Assisted Citizen | _TBC_ | builder availability; guide availability |
-| 3 TTIA-Led (CSLab / automator pods) | _TBC_ | CSLab capacity; number of data sources |
+| 3 TTIA-Led (automator pods) | _TBC_ | automator pod capacity; number of data sources |
 | 2 Partnered Development | _TBC_ | Technology squad availability; SDLC gates |
 | 1 Tech-Led | _TBC_ | prioritisation cycle; dedicated team formation |
 
 **While a cell says _TBC_, do not state a duration** — not a range, not
 "typically", not a number from a knowledge source about another team. Say what
-drives it instead: "this waits on CSLab capacity" or "this waits on a Technology
+drives it instead: "this waits on automator pod capacity" or "this waits on a Technology
 squad accepting it".
 
 If someone needs it by a date, work backwards out loud: *"Partnered means a

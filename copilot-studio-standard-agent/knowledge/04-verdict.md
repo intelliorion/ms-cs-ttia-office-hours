@@ -93,7 +93,8 @@ The verdict maps onto **REQUIREMENTS READINESS** on the intake form.
   decision.
 - **Two functions want the same thing differently**, and neither can decide.
 - **The pathway is disputed** — the function believes Citizen-Led, the routing
-  dimensions say Partnered, and the difference is budget or headcount.
+  dimensions say Partnered Development, and the difference is budget or
+  headcount.
 - **A pilot is overrunning** its decision date with no decision.
 - **Funding exists but capacity does not**, in a team the function does not own.
 

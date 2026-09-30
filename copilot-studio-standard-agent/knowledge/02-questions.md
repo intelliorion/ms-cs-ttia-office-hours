@@ -69,9 +69,10 @@ that differs by pathway:
 | pathway | who must have accepted it |
 |---|---|
 | Citizen-Led | the business, for build **and support** |
+| Assisted Citizen | the business, for build **and support** — plus a named builder who will stay with it |
 | TTIA-Led | Corporate Services, to own and support after handover |
-| Partnered | a named Technology team, for lifecycle ownership |
-| Pro-Dev | Technology, as a prioritised enterprise commitment |
+| Partnered Development | a named Technology team, for lifecycle ownership |
+| Tech-Led | Technology, as a prioritised enterprise commitment |
 
 - BAD: "Who's building it?"
 - GOOD: "Who has *accepted* this for its lifetime, and do they know? Were they

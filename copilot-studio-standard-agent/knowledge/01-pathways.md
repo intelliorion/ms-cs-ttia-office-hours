@@ -9,24 +9,67 @@ asks better questions for the rest of the conversation.
 
 **Capability goes up. Autonomy goes down.** That is the whole trade.
 
-## Citizen-Led — business builds and owns, TTIA advises
+## The five pathways at a glance
+
+CSIC recognises **five** delivery pathways. They are numbered from the most
+Technology-owned (1) to the most business-owned (5). Read the ladder from the
+bottom up when routing: start at 5 and stop at the first path that is not
+disqualified.
+
+| # | pathway | one line | who builds | who owns for life |
+|---|---|---|---|---|
+| 1 | **Tech-Led** | Strategic platforms and major transformations | Technology, dedicated team | Technology |
+| 2 | **Partnered Development** | Joint delivery with Technology using approved firm frameworks | Technology squad + CS partner developers | Technology (asset), CS (outcome) |
+| 3 | **TTIA-Led** | Targeted internal solutions and automator pods | TTIA (CSLab / automator pods) | Corporate Services, after handover |
+| 4 | **Assisted Citizen** | Guided builders using approved low-code and AI tools | a business builder, guided by TTIA | the business |
+| 5 | **Citizen-Led** | Local solutions within clear controls and lifecycle expectations | the business, on its own | the business |
+
+Use the official names above on the sheet. Older material says "Pro-Dev" for
+Tech-Led and lists only four paths; **Assisted Citizen is the one that was
+added.** If the user uses the old words, translate without fuss.
+
+## 5 · Citizen-Led — business builds and owns, TTIA advises
 
 Business teams independently build and manage **low-complexity** solutions using
-**approved** citizen-development tools, with technology visibility and
-governance oversight. **The business owns the solution end-to-end.**
+**approved** citizen-development tools, within clear controls and lifecycle
+expectations, with technology visibility and governance oversight. **The
+business owns the solution end-to-end.**
 
 Tools: **Copilot · Copilot Studio · Power Apps · AI@MS agents**
 
-What it demands: that it is genuinely low-complexity, on an approved tool, and
-that the business has accepted **support**, not just build. There is no squad
-behind you. When it breaks in eighteen months, it is still yours.
+What it demands: that it is genuinely low-complexity, on an approved tool, that
+someone in the team has built this kind of thing before, and that the business
+has accepted **support**, not just build. There is no squad behind you. When it
+breaks in eighteen months, it is still yours.
 
-## TTIA-Led — TTIA builds, Corporate Services owns
+## 4 · Assisted Citizen — business builds with a guide, business owns
 
-TTIA designs, builds and delivers solutions that **Corporate Services chooses to
-own and support throughout their lifecycle**. It creates delivery capacity
-outside the traditional Technology Book of Work while keeping required
-governance and controls.
+The same tools and the same ownership as Citizen-Led, with one difference:
+**the builder is guided.** TTIA (or an approved enablement programme) pairs
+with a named person in the function who will build it, so the team does not
+need someone who has already done it. Guidance covers tool choice, patterns,
+controls and the handover into support.
+
+Tools: the Citizen-Led set — **Copilot · Copilot Studio · Power Apps · AI@MS
+agents** — used with guidance.
+
+What it demands: **a named builder who will do the work and stay with it.**
+Guidance is not delivery: TTIA does not build it and does not hold the pager.
+The business still owns build **and** support. Everything that rules out
+Citizen-Led on integration or maintenance grounds rules out Assisted Citizen
+too; the only disqualifier it removes is "no proven builder".
+
+> "You have someone keen but nobody who has built a Copilot Studio agent
+> before. That is exactly what Assisted Citizen is for. It is still yours to
+> run afterwards, though — guidance ends, ownership does not."
+
+## 3 · TTIA-Led — TTIA builds, Corporate Services owns
+
+TTIA designs, builds and delivers **targeted internal solutions**, through
+**CSLab** and its **automator pods**, that **Corporate Services chooses to own
+and support throughout their lifecycle**. It creates delivery capacity outside
+the traditional Technology Book of Work while keeping required governance and
+controls.
 
 Tools: everything Citizen-Led has, **plus Dataiku · UiPath · Snowflake Cortex ·
 a vibe-coded custom app.** This is the path that takes a citizen-built idea to
@@ -37,10 +80,11 @@ hands it over. If nobody in CS has agreed to hold it afterwards, this is the
 orphan waiting to happen — and it is the single most common reason an item is
 carried over.
 
-## Partnered Development — Technology owns the asset, you own the outcome
+## 2 · Partnered Development — Technology owns the asset, you own the outcome
 
-Corporate Services and Technology jointly deliver. Partner Developers add
-capacity inside a Technology squad. **Technology retains lifecycle ownership.**
+Corporate Services and Technology jointly deliver, **using approved firm
+frameworks**. Partner Developers add capacity inside a Technology squad.
+**Technology retains lifecycle ownership.**
 
 This is the one people misunderstand. "Partnered" sounds like help. Here is what
 it actually means:
@@ -63,11 +107,12 @@ support forever.
 What it demands: **a named Technology team must accept lifecycle ownership.**
 Not "was mentioned in a meeting". Accepted.
 
-## Pro-Dev (Technology-Led) — Technology builds, owns and operates
+## 1 · Tech-Led — Technology builds, owns and operates
 
-Technology-led delivery for enterprise-scale, strategically prioritised
-solutions requiring dedicated engineering teams, full SDLC governance and
-long-term Technology ownership and support.
+Technology-led delivery for **strategic platforms and major transformations**:
+enterprise-scale, strategically prioritised solutions requiring dedicated
+engineering teams, full SDLC governance and long-term Technology ownership and
+support. (Older material calls this Pro-Dev.)
 
 What it demands: that it is genuinely enterprise-scale and strategically
 prioritised enough to earn a dedicated team. Most things are not, and saying so
@@ -79,7 +124,8 @@ early is a kindness.
 choose a pathway by how fast it looks; the path is actually decided by
 integration, scale, risk and who will maintain it.
 
-Ask these in order and stop at the first path that is not disqualified.
+Ask these in order, from the bottom of the ladder up, and stop at the first
+path that is not disqualified.
 
 ### 1. Can it be Citizen-Led?
 
@@ -92,7 +138,9 @@ All three must be true. One "no" disqualifies it.
   maintenance. TTIA advises; it does not hold the pager.
 - **Does it stay inside Microsoft?** Citizen-Led cannot take complex
   integrations — no database connections, no API sources outside Microsoft
-  products.
+  products. A **live connection** to a non-Microsoft system fails this test. A
+  **published extract** that already lands in SharePoint or Teams on a schedule
+  someone else owns does not; ask which one they mean before ruling it out.
 
 > "You need one connection to a system that is not Microsoft. That rules out
 > Citizen-Led on its own, whatever else is true."
@@ -102,10 +150,27 @@ The maintenance question is the one people skip and regret. Ask it directly:
 breaks — who fixes it?"* If there is no answer, this is not Citizen-Led however
 simple the build looks.
 
-### 2. Can it be TTIA-Led?
+### 2. Can it be Assisted Citizen?
 
-This is where **CSLab**, the TTIA sandbox team, engages. It handles what
-Citizen-Led cannot:
+Only one thing changes from step 1: **the builder does not need to have done it
+before.** Ask:
+
+- **Is there a named person in the function who will build it and stay with
+  it?** Willing and available, not "someone on the team could".
+- The maintenance and stays-inside-Microsoft tests are **unchanged**. If either
+  failed in step 1, it fails here too.
+
+If the only thing that stopped Citizen-Led was a missing proven builder, this
+is the path. If the team has no builder at all, or the tools cannot do the job,
+move up.
+
+> "Nobody has done this before, but you have someone who will. Assisted Citizen
+> gets you a guide. It does not get you a squad."
+
+### 3. Can it be TTIA-Led?
+
+This is where **CSLab** and the **automator pods**, the TTIA delivery teams,
+engage. They handle what a citizen build cannot:
 
 - integration with existing data sources — **LDAP, Manhattan, Security**, and
   the like
@@ -131,7 +196,7 @@ as TTIA-Led — do not let them leave thinking CSLab is settled.
 Remember the handover: **TTIA builds, Corporate Services owns and supports.** A
 TTIA-Led item still needs a named CS owner who has accepted it for life.
 
-### 3. Partnered or Pro-Dev
+### 4. Partnered Development or Tech-Led
 
 Everything above the TTIA-Led ceiling:
 
@@ -141,10 +206,11 @@ Everything above the TTIA-Led ceiling:
 - high risk
 - **PII**
 
-Between the two: **Partnered** adds CS delivery capacity inside a Technology
-squad, with Technology owning the asset. **Pro-Dev** is Technology-led for
-enterprise-scale, strategically prioritised work with a dedicated team and full
-SDLC. Most things are not Pro-Dev.
+Between the two: **Partnered Development** adds CS delivery capacity inside a
+Technology squad, on approved firm frameworks, with Technology owning the
+asset. **Tech-Led** is Technology-led for strategic platforms and major
+transformations, with a dedicated team and full SDLC. Most things are not
+Tech-Led.
 
 ## The disqualifiers, one line each
 
@@ -153,19 +219,22 @@ the conversation:
 
 | if this is true | it cannot be |
 |---|---|
-| no skilled builder in the requesting team, or nobody will maintain it | Citizen-Led |
-| any integration outside Microsoft products | Citizen-Led |
+| no proven builder in the requesting team | Citizen-Led (consider Assisted Citizen) |
+| no named builder at all, or nobody will maintain it | Citizen-Led or Assisted Citizen |
+| any integration outside Microsoft products | Citizen-Led or Assisted Citizen |
 | PII, high risk, many users, or large volume | TTIA-Led |
-| live ingestion or complex integration | Citizen-Led or TTIA-Led |
+| live ingestion or complex integration | Citizen-Led, Assisted Citizen or TTIA-Led |
+| not a strategic platform or major transformation | Tech-Led |
 | a large audience on a per-seat tool, with a benefit smaller than the licence | that tool, on any pathway |
 
 ### Failure pattern: path shopping
 
 Choosing the fastest-looking path rather than the one the constraints allow.
 Almost always shows up as Citizen-Led chosen for something with a real
-integration, or TTIA-Led chosen for something carrying PII. Test the claim
-against the disqualifiers rather than accepting the preference — and say what
-you are doing, so it reads as saving them a rejection rather than blocking them.
+integration, Assisted Citizen chosen to get TTIA to build it, or TTIA-Led
+chosen for something carrying PII. Test the claim against the disqualifiers
+rather than accepting the preference — and say what you are doing, so it reads
+as saving them a rejection rather than blocking them.
 
 ## The licence maths — ask audience size early
 
@@ -227,10 +296,11 @@ the sustainability answer: **whose cost centre carries it, every year.**
 
 | pathway | typical time to live | what drives the variation |
 |---|---|---|
-| Citizen-Led | _TBC_ | builder availability; approval of the tool |
-| TTIA-Led (CSLab) | _TBC_ | CSLab capacity; number of data sources |
-| Partnered | _TBC_ | Technology squad availability; SDLC gates |
-| Pro-Dev | _TBC_ | prioritisation cycle; dedicated team formation |
+| 5 Citizen-Led | _TBC_ | builder availability; approval of the tool |
+| 4 Assisted Citizen | _TBC_ | builder availability; guide availability |
+| 3 TTIA-Led (CSLab / automator pods) | _TBC_ | CSLab capacity; number of data sources |
+| 2 Partnered Development | _TBC_ | Technology squad availability; SDLC gates |
+| 1 Tech-Led | _TBC_ | prioritisation cycle; dedicated team formation |
 
 **While a cell says _TBC_, do not state a duration** — not a range, not
 "typically", not a number from a knowledge source about another team. Say what

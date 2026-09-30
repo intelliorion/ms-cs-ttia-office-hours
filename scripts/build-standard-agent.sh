@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Generate the standard-agent knowledge files from the skills, so there is one
-# source of truth. Output: copilot-studio-standard-agent/knowledge/*.md
+# Generate the standard-agent knowledge files (00..06) from the skills, so there
+# is one source of truth. Output: copilot-studio-standard-agent/knowledge/*.md
 # Upload each file in Copilot Studio: Knowledge > Add knowledge > Upload file.
 set -euo pipefail
 
@@ -33,6 +33,10 @@ adapt() {
 }
 
 header() { printf '# %s\n\nTTIA Office Hours knowledge file. The CS function owns every value; never fill a form field from this file.\n\n' "$1"; }
+
+{ header "00 — TTIA: what the team is and its five pillars"
+  sed '1d' "$root/skills/ms-cs-ttia-office-hours/references/ttia-team.md" | adapt
+} > "$out/00-ttia-team.md"
 
 { header "01 — Delivery pathways, tools, licence maths and durations"
   section "$intake" '^# Phase 2 ' '^# Phase 3 ' | adapt

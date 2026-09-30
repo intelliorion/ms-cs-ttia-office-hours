@@ -99,7 +99,8 @@ product. *Hybrid* is a bought product with real integration work around it.
 
 Carry these three, outside the form, because CSIC will ask:
 
-- **Pathway.** Citizen-Led / TTIA-Led / Partnered / Pro-Dev, which disqualifier
+- **Pathway.** Tech-Led / Partnered Development / TTIA-Led / Assisted Citizen /
+  Citizen-Led, which disqualifier
   decided it, and who has **accepted** ownership for that path.
 - **Pilot terms**, if it is a pilot: stopping condition, review cadence,
   decision date.

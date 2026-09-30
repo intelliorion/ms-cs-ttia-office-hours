@@ -11,7 +11,7 @@ No Skills panel? Use `../copilot-studio-standard-agent/` instead.
 
 | file | goes where in Copilot Studio |
 |---|---|
-| `agent-instructions.md` | Build → Instructions (2,548 of 8,000 characters) |
+| `agent-instructions.md` | Build → Instructions (2,850 of 8,000 characters) |
 | `upload/ms-cs-ttia-office-hours.zip` | Build → Skills → Upload a skill |
 | `upload/ms-cs-ttia-value-report.zip` | Build → Skills → Upload a skill |
 

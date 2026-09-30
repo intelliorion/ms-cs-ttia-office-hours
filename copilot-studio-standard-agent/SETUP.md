@@ -10,8 +10,8 @@ What changes versus the skills version:
 
 | | GitHub Copilot harness agent | this package |
 |---|---|---|
-| procedure | `SKILL.md`, loaded when relevant | core flow in Instructions (5.8k of 8k chars) |
-| detail | inside the skill | six knowledge files, searched by topic |
+| procedure | `SKILL.md`, loaded when relevant | core flow in Instructions (6.5k of 8k chars) |
+| detail | inside the skill | seven knowledge files, searched by topic |
 | intake + case output | Word documents | markdown in chat |
 | value report | separate skill | same agent, knowledge file 06 |
 
@@ -31,7 +31,7 @@ GitHub.
 **Overview → Instructions → Edit.** Paste all of `agent-instructions.md`.
 Save.
 
-## 3. Knowledge — upload six files
+## 3. Knowledge — upload seven files
 
 **Knowledge → Add knowledge → upload file**, one at a time, from `knowledge/`.
 Do not zip them — knowledge only accepts individual files. Use these names and
@@ -40,7 +40,8 @@ search each file.
 
 | file | name | description |
 |---|---|---|
-| `01-pathways.md` | 01-pathways | CSIC delivery pathways (Citizen-Led, TTIA-Led/CSLab, Partnered, Pro-Dev), which tools each allows, the disqualifiers that rule each out, licence cost maths, and what drives pathway duration. |
+| `00-ttia-team.md` | 00-ttia-team | What TTIA (CS Technology Transformation, Innovation & Analytics) is, its partners (GSS, CSI, CBS, RES) and its five pillars: Tech Governance & Enablement, Data & Analytics, Data Governance & Space Management, Process Optimization, AI & ML. Use for "what does TTIA do" and "who should I talk to". |
+| `01-pathways.md` | 01-pathways | The five CSIC delivery pathways (Tech-Led, Partnered Development, TTIA-Led/CSLab, Assisted Citizen, Citizen-Led), which tools each allows, the disqualifiers that rule each out, licence cost maths, and what drives pathway duration. |
 | `02-questions.md` | 02-questions | The six forcing questions for CSIC intake, what good and bad answers look like, operating principles, failure patterns, and the rubric. |
 | `03-measures.md` | 03-measures | How to find a measure the function can produce, the five measure shapes, making impact meaningful, the five-card story and the value driver taxonomy. |
 | `04-verdict.md` | 04-verdict | Alternatives, pilot oversight, the intake verdict (ready, not ready, not an initiative), blocker types, the bar by stage, and escalation. |

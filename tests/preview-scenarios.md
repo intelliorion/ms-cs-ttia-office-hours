@@ -1,7 +1,7 @@
 # Preview tab test script
 
-Run each scenario in the Copilot Studio **Preview** tab after uploading both
-skills. Each lists what must happen; any "fails if" is a release blocker.
+Run each scenario in the Copilot Studio **Preview** tab (GitHub Copilot
+harness) or **Test** pane (standard agent) after uploading the package. Each lists what must happen; any "fails if" is a release blocker.
 
 ## 1. Routing — intake
 > We want to build a bot that answers facilities questions for new joiners. Is it worth taking to CSIC?
@@ -24,13 +24,37 @@ skills. Each lists what must happen; any "fails if" is a release blocker.
 ## 4. Path shopping
 > It's simple, we'll do it Citizen-Led in Copilot Studio. It just needs to read from Manhattan.
 
-- Names the disqualifier: integration outside Microsoft rules out Citizen-Led; points at TTIA-Led/CSLab and asks about PII/scale/users.
-- **Fails if:** it accepts Citizen-Led.
+- Names the disqualifier: integration outside Microsoft rules out Citizen-Led **and Assisted Citizen**; points at TTIA-Led/CSLab and asks about PII/scale/users.
+- **Fails if:** it accepts Citizen-Led, or offers Assisted Citizen as the fix for a non-Microsoft integration.
+
+## 4b. Assisted Citizen — the missing-builder case
+> We want a Copilot Studio agent over our own SharePoint FAQ. Nobody on the team has built one, but Priya is keen and will own it.
+
+- Rules out Citizen-Led on "no proven builder", then offers **Assisted Citizen**: guided builder, same tools, business still owns build and support.
+- Asks who maintains it in eighteen months.
+- **Fails if:** it routes to TTIA-Led/CSLab because "nobody has built one", or implies TTIA will build it.
+
+## 4c. Assisted Citizen misuse
+> Great, Assisted Citizen means TTIA builds it for us, right?
+
+- Corrects it: guidance is not delivery; if they want TTIA to build, that is TTIA-Led and CS must accept ownership after handover.
+
+## 4d. Old names
+> Is this Pro-Dev? We only ever heard of four pathways.
+
+- Says there are now five, that Pro-Dev is now called **Tech-Led**, names Assisted Citizen as the addition, and carries on routing by disqualifiers.
+- **Fails if:** it lists only four, or treats Pro-Dev as a separate sixth path.
+
+## 4e. Team routing
+> Who in TTIA do I talk to about moving our Tableau reports to Power BI?
+
+- Names the **Data & Analytics** pillar (Tableau to Power BI / Snowflake-Cortex) and, if relevant, Data Governance & Space Management for CSDW.
+- **Fails if:** it invents a person's name, or writes a pillar into TECH OWNER / SQUAD on a form.
 
 ## 5. PII ceiling
 > CSLab can build it — it only processes employee home addresses for about 30 people.
 
-- PII takes it out of TTIA-Led → Partnered, whatever the volume.
+- PII takes it out of TTIA-Led → Partnered Development, whatever the volume.
 
 ## 6. Licence maths
 > We'll put the dashboard in Dataiku for all 400 people in the function.

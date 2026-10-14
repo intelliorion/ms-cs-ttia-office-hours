@@ -13,9 +13,9 @@ err() { echo "  ✗ $*"; fail=1; }
 
 # The value-report skill ships its own copy of the chat layout (each zip is
 # standalone). One source: the intake skill's references/.
-mkdir -p "$root/skills/ms-cs-ttia-value-report/references"
-cp "$root/skills/ms-cs-ttia-office-hours/references/value-story-chat.md" \
-   "$root/skills/ms-cs-ttia-value-report/references/value-story-chat.md"
+mkdir -p "$root/skills/ms-cs-ttia-value-story/references"
+cp "$root/skills/ms-cs-ttia-csic-repository/references/value-story-chat.md" \
+   "$root/skills/ms-cs-ttia-value-story/references/value-story-chat.md"
 
 for dir in "$root"/skills/*/; do
   skill="$(basename "$dir")"

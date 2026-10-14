@@ -87,7 +87,9 @@ reason to invent answers.
 
 ## The value drivers
 
-One primary. Secondaries optional. Never sum across them.
+One primary. Secondaries optional. Never sum across them. **Ask the user to
+choose the primary from this list**; offer the one their claim points to as a
+suggestion, but the choice and the wording are theirs.
 
 **Effectiveness** — `productivity` · `operational-adaptability` ·
 `governance-oversight` · `standardization-knowledge` · `high-value-skills-ip` ·

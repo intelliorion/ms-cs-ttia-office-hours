@@ -5,7 +5,9 @@ TTIA Office Hours knowledge file. The CS function owns every value; never fill a
 # Phase 2 — the delivery pathways
 
 Explain these early, not at the end. A function that understands the ladder
-asks better questions for the rest of the conversation.
+asks better questions for the rest of the conversation. If the Creators' Café
+already explained the ladder in this conversation, do not explain it again:
+go straight to the disqualifier test.
 
 **Capability goes up. Autonomy goes down.** That is the whole trade.
 
@@ -35,7 +37,10 @@ Business teams independently build and manage **low-complexity** solutions using
 expectations, with technology visibility and governance oversight. **The
 business owns the solution end-to-end.**
 
-Tools: **Copilot · Copilot Studio · Power Apps · AI@MS agents**
+Tools: **Copilot Studio · Power Apps · Dataiku · UiPath**, plus Copilot and
+AI@MS agents. (The CS "How I want to use & Build AI" map puts Dataiku and
+UiPath on the citizen toolset; an approved tool is not an approved
+integration — the stays-inside-Microsoft test below still applies.)
 
 What it demands: that it is genuinely low-complexity, on an approved tool, that
 someone in the team has built this kind of thing before, and that the business
@@ -50,8 +55,8 @@ with a named person in the function who will build it, so the team does not
 need someone who has already done it. Guidance covers tool choice, patterns,
 controls and the handover into support.
 
-Tools: the Citizen-Led set — **Copilot · Copilot Studio · Power Apps · AI@MS
-agents** — used with guidance.
+Tools: the Citizen-Led set — **Copilot Studio · Power Apps · Dataiku ·
+UiPath**, plus Copilot and AI@MS agents — used with guidance.
 
 What it demands: **a named builder who will do the work and stay with it.**
 Guidance is not delivery: TTIA does not build it and does not hold the pager.
@@ -71,9 +76,10 @@ and support throughout their lifecycle**. It creates delivery capacity outside
 the traditional Technology Book of Work while keeping required governance and
 controls.
 
-Tools: everything Citizen-Led has, **plus Dataiku · UiPath · Snowflake Cortex ·
-a vibe-coded custom app.** This is the path that takes a citizen-built idea to
-the next level.
+Tools: everything Citizen-Led has, **plus a vibe-coded custom app and
+Snowflake Cortex.** The custom app is the one tool on the map that only
+TTIA-Led opens. This is the path that takes a citizen-built idea to the next
+level.
 
 What it demands: **CS must choose to own and support it.** TTIA builds it and
 hands it over. If nobody in CS has agreed to hold it afterwards, this is the
@@ -129,11 +135,11 @@ path that is not disqualified.
 
 ### 1. Can it be Citizen-Led?
 
-All three must be true. One "no" disqualifies it.
+All four must be true. One "no" disqualifies it.
 
 - **Does the requesting team have a person who can actually build this** in
-  Copilot Studio, Copilot, or configure agents in AI@MS? Not "we could learn" —
-  a named person who has done it.
+  Copilot Studio, Power Apps, Dataiku or UiPath, or configure agents in AI@MS?
+  Not "we could learn" — a named person who has done it.
 - **Will that team maintain it?** The client side is accountable for
   maintenance. TTIA advises; it does not hold the pager.
 - **Does it stay inside Microsoft?** Citizen-Led cannot take complex
@@ -141,9 +147,22 @@ All three must be true. One "no" disqualifies it.
   products. A **live connection** to a non-Microsoft system fails this test. A
   **published extract** that already lands in SharePoint or Teams on a schedule
   someone else owns does not; ask which one they mean before ruling it out.
+- **Is it free of personal, client and third-party data?** If the data
+  identifies people (badge, access, HR, visitor, home address) or clients,
+  it is not Citizen-Led, **however it arrives** — a published extract of
+  personal data is still personal data. The ceiling that stops TTIA-Led on
+  PII stops the business-owned paths first.
 
 > "You need one connection to a system that is not Microsoft. That rules out
 > Citizen-Led on its own, whatever else is true."
+
+> "The extract fixes the integration problem. It doesn't fix the data: it
+> still names people. That takes Citizen-Led off the table — unless the
+> extract can drop the names. Does the job need to know who, or only how
+> many?"
+
+If an aggregated or de-identified extract does the job (counts, not names),
+the data test passes and Citizen-Led is back on the table. Ask it.
 
 The maintenance question is the one people skip and regret. Ask it directly:
 *"In eighteen months, when the person who built this has moved teams and it
@@ -157,8 +176,8 @@ before.** Ask:
 
 - **Is there a named person in the function who will build it and stay with
   it?** Willing and available, not "someone on the team could".
-- The maintenance and stays-inside-Microsoft tests are **unchanged**. If either
-  failed in step 1, it fails here too.
+- The maintenance, stays-inside-Microsoft and no-personal-data tests are
+  **unchanged**. If any failed in step 1, it fails here too.
 
 If the only thing that stopped Citizen-Led was a missing proven builder, this
 is the path. If the team has no builder at all, or the tools cannot do the job,
@@ -174,7 +193,8 @@ This is where TTIA's **automator pods**, its delivery teams, engage. They handle
 - integration with existing data sources — **LDAP, Manhattan, Security**, and
   the like
 - additional coding: data flows, workflows, format conversion
-- the wider toolset: Dataiku, UiPath, Snowflake Cortex, a vibe-coded custom app
+- the wider toolset: a vibe-coded custom app, Snowflake Cortex, and Dataiku or
+  UiPath builds beyond what a citizen builder can carry
 
 **But it has a ceiling, and the ceiling is firm.** TTIA-Led requires
 **below-medium scale**:
@@ -221,6 +241,7 @@ the conversation:
 | no proven builder in the requesting team | Citizen-Led (consider Assisted Citizen) |
 | no named builder at all, or nobody will maintain it | Citizen-Led or Assisted Citizen |
 | any integration outside Microsoft products | Citizen-Led or Assisted Citizen |
+| personal, client or third-party data, even as a published extract | Citizen-Led or Assisted Citizen |
 | PII, high risk, many users, or large volume | TTIA-Led |
 | live ingestion or complex integration | Citizen-Led, Assisted Citizen or TTIA-Led |
 | not a strategic platform or major transformation | Tech-Led |

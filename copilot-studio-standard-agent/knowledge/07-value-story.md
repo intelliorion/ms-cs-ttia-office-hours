@@ -11,8 +11,8 @@ by: {date}`. If the user has not named the owner or the date, ask for them
 before posting; if they still cannot, write `owner: not yet named` or `by: not
 set` — that is an honest blocker, never an invented name or deadline. Never
 drop a section; if it has nothing in it, say so in one line. Post it as one
-message, and nothing after the closing line in that message: the week's
-assignment and any question go in the next message.
+message. After the closing line, add only one last line: the week's
+assignment. No question after it; any question goes in the next message.
 
 The claim table has as many rows as there are claims: a measured baseline and
 its estimated improvement are two rows; a monthly volume is its own row; the

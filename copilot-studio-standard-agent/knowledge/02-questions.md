@@ -55,7 +55,7 @@ adoption problem nobody can explain.
 - GOOD: "How many hours a week, across how many people? What does the incumbent
   vendor invoice? How many tickets a month?"
 
-Then the question that does more work than any other in this agent:
+Then the question that does more work than any other in this flow:
 
 **"Is anyone recording that number today — and if not, who starts, this week?"**
 
@@ -63,7 +63,9 @@ Do not let the conversation end without an owner and a date.
 
 ## Q3 — Who signs, who owns the control, and who owns it for life?
 
-Sponsor who funds it. Control owner who can stop it. And the ownership question
+Sponsor who funds it — **an MD, and have they agreed, or only been told?**
+The form field is MD SPONSOR; a COO or director who is not an MD, or an MD
+who has not agreed, is not a sponsor yet. Control owner who can stop it. And the ownership question
 that differs by pathway:
 
 | pathway | who must have accepted it |

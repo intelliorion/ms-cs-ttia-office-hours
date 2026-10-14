@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Generate the standard-agent knowledge files (00..07) from the skills, so there
+# Generate the standard-agent knowledge files (00..08) from the skills, so there
 # is one source of truth. Output: copilot-studio-standard-agent/knowledge/*.md
 # Upload each file in Copilot Studio: Knowledge > Add knowledge > Upload file.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-intake="$root/skills/ms-cs-ttia-office-hours/SKILL.md"
-value="$root/skills/ms-cs-ttia-value-report/SKILL.md"
+intake="$root/skills/ms-cs-ttia-csic-repository/SKILL.md"
+value="$root/skills/ms-cs-ttia-value-story/SKILL.md"
+cafe="$root/skills/ms-cs-ttia-creators-cafe/SKILL.md"
 out="$root/copilot-studio-standard-agent/knowledge"
 mkdir -p "$out"
 
@@ -22,20 +23,23 @@ section() {
 
 # Wording that only makes sense for the skills version.
 adapt() {
-  perl -0pe 's/compute\s+it exactly with your code sandbox from the uploaded file/show the calculation step by step from the uploaded figures/g' |
-  sed -e '/^<!--.*-->$/d' \
+  perl -0pe 's/compute\s+it exactly with your code sandbox from the uploaded file/show the calculation step by step from the uploaded figures/g;
+              s/the\s+\*\*ms-cs-ttia-value-story\*\*\s+skill/the value story (knowledge file 06-value-report)/g;
+              s/the\s+\*\*ms-cs-ttia-creators-cafe\*\*\s+skill/the Creators\x27 Café flow (knowledge file 08-creators-cafe)/g;
+              s/the\s+\*\*ms-cs-ttia-csic-repository\*\*\s+skill/the CSIC Repository flow (knowledge files 00-05 and 07)/g' |
+  sed -e '/^[[:space:]]*<!--.*-->$/d' \
       -e 's/ or `CSIC-intake-\*\.docx`//' \
-      -e 's/the \*\*ms-cs-ttia-value-report\*\* skill/the value report (knowledge file 06-value-report)/g' \
-      -e 's/ms-cs-ttia-value-report/the value report flow (06-value-report)/g' \
-      -e 's/ms-cs-ttia-office-hours/the intake flow/g' \
-      -e 's/[Tt]his skill/this agent/g' \
-      -e 's/in this skill package//g'
+      -e 's/ms-cs-ttia-value-story/the value story flow (06-value-report)/g' \
+      -e 's/ms-cs-ttia-creators-cafe/the Creators'"'"' Café flow (08-creators-cafe)/g' \
+      -e 's/ms-cs-ttia-csic-repository/the CSIC Repository flow/g' \
+      -e 's/ in this skill package//g' \
+      -e 's/This skill/This flow/g' -e 's/this skill/this flow/g'
 }
 
 header() { printf '# %s\n\nTTIA Office Hours knowledge file. The CS function owns every value; never fill a form field from this file.\n\n' "$1"; }
 
 { header "00 — TTIA: what the team is and its five pillars"
-  sed '1d' "$root/skills/ms-cs-ttia-office-hours/references/ttia-team.md" | adapt
+  sed '1d' "$root/skills/ms-cs-ttia-csic-repository/references/ttia-team.md" | adapt
 } > "$out/00-ttia-team.md"
 
 { header "01 — Delivery pathways, tools, licence maths and durations"
@@ -62,49 +66,45 @@ header() { printf '# %s\n\nTTIA Office Hours knowledge file. The CS function own
 
 # The value case, in the case tense (after the sheet, READY cases only)
 
-Write it in chat after the sheet. It is a case, not a report. Open with: "Nothing
-here has happened yet. These are expected outcomes, each marked with how strong
-its evidence is. The measure named below is the number this will be held to."
-
-Build the claim table first, then the sections from it:
-
-| id | tier | claim | figure | unit | source or assumption | owner |
-|---|---|---|---|---|---|---|
-
-- **measured** — the CURRENT state only (the baseline), with the system it came from. Never an outcome.
-- **estimated** — the expected benefit, with the assumption and who owns it.
-- **qualitative** — a capability change, one sentence, no numeral.
-
-Sections, in order: 1 What problem are we solving (no figures) · 2 What
-capability will AI unlock (no figures) · 3 What we expect to improve (the
-claims, each naming measure, system of record and who pulls it) · 4 Which value
-driver (one primary) · 5 Who is accountable (named leader, value realization
-owner, cadence) · 6 Pathway and what it costs (path, deciding disqualifier, who
-accepted ownership, annual run cost incl. licences, whose cost centre) · 7 What
-we are not claiming.
+This is where the AI ROI is written down. Post it in chat as one message,
+after the sheet, in the exact layout of knowledge file 07-value-story,
+section A: same opening, same headings, same order, claim table first, tier
+layouts as shown, and after its closing line only the assignment line. Do not
+use any other layout.
 
 Every figure comes from the claim table; none in headings or prose. No rubric
-score appears as measured or estimated.
+score appears as measured or estimated. The value driver is the one the user
+chose.
 
-Close with: "The case claims X. The submission records the measure for X as Y,
-from system Z, pulled by A. If either changes, both change." Then tell them
-this is the number the value report will be held to after delivery; changing
-it now is free, later is not.
+In that assignment line: this is the number the value story will be held to
+after go-live; changing it now is free, later is not. Then this week's one
+action.
 MD
 } > "$out/05-intake-form.md"
 
-{ header "06 — The value report (initiatives already in service)"
+{ header "06 — The value story (initiatives already in service)"
   cat <<'MD'
 Use this only when an initiative is in service and there is an outcome to
-report. If it is not in service yet, return to the intake flow: a value report
-on something that has not happened is a forecast dressed as a result.
+report. This is the third level: the Creators' Café finds the solution, the
+CSIC Repository identifies and measures the ROI, and the value story tests
+that promise against what happened.
 
-Evidence comes only from files the user uploads in this conversation or
-knowledge you actually retrieved. Aggregates only — never individual-level
-personal or client data.
+Two edge cases, both closed here with an assignment, never by restarting
+intake. Nothing live yet: say there is nothing to report, and the assignment
+is to take it to the CSIC Repository, or to the Creators' Café if they do not
+yet know what to build. Live but never through CSIC: say there
+is no intake record, report what can be evidenced, and if the real question is
+"who owns this now", the assignment is to take it to the CSIC Repository as a
+pilot.
+
+Evidence comes only from files the user uploads, text or figures the user
+pastes in this conversation, or knowledge you actually retrieved. Cite a
+pasted figure as "pasted by the user, from {system}, {period}"; ask for the
+system and period if they did not say. Aggregates only — never
+individual-level personal or client data.
 
 MD
-  section "$value" '^## Step 1 ' '^## Step 6 ' | adapt
+  section "$value" '^## Step 0 ' '^## Step 6 ' | adapt
   cat <<'MD'
 ## Step 6 — the report, in chat
 
@@ -123,10 +123,18 @@ MD
 } > "$out/06-value-report.md"
 
 { header "07 — Value story layout: the value case and the value report, exactly as posted in chat"
-  sed '1d' "$root/skills/ms-cs-ttia-office-hours/references/value-story-chat.md" |
+  sed '1d' "$root/skills/ms-cs-ttia-csic-repository/references/value-story-chat.md" |
     sed -e 's/^Use this layout whenever the value case (intake, READY cases only) or the value$/Use this layout for the value case (intake, READY cases only) and the value/' \
         -e 's/^report (in service) is delivered as a chat message rather than a Word file\.$/report (in service). Both are posted in chat, as one message./' | adapt
 } > "$out/07-value-story.md"
+
+{ header "08 — Creators' Café: the CS Advanced AI Community of Practice (idea stage, tools, reuse, Café vs Repository)"
+  # Everything after the front matter.
+  awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$cafe" |
+    perl -0pe 's/Read\s+`references\/how-to-start-ai\.md`\s+in\s+this\s+skill\s+package\s+before/Use the start-here map section at the end of this file before/g' | adapt
+  printf '\n\n---\n\n'
+  sed '1d' "$root/skills/ms-cs-ttia-creators-cafe/references/how-to-start-ai.md" | adapt
+} > "$out/08-creators-cafe.md"
 
 # Checks: nothing from the skills-only world should survive into knowledge files.
 fail=0

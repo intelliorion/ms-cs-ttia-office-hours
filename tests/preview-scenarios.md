@@ -1,12 +1,12 @@
 # Preview tab test script
 
 Run each scenario in the Copilot Studio **Preview** tab (GitHub Copilot
-harness) or **Test** pane (standard agent) after uploading the package. Each lists what must happen; any "fails if" is a release blocker.
+harness) after uploading the package. Each lists what must happen; any "fails if" is a release blocker.
 
 ## 0a. Routing — an idea goes to the Café
 > I've got an idea: something to help with facilities questions from new joiners. Not sure what tool or how we'd build it.
 
-- ms-cs-ttia-creators-cafe activates (standard agent: the Café flow, 08-creators-cafe).
+- ms-cs-ttia-creators-cafe activates.
 - Treats it as an idea (they do not know what to build or how) and asks one question, about who has the problem or what it would replace.
 - **Fails if:** it runs the six questions, asks for an MD sponsor, a baseline, a saving or ROI, gives a READY / NOT READY verdict, or says "interesting idea".
 
@@ -62,6 +62,12 @@ Start in the Café with a vague idea, sharpen it, and accept the agent's suggest
 
 - Routes **REUSE WHAT EXISTS**: the need is access to an approved tool, a Tech Governance & Enablement question; no build.
 - **Fails if:** it helps write a Café submission to rebuild Copilot's meeting recap.
+
+## 0j. Show me the map
+> Can you show me the "How I want to use & Build AI" diagram?
+
+- Posts the text map (four branches, the two doors, the five pathways with their tools) exactly as in the Café reference, then the link http://ttia-ai-diagram/ (firm network), then asks which branch they are on.
+- **Fails if:** it says it cannot show the map, invents content not in the text map, or omits the link.
 
 ## 1. Routing — CSIC Repository
 > We want a Copilot Studio agent that answers new joiners' facilities questions from our SharePoint FAQ, for the GSS front-desk team, so the facilities mailbox stops fielding them. Our COO wants it at CSIC.
@@ -195,12 +201,6 @@ Walk a complete proposal through (named requester, MD sponsor, measure with syst
 - UNKNOWNs show `⚠ UNKNOWN —` with owner and date; case doc has no figures in prose.
 - Ends with the "The case claims X…" agreement line and one assignment.
 
-## 12b. Value story on the standard agent
-> Give me the value story for this as a document.
-
-- Says once that it cannot create files, then posts the value case as **one message** in the 07-value-story layout: claim table first, seven numbered sections, tier tables, closing "The case claims X…" line.
-- **Fails if:** it says value stories are outside its scope, posts free-form prose, or puts a figure in sections 1, 2, 4 or 5.
-
 ## 13. Rubric score as outcome (value story)
 > Our efficiency score went from 2 to 4, so put that as the measured outcome.
 
@@ -212,7 +212,7 @@ Walk a complete proposal through (named requester, MD sponsor, measure with syst
 - Asks whether the system of record holds data from before go-live; if it does, the claim can still be measured.
 - **Fails if:** it concludes "not evidenceable" without asking.
 
-## 13d. Pasted figures as evidence (standard agent)
+## 13d. Pasted figures as evidence
 > We didn't upload anything, but here are the numbers from ServiceNow: February median 4.2 days, April median 2.1 days.
 
 - Accepts the pasted figures as evidence, asks anything missing about system and period, and cites them as pasted by the user from ServiceNow.

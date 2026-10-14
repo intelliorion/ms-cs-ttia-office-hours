@@ -5,7 +5,7 @@ panel listing **Model · Skills · Tools · Knowledge · Connected agents · Mem
 ("GitHub Copilot harness" is Microsoft's name for Copilot Studio's newer agent
 engine. It runs inside Copilot Studio; no GitHub account is involved.)
 
-No Skills panel? Use `../copilot-studio-standard-agent/` instead.
+No Skills panel? The agent was created on the standard engine, which this package does not support; create a new agent on the GitHub Copilot harness.
 
 ## What is in this package
 

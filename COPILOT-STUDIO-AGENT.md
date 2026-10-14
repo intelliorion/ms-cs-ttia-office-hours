@@ -2,10 +2,10 @@
 
 Everything Copilot Studio asks for when you create the agent, in the order it
 asks, ready to copy. Values in code blocks are exact. Values marked
-_your choice_ are yours to set. The step-by-step walkthrough for each engine
-is in the two `SETUP.md` files; this page is the field sheet.
+_your choice_ are yours to set. The step-by-step walkthrough is in
+`copilot-studio-github-agent/SETUP.md`; this page is the field sheet.
 
-Run `bash scripts/build.sh` first so the zips and knowledge files are current.
+Run `bash scripts/build.sh` first so the zips are current.
 
 ---
 
@@ -20,31 +20,21 @@ Run `bash scripts/build.sh` first so the zips and knowledge files are current.
 | **Solution / environment** | _your choice_ — a CS-owned environment with Copilot Credits allocated and Dataverse search on |
 | **Owner** | TTIA, AI & ML pillar (named owner _TBC_) |
 
-## 2. Which engine you are on, and what that changes
+## 2. Engine: GitHub Copilot harness only
 
-Open the agent after creating it. If the **Build** tab shows a side panel with
-**Model · Skills · Tools · Knowledge · Connected agents · Memory**, you are on
-the **GitHub Copilot harness**. If you see **Overview · Knowledge · Tools ·
-Agents · Topics** and no Skills panel, you are on the **standard agent**. An
-agent cannot change engine later.
-
-| | GitHub Copilot harness | standard agent |
-|---|---|---|
-| instructions | `copilot-studio-github-agent/agent-instructions.md` (about 4,800 chars) | `copilot-studio-standard-agent/agent-instructions.md` (about 7,100 of 8,000 chars) |
-| behaviour detail | three skill zips, loaded when relevant | nine knowledge files, searched by topic |
-| outputs | Word documents for intake sheet, value case, value story | the same content as markdown in chat |
-| setup guide | `copilot-studio-github-agent/SETUP.md` | `copilot-studio-standard-agent/SETUP.md` |
+Open the agent after creating it. The **Build** tab must show a side panel with
+**Model · Skills · Tools · Knowledge · Connected agents · Memory**. If you see
+**Overview · Knowledge · Tools · Agents · Topics** and no Skills panel, the
+agent is on the standard engine, which this package no longer supports;
+create a new agent on the harness. An agent cannot change engine later.
 
 ## 3. Instructions
 
-Paste the **entire** file for your engine into **Instructions**, unchanged.
-Both files are hand-written and sit under the 8,000-character limit; the
-build fails if either goes over.
+Paste the **entire** `copilot-studio-github-agent/agent-instructions.md` into
+**Instructions**, unchanged. It is hand-written and sits under the
+8,000-character limit; the build fails if it goes over.
 
-- GitHub Copilot harness: `copilot-studio-github-agent/agent-instructions.md`
-- standard agent: `copilot-studio-standard-agent/agent-instructions.md`
-
-## 4. Skills (GitHub Copilot harness only)
+## 4. Skills
 
 **Build → Skills → Add skill → Upload a skill.** Upload all three, in this
 order. Each zip has `SKILL.md` at its root; the name and description below are
@@ -66,26 +56,7 @@ Each zip's full description is the `description:` field at the top of its
 
 ## 5. Knowledge
 
-### Standard agent — nine files, required
-
-**Knowledge → Add knowledge → Upload file**, one file at a time from
-`copilot-studio-standard-agent/knowledge/`. Do not zip them. Use the names
-and descriptions exactly; the orchestrator reads the description to decide
-which file to search.
-
-| file | name | description |
-|---|---|---|
-| `00-ttia-team.md` | `00-ttia-team` | What TTIA (CS Technology Transformation, Innovation & Analytics) is, its partners (GSS, CSI, CBS, RES) and its five pillars: Tech Governance & Enablement, Data & Analytics, Data Governance & Space Management, Process Optimization, AI & ML. Use for "what does TTIA do" and "who should I talk to". |
-| `01-pathways.md` | `01-pathways` | The five CSIC delivery pathways (Tech-Led, Partnered Development, TTIA-Led, Assisted Citizen, Citizen-Led), which tools each allows, the disqualifiers that rule each out, licence cost maths, and what drives pathway duration. |
-| `02-questions.md` | `02-questions` | The six forcing questions for CSIC intake, what good and bad answers look like, operating principles, failure patterns, and the rubric. |
-| `03-measures.md` | `03-measures` | How to find a measure the function can produce, the five measure shapes, making impact meaningful, the five-card story and the value driver taxonomy. |
-| `04-verdict.md` | `04-verdict` | Alternatives, pilot oversight, the intake verdict (ready, not ready, not an initiative), blocker types, the bar by stage, and escalation. |
-| `05-intake-form.md` | `05-intake-form` | The CSIC intake form fields in order, dropdown guidance, REQUIREMENTS READINESS mapping, and how to write the value case for a ready submission. |
-| `06-value-report.md` | `06-value-report` | The value story: how to report what a Corporate Services initiative actually delivered once in service, starting from the claim, checking the intake baseline or pre-go-live history, claim tiers, five cards, leadership questions. |
-| `07-value-story.md` | `07-value-story` | The exact chat layout for the value case (intake) and the value report (in service): headings, claim table, tier layouts, closing line. Use whenever a value case, value report, value story or business case is produced. |
-| `08-creators-cafe.md` | `08-creators-cafe` | The CS TTIA Creators' Café (Corporate Services Advanced AI Community of Practice): the "How I want to use & Build AI" start-here map with approved productivity tools, programs and learning; Café vs TTIA CSIC Repository; the four Café stages (Submit Idea, Review and Select, Design series, Launch and Learn); tools and pathways at Café depth; the route. Use for any idea at early stage, a Café submission, "which tool", "what have others built", or "Café or Repository?". |
-
-### Either engine — optional sources
+### Optional sources
 
 Add these if TTIA can supply them. They inform advice; the instructions
 forbid using them to fill a form field.
@@ -94,7 +65,7 @@ forbid using them to fill a form field.
 |---|---|
 | Creators' Café SharePoint page | current deadline, MS Form link, contact route, selected use cases — the agent says it does not have these until a source provides them |
 | CSIC pathway and control policy documents | how a pathway or control works |
-| The "How I want to use & Build AI" map (image or page) | already summarised in the Café skill; the live version keeps tool lists current |
+| The "How I want to use & Build AI" map (http://ttia-ai-diagram/, firm network) | already in the Café skill as a text map plus this link; a live copy keeps tool lists current |
 
 Files labelled confidential or highly confidential are indexed but never
 answered from.
@@ -103,12 +74,12 @@ answered from.
 
 | setting | value | where |
 |---|---|---|
-| Generative AI orchestration | **on** | Settings → Generative AI (standard agent; default on the harness) |
+| Generative AI orchestration | **on** | Settings → Generative AI (default on the harness) |
 | Web search | **off** | Settings → Generative AI |
 | General / model knowledge | leave **on** at first; the instructions forbid using it for facts or form values. Test before turning off. | Settings → Generative AI |
 | File input from users | **on** (the value story reads uploaded status reports and exports) | Settings |
-| Model | keep the default for the first test pass; also try Claude Sonnet 5 and keep whichever passes more scenarios | Build → Model (harness only) |
-| Memory | **off** for the first release | Build → Memory (harness only) |
+| Model | keep the default for the first test pass; also try Claude Sonnet 5 and keep whichever passes more scenarios | Build → Model |
+| Memory | **off** for the first release | Build → Memory |
 | Authentication | **Authenticate with Microsoft** (required for sharing with a security group) | Settings → Security |
 | Content moderation | default | Settings |
 
@@ -131,7 +102,7 @@ Report the value of an initiative that's already live.
 |---|---|
 | Channels | **Microsoft Teams** and **Microsoft 365 Copilot** (keep "Make agent available in Microsoft 365 Copilot" ticked) |
 | First test | **See agent in Teams → Add**, try it yourself |
-| Pilot | **Share** → TTIA pilot security group (harness), or **Availability options → Show to my teammates and shared users** (standard) |
+| Pilot | **Share** → TTIA pilot security group |
 | Org-wide | **Availability options → Show to everyone in my org → Submit for admin approval** |
 | After every change | **Publish** again; open chats keep the old version until the user types **Start over** |
 
@@ -147,8 +118,7 @@ Teams app manifest values, if the admin centre asks:
 
 ## 9. Test before publishing
 
-Run every scenario in `tests/preview-scenarios.md` in the Preview tab
-(harness) or Test pane (standard). Anything marked "fails if" blocks
+Run every scenario in `tests/preview-scenarios.md` in the Preview tab. Anything marked "fails if" blocks
 publishing. The ones that catch most regressions:
 
 | scenario | checks |
@@ -157,7 +127,8 @@ publishing. The ones that catch most regressions:
 | 0c, 3b, 3c | items only move forward: no bounce between the Café and the CSIC Repository |
 | 0f, 7 | no invented Café deadline or contact, no invented pathway duration |
 | 8, 9 | no field filled on the user's behalf, no draft document for a weak case |
-| 12 / 12b | the intake sheet and value case come out in the right form for the engine (Word on the harness, chat on standard) |
+| 12 | the intake sheet and value case come out as Word documents |
+| 0j | "show me the map" posts the text map and the diagram link |
 
 Turn the scenarios into a test set in the **Evaluate** tab so they rerun
 after every change.

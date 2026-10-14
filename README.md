@@ -11,7 +11,6 @@ is in [`COPILOT-STUDIO-AGENT.md`](COPILOT-STUDIO-AGENT.md).
 | where | how | see |
 |---|---|---|
 | Copilot Studio, GitHub Copilot harness (Build tab with a **Skills** panel) | upload three skill zips | [`copilot-studio-github-agent/SETUP.md`](copilot-studio-github-agent/SETUP.md) |
-| Copilot Studio, standard agent (Knowledge · Tools · Topics, no Skills) | paste instructions, upload nine knowledge files | [`copilot-studio-standard-agent/SETUP.md`](copilot-studio-standard-agent/SETUP.md) |
 | Claude Code | `bash scripts/install-local.sh --claude` | skills appear next session |
 | GitHub Copilot in VS Code (agent mode) and Copilot CLI | `bash scripts/install-local.sh --copilot` | reads `~/.copilot/skills` and `~/.agents/skills` |
 
@@ -108,11 +107,9 @@ skills/                                   source of truth — edit these
   ms-cs-ttia-value-story/SKILL.md           value story: what an initiative in service actually delivered
 copilot-studio-github-agent/              package 1 — built from skills/
   SETUP.md · agent-instructions.md · upload/*.zip
-copilot-studio-standard-agent/            package 2 — built from skills/
-  SETUP.md · agent-instructions.md · knowledge/00..08-*.md
-scripts/build.sh                          validate and rebuild both packages
+scripts/build.sh                          validate and rebuild the package
 scripts/install-local.sh                  install skills for Claude Code / VS Code Copilot / Copilot CLI
-tests/preview-scenarios.md                42 scenarios to pass before publishing any package
+tests/preview-scenarios.md                scenarios to pass before publishing
 CHANGELOG.md                              what changed, when
 ```
 
@@ -120,14 +117,11 @@ CHANGELOG.md                              what changed, when
 
 1. Edit `skills/*/SKILL.md` or a file under `references/`.
 2. Run `bash scripts/build.sh`. It validates the skill front matter, checks
-   every referenced file ships, regenerates the nine knowledge files, zips the
-   skills, and fails if either instructions file is over the 8,000-character
-   limit. The standard-agent instructions sit a few characters under it;
-   anything added there has to be paid for with a cut.
-3. The two `agent-instructions.md` files are written by hand. If the change
-   affects routing, pathways or hard rules, update both.
-4. Run the scenarios in `tests/preview-scenarios.md` on the package you are
-   publishing. Anything marked "fails if" blocks release.
+   every referenced file ships, zips the skills, and fails if the
+   instructions file is over the 8,000-character limit.
+3. `copilot-studio-github-agent/agent-instructions.md` is written by hand. If
+   the change affects routing, pathways or hard rules, update it.
+4. Run the scenarios in `tests/preview-scenarios.md` in the Preview tab. Anything marked "fails if" blocks release.
 5. Commit the rebuilt packages together with the source.
 
 ## Before go-live: TTIA to confirm

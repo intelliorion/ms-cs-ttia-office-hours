@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-14 (map, single package)
+
+- **Start-here map shown on request.** The Café reference now has a text
+  version of the "How I want to use & Build AI" diagram, posted as-is when
+  someone asks to see the map, followed by the link to the original,
+  http://ttia-ai-diagram/ (firm network; the agent cannot open it). Scenario
+  0j added.
+- **Standard agent removed.** `copilot-studio-standard-agent/` and
+  `scripts/build-standard-agent.sh` are gone; the GitHub Copilot harness is
+  the only Copilot Studio package. Docs, build and scenarios updated
+  (12b removed).
+
 ## 2026-10-14 (round 4 test fixes)
 
 - **Dead end closed:** a Café idea that needs a live non-Microsoft system, or

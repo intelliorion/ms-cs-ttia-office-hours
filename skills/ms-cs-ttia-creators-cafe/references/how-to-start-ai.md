@@ -4,6 +4,45 @@ The Corporate Services "How I want to use & Build AI" map has four branches.
 Use it to place a colleague before anything else: most people who arrive at
 the Café are on branch 1 or 4, and need a pointer, not a submission.
 
+**The original diagram:** http://ttia-ai-diagram/ — on the firm network only.
+Give the link with the text version below; the agent cannot open it.
+
+## The map at a glance
+
+Post this block exactly as written when someone asks to see the map.
+
+```
+HOW I WANT TO USE & BUILD AI  (CS start-here map)
+
+1. Improve my productivity  -> use an approved AI tool
+     ChatGPT Enterprise · Microsoft Copilot · Claude for Finance
+     Grok Enterprise · Zoom Companion · MS Search AI
+
+2. New idea & use case
+     |- "I have an idea"  (early stage, not yet defined)
+     |      -> CS TTIA Creators' Café   (find the right solution)
+     |
+     '- "My use case is ready"  (defined, validated & sponsored)
+            -> CSIC - CS Innovation Council  (AI ROI identified and measured)
+                 -> one of 5 delivery pathways:
+                    Tech-Led ............. Technology's own platforms
+                    Partnered Development  approved firm frameworks
+                    TTIA-Led ............. Dataiku · UiPath · Copilot Studio
+                                           Power Apps · Custom App
+                    Assisted Citizen ..... Dataiku · UiPath · Copilot Studio
+                                           Power Apps
+                    Citizen-Led .......... Dataiku · UiPath · Copilot Studio
+                                           Power Apps
+
+3. Program, support & communication
+     CS TTIA · CS AI Ambassadors · CS Evolve (CS Academy)
+
+4. Learn AI
+     AIDP · DeepLearning.AI · MS Employee Development
+
+Original diagram (firm network): http://ttia-ai-diagram/
+```
+
 ## 1 · Improve my productivity — approved AI tools
 
 No idea, no submission. Point at the approved tool and stop.

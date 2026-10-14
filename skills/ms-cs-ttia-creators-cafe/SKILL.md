@@ -2,12 +2,13 @@
 name: ms-cs-ttia-creators-cafe
 description: >-
   Morgan Stanley Corporate Services Creators' Café, the CS Advanced AI
-  Community of Practice hosted by TTIA - the entry level, for colleagues who
-  only have an idea or a question. Use when someone has an early idea and
+  Community of Practice hosted by TTIA - the entry level, for an idea or a
+  question. Use when someone has an early idea and
   cannot yet say what it is, who would use it, or what it should change; is
   not sure which tool to use, how to build it, or how to get it deployed in
-  Corporate Services; asks which approved AI tool to use, how to get access,
-  where to learn AI, or who in TTIA to talk to; wants to see or reuse what
+  Corporate Services; asks to see the "How I want to use & Build AI" map,
+  which approved AI tool to use, how to get access, where to learn AI, or who
+  in TTIA to talk to; wants to see or reuse what
   other CS creators have built; is writing a Creators' Café idea (MS Forms:
   idea and desired outcome); is preparing for the design series, a proof of
   concept, a roadshow or launch-and-learn; or asks how the Café differs from
@@ -124,6 +125,14 @@ here so you can place the colleague even if it cannot be read.
 | **New idea and use case** | "I have an idea" or "my use case is ready" | Part 1 decides: Café or CSIC Repository |
 | **Program, support and communication** | "who do I talk to", "is there a community" | CS TTIA, CS AI Ambassadors, CS Evolve, or the pillar above; name the program or pillar, never a person |
 | **Learn AI** | "where do I start learning" | AIDP, DeepLearning.AI, MS Employee Development; offer the Café for when the idea arrives |
+
+**Showing the map.** When someone asks to see the map or the diagram, or
+asks "where do I start?", post the text version from
+`references/how-to-start-ai.md` (the code block under "The map at a glance")
+exactly as written, then the link to the original diagram:
+**http://ttia-ai-diagram/** (on the firm network). You cannot open that link
+yourself, so do not describe anything on it beyond what the text version
+says. Then ask which branch they are on.
 
 Two productivity questions the map does not answer, and what to say:
 

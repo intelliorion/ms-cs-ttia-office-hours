@@ -1,0 +1,113 @@
+import { describe, it, expect } from 'vitest';
+import { buildGraph, nodeId } from '../src/graph/build';
+import { ALLOWED, NODE_COLOURS } from '../src/graph/ontology';
+import { layoutFor } from '../src/graph/layout';
+import { rebuildGraph, appendAiLink, setAiLinkStatus } from '../src/graph/store';
+import { tmpWorkspace, sampleIdea, FIXTURE } from './helpers';
+import { importExport } from '../src/import/importRows';
+import { DEFAULT_STEPS as steps } from '../src/rules/stages';
+import { fixedClock } from '../src/clock';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const rfx = sampleIdea({
+  id: 'CAFE-2026-002', slug: 'rfx', title: 'RFx CoE Intake', entity: 'CS', function: 'GSS', region: 'APAC', stage: 2,
+  support: ['Agent Design Guidance', 'Collab…'],
+  people: { submitter: 'Person 2', team: [{ name: 'Person 2', role: 'lead', note: 'Lead' }, { name: 'Person 3', role: 'sponsor', note: 'Sponsor' }, { name: 'Person 4', role: 'member' }] },
+});
+const inv = sampleIdea({
+  id: 'CAFE-2026-003', slug: 'inv', title: 'Invoice Assessment', entity: 'CS', function: 'GSS', region: 'APAC',
+  support: ['AI Solution Brainstorming'], people: { submitter: 'Person 5', team: [{ name: 'Person 3', role: 'member' }] },
+});
+
+describe('buildGraph', () => {
+  it('builds entity → team → person → idea with roles', () => {
+    const g = buildGraph([rfx], []);
+    const types = Object.fromEntries(g.nodes.map((n) => [n.id, n.type]));
+    expect(types['entity:cs']).toBe('Entity');
+    expect(types['team:gss']).toBe('Team');
+    expect(types['idea:CAFE-2026-002']).toBe('Idea');
+    expect(g.nodes.filter((n) => n.type === 'Person').map((n) => n.label).sort()).toEqual(['Person 2', 'Person 3', 'Person 4']);
+    const rels = g.edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
+    expect(rels).toContain('entity:cs HAS_TEAM team:gss');
+    expect(rels).toContain('team:gss HAS_MEMBER person:person-2');
+    expect(rels).toContain('person:person-2 SUBMITTED idea:CAFE-2026-002');
+    expect(rels).toContain('person:person-3 SPONSORS idea:CAFE-2026-002');
+    expect(rels).toContain('person:person-4 RELATED idea:CAFE-2026-002');
+    expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.description).toBe('Submitter Name; also listed as Lead');
+    expect(rels).toContain('idea:CAFE-2026-002 NEEDS capability:agent-design-guidance');
+  });
+
+  it('keeps one node per person across ideas, with a role link to each', () => {
+    const g = buildGraph([rfx, inv], []);
+    expect(g.nodes.filter((n) => n.label === 'Person 3')).toHaveLength(1);
+    expect(g.edges.filter((e) => e.from === 'person:person-3').map((e) => e.rel).sort()).toEqual(['RELATED', 'SPONSORS']);
+  });
+
+  it('never turns attributes into nodes and puts stage on the idea node', () => {
+    const g = buildGraph([rfx], []);
+    expect(g.nodes.some((n) => /APAC|2026-|@/.test(n.label))).toBe(false);
+    const idea = g.nodes.find((n) => n.id === 'idea:CAFE-2026-002')!;
+    expect(idea.attrs).toMatchObject({ stage: 2, stageLabel: 'Review and Select' });
+  });
+
+  it('gives every edge a source and confidence 1 for form links', () => {
+    const g = buildGraph([rfx], []);
+    for (const e of g.edges) {
+      expect(e.source).toMatch(/^form:/);
+      expect(e.confidence).toBe(1);
+      expect(e.confirmed).toBe(true);
+      expect(ALLOWED[e.rel]).toBeDefined();
+    }
+  });
+
+  it('applies AI links, dashed below 0.7, and drops dangling ones', () => {
+    const ai = [
+      { from: 'idea:CAFE-2026-002', to: 'capability:ticketing-and-status', rel: 'NEEDS' as const, description: 'shared mailbox re-keyed into a tracker', source: 'ai:challenge', confidence: 0.65, status: 'pending' as const, newNodes: [{ id: 'capability:ticketing-and-status', type: 'Capability' as const, label: 'Ticketing and status' }] },
+      { from: 'idea:CAFE-2026-099', to: 'capability:x', rel: 'NEEDS' as const, description: 'gone', source: 'ai:challenge', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: 'capability:x', type: 'Capability' as const, label: 'X' }] },
+      { from: 'idea:CAFE-2026-002', to: 'capability:removed', rel: 'NEEDS' as const, description: 'no', source: 'ai:challenge', confidence: 0.9, status: 'removed' as const, newNodes: [{ id: 'capability:removed', type: 'Capability' as const, label: 'Removed' }] },
+    ];
+    const g = buildGraph([rfx], ai);
+    const e = g.edges.find((x) => x.to === 'capability:ticketing-and-status')!;
+    expect(e.confirmed).toBe(false);
+    expect(e.confidence).toBe(0.65);
+    expect(g.nodes.some((n) => n.id === 'capability:x')).toBe(false);
+    expect(g.nodes.some((n) => n.id === 'capability:removed')).toBe(false);
+  });
+
+  it('is deterministic and handles an empty workspace', () => {
+    expect(buildGraph([rfx, inv], [])).toEqual(buildGraph([inv, rfx], []));
+    expect(buildGraph([], [])).toEqual({ nodes: [], edges: [] });
+  });
+
+  it('has a colour for every type', () => {
+    for (const t of ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System'] as const) expect(NODE_COLOURS[t]).toMatch(/^#/);
+    expect(nodeId('Team', 'GSS')).toBe('team:gss');
+  });
+});
+
+describe('store and layout', () => {
+  it('rebuilds from the folders, caches a stable layout, and confirms a link', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, { clock: fixedClock('2026-10-19'), steps });
+    const g1 = await rebuildGraph(root);
+    expect(g1.nodes.length).toBeGreaterThan(5);
+    const l1 = await layoutFor(root, g1);
+    const l2 = await layoutFor(root, g1);
+    expect(l2).toEqual(l1);
+    for (const p of Object.values(l1)) expect(p.every(Number.isFinite)).toBe(true);
+    await appendAiLink(root, { from: 'idea:CAFE-2026-002', to: 'capability:ticketing-and-status', rel: 'NEEDS', description: 'd', source: 'ai:challenge', confidence: 0.6, status: 'pending', newNodes: [{ id: 'capability:ticketing-and-status', type: 'Capability', label: 'Ticketing and status' }] });
+    const g2 = await rebuildGraph(root);
+    const edge = g2.edges.find((e) => e.to === 'capability:ticketing-and-status')!;
+    expect(edge.confirmed).toBe(false);
+    const l3 = await layoutFor(root, g2);
+    expect(l3['idea:CAFE-2026-002']).toEqual(l1['idea:CAFE-2026-002']);
+    expect(l3['capability:ticketing-and-status']).toBeDefined();
+    await setAiLinkStatus(root, edge.id, 'confirmed');
+    const g3 = await rebuildGraph(root);
+    expect(g3.edges.find((e) => e.id === edge.id)?.confirmed).toBe(true);
+    await setAiLinkStatus(root, edge.id, 'removed');
+    expect((await rebuildGraph(root)).edges.some((e) => e.id === edge.id)).toBe(false);
+    expect(await readFile(path.join(root, 'graph', 'nodes.jsonl'), 'utf8')).toContain('"idea:CAFE-2026-001"');
+  });
+});

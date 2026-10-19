@@ -15,6 +15,8 @@ import { draftEmail, listOutboxChecked, approve, markSent, updateDraft } from '.
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { writeStatusCsv } from '../exports/status';
+import { rebuildGraph, setAiLinkStatus } from '../graph/store';
+import { layoutFor } from '../graph/layout';
 
 export function registerApi(add: AddRoute, { root, clock }: { root: string; clock: Clock }): void {
   const steps = () => loadSteps(root);
@@ -69,5 +71,12 @@ export function registerApi(add: AddRoute, { root, clock }: { root: string; cloc
   add('POST', '/api/outbox/update', async ({ body }) => updateDraft(root, String(body.key), body));
 
   add('POST', '/api/review-pack', async () => ({ file: await writeReviewPack(root, clock) }));
+  add('GET', '/api/graph', async () => {
+    const graph = await rebuildGraph(root);
+    const layout = await layoutFor(root, graph);
+    return { ...graph, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed).length };
+  });
+  add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
+  add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });
   add('POST', '/api/status-export', async () => ({ file: await writeStatusCsv(root, clock) }));
 }

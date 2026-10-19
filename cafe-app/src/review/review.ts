@@ -41,7 +41,7 @@ export interface ReviewResult {
   handoff?: string;
 }
 
-const NOT_IN_RECORD = 'Not in the Café record. Ask the team.';
+const NOT_IN_SUBMISSION = 'Not in the Café submission. Ask the team.';
 
 export function renderReview(idea: Idea, r: ReviewRecord): string {
   return [
@@ -58,11 +58,11 @@ export function renderHandoff(idea: Idea, settings: Settings): string {
   const sponsor = idea.people.team.find((p) => p.role === 'sponsor');
   const field = (title: string, value: string | undefined, source: string) => {
     const v = value?.trim();
-    return [`## ${title}`, '', v || NOT_IN_RECORD, '', `Source: ${v ? source : 'none'}`, ''];
+    return [`## ${title}`, '', v || NOT_IN_SUBMISSION, '', `Source: ${v ? source : 'none'}`, ''];
   };
   return [
     `# CSIC Repository intake draft: ${idea.title}`, '',
-    `From Creators' Café record ${idea.id}. Every field says where it came from. Check each one before you paste it into the intake form: ${settings.csicLink?.trim() || '[CSIC REPOSITORY INTAKE LINK]'}`, '',
+    `From Creators' Café idea ${idea.id}. Every field says where it came from. Check each one before you paste it into the intake form: ${settings.csicLink?.trim() || '[CSIC REPOSITORY INTAKE LINK]'}`, '',
     ...field('Opportunity description', idea.challenge, 'form, Business Challenge'),
     ...field('Current process', idea.current_process, 'form, Current Process'),
     ...field('Who would use it', undefined, ''),
@@ -92,6 +92,7 @@ export async function saveReview(
   const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
   if (!reason) throw new Error('Give a reason for the decision');
 
+  // Build everything in memory first; nothing is written until the email draft succeeds.
   let idea = await loadIdea(root, id);
   if (idea.closed) throw new Error(`${id} is already closed`);
   const today = ctx.clock();
@@ -102,10 +103,8 @@ export async function saveReview(
   const warnings: string[] = [];
 
   const s2a = ctx.steps.find((s) => s.id === 's2a');
-  if (decision !== 'ask' && s2a && !idea.checklist.s2a?.done) {
-    idea = withTick(idea, s2a, true, 'operator', today, 'review.md');
-    await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
-  }
+  const ticksS2a = decision !== 'ask' && Boolean(s2a) && !idea.checklist.s2a?.done;
+  if (ticksS2a && s2a) idea = withTick(idea, s2a, true, 'operator', today, 'review.md');
 
   if (decision === 'select') {
     const { ideas } = await listIdeas(root);
@@ -118,15 +117,19 @@ export async function saveReview(
   if (decision === 'csic') {
     idea = { ...idea, closed: { as: 'csic', at: today, followUp: plusDays(today, 28) }, route: 'CSIC Repository' };
     handoff = path.join(dir, 'csic-handoff.md');
-    await writeFileAtomic(handoff, renderHandoff(idea, await loadSettings(root)));
   } else if (decision === 'reuse' || decision === 'notnow') {
     idea = { ...idea, closed: { as: decision, at: today } };
   }
+  const settings = await loadSettings(root);
 
+  // Draft the email first: it reads the stored idea, which still has the same id and title.
+  const email = await draftEmail(root, { template: DECISION_EMAIL[decision], ideaId: id }, ctx.clock);
+
+  if (handoff) await writeFileAtomic(handoff, renderHandoff(idea, settings));
   await writeFileAtomic(path.join(dir, 'review.md'), renderReview(idea, review));
   await saveIdea(root, idea);
+  if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
   await appendHistory(dir, { at: today, action: 'review', by: 'operator', detail: `${decision}: ${reason}`, source: 'review.md' });
-  const email = await draftEmail(root, { template: DECISION_EMAIL[decision], ideaId: id }, ctx.clock);
   return { idea, email, warnings, ...(handoff ? { handoff } : {}) };
 }
 

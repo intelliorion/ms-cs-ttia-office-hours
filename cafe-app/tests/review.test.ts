@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { saveReview, writeReviewPack } from '../src/review/review';
 import { loadIdea, ideaDir } from '../src/ideas/store';
 import { saveSettings } from '../src/round/store';
+import { paths } from '../src/workspace/paths';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
 
@@ -57,7 +58,7 @@ describe('saveReview', () => {
     expect(handoff).toContain('Requests arrive in a shared mailbox');
     expect(handoff).toContain('Source: form, Business Challenge');
     expect(handoff).toContain('Person 3, named as sponsor in Team Members and Lead. MD status: not confirmed.');
-    expect(handoff).toContain('## Who would use it\n\nNot in the Café record. Ask the team.\n\nSource: none');
+    expect(handoff).toContain('## Who would use it\n\nNot in the Café submission. Ask the team.\n\nSource: none');
     expect(handoff).toContain('[CSIC REPOSITORY INTAKE LINK]');
     expect(handoff).toContain('On 16 November 2026: did it reach the CSIC Repository?');
   });
@@ -69,6 +70,17 @@ describe('saveReview', () => {
     const second = await saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'b' }, ctx);
     expect(first.warnings).toEqual([]);
     expect(second.warnings).toEqual(['This makes 2 ideas selected this round; your limit is 1.']);
+  });
+
+  it('a failed email draft leaves the idea open and writes nothing', async () => {
+    const root = await setup();
+    await rm(path.join(paths(root).templates, 'E5.md'));
+    await expect(saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx)).rejects.toThrow();
+    expect((await loadIdea(root, 'CAFE-2026-002')).closed).toBeUndefined();
+    expect((await loadIdea(root, 'CAFE-2026-002')).checklist.s2a).toBeUndefined();
+    const dir = await ideaDir(root, 'CAFE-2026-002');
+    await expect(access(path.join(dir, 'review.md'))).rejects.toThrow();
+    await expect(access(path.join(dir, 'csic-handoff.md'))).rejects.toThrow();
   });
 
   it('will not review a closed idea again', async () => {

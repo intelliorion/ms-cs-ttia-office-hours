@@ -28,3 +28,14 @@ export function sampleIdea(over: Partial<Idea> = {}): Idea {
     ...over,
   });
 }
+
+import type { AddressInfo } from 'node:net';
+import { createApp } from '../src/server/server';
+
+export async function startServer(today = '2026-10-19') {
+  const root = await tmpWorkspace(today);
+  const server = createApp({ root, clock: fixedClock(today) });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return { root, server, base: `http://127.0.0.1:${port}` };
+}

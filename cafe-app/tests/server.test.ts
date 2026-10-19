@@ -32,7 +32,7 @@ function rawStatus(base: string, pathName: string, host: string): Promise<number
 describe('api', () => {
   it('reports an empty round', async () => {
     const { base } = await boot();
-    const state = await (await fetch(`${base}/api/state`)).json();
+    const state = await j(await fetch(`${base}/api/state`));
     expect(state.round.id).toBe('ROUND-2026-Q4');
     expect(state.ideas).toEqual([]);
     expect(state.steps).toHaveLength(25);
@@ -44,8 +44,8 @@ describe('api', () => {
     const res = await fetch(`${base}/api/import`, {
       method: 'POST', headers: { 'x-filename': 'export.csv', 'content-type': 'application/octet-stream' }, body: await readFile(FIXTURE),
     });
-    expect(((await j(res))()).created).toHaveLength(3);
-    const state = await (await fetch(`${base}/api/state`)).json();
+    expect((await j(res)).created).toHaveLength(3);
+    const state = await j(await fetch(`${base}/api/state`));
     expect(state.ideas[0].progress.label).toBe('Submit Idea · 1 of 25');
     expect(state.ideas[0].status.s1d).toBe('done');
   });
@@ -53,17 +53,17 @@ describe('api', () => {
   it('turns a missing setting into a 400 that names it', async () => {
     const { base } = await boot();
     await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
-    const draft = await (await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' })).json();
+    const draft = await j(await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' }));
     const res = await post(base, '/api/outbox/approve', { key: draft.key });
     expect(res.status).toBe(400);
-    expect(((await j(res))()).missing).toEqual(['Decisions by', 'Your name (email signature)']);
+    expect((await j(res)).missing).toEqual(['Decisions by', 'Your name (email signature)']);
   });
 
   it('refuses paths and IDs outside the workspace', async () => {
     const { base } = await boot();
     const res = await post(base, '/api/ideas/..%2F..%2Fetc/tick', { step: 's1a', done: true });
     expect(res.status).toBe(400);
-    expect(((await j(res))()).error).toContain('Not a Café ID');
+    expect((await j(res)).error).toContain('Not a Café ID');
     expect((await fetch(`${base}/../package.json`)).status).toBe(404);
     expect((await post(base, '/api/outbox/approve', { key: '../../x.md' })).status).toBe(400);
   });
@@ -84,6 +84,6 @@ describe('api', () => {
     const { base } = await boot();
     const res = await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'notes.exe' }, body: 'x' });
     expect(res.status).toBe(400);
-    expect(((await j(res))()).error).toBe('Drop a .csv or .xlsx export');
+    expect((await j(res)).error).toBe('Drop a .csv or .xlsx export');
   });
 });

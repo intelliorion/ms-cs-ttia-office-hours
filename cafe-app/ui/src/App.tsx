@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
@@ -6,26 +6,38 @@ import { useStore } from './state/store';
 import { IdeasList } from './panels/IdeasList';
 import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
 import { Universe } from './universe/Universe';
+import { Modal } from './popouts/Modal';
+import { IdeaPopout } from './popouts/IdeaPopout';
+import { NodeCard } from './popouts/NodeCard';
+import { cafeIdOf } from './popouts/ideaHelpers';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, closePopout, notice, refresh, selectedId, hoverId, labels, viewNonce, select, hover, toggleLabels, resetView } = useStore();
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, viewNonce, select, hover, toggleLabels, resetView } = useStore();
+  // An idea star opens its pop-out; any other star shows its card.
+  const onSelect = useCallback((id: string | null) => {
+    select(id);
+    const cafe = cafeIdOf(id);
+    if (cafe) openPopout({ kind: 'idea', id: cafe });
+  }, [select, openPopout]);
+  const cardFor = selectedId && !cafeIdOf(selectedId) && !popout && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, hover, toggleLabels, resetView };
+      window.__cafe = { select, click: onSelect, hover, toggleLabels, resetView, openPopout, closePopout };
     }
-  }, [select, hover, toggleLabels, resetView]);
+  }, [select, onSelect, hover, toggleLabels, resetView, openPopout, closePopout]);
   return (
     <Stage>
       {graph && (
         <Universe graph={graph} layout={graph.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels}
-          viewNonce={viewNonce} onSelect={select} onHover={hover} />
+          viewNonce={viewNonce} onSelect={onSelect} onHover={hover} />
       )}
       <TitleBar />
-      {notice && <div className="notice" role="status">{notice.text}</div>}
+      {notice && !popout && <div className="notice" role="status">{notice.text}</div>}
+      {cardFor && <NodeCard nodeId={cardFor} />}
       <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
         <IdeasList />
       </Panel>
@@ -45,13 +57,11 @@ export default function App() {
         <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
         <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
       </div>
-      {popout && (
-        <div className="modal-back" onClick={closePopout}>
-          <div className="panel modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{popout.kind}</h2>
-            <div className="panel-body">Coming next.<div><button className="pill" onClick={closePopout}>Close</button></div></div>
-          </div>
-        </div>
+      {popout?.kind === 'idea' && <IdeaPopout id={popout.id} />}
+      {popout && popout.kind !== 'idea' && (
+        <Modal title={<h2>{popout.kind[0].toUpperCase() + popout.kind.slice(1)}</h2>} label={popout.kind} onClose={closePopout} width={720} height={260}>
+          <div className="modal-body">Coming next.</div>
+        </Modal>
       )}
     </Stage>
   );

@@ -105,9 +105,12 @@ function Scene({ graph, layout, selectedId, hoverId, labels, viewNonce = 0, onSe
     return () => { el.removeEventListener('pointerdown', on); el.removeEventListener('wheel', on); };
   }, [gl]);
 
-  // Fly to the selected star.
+  // Fly to the selected star, once per selection: a refreshed graph keeps the camera where it is.
+  const flown = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedId || !spin.current) return;
+    if (!selectedId) { flown.current = null; return; }
+    if (!spin.current || flown.current === selectedId) return;
+    flown.current = selectedId;
     const p = pos.get(selectedId); if (!p) return;
     spin.current.updateMatrixWorld();
     // At least 70 units away, and far enough back that the whole neighbourhood stays in view.

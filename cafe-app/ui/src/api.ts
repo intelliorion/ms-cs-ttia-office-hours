@@ -13,3 +13,11 @@ export const getState = () => fetch('/api/state').then((r) => handle<any>(r));
 export const getGraph = () => fetch('/api/graph').then((r) => handle<any>(r));
 export const post = (url: string, body: unknown = {}) =>
   fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => handle<any>(r));
+export const getHistory = (id: string) => fetch(`/api/ideas/${encodeURIComponent(id)}/history`).then((r) => handle<any[]>(r));
+export const ideaPost = (id: string, what: 'stage' | 'review' | 'draft' | 'reply', body: unknown = {}) =>
+  post(`/api/ideas/${encodeURIComponent(id)}/${what}`, body);
+
+/** Puts text on the clipboard. False when the browser refuses, so the caller can show it selected instead. */
+export async function copyText(text: string): Promise<boolean> {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}

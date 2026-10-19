@@ -9,7 +9,9 @@ export type Popout =
   | { kind: 'outbox' }
   | { kind: 'ai' };
 
-export interface Notice { text: string; suggest?: unknown }
+/** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
+export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }
+export interface Notice { text: string; kind?: 'ok' | 'error' }
 
 export interface AppState {
   state: any | null;
@@ -22,6 +24,7 @@ export interface AppState {
   viewNonce: number;
   popout: Popout;
   notice: Notice | null;
+  suggest: Suggest | null;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
@@ -30,14 +33,16 @@ export interface AppState {
   openPopout: (p: Exclude<Popout, null>) => void;
   closePopout: () => void;
   setNotice: (n: Notice | null) => void;
+  setSuggest: (s: Suggest | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null,
   refresh: async () => {
     try {
       const [state, graph] = await Promise.all([getState(), getGraph().catch(() => null)]);
-      set({ state, graph });
+      // Keep the old graph (or its layout) when nothing changed, so the universe and its camera stay where they are.
+      set((s) => ({ state, graph: keepSame(s.graph, graph) }));
     } catch (e) { set({ notice: { text: (e as Error).message } }); }
   },
   select: (id) => set({ selectedId: id }),
@@ -45,9 +50,18 @@ export const useStore = create<AppState>((set) => ({
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
   openPopout: (p) => set({ popout: p }),
-  closePopout: () => set({ popout: null }),
+  closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
+  setSuggest: (x) => set({ suggest: x }),
 }));
+
+/** Structural sharing for the graph: same content keeps the same object, and an unchanged layout keeps its object. */
+export function keepSame(prev: any, next: any): any {
+  if (!prev || !next) return next;
+  if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+  if (prev.layout && JSON.stringify(prev.layout) === JSON.stringify(next.layout)) return { ...next, layout: prev.layout };
+  return next;
+}
 
 const isOpen = (i: any) => !i.closed;
 const tally = (keys: string[]): [string, number][] => {

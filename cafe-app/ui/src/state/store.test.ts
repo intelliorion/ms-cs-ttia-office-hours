@@ -28,3 +28,16 @@ describe('selection', () => {
     expect(useStore.getState()).toMatchObject({ selectedId: null, viewNonce: 1, labels: true });
   });
 });
+
+describe('keepSame', () => {
+  it('keeps the old graph when nothing changed, and the old layout when only links changed', async () => {
+    const { keepSame } = await import('./store');
+    const a = { nodes: [1], edges: [], layout: { n: [0, 0, 0] } };
+    expect(keepSame(a, JSON.parse(JSON.stringify(a)))).toBe(a);
+    const b = { ...JSON.parse(JSON.stringify(a)), edges: [2] };
+    const k = keepSame(a, b);
+    expect(k).not.toBe(a);
+    expect(k.layout).toBe(a.layout);
+    expect(keepSame(null, b)).toBe(b);
+  });
+});

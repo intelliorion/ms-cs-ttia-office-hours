@@ -1,0 +1,38 @@
+import { NODE_COLOURS } from '../universe/graphView';
+import { confidenceText, type LinkRow } from './ideaHelpers';
+
+const TYPE_KEY: Record<string, string> = { 'Pain point': 'PainPoint', 'System or data': 'System' };
+
+/** Links with relation, the other star, source and confidence; unconfirmed ones get Confirm and Remove. */
+export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: {
+  rows: LinkRow[]; busy: boolean; onConfirm: (edgeId: string) => void; onRemove: (edgeId: string) => void; compact?: boolean;
+}) {
+  if (!rows.length) return <div className="hint">No links yet.</div>;
+  return (
+    <ul className={`links${compact ? ' compact' : ''}`}>
+      {rows.map((r) => {
+        const colour = (NODE_COLOURS as Record<string, string>)[TYPE_KEY[r.other.type] ?? r.other.type] ?? '#9fb0ae';
+        return (
+          <li key={r.edge.id} className={r.confirmed ? '' : 'unconfirmed'} data-edge={r.edge.id}>
+            <div className="lk-main">
+              <span className="rel">{r.out ? `${r.rel} →` : `← ${r.rel}`}</span>
+              <span className="dot" style={{ background: colour }} aria-hidden="true" />
+              <span className="other" title={r.other.type}>{r.other.label}</span>
+              <span className={`conf${r.confirmed ? '' : ' low'}`}>{confidenceText(r.confidence)}</span>
+            </div>
+            <div className="lk-sub">
+              <span className="src" title={r.edge.description || r.source}>{r.source}</span>
+              {!r.confirmed && (
+                <span className="lk-acts">
+                  <span className="tag">Unconfirmed</span>
+                  <button className="btn sm primary" disabled={busy} data-action="confirm-link" onClick={() => onConfirm(r.edge.id)}>Confirm</button>
+                  <button className="btn sm" disabled={busy} data-action="remove-link" onClick={() => onRemove(r.edge.id)}>Remove</button>
+                </span>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

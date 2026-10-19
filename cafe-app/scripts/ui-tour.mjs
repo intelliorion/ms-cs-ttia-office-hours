@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover]
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout]
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -53,6 +53,47 @@ async function page(browser, errors) {
   return p;
 }
 
+// Two pending AI links (below 0.7, so dashed and unconfirmed) for the pop-out and the star card.
+async function seedAiLinks() {
+  const dir = path.join(workspace, 'graph');
+  await fs.mkdir(dir, { recursive: true });
+  const links = [
+    { from: 'idea:CAFE-2026-002', to: 'painpoint:re-keying-requests-into-a-tracker', rel: 'REPLACES', description: 'Requests are re-keyed into an Excel tracker by hand',
+      source: 'ai: extract, CAFE-2026-002 Business Challenge', confidence: 0.62, status: 'pending',
+      newNodes: [{ id: 'painpoint:re-keying-requests-into-a-tracker', type: 'PainPoint', label: 'Re-keying requests into a tracker' }] },
+    { from: 'capability:agent-design-guidance', to: 'tool:copilot-studio', rel: 'BUILT_WITH', description: 'Agent design guidance is usually built with Copilot Studio',
+      source: 'ai: extract, CAFE-2026-002 Support Requested', confidence: 0.55, status: 'pending',
+      newNodes: [{ id: 'tool:copilot-studio', type: 'Tool', label: 'Copilot Studio' }] },
+  ];
+  await fs.writeFile(path.join(dir, 'ai-links.jsonl'), links.map((l) => JSON.stringify(l)).join('\n') + '\n');
+}
+
+// The idea pop-out, a review's suggestion inside it, and the card for a star that is not an idea.
+async function popoutShots(p) {
+  await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002')); // as a click on the star
+  await p.waitForSelector('.idea-pop');
+  await sleep(3500);
+  await shot(p, '06-popout.png');
+  // A CSIC review through the page: tick two criteria, pick the decision, give a reason, save.
+  const crit = p.locator('.idea-pop .criteria input');
+  await crit.nth(0).check(); await crit.nth(2).check();
+  await p.selectOption('.idea-pop [data-action="decision"]', 'csic');
+  await p.fill('.idea-pop textarea.reason', 'It needs the live shared mailbox, so it belongs in the CSIC Repository.');
+  await p.click('.idea-pop [data-action="save-review"]');
+  await p.waitForSelector('[data-testid="suggest"]');
+  await sleep(800);
+  await shot(p, '07-popout-suggest.png');
+  await p.click('.idea-pop [data-action="suggest-no"]');
+  await p.keyboard.press('Escape');
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await sleep(1500);
+  await p.evaluate(() => window.__cafe.click('capability:agent-design-guidance'));
+  await p.waitForSelector('[data-testid="nodecard"]');
+  await sleep(3500);
+  await shot(p, '08-nodecard.png');
+  await p.evaluate(() => window.__cafe.select(null));
+}
+
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
 
 // The workspace is wiped on every run, so only ever delete a throwaway folder.
@@ -79,6 +120,7 @@ async function main() {
     const { ideas } = await (await fetch(`${base}/api/state`)).json();
     const plan = [null, { stage: 2 }, { stage: 3 }, null, { stage: 2 }, { stage: 4 }, { stage: 3 }, { closeAs: 'csic' }];
     for (const [i, t] of plan.entries()) if (t && ideas[i]) await post(`/api/ideas/${ideas[i].id}/stage`, t);
+    await seedAiLinks();
 
     console.log('WebGL:');
     const gl = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
@@ -92,6 +134,13 @@ async function main() {
       await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); window.__cafe.hover('team:gss'); });
       await sleep(2500);
       await shot(p, '05-hover.png');
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'popout') {
+      await popoutShots(p);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;
@@ -119,6 +168,8 @@ async function main() {
     await p.evaluate(() => { window.__cafe.toggleLabels(); window.__cafe.hover('team:gss'); });
     await sleep(800);
     await shot(p, '05-hover.png');
+    await p.evaluate(() => window.__cafe.hover(null));
+    await popoutShots(p);
     await gl.close();
 
     console.log('No WebGL:');

@@ -67,11 +67,25 @@ async function load(root: string, key: string): Promise<EmailRecord> {
 
 const save = (root: string, r: EmailRecord) => writeFileAtomic(fileOf(root, r.key), serialize(r));
 
-async function recordsIn(root: string, dir: string): Promise<EmailRecord[]> {
+export interface OutboxProblem {
+  file: string;
+  message: string;
+}
+
+/** Reads every email in a folder; a file that cannot be read is reported, not thrown. */
+async function recordsIn(root: string, dir: string): Promise<{ records: EmailRecord[]; problems: OutboxProblem[]; count: number }> {
   const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => FILE_PATTERN.test(n)).sort();
-  const out: EmailRecord[] = [];
-  for (const n of names) out.push(await load(root, keyOf(root, path.join(dir, n))));
-  return out;
+  const records: EmailRecord[] = [];
+  const problems: OutboxProblem[] = [];
+  for (const n of names) {
+    const key = keyOf(root, path.join(dir, n));
+    try {
+      records.push(await load(root, key));
+    } catch (e) {
+      problems.push({ file: key, message: (e as Error).message });
+    }
+  }
+  return { records, problems, count: names.length };
 }
 
 export async function draftEmail(
@@ -83,11 +97,11 @@ export async function draftEmail(
   const idea = input.ideaId ? await loadIdea(root, input.ideaId) : undefined;
   const round = idea?.round || (await currentRoundId(root));
   const dir = idea ? path.join(await ideaDir(root, idea.id), 'emails') : path.join(paths(root).rounds, round, 'emails');
-  const records = await recordsIn(root, dir);
+  const { records, count } = await recordsIn(root, dir);
   const existing = records.find((r) => r.template === tpl.id && r.status !== 'sent');
   if (existing) return existing;
 
-  const seq = String(records.length + 1).padStart(3, '0');
+  const seq = String(count + 1).padStart(3, '0');
   const r = render(tpl, { idea });
   const rec: EmailRecord = {
     key: keyOf(root, path.join(dir, `${seq}-${tpl.id}.md`)),
@@ -112,15 +126,23 @@ async function viewOf(root: string, r: EmailRecord): Promise<OutboxItem> {
 }
 
 export async function listOutbox(root: string): Promise<OutboxItem[]> {
+  return (await listOutboxChecked(root)).items;
+}
+
+export async function listOutboxChecked(root: string): Promise<{ items: OutboxItem[]; problems: OutboxProblem[] }> {
   const p = paths(root);
   const items: OutboxItem[] = [];
+  const problems: OutboxProblem[] = [];
   for (const base of [p.ideas, p.rounds]) {
     for (const name of (await fs.readdir(base).catch(() => [] as string[])).sort()) {
-      for (const r of await recordsIn(root, path.join(base, name, 'emails'))) items.push(await viewOf(root, r));
+      const found = await recordsIn(root, path.join(base, name, 'emails'));
+      problems.push(...found.problems);
+      for (const r of found.records) items.push(await viewOf(root, r));
     }
   }
   const order: Record<EmailStatus, number> = { draft: 0, approved: 1, sent: 2 };
-  return items.sort((a, b) => order[a.status] - order[b.status] || a.created.localeCompare(b.created) || a.key.localeCompare(b.key));
+  items.sort((a, b) => order[a.status] - order[b.status] || a.created.localeCompare(b.created) || a.key.localeCompare(b.key));
+  return { items, problems };
 }
 
 export async function approve(root: string, key: string, clock: Clock): Promise<EmailRecord> {
@@ -142,14 +164,16 @@ export async function markSent(root: string, key: string, clock: Clock, steps: S
     const tpl = (await loadTemplates(root))[r.template];
     const dir = await ideaDir(root, r.idea);
     let idea = await loadIdea(root, r.idea);
+    let ticked: string | undefined;
     idea = { ...idea, sent: { ...idea.sent, [r.template]: today } };
     if (r.template === 'E2' || r.template === 'E2R') idea = { ...idea, due: { ...idea.due, s2d: plusDays(today, 5) } };
     const step = tpl?.step ? steps.find((s) => s.id === tpl.step) : undefined;
     if (step && !idea.checklist[step.id]?.done) {
       idea = withTick(idea, step, true, 'app', today, key);
-      await appendHistory(dir, { at: today, action: 'tick', by: 'app', step: step.id, source: key });
+      ticked = step.id;
     }
     await saveIdea(root, idea);
+    if (ticked) await appendHistory(dir, { at: today, action: 'tick', by: 'app', step: ticked, source: key });
     await appendHistory(dir, { at: today, action: 'sent', by: 'operator', detail: r.template, source: key });
   }
   const next: EmailRecord = { ...r, status: 'sent', sentAt: today };

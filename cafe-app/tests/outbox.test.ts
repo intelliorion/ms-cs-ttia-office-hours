@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea, loadIdea } from '../src/ideas/store';
 import { saveRound, saveSettings } from '../src/round/store';
-import { draftEmail, listOutbox, approve, markSent, updateDraft, MissingSettingsError } from '../src/comms/outbox';
+import { draftEmail, listOutbox, listOutboxChecked, approve, markSent, updateDraft, MissingSettingsError } from '../src/comms/outbox';
 import { readHistory } from '../src/workspace/files';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
@@ -110,5 +110,14 @@ describe('outbox', () => {
   it('refuses a key outside the Outbox', async () => {
     const { root } = await setup();
     await expect(approve(root, '../../etc/passwd', clock)).rejects.toThrow('Not an Outbox item');
+  });
+  it('reports an unreadable email file and still lists the good ones', async () => {
+    const { root, dir } = await setup();
+    const { key } = await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
+    await writeFile(path.join(dir, 'emails', '002-E2.md'), 'not an email at all');
+    const { items, problems } = await listOutboxChecked(root);
+    expect(items.map((i) => i.key)).toEqual([key]);
+    expect(problems).toEqual([{ file: 'ideas/CAFE-2026-001-email-scheduler/emails/002-E2.md', message: expect.stringContaining('missing front matter') }]);
+    expect(await listOutbox(root)).toHaveLength(1);
   });
 });

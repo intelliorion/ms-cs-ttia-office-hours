@@ -59,6 +59,13 @@ export function createApp({ root, clock }: ServerOptions): http.Server {
     routes.push({ method, pattern, keys, handler });
   };
   registerApi(add, { root, clock });
+  // Every POST waits for the one before it, so two clicks cannot interleave their file writes.
+  let lock: Promise<unknown> = Promise.resolve();
+  const exclusive = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = lock.then(fn, fn);
+    lock = run.catch(() => undefined);
+    return run;
+  };
 
   return http.createServer(async (req, res) => {
     try {
@@ -84,7 +91,8 @@ export function createApp({ root, clock }: ServerOptions): http.Server {
       const body = isJson && raw.length
         ? (JSON.parse(raw.toString('utf8')) as Record<string, unknown>)
         : {};
-      return send(res, 200, await route.handler({ body, raw, params, headers: req.headers }));
+      const call = () => route.handler({ body, raw, params, headers: req.headers });
+      return send(res, 200, await (req.method === 'POST' ? exclusive(call) : call()));
     } catch (e) {
       const err = e as Error;
       return send(res, 400, { error: err.message, ...(err instanceof MissingSettingsError ? { missing: err.labels } : {}) });

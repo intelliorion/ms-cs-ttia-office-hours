@@ -9,7 +9,7 @@ import { loadRound, saveRound, loadSettings, saveSettings } from '../round/store
 import { listIdeas } from '../ideas/store';
 import { progress, stepStatus, tick, advance } from '../checklist/checklist';
 import { importExport } from '../import/importRows';
-import { draftEmail, listOutbox, approve, markSent, updateDraft } from '../comms/outbox';
+import { draftEmail, listOutboxChecked, approve, markSent, updateDraft } from '../comms/outbox';
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { writeStatusCsv } from '../exports/status';
@@ -18,12 +18,12 @@ export function registerApi(add: AddRoute, { root, clock }: { root: string; cloc
   const steps = () => loadSteps(root);
 
   add('GET', '/api/state', async () => {
-    const [round, settings, st, list, outbox] = await Promise.all([
-      loadRound(root), loadSettings(root), steps(), listIdeas(root), listOutbox(root),
+    const [round, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
+      loadRound(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
     ]);
     const today = clock();
     return {
-      today, round, settings, steps: st, stageNames: STAGE_NAMES, problems: list.problems,
+      today, round, settings, steps: st, stageNames: STAGE_NAMES, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
         return {

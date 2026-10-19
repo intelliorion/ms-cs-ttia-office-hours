@@ -158,8 +158,10 @@ function viewReview() {
 }
 
 function viewOutbox() {
-  if (!state.outbox.length) return '<p>Nothing in the Outbox yet.</p>';
-  return state.outbox.map((m) => {
+  const bad = (state.outboxProblems || []).length
+    ? `<p class="warn">Couldn't read: ${state.outboxProblems.map((p) => esc(`${p.file}: ${p.message}`)).join('; ')}</p>` : '';
+  if (!state.outbox.length) return `<p>Nothing in the Outbox yet.</p>${bad}`;
+  return bad + state.outbox.map((m) => {
     const left = m.contentPlaceholders.length;
     const actions = m.status === 'draft'
       ? `<button class="primary" data-action="approve" data-key="${esc(m.key)}">${m.missingSettings.length ? 'Open Round to set them' : 'Approve and copy'}</button>`
@@ -195,6 +197,8 @@ async function upload(file) {
     if (!res.ok) throw new Error(r.error);
     const errors = r.errors.length ? `, ${r.errors.length} row${r.errors.length === 1 ? '' : 's'} not read (${r.errors.map((e) => `row ${e.row}: ${esc(e.message)}`).join('; ')})` : '';
     ui.report = `<p>Imported ${r.created.length} new, skipped ${r.duplicates.length} already imported${errors}.</p>`
+      + (r.duplicates.length ? `<p>Already imported: ${r.duplicates.map((d) => `row ${d.row} is ${esc(d.id)}`).join('; ')}.</p>` : '')
+      + (r.ignoredColumns.length ? `<p>Columns not used: ${r.ignoredColumns.map(esc).join(', ')}.</p>` : '')
       + (r.flags.length ? `<ul>${r.flags.map((f) => `<li>${esc(f.id)}: ${esc(f.message)}</li>`).join('')}</ul>` : '');
     ui.notice = '';
   } catch (e) {

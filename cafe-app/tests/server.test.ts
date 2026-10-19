@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { startServer, FIXTURE } from './helpers';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,5 +106,26 @@ describe('api', () => {
     });
     expect((await send('http://evil.example')).status).toBe(403);
     expect((await send('http://localhost:4100')).status).toBe(200);
+  });
+  it('runs posts one at a time, so a double click ticks once and imports never reuse an ID', async () => {
+    const { base, root } = await boot();
+    await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
+    await post(base, '/api/round', { reviewBy: '2026-11-02' });
+    await post(base, '/api/settings', { operatorName: 'Café operator' });
+    const draft = await j(await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' }));
+    expect((await post(base, '/api/outbox/approve', { key: draft.key })).status).toBe(200);
+    await Promise.all([post(base, '/api/outbox/sent', { key: draft.key }), post(base, '/api/outbox/sent', { key: draft.key })]);
+    const lines = (await readFile(path.join(root, 'ideas', 'CAFE-2026-001-email-scheduler', 'history.log'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    expect(lines.filter((l) => l.action === 'tick' && l.source === draft.key)).toHaveLength(1);
+    expect(lines.filter((l) => l.action === 'sent')).toHaveLength(1);
+
+    const csv = (title: string) => `Title,Submitter Name\n${title},Person 1 (CS)\n`;
+    const imp = (name: string, title: string) => fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': name }, body: csv(title) });
+    await Promise.all([imp('a.csv', 'Alpha idea'), imp('b.csv', 'Beta idea')]);
+    const state = await j(await fetch(`${base}/api/state`));
+    const ids = state.ideas.map((i: { id: string }) => i.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(state.ideas.map((i: { title: string }) => i.title)).toEqual(expect.arrayContaining(['Alpha idea', 'Beta idea']));
+    expect(ids).toHaveLength(5);
   });
 });

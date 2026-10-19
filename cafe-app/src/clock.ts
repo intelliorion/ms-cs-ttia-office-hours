@@ -1,6 +1,11 @@
 export type Clock = () => string;
 
-export const systemClock: Clock = () => process.env.CAFE_TODAY ?? new Date().toISOString().slice(0, 10);
+export function localIso(d: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+}
+
+export const systemClock: Clock = () => process.env.CAFE_TODAY ?? localIso(new Date());
 
 export const fixedClock = (iso: string): Clock => () => iso;
 

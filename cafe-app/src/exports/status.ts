@@ -18,7 +18,11 @@ export function publicStatus(idea: Idea, round: Round): string {
   }
 }
 
-const cell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+// A leading = + - @ tab or CR would run as a formula in Excel, so it gets a quote mark in front.
+const cell = (raw: string) => {
+  const v = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 
 export async function writeStatusCsv(root: string, clock: Clock): Promise<string> {
   const round = await loadRound(root);

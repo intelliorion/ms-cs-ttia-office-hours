@@ -115,4 +115,12 @@ describe('importExport', () => {
     expect(r.created.map((c) => c.id)).toEqual(['CAFE-2026-002', 'CAFE-2026-003', 'CAFE-2026-004']);
     expect(await readFile(path.join(broken, 'idea.yaml'), 'utf8')).toBe(brokenYaml);
   });
+  it('keeps row numbers true after a blank line in a CSV', async () => {
+    const root = await tmpWorkspace();
+    const file = path.join(root, 'gap.csv');
+    await writeFile(file, 'Title,Submitter Name\nFirst,Person 1 (CS)\n\n,Person 2 (CS)\nLast,Person 3 (CS)\n');
+    const r = await importExport(root, file, opts);
+    expect(r.errors).toEqual([{ row: 4, message: 'Title is empty' }]);
+    expect((await loadIdea(root, r.created[1].id)).source).toEqual({ file: 'gap.csv', row: 5 });
+  });
 });

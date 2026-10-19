@@ -63,6 +63,9 @@ export interface Idea {
   dedupe_key: string;
 }
 
+const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const obj = (v: unknown): object => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
 export function normalizeIdea(raw: Partial<Idea>): Idea {
   const stage = Number(raw.stage);
   return {
@@ -72,13 +75,13 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     title: String(raw.title ?? ''),
     round: String(raw.round ?? ''),
     stage: ([1, 2, 3, 4].includes(stage) ? stage : 1) as StageNo,
-    outcomes: raw.outcomes ?? [],
-    support: raw.support ?? [],
-    people: { team: [], ...(raw.people ?? {}) },
+    outcomes: arr(raw.outcomes),
+    support: arr(raw.support),
+    people: { ...obj(raw.people), team: arr(raw.people?.team) },
     checklist: raw.checklist ?? {},
     due: raw.due ?? {},
     sent: raw.sent ?? {},
-    flags: raw.flags ?? [],
+    flags: arr(raw.flags),
     dedupe_key: String(raw.dedupe_key ?? ''),
   };
 }

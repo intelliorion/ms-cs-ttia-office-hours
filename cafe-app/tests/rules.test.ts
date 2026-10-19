@@ -39,4 +39,9 @@ describe('normalizeIdea', () => {
     expect(idea.people.team).toEqual([]);
     expect(idea.flags).toEqual([]);
   });
+  it('always gives arrays and an object for list fields', () => {
+    const i = normalizeIdea({ outcomes: 'oops', support: null, flags: {}, people: { team: 'x' } } as never);
+    expect([i.outcomes, i.support, i.flags, i.people.team]).toEqual([[], [], [], []]);
+    expect(normalizeIdea({ people: 'x' } as never).people).toEqual({ team: [] });
+  });
 });

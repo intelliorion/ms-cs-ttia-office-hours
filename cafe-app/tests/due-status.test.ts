@@ -47,4 +47,14 @@ describe('status', () => {
     expect(lines[4]).toBe('CAFE-2026-009,"Intake, triage and ""routing""",Received · decision by date to be confirmed,2026-10-19');
     expect(csv).not.toMatch(/Person/);
   });
+  it('neutralises spreadsheet formulas and quotes line breaks in status.csv', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', slug: 'a', title: '=HYPERLINK("x")' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', slug: 'b', title: '@cmd', dedupe_key: 'b' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-003', slug: 'c', title: 'two\rlines', dedupe_key: 'c' }));
+    const csv = await readFile(await writeStatusCsv(root, fixedClock('2026-10-19')), 'utf8');
+    expect(csv).toContain(`"'=HYPERLINK(""x"")"`);
+    expect(csv).toContain("'@cmd");
+    expect(csv).toContain('"two\rlines"');
+  });
 });

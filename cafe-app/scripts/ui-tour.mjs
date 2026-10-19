@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout]
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2]
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -94,6 +94,76 @@ async function popoutShots(p) {
   await p.evaluate(() => window.__cafe.select(null));
 }
 
+// A second export: one row already imported, two new ones, one without a title, and a column the app does not use.
+const SECOND_EXPORT = [
+  'ID,Title,Submitter Name,CS Function,Region,Participation Type,Team Members and Lead,Business Challenge,Desired Outcomes,Current Process,Support Requested,Have you already experimented with AI for this idea?,Reviewer notes',
+  '11,Email scheduler,Person 1 (CS),BSI,AMER,Individual,,Arranging meetings takes many back-and-forth emails.,;#Save time;#,Emails go back and forth.,;#Agent Design Guidance;#,Yes,Looks fine',
+  '12,Contract clause finder,Person 12 (CS),Legal Ops,EMEA,Individual,,Lawyers search old contracts by hand for the same clauses.,;#Save time;#Improve quality;#,Open each contract and read it.,;#AI Solution Brainstorming;#,No,Needs data check',
+  '13,Desk booking assistant,Person 13 (CS),Workplace,EMEA,Team,Person 13 (Lead); Person 14,Desk bookings are chased over email each week.,;#Improve visibility;#,Email the desk booking mailbox.,;#Agent Design Guidance;#,No,',
+  '14,,Person 15 (CS),BSI,AMER,Individual,,No title given,,,,No,',
+].join('\n');
+
+const click = (p, sel) => p.click(sel);
+
+// Import, Round, Outbox from the title bar, then a late reply (the app clock moved 8 days on).
+async function popouts2Shots(p, gl, errors, restart) {
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await click(p, '.titlebar [data-action="import"]');
+  await p.waitForSelector('[data-testid="dropzone"]');
+  const csv = path.join(workspace, 'second-export.csv');
+  await fs.writeFile(csv, SECOND_EXPORT);
+  await p.setInputFiles('[data-testid="import-file"]', csv);
+  await p.waitForSelector('[data-testid="import-report"]');
+  await sleep(1500);
+  await shot(p, '09-import.png');
+  await p.keyboard.press('Escape');
+
+  // Round: fill the dates and settings through the page, leaving the Teams link and the series date empty.
+  await click(p, '.titlebar [data-action="round"]');
+  await p.waitForSelector('[data-field="deadline"]');
+  await p.fill('[data-field="open"]', '2026-10-05');
+  await p.fill('[data-field="deadline"]', '2026-10-30');
+  await p.fill('[data-field="reviewBy"]', '2026-11-13');
+  await p.fill('[data-field="operatorName"]', 'Johnny Hao');
+  await p.fill('[data-field="formLink"]', 'https://forms.example.com/cafe');
+  await click(p, '[data-action="save-round"]');
+  await sleep(500);
+  await click(p, '[data-action="save-settings"]');
+  await sleep(700);
+  await shot(p, '10-round.png');
+  await p.keyboard.press('Escape');
+
+  // Fixture: an E2 sent on the app's day, so it is late 8 days on.
+  const { ideas } = await (await fetch(`${base}/api/state`)).json();
+  const [a, b, c] = [ideas[1].id, ideas[2].id, ideas[4].id];
+  const e2 = await post(`/api/ideas/${a}/draft`, { template: 'E2' });
+  await post('/api/outbox/approve', { key: e2.key });
+  await post('/api/outbox/sent', { key: e2.key });
+  const e1 = await post(`/api/ideas/${b}/draft`, { template: 'E1' });
+  await post('/api/outbox/approve', { key: e1.key });
+  await post(`/api/ideas/${c}/draft`, { template: 'E3' }); // blocked: the series date is not set
+  await post(`/api/ideas/${b}/draft`, { template: 'E2' });
+  await post('/api/round/draft', { template: 'E0' });
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(2500);
+  await click(p, '.titlebar [data-action="outbox"]');
+  await p.waitForSelector('[data-group]');
+  await sleep(800);
+  await shot(p, '12-outbox.png');
+  await p.keyboard.press('Escape');
+
+  // Eight days on: the reply is late. Ideas list shows the amber line, Pipeline shows the late list.
+  const later = new Date(Date.now() + 8 * 864e5);
+  const iso = `${later.getFullYear()}-${String(later.getMonth() + 1).padStart(2, '0')}-${String(later.getDate()).padStart(2, '0')}`;
+  await restart({ CAFE_TODAY: iso });
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(3000);
+  await p.mouse.move(960, 540);
+  await shot(p, '11-late.png');
+}
+
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
 
 // The workspace is wiped on every run, so only ever delete a throwaway folder.
@@ -110,7 +180,14 @@ async function main() {
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   await fs.mkdir(out, { recursive: true });
-  const server = spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', workspace, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'] });
+  const launch = (env = {}) => spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', workspace, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } });
+  let server = launch();
+  const restart = async (env) => {
+    server.kill('SIGTERM');
+    await new Promise((r) => (server.exitCode !== null ? r() : server.once('exit', r)));
+    server = launch(env);
+    await waitForServer();
+  };
   const errors = [];
   try {
     await waitForServer();
@@ -146,6 +223,13 @@ async function main() {
       process.exitCode = errors.length ? 1 : 0;
       return;
     }
+    if (only === 'popouts2') {
+      await popouts2Shots(p, gl, errors, restart);
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     if (only === 'panels') {
       await p.mouse.move(200, 330);
       await shot(p, '05-panels.png');
@@ -170,6 +254,7 @@ async function main() {
     await shot(p, '05-hover.png');
     await p.evaluate(() => window.__cafe.hover(null));
     await popoutShots(p);
+    await popouts2Shots(p, gl, errors, restart);
     await gl.close();
 
     console.log('No WebGL:');

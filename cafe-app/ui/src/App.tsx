@@ -8,6 +8,9 @@ import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Chart
 import { Universe } from './universe/Universe';
 import { Modal } from './popouts/Modal';
 import { IdeaPopout } from './popouts/IdeaPopout';
+import { ImportPopout } from './popouts/ImportPopout';
+import { RoundPopout } from './popouts/RoundPopout';
+import { OutboxPopout } from './popouts/OutboxPopout';
 import { NodeCard } from './popouts/NodeCard';
 import { cafeIdOf } from './popouts/ideaHelpers';
 
@@ -58,8 +61,11 @@ export default function App() {
         <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
       </div>
       {popout?.kind === 'idea' && <IdeaPopout id={popout.id} />}
-      {popout && popout.kind !== 'idea' && (
-        <Modal title={<h2>{popout.kind[0].toUpperCase() + popout.kind.slice(1)}</h2>} label={popout.kind} onClose={closePopout} width={720} height={260}>
+      {popout?.kind === 'import' && <ImportPopout />}
+      {popout?.kind === 'round' && <RoundPopout />}
+      {popout?.kind === 'outbox' && <OutboxPopout />}
+      {popout?.kind === 'ai' && (
+        <Modal title={<h2>AI</h2>} label={popout.kind} onClose={closePopout} width={720} height={260}>
           <div className="modal-body">Coming next.</div>
         </Modal>
       )}

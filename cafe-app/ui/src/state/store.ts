@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { getState, getGraph } from '../api';
+import { neighbourhood } from '../universe/graphView';
 
 export type Popout =
   | null
@@ -16,18 +17,24 @@ export interface AppState {
   graph: any | null;
   selectedId: string | null;
   hoverId: string | null;
+  /** Show every label in the universe, not only ideas, teams, tools and entities. */
+  labels: boolean;
+  /** Bumped by Reset view; the universe flies home when it changes. */
+  viewNonce: number;
   popout: Popout;
   notice: Notice | null;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
+  toggleLabels: () => void;
+  resetView: () => void;
   openPopout: (p: Exclude<Popout, null>) => void;
   closePopout: () => void;
   setNotice: (n: Notice | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, popout: null, notice: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null,
   refresh: async () => {
     try {
       const [state, graph] = await Promise.all([getState(), getGraph().catch(() => null)]);
@@ -36,6 +43,8 @@ export const useStore = create<AppState>((set) => ({
   },
   select: (id) => set({ selectedId: id }),
   hover: (id) => set({ hoverId: id }),
+  toggleLabels: () => set((s) => ({ labels: !s.labels })),
+  resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
   openPopout: (p) => set({ popout: p }),
   closePopout: () => set({ popout: null }),
   setNotice: (n) => set({ notice: n }),
@@ -72,4 +81,10 @@ export function supportCounts(s: any): [string, number][] {
 
 export function functionRegion(s: any): [string, number][] {
   return tally(s.ideas.map((i: any) => `${i.function || '—'} · ${i.region || '—'}`));
+}
+
+/** The selected node and its direct neighbours, or null when nothing is selected. */
+export function selectedNeighbourhood(s: Pick<AppState, 'graph' | 'selectedId'>): Set<string> | null {
+  if (!s.selectedId || !s.graph) return null;
+  return neighbourhood(s.graph, s.selectedId);
 }

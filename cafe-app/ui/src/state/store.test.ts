@@ -19,3 +19,17 @@ describe('selectors', () => {
   it('counts support across open ideas only', () => expect(supportCounts(state)).toEqual([['A', 1]]));
   it('groups function and region', () => expect(functionRegion(state)).toEqual([['GSS · APAC', 2], ['— · —', 1]]));
 });
+
+describe('selection', () => {
+  it('gives the neighbourhood of the selection, or null', async () => {
+    const { selectedNeighbourhood } = await import('./store');
+    const graph = { edges: [{ from: 'a', to: 'b' }, { from: 'c', to: 'd' }] };
+    expect(selectedNeighbourhood({ graph, selectedId: null })).toBeNull();
+    expect([...selectedNeighbourhood({ graph, selectedId: 'a' })!].sort()).toEqual(['a', 'b']);
+  });
+  it('reset view clears the selection and bumps the nonce; labels toggle', async () => {
+    const { useStore } = await import('./store');
+    useStore.getState().select('a'); useStore.getState().resetView(); useStore.getState().toggleLabels();
+    expect(useStore.getState()).toMatchObject({ selectedId: null, viewNonce: 1, labels: true });
+  });
+});

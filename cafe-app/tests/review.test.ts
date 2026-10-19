@@ -10,6 +10,7 @@ import { paths } from '../src/workspace/paths';
 import { listOutbox } from '../src/comms/outbox';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
+import { setStage } from '../src/ideas/stage';
 
 const clock = fixedClock('2026-10-19');
 const ctx = { clock, steps };
@@ -17,7 +18,7 @@ const ctx = { clock, steps };
 async function setup() {
   const root = await tmpWorkspace();
   await importExport(root, FIXTURE, ctx);
-  // Reviews happen at stage 2 (Review and Select), so move the imported ideas there.
+  // Most reviews happen at Review and Select, so move the imported ideas there.
   for (const id of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) {
     await saveIdea(root, { ...(await loadIdea(root, id)), stage: 2 });
   }
@@ -25,16 +26,17 @@ async function setup() {
 }
 
 describe('saveReview', () => {
-  it('refuses a stage-1 idea before writing anything', async () => {
+  it('reviews a stage-1 idea too: no stage is required', async () => {
     const root = await tmpWorkspace();
     await importExport(root, FIXTURE, ctx);
-    await expect(saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'Looks good' }, ctx))
-      .rejects.toThrow('Move it to Review and Select first');
+    const r = await saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'Looks good' }, ctx);
+    expect(r.idea.stage).toBe(1);
+    expect(r.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
     const idea = await loadIdea(root, 'CAFE-2026-003');
-    expect(idea.review).toBeUndefined();
-    expect(idea.checklist.s2a).toBeUndefined();
-    await expect(access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'))).rejects.toThrow();
-    expect(await listOutbox(root)).toEqual([]);
+    expect(idea.stage).toBe(1);
+    expect(idea.review?.decision).toBe('select');
+    await access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'));
+    expect((await listOutbox(root)).map((m) => m.template)).toEqual(['E3']);
   });
 
   it('needs a reason and writes nothing without one', async () => {
@@ -43,7 +45,7 @@ describe('saveReview', () => {
     await expect(access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'))).rejects.toThrow();
   });
 
-  it('selects an idea: review.md, s2a ticked, E3 drafted, still open', async () => {
+  it('selects an idea: review.md, s2a ticked, E3 drafted, still open, a move suggested', async () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-003', {
       criteria: { feasible: true, builder: true, data: true, theme: true, reuse: false, bogus: true },
@@ -51,6 +53,8 @@ describe('saveReview', () => {
     }, ctx);
     expect(r.email.template).toBe('E3');
     expect(r.idea.closed).toBeUndefined();
+    expect(r.idea.stage).toBe(2);
+    expect(r.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
     expect(r.idea.review?.criteria).toEqual({ feasible: true, builder: true, data: true, theme: true, reuse: false });
     expect((await loadIdea(root, 'CAFE-2026-003')).checklist.s2a?.done).toBe(true);
     const md = await readFile(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'), 'utf8');
@@ -63,21 +67,41 @@ describe('saveReview', () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-001', { decision: 'ask', reason: 'Did they try Copilot in Outlook?' }, ctx);
     expect(r.email.template).toBe('E2');
+    expect(r.suggest).toBeUndefined();
     expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s2a).toBeUndefined();
   });
 
-  it('routes to CSIC: closes with a four-week follow-up and writes the handoff', async () => {
+  it('routes to CSIC: suggests closing, does not close, and writes the handoff', async () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'Defined, sponsored, serves people beyond the team.' }, ctx);
     expect(r.email.template).toBe('E5');
-    expect(r.idea.closed).toEqual({ as: 'csic', at: '2026-10-19', followUp: '2026-11-16' });
+    expect(r.idea.closed).toBeUndefined();
+    expect((await loadIdea(root, 'CAFE-2026-002')).closed).toBeUndefined();
+    expect(r.suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
     const handoff = await readFile(r.handoff!, 'utf8');
     expect(handoff).toContain('Requests arrive in a shared mailbox');
     expect(handoff).toContain('Source: form, Business Challenge');
     expect(handoff).toContain('Person 3, named as sponsor in Team Members and Lead. MD status: not confirmed.');
     expect(handoff).toContain('## Who would use it\n\nNot in the Café submission. Ask the team.\n\nSource: none');
     expect(handoff).toContain('[CSIC REPOSITORY INTAKE LINK]');
-    expect(handoff).toContain('On 16 November 2026: did it reach the CSIC Repository?');
+    expect(handoff).toContain('On [FOLLOW-UP DATE]: did it reach the CSIC Repository?');
+  });
+
+  it('suggests closing for reuse and not this round, and never closes', async () => {
+    const root = await setup();
+    const reuse = await saveReview(root, 'CAFE-2026-001', { decision: 'reuse', reason: 'Copilot does this.' }, ctx);
+    const notnow = await saveReview(root, 'CAFE-2026-003', { decision: 'notnow', reason: 'Full round.' }, ctx);
+    expect(reuse.suggest).toEqual({ closeAs: 'reuse', label: 'Close it as Reuse?' });
+    expect(notnow.suggest).toEqual({ closeAs: 'notnow', label: 'Close it as Not this round?' });
+    expect((await loadIdea(root, 'CAFE-2026-001')).closed).toBeUndefined();
+    expect((await loadIdea(root, 'CAFE-2026-003')).closed).toBeUndefined();
+  });
+
+  it('does not suggest a move the idea has already made', async () => {
+    const root = await setup();
+    await saveIdea(root, { ...(await loadIdea(root, 'CAFE-2026-003')), stage: 3 });
+    const r = await saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'Still good.' }, ctx);
+    expect(r.suggest).toBeUndefined();
   });
 
   it('warns when a selection goes over capacity', async () => {
@@ -100,10 +124,13 @@ describe('saveReview', () => {
     await expect(access(path.join(dir, 'csic-handoff.md'))).rejects.toThrow();
   });
 
-  it('will not review a closed idea again', async () => {
+  it('will not review a closed idea until it is reopened', async () => {
     const root = await setup();
     await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx);
-    await expect(saveReview(root, 'CAFE-2026-002', { decision: 'select', reason: 'b' }, ctx)).rejects.toThrow('already closed');
+    await setStage(root, 'CAFE-2026-002', { closeAs: 'csic' }, clock);
+    await expect(saveReview(root, 'CAFE-2026-002', { decision: 'select', reason: 'b' }, ctx)).rejects.toThrow('Reopen it first (set its stage)');
+    await setStage(root, 'CAFE-2026-002', { stage: 2 }, clock);
+    expect((await saveReview(root, 'CAFE-2026-002', { decision: 'select', reason: 'b' }, ctx)).idea.review?.decision).toBe('select');
   });
 
   it('refuses an unknown decision', async () => {
@@ -116,7 +143,8 @@ describe('writeReviewPack', () => {
   it('lists the open ideas for the TTIA meeting', async () => {
     const root = await setup();
     await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx);
-    const file = await writeReviewPack(root, clock, steps);
+    await setStage(root, 'CAFE-2026-002', { closeAs: 'csic' }, clock);
+    const file = await writeReviewPack(root, clock);
     expect(path.basename(file)).toBe('review-pack-2026-10-19.md');
     const md = await readFile(file, 'utf8');
     expect(md).toContain('2 ideas to decide');
@@ -124,5 +152,7 @@ describe('writeReviewPack', () => {
     expect(md).toContain('## CAFE-2026-003 Third Party Invoice Assessment');
     expect(md).not.toContain('CAFE-2026-002');
     expect(md).toContain('Participation is Individual but 6 people are listed');
+    expect(md).toContain('- Where it is: Review and Select');
+    expect(md).not.toMatch(/ of 25/);
   });
 });

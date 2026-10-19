@@ -1,12 +1,13 @@
 import path from 'node:path';
-import { plusDays, formatDate, type Clock } from '../clock';
+import { formatDate, type Clock } from '../clock';
 import type { Decision, Idea, ReviewRecord } from '../ideas/idea';
 import { loadIdea, saveIdea, ideaDir, listIdeas } from '../ideas/store';
 import { writeFileAtomic, appendHistory } from '../workspace/files';
 import { paths } from '../workspace/paths';
 import { loadSettings, currentRoundId } from '../round/store';
 import type { Settings } from '../round/round';
-import { withTick, progress } from '../checklist/checklist';
+import { withTick } from '../checklist/checklist';
+import { suggestion, whereLabel, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
 import { draftEmail, type EmailRecord } from '../comms/outbox';
 
@@ -28,6 +29,11 @@ export const DECISION_LABELS: Record<Decision, string> = {
   ask: 'Ask first (E2)',
 };
 
+/** The move each decision suggests. "Ask first" suggests none. */
+export const DECISION_SUGGESTS: Record<Decision, StageTarget | undefined> = {
+  select: { stage: 3 }, reuse: { closeAs: 'reuse' }, csic: { closeAs: 'csic' }, notnow: { closeAs: 'notnow' }, ask: undefined,
+};
+
 export interface ReviewInput {
   criteria?: Record<string, unknown>;
   decision?: unknown;
@@ -39,6 +45,7 @@ export interface ReviewResult {
   email: EmailRecord;
   warnings: string[];
   handoff?: string;
+  suggest?: Suggest;
 }
 
 const NOT_IN_SUBMISSION = 'Not in the Café submission. Ask the team.';
@@ -94,8 +101,7 @@ export async function saveReview(
 
   // Build everything in memory first; nothing is written until the email draft succeeds.
   let idea = await loadIdea(root, id);
-  if (idea.closed) throw new Error(`${id} is already closed`);
-  if (idea.stage < 2) throw new Error('Move it to Review and Select first');
+  if (idea.closed) throw new Error(`${id} is closed. Reopen it first (set its stage)`);
   const today = ctx.clock();
   const dir = await ideaDir(root, id);
   const criteria = Object.fromEntries(CRITERIA.map((c) => [c.id, input.criteria?.[c.id] === true]));
@@ -114,13 +120,9 @@ export async function saveReview(
     if (selected > cap) warnings.push(`This makes ${selected} ideas selected this round; your limit is ${cap}.`);
   }
 
-  let handoff: string | undefined;
-  if (decision === 'csic') {
-    idea = { ...idea, closed: { as: 'csic', at: today, followUp: plusDays(today, 28) }, route: 'CSIC Repository' };
-    handoff = path.join(dir, 'csic-handoff.md');
-  } else if (decision === 'reuse' || decision === 'notnow') {
-    idea = { ...idea, closed: { as: decision, at: today } };
-  }
+  // A review never moves or closes the idea; it only suggests the move.
+  const handoff = decision === 'csic' ? path.join(dir, 'csic-handoff.md') : undefined;
+  const suggest = suggestion(idea, DECISION_SUGGESTS[decision]);
   const settings = await loadSettings(root);
 
   // Draft the email first: it reads the stored idea, which still has the same id and title.
@@ -131,10 +133,10 @@ export async function saveReview(
   await saveIdea(root, idea);
   if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
   await appendHistory(dir, { at: today, action: 'review', by: 'operator', detail: `${decision}: ${reason}`, source: 'review.md' });
-  return { idea, email, warnings, ...(handoff ? { handoff } : {}) };
+  return { idea, email, warnings, ...(handoff ? { handoff } : {}), ...(suggest ? { suggest } : {}) };
 }
 
-export async function writeReviewPack(root: string, clock: Clock, steps: StepDef[]): Promise<string> {
+export async function writeReviewPack(root: string, clock: Clock): Promise<string> {
   const round = await currentRoundId(root);
   const today = clock();
   const open = (await listIdeas(root)).ideas.filter((i) => i.round === round && !i.closed && i.stage <= 2);
@@ -151,7 +153,7 @@ export async function writeReviewPack(root: string, clock: Clock, steps: StepDef
       `- Flags: ${i.flags.join('; ') || 'none'}`,
       `- Criteria: ${r ? CRITERIA.map((c) => `${r.criteria[c.id] ? 'yes' : 'no'}: ${c.text}`).join('; ') : 'not reviewed yet'}`,
       `- Decision: ${r ? `${DECISION_LABELS[r.decision]}. ${r.reason}` : 'not decided yet'}`,
-      `- Where it is: ${progress(i, steps).label}`, '',
+      `- Where it is: ${whereLabel(i)}`, '',
     );
   }
   const file = path.join(paths(root).rounds, round, `review-pack-${today}.md`);

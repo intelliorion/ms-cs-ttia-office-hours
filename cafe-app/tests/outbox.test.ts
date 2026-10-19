@@ -120,4 +120,32 @@ describe('outbox', () => {
     expect(problems).toEqual([{ file: 'ideas/CAFE-2026-001-email-scheduler/emails/002-E2.md', message: expect.stringContaining('missing front matter') }]);
     expect(await listOutbox(root)).toHaveLength(1);
   });
+
+  it('suggests a stage move from the template it sent, and never makes it', async () => {
+    const { root } = await setup();
+    await saveRound(root, { open: '2026-10-01', deadline: '2026-10-15', reviewBy: '2026-11-02', seriesStart: '2026-11-09', roadshow: '2026-12-07' });
+    await saveSettings(root, { operatorName: 'Café operator', formLink: 'https://f', csicLink: 'https://c', teamsLink: 'https://t', distList: 'all', deckTemplate: 'deck' });
+    const send = async (template: string) => {
+      const { key } = await draftEmail(root, { template, ideaId: 'CAFE-2026-001' }, clock);
+      await approve(root, key, clock);
+      return markSent(root, key, clock, steps);
+    };
+    expect((await send('E1')).suggest).toBeUndefined();
+    expect((await send('E3')).suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
+    expect((await send('E5')).suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
+    const idea = await loadIdea(root, 'CAFE-2026-001');
+    expect(idea.stage).toBe(1);
+    expect(idea.closed).toBeUndefined();
+    expect(idea.sent).toMatchObject({ E1: '2026-10-19', E3: '2026-10-19', E5: '2026-10-19' });
+  });
+
+  it('suggests nothing when the idea is already there', async () => {
+    const { root } = await setup();
+    await saveIdea(root, sampleIdea({ stage: 3 }));
+    await saveSettings(root, { operatorName: 'Café operator', teamsLink: 'https://t' });
+    await saveRound(root, { seriesStart: '2026-11-09' });
+    const { key } = await draftEmail(root, { template: 'E3', ideaId: 'CAFE-2026-001' }, clock);
+    await approve(root, key, clock);
+    expect((await markSent(root, key, clock, steps)).suggest).toBeUndefined();
+  });
 });

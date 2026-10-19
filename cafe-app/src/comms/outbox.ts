@@ -9,6 +9,7 @@ import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
 import { currentRoundId, loadRound, loadSettings } from '../round/store';
 import { withTick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
+import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 
 export type EmailStatus = 'draft' | 'approved' | 'sent';
 
@@ -31,6 +32,11 @@ export interface OutboxItem extends EmailRecord {
   missingSettings: { token: string; label: string }[];
   contentPlaceholders: string[];
 }
+
+/** The move a sent email suggests. The operator decides; nothing moves on its own. */
+export const SENT_SUGGESTS: Record<string, StageTarget> = {
+  E3: { stage: 3 }, E4: { closeAs: 'reuse' }, E5: { closeAs: 'csic' }, E6: { closeAs: 'notnow' }, E10: { stage: 4 },
+};
 
 export class MissingSettingsError extends Error {
   constructor(public readonly labels: string[]) {
@@ -155,11 +161,14 @@ export async function approve(root: string, key: string, clock: Clock): Promise<
   return next;
 }
 
-export async function markSent(root: string, key: string, clock: Clock, steps: StepDef[]): Promise<EmailRecord> {
+export async function markSent(
+  root: string, key: string, clock: Clock, steps: StepDef[],
+): Promise<EmailRecord & { suggest?: Suggest }> {
   const r = await load(root, key);
   if (r.status === 'sent') return r;
   if (r.status !== 'approved') throw new Error('Approve the email before marking it as sent');
   const today = clock();
+  let suggest: Suggest | undefined;
   if (r.idea) {
     const tpl = (await loadTemplates(root))[r.template];
     const dir = await ideaDir(root, r.idea);
@@ -175,10 +184,11 @@ export async function markSent(root: string, key: string, clock: Clock, steps: S
     await saveIdea(root, idea);
     if (ticked) await appendHistory(dir, { at: today, action: 'tick', by: 'app', step: ticked, source: key });
     await appendHistory(dir, { at: today, action: 'sent', by: 'operator', detail: r.template, source: key });
+    suggest = suggestion(idea, SENT_SUGGESTS[r.template]);
   }
   const next: EmailRecord = { ...r, status: 'sent', sentAt: today };
   await save(root, next);
-  return next;
+  return suggest ? { ...next, suggest } : next;
 }
 
 export async function updateDraft(

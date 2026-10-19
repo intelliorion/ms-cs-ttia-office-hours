@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, FIXTURE } from './helpers';
 
@@ -43,15 +43,55 @@ describe('api', () => {
     expect(state.today).toBe('2026-10-19');
   });
 
-  it('imports a dropped export and shows each idea with its progress', async () => {
+  it('imports a dropped export and shows each idea with its stage, no step counts', async () => {
     const { base } = await boot();
     const res = await fetch(`${base}/api/import`, {
       method: 'POST', headers: { 'x-filename': 'export.csv', 'content-type': 'application/octet-stream' }, body: await readFile(FIXTURE),
     });
     expect((await j(res)).created).toHaveLength(3);
     const state = await j(await fetch(`${base}/api/state`));
-    expect(state.ideas[0].progress.label).toBe('Submit Idea · 1 of 25');
-    expect(state.ideas[0].status.s1d).toBe('done');
+    expect(state.ideas[0]).toMatchObject({ stage: 1, overdue: [], offerE2R: false, sent: {}, due: {} });
+    expect(state.ideas[0]).not.toHaveProperty('progress');
+    expect(state.ideas[0]).not.toHaveProperty('status');
+    expect(state.ideas[0]).not.toHaveProperty('missingToAdvance');
+    expect(state.stageNames['3']).toBe('Design series');
+    expect(state.closures.csic).toBe('Routed to CSIC');
+  });
+
+  it('sets a stage freely, logs it, and shows the history', async () => {
+    const { base } = await boot();
+    await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
+    const moved = await post(base, '/api/ideas/CAFE-2026-001/stage', { stage: 4 });
+    expect(moved.status).toBe(200);
+    expect((await j(moved)).stage).toBe(4);
+    const closed = await j(await post(base, '/api/ideas/CAFE-2026-001/stage', { closeAs: 'csic' }));
+    expect(closed.closed).toEqual({ as: 'csic', at: '2026-10-19', followUp: '2026-11-16' });
+    const bad = await post(base, '/api/ideas/CAFE-2026-001/stage', { stage: 9 });
+    expect(bad.status).toBe(400);
+    expect((await j(bad)).error).toContain('Pick a stage');
+    const history = await j(await fetch(`${base}/api/ideas/CAFE-2026-001/history`));
+    expect(history.filter((h: { action: string }) => h.action === 'stage').map((h: { detail: string }) => h.detail))
+      .toEqual(['Submit Idea → Launch and Learn', 'Launch and Learn → Closed · Routed to CSIC']);
+    expect(history[0].action).toBe('created');
+    expect((await fetch(`${base}/api/ideas/..%2Fx/history`)).status).toBe(400);
+  });
+
+  it('has no advance route any more', async () => {
+    const { base } = await boot();
+    await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
+    expect((await post(base, '/api/ideas/CAFE-2026-001/advance', {})).status).toBe(404);
+  });
+
+  it('records a reply received, which clears the late reply', async () => {
+    const { base, root } = await boot();
+    await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
+    const ideaFile = path.join(root, 'ideas', 'CAFE-2026-001-email-scheduler', 'idea.yaml');
+    const yaml = await readFile(ideaFile, 'utf8');
+    await writeFile(ideaFile, yaml.replace(/^due: \{\}$/m, 'due:\n  s2d: 2026-10-10'));
+    expect((await j(await fetch(`${base}/api/state`))).ideas[0].overdue).toHaveLength(1);
+    const r = await j(await post(base, '/api/ideas/CAFE-2026-001/reply', {}));
+    expect(r.checklist.s2d).toMatchObject({ done: true, by: 'operator', source: 'reply received' });
+    expect((await j(await fetch(`${base}/api/state`))).ideas[0].overdue).toEqual([]);
   });
 
   it('turns a missing setting into a 400 that names it', async () => {

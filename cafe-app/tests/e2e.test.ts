@@ -6,7 +6,7 @@ import { tmpWorkspace, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { saveRound, saveSettings } from '../src/round/store';
 import { draftEmail, approve, markSent, listOutbox } from '../src/comms/outbox';
-import { tick, advance, progress } from '../src/checklist/checklist';
+import { setStage } from '../src/ideas/stage';
 import { saveReview } from '../src/review/review';
 import { overdue, needsE2R } from '../src/reminders/due';
 import { writeStatusCsv } from '../src/exports/status';
@@ -33,9 +33,7 @@ describe('a round, end to end', () => {
 
     for (const id of ids) {
       await send('E1', id);
-      await tick(root, id, 's1a', true, { by: 'operator', clock, steps });
-      await tick(root, id, 's1b', true, { by: 'operator', clock, steps });
-      expect((await advance(root, id, steps, clock)).stage).toBe(2);
+      expect((await setStage(root, id, { stage: 2 }, clock)).stage).toBe(2);
     }
 
     const ask = await saveReview(root, ids[0], { decision: 'ask', reason: 'Did they try Copilot in Outlook?' }, { clock, steps });
@@ -43,23 +41,26 @@ describe('a round, end to end', () => {
     await markSent(root, ask.email.key, clock, steps);
 
     const csic = await saveReview(root, ids[1], { decision: 'csic', reason: 'Defined, sponsored, serves people beyond the team.' }, { clock, steps });
+    expect(csic.suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
     await approve(root, csic.email.key, clock);
     await markSent(root, csic.email.key, clock, steps);
+    // The operator says yes to the suggestion.
+    await setStage(root, ids[1], { closeAs: 'csic' }, clock);
     await access(path.join(await ideaDir(root, ids[1]), 'csic-handoff.md'));
 
     const sel = await saveReview(root, ids[2], {
       criteria: { feasible: true, builder: true, data: true, theme: true }, decision: 'select', reason: 'Redacted sample invoices are enough.',
     }, { clock, steps });
     await approve(root, sel.email.key, clock);
-    await markSent(root, sel.email.key, clock, steps);
-    await tick(root, ids[2], 's2e', true, { by: 'operator', clock, steps });
-    expect((await advance(root, ids[2], steps, clock)).stage).toBe(3);
+    const sent = await markSent(root, sel.email.key, clock, steps);
+    expect(sent.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
+    expect((await setStage(root, ids[2], sent.suggest!, clock)).stage).toBe(3);
 
-    const labels = (await listIdeas(root)).ideas.map((i) => progress(i, steps).label);
-    expect(labels).toEqual([
-      'Review and Select · 5 of 25',
-      'Closed · Routed to CSIC · 6 of 11',
-      'Design series · 7 of 25',
+    const where = (await listIdeas(root)).ideas.map((i) => ({ stage: i.stage, closed: i.closed }));
+    expect(where).toEqual([
+      { stage: 2, closed: undefined },
+      { stage: 2, closed: { as: 'csic', at: '2026-10-19', followUp: '2026-11-16' } },
+      { stage: 3, closed: undefined },
     ]);
     expect((await listOutbox(root)).every((m) => m.status === 'sent')).toBe(true);
 

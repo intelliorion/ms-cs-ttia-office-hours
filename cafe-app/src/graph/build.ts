@@ -1,7 +1,7 @@
 import type { Idea } from '../ideas/idea';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { ALLOWED, CONFIRMED_AT, edgeId, nodeId, type AiLink, type GEdge, type GNode, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, edgeId, nodeId, type AiLink, type GEdge, type GNode, type Relation } from './ontology';
 export { nodeId } from './ontology';
 
 const ROLE_REL: Record<string, Relation> = { lead: 'RELATED', sponsor: 'SPONSORS', member: 'RELATED' };
@@ -43,7 +43,7 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
     }
     for (const [name, r] of roles) {
       const pid = node({ id: nodeId('Person', name), type: 'Person', label: name });
-      if (teamId) edge(teamId, 'HAS_MEMBER', pid, 'CS Function of the idea', `${src}:CS Function`, submitter === name ? 1 : 1);
+      if (teamId) edge(teamId, 'HAS_MEMBER', pid, 'CS Function of the idea', `${src}:CS Function`, 1);
       edge(pid, r.rel, ideaId, r.notes.join('; '), `${src}:Team Members and Lead`);
     }
     for (const s of idea.support) {
@@ -61,6 +61,8 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
 
   for (const l of aiLinks) {
     if (l.status === 'removed') continue;
+    if (!AI_RELATIONS.includes(l.rel)) continue;
+    if ((l.newNodes ?? []).some((n) => !AI_NODE_TYPES.includes(n.type))) continue;
     const pair = ALLOWED[l.rel]; if (!pair) continue;
     const fromKnown = nodes.has(l.from); const toKnown = nodes.has(l.to);
     const newNodes = new Map((l.newNodes ?? []).map((n) => [n.id, n]));

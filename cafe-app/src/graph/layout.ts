@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force-3d';
 import { paths } from '../workspace/paths';
-import { readYaml, writeFileAtomic, readText } from '../workspace/files';
+import { writeFileAtomic, readText } from '../workspace/files';
 import type { GEdge, GNode } from './ontology';
 
 export type Layout = Record<string, [number, number, number]>;

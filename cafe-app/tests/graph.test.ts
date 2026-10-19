@@ -86,6 +86,22 @@ describe('buildGraph', () => {
   });
 });
 
+describe('hardening', () => {
+  it('keeps non-ASCII names apart and folds accents', () => {
+    expect(nodeId('Person', '李雷')).not.toBe(nodeId('Person', '王芳'));
+    expect(nodeId('Person', 'José')).toBe(nodeId('Person', 'jose'));
+    expect(nodeId('Person', '***').length).toBeGreaterThan('person:'.length);
+  });
+  it('never lets AI links create people, ideas or people links', () => {
+    const ai = [
+      { from: 'person:evil', to: 'idea:CAFE-2026-002', rel: 'SUBMITTED' as const, description: 'x', source: 'ai:challenge', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: 'person:evil', type: 'Person' as const, label: 'Evil' }] },
+      { from: 'idea:CAFE-2026-002', to: 'idea:fake', rel: 'NEEDS' as const, description: 'x', source: 'ai:challenge', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: 'idea:fake', type: 'Idea' as const, label: 'Fake' }] },
+    ];
+    const base = buildGraph([rfx], []);
+    expect(buildGraph([rfx], ai)).toEqual(base);
+  });
+});
+
 describe('store and layout', () => {
   it('rebuilds from the folders, caches a stable layout, and confirms a link', async () => {
     const root = await tmpWorkspace();

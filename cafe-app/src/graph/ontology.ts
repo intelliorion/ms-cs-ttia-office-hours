@@ -30,7 +30,13 @@ export interface AiLink {
   status: 'pending' | 'confirmed' | 'removed'; newNodes?: GNode[];
 }
 
-export const slug = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
+function fnv1a32(str: string): number {
+  let h = 2166136261;
+  for (const c of str) { h ^= c.codePointAt(0)!; h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+export const slug = (s: string) =>
+  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || `h${fnv1a32(s).toString(16)}`;
 export function nodeId(type: NodeType, label: string): string {
   if (type === 'Idea') return `idea:${label}`;
   return `${type.toLowerCase()}:${slug(label)}`;

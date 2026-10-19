@@ -69,7 +69,7 @@ export function waitingSummary(s: any) {
   return {
     drafts: s.outbox.filter((m: any) => m.status === 'draft').length,
     approved: s.outbox.filter((m: any) => m.status === 'approved').length,
-    repliesDue: open.filter((i: any) => i.due?.s2d).length,
+    repliesDue: open.filter((i: any) => i.due?.s2d && !i.checklist?.s2d?.done).length,
     late: late.length,
     lateIdeas: late.map((i: any) => i.id as string),
   };

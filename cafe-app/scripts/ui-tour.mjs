@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...]
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels]
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -17,6 +17,7 @@ const port = Number(flag('port', '4103'));
 if (port === 4100) throw new Error('The tour never uses port 4100 (the operator\'s Café).');
 const workspace = path.resolve(flag('workspace', path.join(APP, '.tour-workspace')));
 const out = path.resolve(flag('out', path.join(workspace, 'shots')));
+const only = argv.find((a) => a.startsWith('--only='))?.slice(7);
 const base = `http://localhost:${port}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,7 +74,19 @@ async function main() {
     const p = await page(gl, errors);
     await p.waitForSelector('canvas');
     await sleep(3000);
+    if (only === 'panels') {
+      await p.mouse.move(200, 330);
+      await shot(p, '05-panels.png');
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     await shot(p, '01-universe.png');
+    await p.hover('.idea-list li:nth-child(2)');
+    await sleep(800);
+    await shot(p, '05-panels.png');
+    await p.mouse.move(960, 540);
     await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
     await sleep(3500); // software WebGL is slow; let the 0.9 s fly-to settle
     await shot(p, '02-selected.png');

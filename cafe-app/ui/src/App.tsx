@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
-import { useStore, ideasByStage, waitingSummary, supportCounts } from './state/store';
+import { useStore } from './state/store';
+import { IdeasList } from './panels/IdeasList';
+import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
 import { Universe } from './universe/Universe';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
@@ -16,9 +18,6 @@ export default function App() {
       window.__cafe = { select, hover, toggleLabels, resetView };
     }
   }, [select, hover, toggleLabels, resetView]);
-  const rows = state ? ideasByStage(state) : [];
-  const w = state ? waitingSummary(state) : null;
-  const sup = state ? supportCounts(state) : [];
   return (
     <Stage>
       {graph && (
@@ -28,13 +27,19 @@ export default function App() {
       <TitleBar />
       {notice && <div className="notice" role="status">{notice.text}</div>}
       <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
-        {rows.map(([n, c]) => <div key={n}>{n}: {c}</div>)}
+        <IdeasList />
       </Panel>
-      <Panel title="Waiting" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
-        {w && <div>{w.drafts} drafts · {w.approved} approved · {w.late} late</div>}
+      <Panel title="Pipeline" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
+        <div className="sub-h">Ideas by stage</div>
+        <StageChart />
+        <div className="sub-h">Waiting on you</div>
+        <Waiting />
       </Panel>
-      <Panel title="Support" side="right" style={{ left: 1460, top: 572, width: 440, height: 488 }}>
-        {sup.map(([n, c]) => <div key={n}>{n}: {c}</div>)}
+      <Panel title="Demand" side="right" style={{ left: 1460, top: 572, width: 440, height: 488 }}>
+        <div className="sub-h">Support requested</div>
+        <SupportChart />
+        <div className="sub-h">Function · region</div>
+        <FunctionChart />
       </Panel>
       <div className="abs" style={{ left: 480, top: 1010, width: 960, display: 'flex', justifyContent: 'center', gap: 16 }}>
         <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>

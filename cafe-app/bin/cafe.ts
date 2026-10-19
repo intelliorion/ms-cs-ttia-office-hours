@@ -17,6 +17,8 @@ const [command, ...rest] = positional;
 const root = path.resolve(flag('workspace') ?? process.env.CAFE_WORKSPACE ?? 'cafe-workspace');
 const clock = systemClock;
 
+const USAGE = 'Usage: cafe <init | start | import <file> | status> [--workspace DIR] [--port N]';
+
 async function main(): Promise<void> {
   switch (command) {
     case 'init': {
@@ -27,7 +29,12 @@ async function main(): Promise<void> {
     case 'start': {
       await initWorkspace(root, clock);
       const port = Number(flag('port') ?? 4100);
-      createApp({ root, clock }).listen(port, '127.0.0.1', () => {
+      const server = createApp({ root, clock });
+      server.on('error', (e: NodeJS.ErrnoException) => {
+        console.error(e.code === 'EADDRINUSE' ? `Port ${port} is already in use. Stop the other Café or use --port N.` : e.message);
+        process.exit(1);
+      });
+      server.listen(port, '127.0.0.1', () => {
         console.log(`Creators' Café is running at http://localhost:${port}\nWorkspace: ${root}\nStop with Ctrl+C.`);
       });
       return;
@@ -42,8 +49,12 @@ async function main(): Promise<void> {
       console.log(await writeStatusCsv(root, clock));
       return;
     }
+    case undefined:
+      console.log(USAGE);
+      return;
     default:
-      console.log('Usage: cafe <init | start | import <file> | status> [--workspace DIR] [--port N]');
+      console.error(`Unknown command "${command}".\n${USAGE}`);
+      process.exit(1);
   }
 }
 

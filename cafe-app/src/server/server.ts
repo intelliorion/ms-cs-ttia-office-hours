@@ -21,10 +21,10 @@ export interface RequestInfo {
 export type Handler = (req: RequestInfo) => Promise<unknown>;
 export type AddRoute = (method: 'GET' | 'POST', route: string, handler: Handler) => void;
 
-const STATIC: Record<string, [string, string]> = {
-  '/': ['index.html', 'text/html; charset=utf-8'],
-  '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
-  '/style.css': ['style.css', 'text/css; charset=utf-8'],
+const WEB_DIR = path.join(APP_DIR, 'web');
+const TYPES: Record<string, string> = {
+  '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 const MAX_BODY = 20 * 1024 * 1024;
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
@@ -72,10 +72,18 @@ export function createApp({ root, clock }: ServerOptions): http.Server {
       const origin = req.headers.origin;
       if (!LOCAL_HOST.test(req.headers.host ?? '') || (origin !== undefined && !LOCAL_ORIGIN.test(origin))) return send(res, 403, { error: 'This app only answers on localhost' });
       const url = new URL(req.url ?? '/', 'http://localhost');
-      const asset = STATIC[url.pathname];
-      if (req.method === 'GET' && asset) {
-        res.writeHead(200, { 'content-type': asset[1], 'cache-control': 'no-store' });
-        res.end(await fs.readFile(path.join(APP_DIR, 'web', asset[0])));
+      if (req.method === 'GET' && url.pathname === '/') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.end(await fs.readFile(path.join(WEB_DIR, 'index.html')));
+        return;
+      }
+      if (req.method === 'GET' && url.pathname.startsWith('/assets/')) {
+        const file = path.resolve(WEB_DIR, '.' + decodeURIComponent(url.pathname));
+        const type = TYPES[path.extname(file).toLowerCase()];
+        const body = type && file.startsWith(WEB_DIR + path.sep) ? await fs.readFile(file).catch(() => null) : null;
+        if (!body || !type) return send(res, 404, { error: 'Not found' });
+        res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable' });
+        res.end(body);
         return;
       }
       const route = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));

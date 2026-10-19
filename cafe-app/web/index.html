@@ -8,12 +8,17 @@
 </head>
 <body>
   <header class="top">
-    <h1>Creators' Café</h1>
-    <span id="today"></span>
+    <div class="brand">
+      <div class="name">Creators' Café · Operator console</div>
+      <div class="sub" id="sub">CS TTIA</div>
+    </div>
+    <div class="pills"><span class="pill" id="today"></span></div>
   </header>
-  <nav id="tabs" role="tablist" aria-label="Sections"></nav>
-  <p id="notice" role="status" hidden></p>
-  <main id="main"><p>Loading…</p></main>
+  <nav id="tabs" aria-label="Sections"></nav>
+  <main>
+    <div id="notice" class="banner" role="status" hidden></div>
+    <div id="main"><p>Loading…</p></div>
+  </main>
   <script src="/app.js"></script>
 </body>
 </html>

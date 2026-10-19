@@ -33,11 +33,14 @@ npm run cafe -- status --workspace ~/cafe-workspace     # write exports/status.c
 
 1. **Round:** set the dates, the links and your name. Draft E0 (call for ideas) and E0B (deadline reminder).
 2. **Ideas:** drop the SharePoint or Forms export. Re-dropping it only adds new rows.
-3. **Checklist:** draft E1 for each idea, tick what the team has done, then move it to Review and Select.
-4. **Review:** tick the five criteria, pick a decision, give a reason. Routing to CSIC also writes
-   `csic-handoff.md` with a follow-up date four weeks out.
-5. **Outbox:** approve and copy, send from Outlook, mark as sent. The matching step ticks itself and
-   E2 starts a five-day reply clock.
+3. **Ideas:** select a row to see the idea, draft E1 and read its history. Set the stage from the row's
+   menu, forward or back, or close it; every change is logged and nothing is ever blocked.
+4. **Review:** tick the five criteria, pick a decision, give a reason. Saving drafts the decision email and
+   suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until you say Yes. Routing
+   to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in once you close it as CSIC.
+5. **Outbox:** approve and copy, send from Outlook, mark as sent. E2 starts a five-day reply clock; use
+   "Reply received" on Ideas when they answer. Marking E3, E4, E5, E6 or E10 as sent suggests a move too.
+   Steps tick themselves in the background as a log; they are not shown as a checklist.
 6. **Round:** write `status.csv` and the review pack for TTIA.
 
 ## Tests

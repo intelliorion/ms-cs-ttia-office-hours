@@ -19,7 +19,6 @@ const TABS = [
   { key: 'inbox', label: 'Inbox', plan: 2, what: 'Drop exports, Outlook emails, Teams transcripts and documents here. The app works out what each item is and which idea it belongs to; safe actions apply with Undo, and anything that ticks a step, creates an idea or drafts an email waits for your OK.' },
   { key: 'review', label: 'Review' },
   { key: 'ideas', label: 'Ideas' },
-  { key: 'checklist', label: 'Checklist' },
   { key: 'tools', label: 'Tool picker', plan: 4, what: 'Splits an idea into features and recommends a tool for each from the approved list and the five pathways. You make the final pick, saved to approach.md.' },
   { key: 'design', label: 'Design', plan: 4, what: 'Runs the design brainstorm one question at a time and fills in design.md, ending with a Café check, for you to approve.' },
   { key: 'cohorts', label: 'Cohorts', plan: 4, what: 'Groups ideas by the capability they share and the support they asked for, with session dates and calendar invites, one folder per cohort under cohorts/.' },
@@ -49,10 +48,14 @@ const TEMPLATE_TITLES = {
   E7: 'Session invite', E8: 'Session follow-up', E9: 'Where your idea goes next', E10: 'Roadshow booked', E11: 'Feedback and decision',
   PD: 'Data held', RS: 'Session moved', SR: 'Session reminder',
 };
-const DECISION_TEMPLATES = ['E3', 'E4', 'E5', 'E6'];
+const DECISION_SHORT = { select: 'Select', reuse: 'Reuse', csic: 'CSIC', notnow: 'Not now', ask: 'Ask first' };
+// Templates the operator can draft for one idea from its panel.
+const IDEA_TEMPLATES = ['E1', 'E2', 'E2R', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'PD'];
 
 let state = null;
-const ui = { tab: 'ideas', sel: null, notice: '', noticeKind: 'ok', report: '' };
+// open: the idea whose panel is expanded on Ideas. suggest: a move offered after a review or a sent email,
+// shown with Yes and No; it is never applied on its own.
+const ui = { tab: 'ideas', open: null, history: null, suggest: null, notice: '', noticeKind: 'ok', report: '' };
 try { ui.tab = localStorage.getItem('cafe-tab') || 'ideas'; } catch (_) { /* storage blocked */ }
 if (!TABS.some((t) => t.key === ui.tab)) ui.tab = 'ideas';
 
@@ -71,15 +74,19 @@ async function api(url, body) {
 
 async function refresh() {
   state = await api('/api/state');
-  if (!state.ideas.some((i) => i.id === ui.sel)) ui.sel = state.ideas[0] ? state.ideas[0].id : null;
+  if (!state.ideas.some((i) => i.id === ui.open)) ui.open = null;
+  if (ui.suggest && !state.ideas.some((i) => i.id === ui.suggest.id)) ui.suggest = null;
+  ui.history = ui.open ? { id: ui.open, items: await api(ideaUrl(ui.open, 'history')).catch(() => null) } : null;
   render();
 }
 
 function showNotice(text, kind) {
   const n = $('#notice');
-  n.textContent = text;
-  n.className = `banner ${kind || 'ok'}`;
-  n.hidden = !text;
+  const s = ui.suggest;
+  const ask = s ? `<span class="suggest"><span>${esc(s.id)}: ${esc(s.label)}</span><button class="btn small primary" data-action="suggest-yes">Yes</button><button class="btn small" data-action="suggest-no">No</button></span>` : '';
+  n.innerHTML = `${text ? `<span>${esc(text)}</span>` : ''}${ask}`;
+  n.className = `banner ${kind || 'ok'}${s ? ' has-suggest' : ''}`;
+  n.hidden = !text && !s;
 }
 
 async function safeRefresh() {
@@ -95,6 +102,9 @@ async function act(fn, ok) {
     const r = await fn();
     ui.notice = ok ? ok(r) : '';
     ui.noticeKind = 'ok';
+    // A review returns { idea: {...} }; a sent email returns { idea: 'CAFE-…' }.
+    const id = r && r.idea && typeof r.idea === 'object' ? r.idea.id : r && r.idea;
+    if (r && r.suggest && id) ui.suggest = { id, ...r.suggest };
   } catch (e) {
     ui.notice = e.message;
     ui.noticeKind = 'warn';
@@ -112,14 +122,18 @@ async function copyText(m) {
   }
 }
 
-const current = () => state.ideas.find((i) => i.id === ui.sel);
 const ideaUrl = (id, suffix) => `/api/ideas/${encodeURIComponent(id)}/${suffix}`;
 const stageName = (n) => state.stageNames[n] || `Stage ${n}`;
-const closedLabel = (i) => i.progress.label.split(' · ').slice(0, 2).join(' · ');
-const stageText = (i) => (i.closed ? closedLabel(i) : stageName(i.stage));
-const stageChip = (i) => (i.closed ? 'chip grey' : i.stage >= 3 ? 'chip teal' : i.stage === 2 ? 'chip amber' : 'chip');
-const missingToMove = (i) => state.steps.filter((s) => s.stage === i.stage && s.needed && i.status[s.id] !== 'done');
-const pendingMail = (ideaId, templates) => state.outbox.find((m) => m.idea === ideaId && templates.includes(m.template) && m.status !== 'sent');
+const closedName = (as) => `Closed · ${state.closures[as] || as}`;
+const stageText = (i) => (i.closed ? closedName(i.closed.as) : stageName(i.stage));
+const stageTone = (i) => (i.closed ? 'grey' : i.stage >= 3 ? 'teal' : i.stage === 2 ? 'amber' : '');
+const stageChip = (i) => `chip ${stageTone(i)}`.trim();
+const targetText = (t) => (t.closeAs ? closedName(t.closeAs) : stageName(t.stage));
+const stepDone = (i, step) => Boolean(i.checklist[step] && i.checklist[step].done);
+const shortDate = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1].slice(0, 3)}` : String(iso || '');
+};
 const selectedThisRound = () => state.ideas.filter((i) => i.round === state.round.id && i.review && i.review.decision === 'select').length;
 const pageHead = (title, lede, right = '') => `<div class="headrow"><div><h1>${title}</h1>${lede ? `<p class="lede">${lede}</p>` : ''}</div>${right ? `<div class="actions">${right}</div>` : ''}</div>`;
 
@@ -134,26 +148,21 @@ function teamText(i) {
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
 }
 
-function nextStep(i) {
-  if (i.closed) return `None · ${closedLabel(i)}`;
-  const missing = missingToMove(i);
-  if (missing.length) return `Next: ${missing[0].text}`;
-  const open = state.steps.find((s) => s.stage === i.stage && i.status[s.id] === 'open');
-  if (open) return `Next: ${open.text}`;
-  return i.stage < 4 ? `Ready to move to ${stageName(i.stage + 1)}` : 'All steps done';
-}
-
 function waitingChips(i) {
   const late = new Set(i.overdue.map((o) => o.step));
   const soon = Object.entries(i.due || {})
-    .filter(([step]) => i.status[step] !== 'done' && !late.has(step))
+    .filter(([step]) => !stepDone(i, step) && !late.has(step))
     .map(([step, due]) => {
       if (step === 's2d') return `Reply due ${longDate(due)}`;
       const def = state.steps.find((x) => x.id === step);
       return `${def ? def.text : step} · due ${longDate(due)}`;
     });
   const chips = [...i.overdue.map((o) => `<span class="chip amber">${esc(o.text)}</span>`), ...soon.map((t) => `<span class="chip grey">${esc(t)}</span>`)];
-  return chips.length ? `<div class="waits">${chips.join('')}</div>` : '';
+  if (i.due && i.due.s2d && !stepDone(i, 's2d') && !i.closed) {
+    chips.push(`<button class="btn small" data-action="reply" data-id="${esc(i.id)}">Reply received</button>`);
+  }
+  if (i.offerE2R) chips.push(`<button class="btn small" data-action="draft" data-id="${esc(i.id)}" data-template="E2R">Draft reminder (E2R)</button>`);
+  return chips.length ? `<div class="waits">${chips.join('')}</div>` : '<span class="hint">—</span>';
 }
 
 /* ---------- Round (mockup lines 59-128) ---------- */
@@ -222,10 +231,10 @@ function reviewCard(i) {
       <div><span class="mono eyebrow">${esc(i.id)} · ${esc(i.function || 'no function')}</span><div class="title">${esc(i.title)}</div></div>
       <span class="${stageChip(i)}">${esc(stageText(i))}</span>
     </div>`;
-  if (i.stage < 2) {
+  if (i.closed) {
     return `<div class="card pad">${head}
-      <div class="banner warn">Move it to Review and Select first.</div>
-      <div><button class="btn small" data-action="open" data-id="${esc(i.id)}">Open its checklist</button></div>
+      <div class="card-text">${r ? `Decided ${esc(longDate(r.at))}: ${esc(state.decisions[r.decision])}. ${esc(r.reason)}` : 'Closed without a review.'}</div>
+      <div class="hint">Reopen it from Ideas to review again.</div>
     </div>`;
   }
   const dec = r ? r.decision : Object.keys(state.decisions)[0];
@@ -246,48 +255,122 @@ function reviewCard(i) {
 }
 
 function viewReview() {
-  const open = state.ideas.filter((i) => !i.closed && i.stage <= 2);
-  const decided = state.ideas.filter((i) => i.closed || i.stage > 2);
+  const open = state.ideas.filter((i) => !i.closed);
+  const closed = state.ideas.filter((i) => i.closed);
   const cap = state.settings.capacity.ideasPerRound;
-  const body = open.length ? open.map(reviewCard).join('') : '<div class="card pad"><div class="card-text">Nothing to review. Import submissions on the Ideas tab.</div></div>';
+  const body = open.length ? open.map(reviewCard).join('') : '<div class="card pad"><div class="card-text">Nothing open to review. Import submissions on the Ideas tab.</div></div>';
   return `<section class="page">
   ${pageHead(`Review · ${esc(state.round.id)}`,
-    `Five criteria, your decision and a reason, saved to each idea’s <span class="mono">review.md</span>. Saving drafts the decision email. ${selectedThisRound()} of ${esc(cap)} design-series places used this round.`,
+    `Five criteria, your decision and a reason, saved to each idea’s <span class="mono">review.md</span>. Saving drafts the decision email and suggests a stage move; nothing moves until you say yes. ${selectedThisRound()} of ${esc(cap)} design-series places used this round.`,
     '<button class="btn primary" data-action="review-pack">Make the review pack for TTIA</button>')}
   ${body}
-  ${decided.length ? `<div class="hint" style="font-size:14px">Already decided: ${decided.map((i) => `${esc(i.id)} (${esc(stageText(i))})`).join(', ')}.</div>` : ''}
+  ${closed.length ? `<h2 class="subhead">Closed</h2>${closed.map(reviewCard).join('')}` : ''}
 </section>`;
 }
 
-/* ---------- Ideas (mockup lines 214-246) ---------- */
+/* ---------- Ideas (mockup lines 214-246; the panel reuses the details block from lines 260-275) ---------- */
+
+function stageMenu(i) {
+  const cur = i.closed ? `close:${i.closed.as}` : `stage:${i.stage}`;
+  const opt = (v, label) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
+  return `<select class="stage-menu ${stageTone(i)}" data-action="stage" data-id="${esc(i.id)}" aria-label="Stage of ${esc(i.id)}">
+    ${[1, 2, 3, 4].map((n) => opt(`stage:${n}`, stageName(n))).join('')}
+    <option disabled>──────────</option>
+    ${Object.keys(state.closures).map((c) => opt(`close:${c}`, closedName(c))).join('')}
+  </select>`;
+}
+
+function emailChips(i) {
+  const sent = Object.entries(i.sent || {}).sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
+    .map(([t, at]) => `<span class="chip teal" title="${esc(TEMPLATE_TITLES[t] || t)}, sent ${esc(longDate(at))}">${esc(t)} ✓ ${esc(shortDate(at))}</span>`);
+  const waiting = state.outbox.filter((m) => m.idea === i.id && m.status !== 'sent')
+    .map((m) => `<span class="chip amber" title="${esc(TEMPLATE_TITLES[m.template] || m.template)}, in the Outbox">${esc(m.template)} ${m.status === 'draft' ? 'draft' : 'approved'}</span>`);
+  const all = [...sent, ...waiting];
+  return all.length ? `<div class="chips">${all.join('')}</div>` : '<span class="hint">—</span>';
+}
+
+function historyText(h) {
+  const step = (id) => { const s = state.steps.find((x) => x.id === id); return s ? s.text : id; };
+  switch (h.action) {
+    case 'created': return `Imported${h.source ? ` from ${h.source}` : ''}`;
+    case 'tick': return `Step done: ${step(h.step)}${h.source ? ` (${h.source.replace(/^ideas\/[^/]+\//, '')})` : ''}`;
+    case 'untick': return `Step undone: ${step(h.step)}`;
+    case 'draft': return `${h.detail} drafted in the Outbox`;
+    case 'sent': return `${h.detail} marked as sent`;
+    case 'review': {
+      const [k, ...rest] = String(h.detail || '').split(': ');
+      return `Reviewed: ${DECISION_SHORT[k] || k}${rest.length ? `. ${rest.join(': ')}` : ''}`;
+    }
+    case 'stage': return `Stage set: ${h.detail}`;
+    case 'advance': return `Moved to ${h.detail}`;
+    case 'close': return `Closed: ${h.detail}`;
+    default: return [h.action, h.detail].filter(Boolean).join(': ');
+  }
+}
+
+function ideaPanel(i) {
+  const chips = (arr, cls) => (arr.length ? `<div class="chips">${arr.map((t) => `<span class="${cls}">${esc(t)}</span>`).join('')}</div>` : '<div class="val">—</div>');
+  const h = ui.history && ui.history.id === i.id ? ui.history.items : null;
+  const history = h === null
+    ? '<div class="hint">Couldn’t read the history.</div>'
+    : h.length
+      ? `<ol class="history">${h.slice(-10).reverse().map((e) => `<li><span class="mono when">${esc(shortDate(e.at))}</span><span class="what">${esc(historyText(e))}</span><span class="who">${e.by === 'app' ? 'app' : 'you'}</span></li>`).join('')}</ol>`
+      : '<div class="hint">Nothing logged yet.</div>';
+  return `<tr class="panel-row"><td colspan="8"><div class="panel" id="panel-${esc(i.id)}">
+    <div class="summary">
+      <div class="item"><div class="field-label">Business challenge</div><div class="val">${esc(i.challenge || '—')}</div></div>
+      <div class="item"><div class="field-label">Current process</div><div class="val">${esc(i.current_process || '—')}</div></div>
+      <div class="col">
+        <div class="item"><div class="field-label">Desired outcomes</div>${chips(i.outcomes, 'chip')}</div>
+        <div class="item"><div class="field-label">Support requested</div>${chips(i.support, 'chip teal')}</div>
+        <div class="item"><div class="field-label">Team · tried it already</div><div class="val">${esc(i.participation || 'Participation not given')}: ${esc(teamText(i))} · Experimented: ${esc(i.experimented || 'not given')}</div></div>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <div class="item">
+        <div class="field-label">Draft an email</div>
+        <div class="actions">
+          <select data-role="template" aria-label="Email to draft for ${esc(i.id)}">${IDEA_TEMPLATES.map((t) => `<option value="${t}">${t} · ${esc(TEMPLATE_TITLES[t] || '')}</option>`).join('')}</select>
+          <button class="btn small primary" data-action="draft-pick" data-id="${esc(i.id)}">Draft</button>
+        </div>
+        <div class="hint">Drafts go to the Outbox. Nothing is sent until you approve it and send it from Outlook.</div>
+      </div>
+      <div class="item">
+        <div class="field-label">History · last 10</div>
+        ${history}
+      </div>
+    </div>
+  </div></td></tr>`;
+}
 
 function viewIdeas() {
   const ideas = state.ideas;
   const counts = [1, 2, 3, 4].map((n) => ({ label: stageName(n), n: ideas.filter((i) => !i.closed && i.stage === n).length }));
   counts.push({ label: 'Closed', n: ideas.filter((i) => i.closed).length });
   const rows = ideas.map((i) => {
-    const pct = i.progress.total ? Math.round((100 * i.progress.done) / i.progress.total) : 0;
-    return `<tr class="row" data-action="open" data-id="${esc(i.id)}">
+    const open = ui.open === i.id;
+    const r = i.review;
+    return `<tr class="row${open ? ' open' : ''}" data-action="open" data-id="${esc(i.id)}">
       <td class="mono nowrap">${esc(i.id)}</td>
-      <td class="idea"><button class="linkish" data-action="open" data-id="${esc(i.id)}"><strong>${esc(i.title)}</strong></button>
-        ${i.support.length ? `<div class="asked">Asked for: ${esc(i.support.join(' · '))}</div>` : ''}
-        ${i.flags.length ? `<div class="chips" style="margin-top:6px">${i.flags.map((f) => `<span class="chip amber">${esc(f)}</span>`).join('')}</div>` : ''}</td>
+      <td class="idea"><button class="linkish" data-action="open" data-id="${esc(i.id)}" aria-expanded="${open}"><strong>${esc(i.title)}</strong></button>
+        ${i.support.length ? `<div class="asked">Asked for: ${esc(i.support.join(' · '))}</div>` : ''}</td>
       <td class="nowrap">${esc([i.function, i.region].filter(Boolean).join(' · ') || '—')}</td>
-      <td><span class="${stageChip(i)}">${esc(stageText(i))}</span></td>
-      <td style="min-width:120px"><div class="mono" style="font-size:13px">${i.progress.done} of ${i.progress.total}</div><div class="bar"><div style="width:${pct}%"></div></div></td>
-      <td style="color:var(--text-2)">${esc(nextStep(i))}</td>
-      <td>${waitingChips(i)}</td>
-    </tr>`;
+      <td>${stageMenu(i)}</td>
+      <td class="emails">${emailChips(i)}</td>
+      <td class="waiting">${waitingChips(i)}</td>
+      <td>${r ? `<span title="${esc(r.reason)}">${esc(DECISION_SHORT[r.decision] || r.decision)}</span>` : '<span class="hint">—</span>'}</td>
+      <td class="flags">${i.flags.length ? `<div class="chips">${i.flags.map((f) => `<span class="chip amber">${esc(f)}</span>`).join('')}</div>` : '<span class="hint">—</span>'}</td>
+    </tr>${open ? ideaPanel(i) : ''}`;
   }).join('');
   const table = ideas.length
-    ? `<div class="card table-wrap"><table class="ideas-table"><thead><tr><th>ID</th><th>Idea</th><th>Function · region</th><th>Stage</th><th>Steps done</th><th>Next step</th><th>Waiting</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    ? `<div class="card table-wrap"><table class="ideas-table"><thead><tr><th>ID</th><th>Idea</th><th>Function · region</th><th>Stage</th><th>Emails</th><th>Waiting on</th><th>Review</th><th>Flags</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="card pad"><div class="card-text">No ideas yet. Import an export above.</div></div>';
   const problems = state.problems.length
     ? `<div class="banner warn">Couldn't read: ${state.problems.map((p) => esc(`${p.folder}: ${p.message}`)).join('; ')}</div>` : '';
   return `<section class="page">
   <div>
     <h1>Ideas</h1>
-    <p class="lede">One folder per idea under <span class="mono">ideas/</span>. Select a row to open its checklist and mark steps done.</p>
+    <p class="lede">One folder per idea under <span class="mono">ideas/</span>. Set each idea’s stage from its menu; every change is logged. Select a row for its details, to draft an email and to see its history.</p>
   </div>
   <div id="drop" class="drop">
     <div><div class="title">Import submissions</div><div class="sub">Drop a SharePoint or Forms export (.csv or .xlsx) here. Rows already imported are skipped.</div></div>
@@ -297,86 +380,6 @@ function viewIdeas() {
   <div class="stats">${counts.map((c) => `<div class="card stat"><div class="label">${esc(c.label)}</div><div class="n">${c.n}</div></div>`).join('')}</div>
   ${table}
   ${problems}
-</section>`;
-}
-
-/* ---------- Checklist (mockup lines 248-298) ---------- */
-
-function stepRow(i, s) {
-  const st = i.status[s.id];
-  const t = i.checklist[s.id];
-  const done = st === 'done';
-  const code = s.email === 'decision' ? 'E3–E6' : s.email;
-  const mail = s.email ? pendingMail(i.id, s.email === 'decision' ? DECISION_TEMPLATES : [s.email]) : null;
-  const side = [];
-  if (!done && mail) {
-    side.push(`<span class="${mail.status === 'draft' ? 'chip amber' : 'chip teal'}">${esc(mail.template)} ${mail.status === 'draft' ? 'in Outbox · draft' : 'approved · send it'}</span>`);
-  } else if (!done && s.email && /^E\d+$/.test(s.email)) {
-    side.push(`<button class="btn small" data-action="draft" data-template="${esc(s.email)}">Draft ${esc(s.email)}</button>`);
-  }
-  if (s.id === 's2d' && i.offerE2R) side.push('<button class="btn small" data-action="draft" data-template="E2R">No reply for 5+ days · draft reminder (E2R)</button>');
-  const who = t && t.done ? `${t.by === 'app' ? 'Ticked by the app' : 'Ticked by you'}, ${longDate(t.at)}${t.source ? ` · ${t.source}` : ''}` : '';
-  return `<div class="step${done ? ' done' : ''}">
-    <button class="box${done ? ' on' : ''}" role="checkbox" aria-checked="${done}" aria-label="${esc(s.text)}" data-action="tick" data-step="${esc(s.id)}" data-done="${done}">${done ? '✓' : ''}</button>
-    <div class="body">
-      <div class="text">${esc(s.text)}${code ? ` (${esc(code)})` : ''}</div>
-      <div class="meta"><span class="${s.owner === 'Team' ? 'chip' : 'chip teal'}">${esc(s.owner)}</span>${s.needed ? '<span class="chip grey">Needed to move on</span>' : ''}${code && !done ? `<span class="hint">Ticks itself when ${esc(s.email === 'decision' ? 'the decision email' : code)} is marked as sent</span>` : ''}</div>
-      ${who ? `<div class="hint">${esc(who)}</div>` : ''}
-    </div>
-    ${side.length ? `<div class="side">${side.join('')}</div>` : ''}
-  </div>`;
-}
-
-function viewChecklist() {
-  const i = current();
-  if (!i) return '<section class="page"><h1>Checklist</h1><div class="card pad"><div class="card-text">No ideas yet. Import submissions on the Ideas tab.</div></div></section>';
-  const picker = `<select class="picker" data-action="pick" aria-label="Idea">${state.ideas.map((x) =>
-    `<option value="${esc(x.id)}"${x.id === i.id ? ' selected' : ''}>${esc(x.id)} ${esc(x.title)}</option>`).join('')}</select>`;
-  const missing = missingToMove(i);
-  const canMove = !i.closed && i.stage < 4;
-  const move = canMove && !missing.length ? `<button class="btn primary" data-action="advance">Move to ${esc(stageName(i.stage + 1))}</button>` : '';
-  const blocked = canMove && missing.length
-    ? `<div class="banner warn">Before it can move to ${esc(stageName(i.stage + 1))}: ${missing.map((s) => esc(s.text)).join(' · ')}</div>` : '';
-  const stageSteps = (n) => state.steps.filter((s) => s.stage === n);
-  const na = (n) => Boolean(i.closed) && n > i.stage;
-  const stepper = [1, 2, 3, 4].map((n) => {
-    const cls = na(n) ? 'na' : (n < i.stage || i.closed) ? 'passed' : n === i.stage ? 'now' : '';
-    const label = na(n) ? 'Not applicable' : cls === 'passed' ? 'Passed' : cls === 'now' ? 'Current stage' : 'Upcoming';
-    const list = stageSteps(n);
-    const d = list.filter((s) => i.status[s.id] === 'done').length;
-    return `<div class="stage-cell ${cls}"><div class="state">${label}</div><div class="name">${esc(stageName(n))}</div><div class="mono count">${na(n) ? '—' : `${d} of ${list.length} done`}</div></div>`;
-  }).join('');
-  const groups = [1, 2, 3, 4].map((n) => {
-    const list = stageSteps(n);
-    const d = list.filter((s) => i.status[s.id] === 'done').length;
-    return `<div class="card group${n === i.stage && !i.closed ? ' current' : ''}">
-      <div class="group-head"><div class="card-title">${n} · ${esc(stageName(n))}</div><span class="mono count">${na(n) ? 'Not applicable' : `${d} of ${list.length}`}</span></div>
-      ${na(n) ? '<div class="card-text" style="color:var(--muted-2)">Closed before this stage.</div>' : list.map((s) => stepRow(i, s)).join('')}
-    </div>`;
-  }).join('');
-  const chips = (arr, cls) => (arr.length ? `<div class="chips">${arr.map((t) => `<span class="${cls}">${esc(t)}</span>`).join('')}</div>` : '<div class="val">—</div>');
-  const dir = `${i.id}-${i.slug}`;
-  return `<section class="page">
-  <div class="headrow">
-    <div>
-      <div class="mono eyebrow">${esc([i.id, i.function, i.region].filter(Boolean).join(' · '))}</div>
-      <h1 style="margin-top:2px">Checklist · ${esc(i.title)}</h1>
-      <p class="lede" style="margin-top:6px;max-width:780px">Tick each step as it happens. Steps with an email tick themselves when you mark that email as sent in the Outbox. Saved to <span class="mono">ideas/${esc(dir)}/idea.yaml</span>, with each tick logged in <span class="mono">history.log</span>.</p>
-    </div>
-    <div class="actions"><span class="${stageChip(i)}">${esc(stageText(i))}</span>${picker}${move}</div>
-  </div>
-  <div class="card summary">
-    <div class="item"><div class="field-label">Business challenge</div><div class="val">${esc(i.challenge || '—')}</div></div>
-    <div class="item"><div class="field-label">Current process</div><div class="val">${esc(i.current_process || '—')}</div></div>
-    <div class="col">
-      <div class="item"><div class="field-label">Desired outcomes</div>${chips(i.outcomes, 'chip')}</div>
-      <div class="item"><div class="field-label">Support requested</div>${chips(i.support, 'chip teal')}</div>
-      <div class="item"><div class="field-label">Team · tried it already</div><div class="val">${esc(i.participation || 'Participation not given')}: ${esc(teamText(i))} · Experimented: ${esc(i.experimented || 'not given')}</div></div>
-    </div>
-  </div>
-  ${blocked}
-  <div class="stepper">${stepper}</div>
-  <div class="grid-steps">${groups}</div>
 </section>`;
 }
 
@@ -430,12 +433,10 @@ function viewLater(t) {
 
 function render() {
   const open = state.outbox.filter((m) => m.status !== 'sent').length;
-  const toReview = state.ideas.filter((i) => !i.closed && i.stage === 2 && (!i.review || i.review.decision === 'ask')).length;
-  const sel = current();
+  const toReview = state.ideas.filter((i) => !i.closed && (!i.review || i.review.decision === 'ask')).length;
   const label = (t) => {
     if (t.key === 'review') return `Review (${toReview})`;
     if (t.key === 'ideas') return `Ideas (${state.ideas.length})`;
-    if (t.key === 'checklist') return sel ? `Checklist · ${sel.id.slice(-3)}` : 'Checklist';
     if (t.key === 'outbox') return `Outbox (${open})`;
     return t.label;
   };
@@ -444,7 +445,7 @@ function render() {
   $('#sub').textContent = `CS TTIA · ${state.round.id}`;
   $('#today').textContent = `Today: ${longDate(state.today)}`;
   showNotice(ui.notice, ui.noticeKind);
-  const views = { round: viewRound, ideas: viewIdeas, checklist: viewChecklist, review: viewReview, outbox: viewOutbox };
+  const views = { round: viewRound, ideas: viewIdeas, review: viewReview, outbox: viewOutbox };
   const tab = TABS.find((t) => t.key === ui.tab);
   $('#main').innerHTML = tab && tab.plan ? viewLater(tab) : (views[ui.tab] || viewIdeas)();
 }
@@ -481,12 +482,30 @@ document.addEventListener('click', (ev) => {
   const outboxItem = () => state.outbox.find((x) => x.key === b.dataset.key);
   switch (b.dataset.action) {
     case 'tab': setTab(b.dataset.tab); ui.notice = ''; render(); break;
-    case 'open': ui.sel = b.dataset.id; setTab('checklist'); ui.notice = ''; render(); break;
+    case 'open': {
+      if (b.tagName === 'TR' && ev.target.closest('button, a, select, input, label')) break;
+      ui.open = ui.open === b.dataset.id ? null : b.dataset.id;
+      safeRefresh();
+      break;
+    }
     case 'crit': toggleBox(b); break;
-    case 'tick': act(() => api(ideaUrl(ui.sel, 'tick'), { step: b.dataset.step, done: b.dataset.done !== 'true' })); break;
-    case 'draft': act(() => api(ideaUrl(ui.sel, 'draft'), { template: b.dataset.template }), (r) => `${r.template} is drafted in the Outbox.`); break;
+    case 'draft': act(() => api(ideaUrl(b.dataset.id, 'draft'), { template: b.dataset.template }), (r) => `${r.template} is drafted in the Outbox.`); break;
+    case 'draft-pick': {
+      const pick = b.closest('.panel').querySelector('[data-role="template"]');
+      act(() => api(ideaUrl(b.dataset.id, 'draft'), { template: pick.value }), (r) => `${r.template} for ${b.dataset.id} is drafted in the Outbox.`);
+      break;
+    }
+    case 'reply': act(() => api(ideaUrl(b.dataset.id, 'reply'), {}), (r) => `Reply from ${r.id} recorded.`); break;
+    case 'suggest-yes': {
+      const s = ui.suggest;
+      if (!s) break;
+      const target = s.closeAs ? { closeAs: s.closeAs } : { stage: s.stage };
+      ui.suggest = null;
+      act(() => api(ideaUrl(s.id, 'stage'), target), (r) => `Moved ${r.id} to ${stageText(r)}`);
+      break;
+    }
+    case 'suggest-no': ui.suggest = null; ui.notice = ''; render(); break;
     case 'round-draft': act(() => api('/api/round/draft', { template: b.dataset.template }), (r) => `${r.template} is drafted in the Outbox.`); break;
-    case 'advance': act(() => api(ideaUrl(ui.sel, 'advance'), {}), (r) => `${r.id} moved to ${stageName(r.stage)}.`); break;
     case 'status-export': act(() => api('/api/status-export', {}), (r) => `Written: ${r.file}`); break;
     case 'review-pack': act(() => api('/api/review-pack', {}), (r) => `Written: ${r.file}`); break;
     case 'approve': {
@@ -513,14 +532,18 @@ document.addEventListener('click', (ev) => {
       });
       break;
     }
-    case 'sent': act(() => api('/api/outbox/sent', { key: b.dataset.key }), () => 'Marked as sent. The matching step is ticked.'); break;
+    case 'sent': act(() => api('/api/outbox/sent', { key: b.dataset.key }), (r) => `${r.template} marked as sent.`); break;
   }
 });
 
 document.addEventListener('change', (ev) => {
   const t = ev.target;
-  if (t.matches('[data-action="pick"]')) { ui.sel = t.value; render(); }
-  else if (t.matches('[data-action="decision"]')) {
+  if (t.matches('[data-action="stage"]')) {
+    const [kind, v] = t.value.split(':');
+    const target = kind === 'close' ? { closeAs: v } : { stage: Number(v) };
+    if (ui.suggest && ui.suggest.id === t.dataset.id) ui.suggest = null;
+    act(() => api(ideaUrl(t.dataset.id, 'stage'), target), (r) => `Moved ${r.id} to ${stageText(r)}`);
+  } else if (t.matches('[data-action="decision"]')) {
     const save = t.form && t.form.querySelector('[data-role="save"]');
     if (save) save.textContent = `Save decision and draft ${t.selectedOptions[0].dataset.email || ''}`.trim();
   } else if (t.id === 'file') upload(t.files[0]);

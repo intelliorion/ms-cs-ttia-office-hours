@@ -16,8 +16,8 @@ function setTab(tab) {
 async function api(url, body) {
   const init = body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
   const res = await fetch(url, init);
-  const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong'), { data });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || `Something went wrong (HTTP ${res.status})`), { data });
   return data;
 }
 
@@ -25,6 +25,15 @@ async function refresh() {
   state = await api('/api/state');
   if (!state.ideas.some((i) => i.id === ui.sel)) ui.sel = state.ideas[0] ? state.ideas[0].id : null;
   render();
+}
+
+async function safeRefresh() {
+  try {
+    await refresh();
+  } catch (e) {
+    $('#notice').textContent = `Couldn't reach the app: ${e.message}`;
+    $('#notice').hidden = false;
+  }
 }
 
 async function act(fn, ok) {
@@ -35,7 +44,7 @@ async function act(fn, ok) {
     ui.notice = e.message;
     if (e.data && e.data.missing) setTab('round');
   }
-  await refresh();
+  await safeRefresh();
 }
 
 async function copyText(m) {
@@ -45,6 +54,18 @@ async function copyText(m) {
   } catch (_) {
     return false;
   }
+}
+
+function waiting(i) {
+  const late = new Set(i.overdue.map((o) => o.step));
+  const soon = Object.entries(i.due || {})
+    .filter(([step]) => i.status[step] !== 'done' && !late.has(step))
+    .map(([step, due]) => {
+      if (step === 's2d') return `Reply due ${esc(due)}`;
+      const def = state.steps.find((x) => x.id === step);
+      return `${esc(def ? def.text : step)} · due ${esc(due)}`;
+    });
+  return [...i.overdue.map((o) => esc(o.text)), ...soon].join('<br>') || '—';
 }
 
 const current = () => state.ideas.find((i) => i.id === ui.sel);
@@ -83,7 +104,7 @@ function viewIdeas() {
       <td>${esc(i.title)}</td>
       <td>${esc(i.function || '')}</td>
       <td>${esc(i.progress.label)}</td>
-      <td>${i.overdue.map((o) => esc(o.text)).join('<br>') || '—'}</td>
+      <td>${waiting(i)}</td>
       <td>${esc(i.flags.join(' · ')) || '—'}</td>
     </tr>`).join('');
   const table = state.ideas.length
@@ -179,7 +200,7 @@ async function upload(file) {
   } catch (e) {
     ui.notice = e.message;
   }
-  await refresh();
+  await safeRefresh();
 }
 
 document.addEventListener('click', (ev) => {
@@ -196,6 +217,7 @@ document.addEventListener('click', (ev) => {
     case 'review-pack': act(() => api('/api/review-pack', {}), (r) => `Written: ${r.file}`); break;
     case 'approve': {
       const m = outboxItem();
+      if (!m) break;
       if (m.missingSettings.length) {
         setTab('round');
         ui.notice = `Set first: ${m.missingSettings.map((x) => x.label).join(', ')}`;
@@ -208,6 +230,7 @@ document.addEventListener('click', (ev) => {
     }
     case 'copy': {
       const m = outboxItem();
+      if (!m) break;
       copyText(m.view).then((ok) => { ui.notice = ok ? 'Copied.' : "Copy didn't work here. Select the text and copy it."; render(); });
       break;
     }

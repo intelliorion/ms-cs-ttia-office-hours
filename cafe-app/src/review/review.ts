@@ -95,6 +95,7 @@ export async function saveReview(
   // Build everything in memory first; nothing is written until the email draft succeeds.
   let idea = await loadIdea(root, id);
   if (idea.closed) throw new Error(`${id} is already closed`);
+  if (idea.stage < 2) throw new Error('Move it to Review and Select first');
   const today = ctx.clock();
   const dir = await ideaDir(root, id);
   const criteria = Object.fromEntries(CRITERIA.map((c) => [c.id, input.criteria?.[c.id] === true]));

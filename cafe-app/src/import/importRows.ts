@@ -20,6 +20,7 @@ export interface ImportReport {
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 const CUT_OFF = /…|\.{3}/;
 const opt = (v: string) => (v ? v : undefined);
+const MULTI = new Set<Field>(['outcomes', 'support']);
 
 export async function importExport(
   root: string, file: string, opts: { clock: Clock; steps: StepDef[] },
@@ -66,7 +67,10 @@ export async function importExport(
     const flags: string[] = [];
     for (const c of COLUMNS) {
       const v = get(c.field);
-      if (CUT_OFF.test(v)) flags.push(`Cut off in the export, check the full text: ${c.label} "${v}"`);
+      if (!CUT_OFF.test(v)) continue;
+      // Multi-select fields arrive as ";#A;#B;#"; show them the way the idea stores them.
+      const shown = MULTI.has(c.field) ? splitMulti(v).join('; ') : v;
+      flags.push(`Cut off in the export, check the full text: ${c.label} "${shown}"`);
     }
     if (/individual/i.test(participation) && team.length > 1) {
       flags.push(`Participation is Individual but ${team.length} people are listed`);

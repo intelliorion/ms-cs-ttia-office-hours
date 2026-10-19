@@ -4,9 +4,10 @@ import path from 'node:path';
 import { tmpWorkspace, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { saveReview, writeReviewPack } from '../src/review/review';
-import { loadIdea, ideaDir } from '../src/ideas/store';
+import { loadIdea, saveIdea, ideaDir } from '../src/ideas/store';
 import { saveSettings } from '../src/round/store';
 import { paths } from '../src/workspace/paths';
+import { listOutbox } from '../src/comms/outbox';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
 
@@ -16,10 +17,26 @@ const ctx = { clock, steps };
 async function setup() {
   const root = await tmpWorkspace();
   await importExport(root, FIXTURE, ctx);
+  // Reviews happen at stage 2 (Review and Select), so move the imported ideas there.
+  for (const id of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) {
+    await saveIdea(root, { ...(await loadIdea(root, id)), stage: 2 });
+  }
   return root;
 }
 
 describe('saveReview', () => {
+  it('refuses a stage-1 idea before writing anything', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, ctx);
+    await expect(saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'Looks good' }, ctx))
+      .rejects.toThrow('Move it to Review and Select first');
+    const idea = await loadIdea(root, 'CAFE-2026-003');
+    expect(idea.review).toBeUndefined();
+    expect(idea.checklist.s2a).toBeUndefined();
+    await expect(access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'))).rejects.toThrow();
+    expect(await listOutbox(root)).toEqual([]);
+  });
+
   it('needs a reason and writes nothing without one', async () => {
     const root = await setup();
     await expect(saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: '  ' }, ctx)).rejects.toThrow('Give a reason');

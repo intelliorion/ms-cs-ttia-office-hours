@@ -43,9 +43,12 @@ describe('importExport', () => {
     expect(r.errors).toEqual([{ row: 5, message: 'Title is empty' }]);
     expect(r.ignoredColumns).toEqual(['ID']);
     expect(r.flags.filter((f) => f.id === 'CAFE-2026-003').map((f) => f.message)).toEqual([
-      'Cut off in the export, check the full text: Desired Outcomes ";#Save time;#Imp…;#"',
+      'Cut off in the export, check the full text: Desired Outcomes "Save time; Imp…"',
       'Participation is Individual but 6 people are listed',
     ]);
+    expect(r.flags.filter((f) => f.id === 'CAFE-2026-002').map((f) => f.message)).toContain(
+      'Cut off in the export, check the full text: Support Requested "Agent Design Guidance; Collab…"',
+    );
 
     const rfx = await loadIdea(root, 'CAFE-2026-002');
     expect(rfx).toMatchObject({ function: 'GSS', region: 'APAC', entity: 'CS', round: 'ROUND-2026-Q4', stage: 1 });

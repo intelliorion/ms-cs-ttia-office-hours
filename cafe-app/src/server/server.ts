@@ -28,6 +28,7 @@ const STATIC: Record<string, [string, string]> = {
 };
 const MAX_BODY = 20 * 1024 * 1024;
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
 function send(res: http.ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -61,7 +62,8 @@ export function createApp({ root, clock }: ServerOptions): http.Server {
 
   return http.createServer(async (req, res) => {
     try {
-      if (!LOCAL_HOST.test(req.headers.host ?? '')) return send(res, 403, { error: 'This app only answers on localhost' });
+      const origin = req.headers.origin;
+      if (!LOCAL_HOST.test(req.headers.host ?? '') || (origin !== undefined && !LOCAL_ORIGIN.test(origin))) return send(res, 403, { error: 'This app only answers on localhost' });
       const url = new URL(req.url ?? '/', 'http://localhost');
       const asset = STATIC[url.pathname];
       if (req.method === 'GET' && asset) {
@@ -71,14 +73,15 @@ export function createApp({ root, clock }: ServerOptions): http.Server {
       }
       const route = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));
       if (!route) return send(res, 404, { error: 'Not found' });
-      const type = req.headers['content-type'] ?? '';
-      if (req.method === 'POST' && !type.includes('application/json') && !req.headers['x-filename']) {
+      const media = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+      const isJson = media === 'application/json';
+      if (req.method === 'POST' && !isJson && !req.headers['x-filename']) {
         return send(res, 415, { error: 'Send JSON' });
       }
       const m = route.pattern.exec(url.pathname)!;
       const params = Object.fromEntries(route.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
       const raw = await readBody(req);
-      const body = type.includes('application/json') && raw.length
+      const body = isJson && raw.length
         ? (JSON.parse(raw.toString('utf8')) as Record<string, unknown>)
         : {};
       return send(res, 200, await route.handler({ body, raw, params, headers: req.headers }));

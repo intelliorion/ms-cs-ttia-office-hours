@@ -5,12 +5,15 @@ import { startServer, FIXTURE } from './helpers';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const j = (r: Response): Promise<any> => r.json();
-let close: (() => void) | undefined;
-afterEach(() => close?.());
+let close: (() => Promise<void>) | undefined;
+afterEach(async () => { await close?.(); close = undefined; });
 
 async function boot() {
   const s = await startServer();
-  close = () => s.server.close();
+  close = () => new Promise<void>((resolve) => {
+    s.server.close(() => resolve());
+    s.server.closeAllConnections();
+  });
   return s;
 }
 
@@ -64,7 +67,9 @@ describe('api', () => {
     const res = await post(base, '/api/ideas/..%2F..%2Fetc/tick', { step: 's1a', done: true });
     expect(res.status).toBe(400);
     expect((await j(res)).error).toContain('Not a Café ID');
-    expect((await fetch(`${base}/../package.json`)).status).toBe(404);
+    for (const p of ['/../package.json', '/%2e%2e/package.json']) {
+      expect(await rawStatus(base, p, 'localhost')).not.toBe(200);
+    }
     expect((await post(base, '/api/outbox/approve', { key: '../../x.md' })).status).toBe(400);
   });
 
@@ -85,5 +90,20 @@ describe('api', () => {
     const res = await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'notes.exe' }, body: 'x' });
     expect(res.status).toBe(400);
     expect((await j(res)).error).toBe('Drop a .csv or .xlsx export');
+  });
+
+  it('does not trust a content type that only mentions JSON', async () => {
+    const { base } = await boot();
+    const res = await fetch(`${base}/api/round`, { method: 'POST', headers: { 'content-type': 'text/plain; x=application/json' }, body: '{}' });
+    expect(res.status).toBe(415);
+  });
+
+  it('refuses cross-site origins and accepts local ones', async () => {
+    const { base } = await boot();
+    const send = (origin: string) => fetch(`${base}/api/round`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin }, body: '{}',
+    });
+    expect((await send('http://evil.example')).status).toBe(403);
+    expect((await send('http://localhost:4100')).status).toBe(200);
   });
 });

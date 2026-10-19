@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { progress, missingToAdvance, stepStatus, tick, advance, closeIdea } from '../src/checklist/checklist';
-import { saveIdea, loadIdea } from '../src/ideas/store';
+import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
 import { readHistory } from '../src/workspace/files';
 import { fixedClock } from '../src/clock';
 
@@ -41,6 +40,18 @@ describe('tick and advance', () => {
     expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s1a.by).toBe('operator');
   });
 
+  it('records the source of an app tick and logs an untick', async () => {
+    const root = await tmpWorkspace();
+    const dir = await saveIdea(root, sampleIdea());
+    await tick(root, 'CAFE-2026-001', 's1d', true, { by: 'app', source: 'export.csv row 2', clock, steps });
+    expect((await readHistory(dir)).at(-1)).toMatchObject({ action: 'tick', by: 'app', step: 's1d', source: 'export.csv row 2' });
+    const ticked = await loadIdea(root, 'CAFE-2026-001');
+    expect(ticked.checklist.s1d).toMatchObject({ done: true, by: 'app', source: 'export.csv row 2' });
+    await tick(root, 'CAFE-2026-001', 's1d', false, { by: 'operator', clock, steps });
+    expect((await readHistory(dir)).at(-1)).toMatchObject({ action: 'untick', step: 's1d' });
+    expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s1d.done).toBe(false);
+  });
+
   it('refuses an unknown step', async () => {
     const root = await tmpWorkspace();
     await saveIdea(root, sampleIdea());
@@ -66,6 +77,6 @@ describe('tick and advance', () => {
     const idea = await closeIdea(root, 'CAFE-2026-001', 'csic', clock, '2026-11-16');
     expect(idea.closed).toEqual({ as: 'csic', at: '2026-10-19', followUp: '2026-11-16' });
     await expect(advance(root, 'CAFE-2026-001', steps, clock)).rejects.toThrow('is closed');
-    expect(path.basename(root)).toMatch(/^cafe-ws-/);
+    expect((await readHistory(await ideaDir(root, 'CAFE-2026-001'))).at(-1)).toMatchObject({ action: 'close', detail: 'Routed to CSIC' });
   });
 });

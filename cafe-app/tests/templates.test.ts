@@ -50,6 +50,14 @@ describe('templates', () => {
     expect(render(t.E0, {}).to).toBe('[DISTRIBUTION LIST]');
   });
 
+  it('keeps $ sequences in user values literal', async () => {
+    const { E1 } = await loadTemplatesFrom(BUNDLED_TEMPLATES);
+    const dollarIdea = normalizeIdea({ ...idea, title: 'Cost $& savings $$' });
+    expect(render(E1, { idea: dollarIdea }).body).toContain('"Cost $& savings $$"');
+    const dollarSettings = { ...settings, operatorName: "Ann $' O'Neil" };
+    expect(render(E1, { idea, round, settings: dollarSettings }).body).toContain("Ann $' O'Neil");
+  });
+
   it('counts the content placeholders left for Outlook', async () => {
     const { E2 } = await loadTemplatesFrom(BUNDLED_TEMPLATES);
     expect(render(E2, { idea, round, settings }).contentPlaceholders).toHaveLength(4);

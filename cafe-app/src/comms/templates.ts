@@ -51,14 +51,15 @@ export interface RenderContext {
 export function fillText(text: string, ctx: RenderContext): string {
   let out = text;
   if (ctx.idea) {
-    out = out.replaceAll('[CAFE ID]', ctx.idea.id).replaceAll('[IDEA TITLE]', ctx.idea.title);
+    const { id, title } = ctx.idea;
+    out = out.replaceAll('[CAFE ID]', () => id).replaceAll('[IDEA TITLE]', () => title);
     const first = ctx.idea.people.submitter?.trim().split(/\s+/)[0];
-    if (first) out = out.replaceAll('[FIRST NAME]', first);
+    if (first) out = out.replaceAll('[FIRST NAME]', () => first);
   }
   if (ctx.round && ctx.settings) {
     for (const token of Object.keys(TOKENS)) {
       const value = resolveToken(token, ctx.round, ctx.settings);
-      if (value !== undefined) out = out.replaceAll(token, value);
+      if (value !== undefined) out = out.replaceAll(token, () => value);
     }
   }
   return out;

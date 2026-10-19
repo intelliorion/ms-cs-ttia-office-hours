@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees } from './graphView';
+import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -29,4 +29,9 @@ describe('framing helpers', () => {
     expect(ringColour({ id: 'i', type: 'Idea', label: 'x', attrs: { stage: 3, closed: 'Moved to CSIC' } } as any)).toBe('#5c6b6a');
   });
   it('counts degrees', () => expect(degrees(g).get('a')).toBe(2));
+});
+
+describe('extent', () => {
+  it('is null for no points, so an empty graph never yields NaN', () => expect(extent([])).toBeNull());
+  it('spans the points', () => expect(extent([[1, 5], [-3, 2], [4, -1]])).toEqual({ x0: -3, x1: 4, y0: -1, y1: 5 }));
 });

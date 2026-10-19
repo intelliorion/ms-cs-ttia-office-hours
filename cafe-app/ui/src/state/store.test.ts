@@ -22,12 +22,6 @@ describe('selectors', () => {
 });
 
 describe('selection', () => {
-  it('gives the neighbourhood of the selection, or null', async () => {
-    const { selectedNeighbourhood } = await import('./store');
-    const graph = { edges: [{ from: 'a', to: 'b' }, { from: 'c', to: 'd' }] };
-    expect(selectedNeighbourhood({ graph, selectedId: null })).toBeNull();
-    expect([...selectedNeighbourhood({ graph, selectedId: 'a' })!].sort()).toEqual(['a', 'b']);
-  });
   it('reset view clears the selection and bumps the nonce; labels toggle', async () => {
     const { useStore } = await import('./store');
     useStore.getState().select('a'); useStore.getState().resetView(); useStore.getState().toggleLabels();

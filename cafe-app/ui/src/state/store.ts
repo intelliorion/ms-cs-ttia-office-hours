@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { getState, getGraph } from '../api';
-import { neighbourhood } from '../universe/graphView';
 
 export type Popout =
   | null
@@ -83,8 +82,3 @@ export function functionRegion(s: any): [string, number][] {
   return tally(s.ideas.map((i: any) => `${i.function || '—'} · ${i.region || '—'}`));
 }
 
-/** The selected node and its direct neighbours, or null when nothing is selected. */
-export function selectedNeighbourhood(s: Pick<AppState, 'graph' | 'selectedId'>): Set<string> | null {
-  if (!s.selectedId || !s.graph) return null;
-  return neighbourhood(s.graph, s.selectedId);
-}

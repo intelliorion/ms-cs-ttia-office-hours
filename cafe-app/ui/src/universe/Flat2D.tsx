@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { DIM, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, labelAlways, neighbourhood, ringColour, starSize, type Graph, type Vec3 } from './graphView';
+import { DIM, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelAlways, neighbourhood, ringColour, starSize, type Graph, type Vec3 } from './graphView';
 
 interface Props {
   graph: Graph;
@@ -20,8 +20,9 @@ const RANK: Record<string, number> = { Idea: 0, Team: 1, Entity: 2, Tool: 3, Cap
 export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, onHover }: Props) {
   const { pts } = useMemo(() => {
     const ids = graph.nodes.map((n) => n.id).filter((id) => layout[id]);
-    const xs = ids.map((id) => layout[id][0]); const ys = ids.map((id) => layout[id][1]);
-    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const box = extent(ids.map((id) => layout[id]));
+    if (!box) return { pts: new Map<string, [number, number]>() };
+    const { x0, x1, y0, y1 } = box;
     const k = Math.min((BOX.w - 2 * PAD) / Math.max(1, x1 - x0), (BOX.h - 2 * PAD) / Math.max(1, y1 - y0));
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const pts = new Map(ids.map((id) => [id, [BOX.x + BOX.w / 2 + (layout[id][0] - cx) * k, BOX.y + BOX.h / 2 - (layout[id][1] - cy) * k] as [number, number]]));
@@ -44,6 +45,7 @@ export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, o
       placed.push(b); shown.add(n.id);
     }
   }
+  if (!pts.size) return <div className="flat2d-empty" data-testid="flat2d">Import an export to light up the universe</div>;
   return (
     <svg className="flat2d" viewBox="0 0 1920 1080" width={1920} height={1080} onClick={() => onSelect(null)} data-testid="flat2d">
       <defs>

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { AdditiveBlending, Sprite, Vector3 } from 'three';
@@ -8,8 +8,18 @@ import { haloTexture } from './haloTexture';
 const PULSE_SECONDS = 1.2;
 
 /** Faint teal links; unconfirmed dashed amber; the selection's links bright with travelling pulses. */
-export function Links({ edges, pos, selectedId }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null }) {
-  const drawn = edges.filter((e) => pos.has(e.from) && pos.has(e.to));
+// memo: hover changes never re-render the links (their style depends only on the selection).
+export const Links = memo(function Links({ edges, pos, selectedId }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null }) {
+  // One stable points array per edge, so drei Line keeps its geometry across renders.
+  const points = useMemo(() => {
+    const m = new Map<string, [Vec3, Vec3]>();
+    for (const e of edges) {
+      const a = pos.get(e.from), b = pos.get(e.to);
+      if (a && b) m.set(e.id, [a, b]);
+    }
+    return m;
+  }, [edges, pos]);
+  const drawn = useMemo(() => edges.filter((e) => points.has(e.id)), [edges, points]);
   const pulses = selectedId ? drawn.filter((e) => edgeStyle(e, selectedId).pulse) : [];
   return (
     <group>
@@ -19,7 +29,7 @@ export function Links({ edges, pos, selectedId }: { edges: GEdge[]; pos: Map<str
         return (
           <Line
             key={e.id}
-            points={[pos.get(e.from)!, pos.get(e.to)!]}
+            points={points.get(e.id)!}
             color={s.dashed ? UNCONFIRMED_COLOUR : bright ? '#a8f0ea' : LINK_COLOUR}
             lineWidth={bright ? 1.6 : 1}
             transparent
@@ -37,7 +47,7 @@ export function Links({ edges, pos, selectedId }: { edges: GEdge[]; pos: Map<str
       ))}
     </group>
   );
-}
+});
 
 function Pulse({ from, to, amber }: { from: Vec3; to: Vec3; amber: boolean }) {
   const ref = useRef<Sprite>(null);

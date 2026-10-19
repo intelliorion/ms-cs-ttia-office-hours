@@ -2,9 +2,10 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels]
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover]
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -54,7 +55,17 @@ async function page(browser, errors) {
 
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
 
+// The workspace is wiped on every run, so only ever delete a throwaway folder.
+function safeToDelete(dir) {
+  const under = (root) => { const rel = path.relative(path.resolve(root), dir); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel); };
+  return under(os.tmpdir()) || under('/private/tmp') || under('/tmp') || /tour|scratch/i.test(path.basename(dir));
+}
+
 async function main() {
+  if (!safeToDelete(workspace)) {
+    console.error(`Refusing to delete ${workspace}: the tour wipes its workspace, so pass a folder under the temp directory or one whose name contains "tour" or "scratch".`);
+    process.exit(2);
+  }
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   await fs.mkdir(out, { recursive: true });
@@ -74,6 +85,18 @@ async function main() {
     const p = await page(gl, errors);
     await p.waitForSelector('canvas');
     await sleep(3000);
+    if (only === 'hover') {
+      await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
+      await sleep(3500);
+      await shot(p, '02-selected.png');
+      await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); window.__cafe.hover('team:gss'); });
+      await sleep(2500);
+      await shot(p, '05-hover.png');
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     if (only === 'panels') {
       await p.mouse.move(200, 330);
       await shot(p, '05-panels.png');

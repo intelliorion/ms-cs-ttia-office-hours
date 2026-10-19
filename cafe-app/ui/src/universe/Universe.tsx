@@ -29,7 +29,9 @@ const MAX_PAN = 400;
 export function hasWebGL(): boolean {
   try {
     const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext(); // release the probe context at once
+    return !!gl;
   } catch { return false; }
 }
 

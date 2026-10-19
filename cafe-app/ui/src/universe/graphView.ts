@@ -71,3 +71,11 @@ export function phase(id: string): number {
   for (const ch of id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
   return (h >>> 0) / 4294967296;
 }
+
+/** The x/y box around some points, or null when there are none (no Math.min of nothing). */
+export function extent(points: ReadonlyArray<readonly [number, number, ...number[]]>): { x0: number; x1: number; y0: number; y1: number } | null {
+  if (!points.length) return null;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of points) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  return { x0, x1, y0, y1 };
+}

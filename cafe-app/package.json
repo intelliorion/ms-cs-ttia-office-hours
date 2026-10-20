@@ -16,7 +16,9 @@
     "cafe": "tsx bin/cafe.ts",
     "build:ui": "npm --prefix ui run build",
     "dev:ui": "npm --prefix ui run dev",
-    "test-data": "node scripts/make-test-data.mjs"
+    "test-data": "node scripts/make-test-data.mjs",
+    "acceptance": "tsx scripts/acceptance.mjs --fake",
+    "scale": "tsx scripts/make-scale-data.mjs"
   },
   "dependencies": {
     "@kenjiuno/msgreader": "1.28.0",

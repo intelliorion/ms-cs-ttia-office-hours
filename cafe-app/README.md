@@ -146,7 +146,7 @@ decides what is safe, what needs your OK and what is held, and it writes every f
 alone is never enough for a safe change: an answer is saved on its own only when it answers a question we
 sent in the E2; a reply is marked received only when an E2 or E2R was sent; attendance is logged only when
 the E3 invitation was sent. Anything else waits for your Yes (for example "question not one we sent").
-An email from you (the name in Settings) is filed as sent, anything else as received.
+An email from you (the name in Settings) is filed as sent and nothing else is proposed from it; anything else is filed as received.
 
 **What goes in the universe**
 
@@ -246,6 +246,18 @@ npm run typecheck
 cd ui && npm test        # the UI helpers
 node scripts/ui-tour.mjs --workspace /tmp/cafe-tour-ws --out /tmp/cafe-tour-shots
 ```
+
+**Acceptance run of the Inbox.** `npm run acceptance` drops the whole `test-data/` kit (01 to 12) through the API on its own
+server (a free port, never 4100) and a fresh workspace, sends an E2 for CAFE-2026-002 first, then applies one Needs-OK
+action, undoes one Safe one and confirms one link, and prints file → expected → actual → PASS/FAIL (non-zero exit on a
+FAIL). It runs with `--fake`: a scripted, deterministic triage (which obeys the injection in 05, to show the code holds
+it). `npx tsx scripts/acceptance.mjs --real-ai` uses this machine's AI instead (about 8 calls, a few minutes) and checks
+tiers and kinds, not wording. Add `--workspace DIR` to choose the scratch folder.
+
+**Scale test of the universe.** `npm run scale -- --out /tmp/cafe-scale` generates a 60-idea export and 150 synthetic
+AI links (`--links 300` for about 300 stars), imports them into a fresh workspace, times `GET /api/graph`, and in
+headless Chrome (software WebGL) measures the frame time with and without a selection, checks labels do not overlap and
+the fly-to lands, and saves `scale-universe.png` and `scale-report.json`. Nothing it writes is committed.
 
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so

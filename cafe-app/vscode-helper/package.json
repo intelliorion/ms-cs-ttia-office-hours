@@ -1,0 +1,18 @@
+{
+  "name": "cafe-ai-helper",
+  "displayName": "Creators' Café AI helper",
+  "description": "Lets the local Creators' Café app ask your GitHub Copilot model for suggestions, on localhost only.",
+  "version": "0.1.0",
+  "publisher": "cafe-local",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "cafe.aiHelper.status", "title": "Creators' Café: AI helper status" }
+    ]
+  }
+}

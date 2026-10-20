@@ -3,6 +3,7 @@ import { useStore } from '../state/store';
 import { ApiError, copyText, getHistory, ideaPost, post } from '../api';
 import { shortDate } from '../panels/filterIdeas';
 import { Modal } from './Modal';
+import { applySuggestion, extractNotice, NO_AI_TIP, providerName, type ReviewSuggestion } from './aiUi';
 import { LinkTable } from './LinkTable';
 import {
   APPROVED_NOTICE, DECISION_EMAIL, IDEA_TEMPLATES, approveAndCopy, reviewKey, shouldResetReview, TEMPLATE_TITLES, clipText, emailAction, emailStatus, historyLine, ideaLinks, type HistoryEntry,
@@ -11,7 +12,9 @@ import {
 const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', member: 'Member' };
 
 export function IdeaPopout({ id }: { id: string }) {
-  const { state, graph, refresh, closePopout, openPopout, notice, setNotice, suggest, setSuggest } = useStore();
+  const { state, graph, refresh, closePopout, openPopout, notice, setNotice, suggest, setSuggest, ai } = useStore();
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiReview, setAiReview] = useState<ReviewSuggestion | null>(null);
   const idea = state?.ideas.find((i: any) => i.id === id);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
@@ -19,7 +22,7 @@ export function IdeaPopout({ id }: { id: string }) {
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
 
   const loadHistory = useCallback(() => getHistory(id).then(setHistory, () => setHistory(null)), [id]);
-  useEffect(() => { setNotice(null); setFallback(null); void loadHistory(); }, [id, loadHistory, setNotice]);
+  useEffect(() => { setNotice(null); setFallback(null); setAiReview(null); void loadHistory(); }, [id, loadHistory, setNotice]);
   useEffect(() => { if (fallback) { fallbackRef.current?.focus(); fallbackRef.current?.select(); } }, [fallback]);
 
   /** Runs one change, says what happened in plain words, then refreshes state, graph and history. */
@@ -38,6 +41,22 @@ export function IdeaPopout({ id }: { id: string }) {
     await Promise.all([refresh(), loadHistory()]);
     setBusy(false);
   };
+
+  const noAi = !ai?.provider;
+  /** One AI call at a time: it can take a minute and holds the server's write lock. */
+  const runAi = async (url: string, onOk: (r: any) => void) => {
+    if (aiBusy || busy || noAi) return;
+    setAiBusy(true); setNotice(null);
+    try { onOk(await post(url, { id })); }
+    catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+    await Promise.all([refresh(), loadHistory()]);
+    setAiBusy(false);
+  };
+  const grow = () => runAi('/api/ai/extract', (r) => setNotice({ text: extractNotice(r), kind: 'ok' }));
+  const suggestReview = () => runAi('/api/ai/review-suggest', (r) => {
+    setAiReview(r);
+    setNotice({ text: `Review suggested by ${providerName(r.provider, ai)}. Nothing is saved until you press Save.`, kind: 'ok' });
+  });
 
   if (!idea) {
     return (
@@ -115,7 +134,13 @@ export function IdeaPopout({ id }: { id: string }) {
       )}
       <div className="pop-grid">
         <div className="pop-col">
-          <Review idea={idea} state={state} busy={busy}
+          <Review idea={idea} state={state} busy={busy || aiBusy} aiReview={aiReview} aiName={providerName(aiReview?.provider, ai)}
+            onClearAi={() => setAiReview(null)} aiBar={(
+              <div className="ai-row">
+                <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy || Boolean(idea.closed)} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
+                  {aiBusy ? 'Working…' : 'Suggest a review'}</button>
+              </div>
+            )}
             onSave={(body) => act(() => ideaPost(id, 'review', body), (r: any) =>
               [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
           <Details idea={idea} />
@@ -135,6 +160,11 @@ export function IdeaPopout({ id }: { id: string }) {
             onSent={(key) => act(() => post('/api/outbox/sent', { key }), (r: any) => `${r.template} marked sent.`)} />
           <section className="sec">
             <h3>Graph <span className="sec-n">{ideaLinks(graph, id).length} links</span></h3>
+            <div className="ai-row">
+              <button className="btn" data-action="ai-grow" disabled={noAi || aiBusy || busy} title={noAi ? NO_AI_TIP : undefined} onClick={() => void grow()}>
+                {aiBusy ? 'Working…' : 'Grow the universe from this idea'}</button>
+              {aiBusy && <span className="ai-busy" role="status">Asking the AI, this can take a minute…</span>}
+            </div>
             <LinkTable rows={ideaLinks(graph, id)} busy={busy}
               onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), () => 'Link confirmed.')}
               onRemove={(edgeId) => act(() => post('/api/graph/remove', { edgeId }), () => 'Link removed.')} />
@@ -189,7 +219,11 @@ function Details({ idea }: { idea: any }) {
   );
 }
 
-function Review({ idea, state, busy, onSave }: { idea: any; state: any; busy: boolean; onSave: (b: unknown) => void }) {
+function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi, aiBar }: {
+  idea: any; state: any; busy: boolean; onSave: (b: unknown) => void;
+  aiReview: ReviewSuggestion | null; aiName: string; onClearAi: () => void; aiBar: React.ReactNode;
+}) {
+  const [suggested, setSuggested] = useState(false);
   const [criteria, setCriteria] = useState<Record<string, boolean>>({});
   const [decision, setDecision] = useState('');
   const [reason, setReason] = useState('');
@@ -202,30 +236,41 @@ function Review({ idea, state, busy, onSave }: { idea: any; state: any; busy: bo
     setCriteria({ ...(idea.review?.criteria ?? {}) });
     setDecision(idea.review?.decision ?? '');
     setReason(idea.review?.reason ?? '');
+    setSuggested(false);
   }, [key, idea.review]);
+  // A suggestion fills the form but is not saved; the highlight stays until the operator edits or saves.
+  useEffect(() => {
+    if (!aiReview) return;
+    const f = applySuggestion({ criteria, decision, reason }, aiReview);
+    setCriteria(f.criteria); setDecision(f.decision); setReason(f.reason); setSuggested(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiReview]);
+  const edited = () => { if (suggested) { setSuggested(false); onClearAi(); } };
   const closed = Boolean(idea.closed);
   return (
     <section className="sec">
       <h3>Review {idea.review && <span className="sec-n">saved {shortDate(idea.review.at)}</span>}</h3>
-      <ul className="criteria">
+      {aiBar}
+      <ul className={`criteria${suggested ? ' suggested' : ''}`}>
         {(state.criteria ?? []).map((c: any) => (
           <li key={c.id}>
             <label>
               <input type="checkbox" checked={criteria[c.id] === true} disabled={closed || busy}
-                onChange={(e) => setCriteria((x) => ({ ...x, [c.id]: e.target.checked }))} />
+                onChange={(e) => { edited(); setCriteria((x) => ({ ...x, [c.id]: e.target.checked })); }} />
               <span>{c.text}</span>
             </label>
           </li>
         ))}
       </ul>
       <div className="rv-row">
-        <select value={decision} disabled={closed || busy} onChange={(e) => setDecision(e.target.value)} aria-label="Decision" data-action="decision">
+        <select className={suggested ? 'suggested-box' : ''} value={decision} disabled={closed || busy} onChange={(e) => { edited(); setDecision(e.target.value); }} aria-label="Decision" data-action="decision">
           <option value="">Pick a decision…</option>
           {Object.entries(state.decisions ?? {}).map(([k, v]) => <option key={k} value={k}>{String(v)}</option>)}
         </select>
       </div>
-      <textarea className="reason" rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={closed || busy}
-        onChange={(e) => setReason(e.target.value)} aria-label="Reason" />
+      <textarea className={`reason${suggested ? ' suggested-box' : ''}`} rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={closed || busy}
+        onChange={(e) => { edited(); setReason(e.target.value); }} aria-label="Reason" />
+      {suggested && <div className="sg-by" data-testid="ai-review-by">Suggested by {aiName}. Check it, change what you like, then save.</div>}
       <div className="rv-foot">
         <span className="hint">{closed ? 'Closed. Set a stage to reopen it before reviewing.' : 'Saving drafts the decision email. Nothing moves until you say yes.'}</span>
         <button className="btn primary" data-action="save-review" disabled={closed || busy || !decision || !reason.trim()}

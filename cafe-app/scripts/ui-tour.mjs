@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2]
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai]  (ai needs CAFE_AI_FAKE=1)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -164,6 +164,26 @@ async function popouts2Shots(p, gl, errors, restart) {
   await shot(p, '11-late.png');
 }
 
+// The AI pop-out, then "Grow the universe" on CAFE-2026-002 with the fake provider. Needs CAFE_AI_FAKE=1.
+async function aiShots(p) {
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await p.waitForSelector('.titlebar [data-action="ai"]');
+  await sleep(1000);
+  await p.click('.titlebar [data-action="ai"]');
+  await p.waitForSelector('.ai-pop');
+  await sleep(800);
+  await shot(p, '13-ai-chip.png');
+  await p.keyboard.press('Escape');
+  await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002'));
+  await p.waitForSelector('.idea-pop');
+  await sleep(3000);
+  await p.click('.idea-pop [data-action="ai-grow"]');
+  await p.waitForSelector('.idea-pop .pop-notice:has-text("Added")', { timeout: 60000 });
+  await sleep(3500);
+  await p.locator('.idea-pop [data-action="ai-grow"]').scrollIntoViewIfNeeded();
+  await shot(p, '14-grown.png');
+}
+
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
 
 // The workspace is wiped on every run, so only ever delete a throwaway folder.
@@ -225,6 +245,13 @@ async function main() {
     }
     if (only === 'popouts2') {
       await popouts2Shots(p, gl, errors, restart);
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'ai') {
+      await aiShots(p);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;

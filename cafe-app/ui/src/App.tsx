@@ -6,11 +6,11 @@ import { useStore } from './state/store';
 import { IdeasList } from './panels/IdeasList';
 import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
 import { Universe } from './universe/Universe';
-import { Modal } from './popouts/Modal';
 import { IdeaPopout } from './popouts/IdeaPopout';
 import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
+import { AiPopout } from './popouts/AiPopout';
 import { NodeCard } from './popouts/NodeCard';
 import { cafeIdOf } from './popouts/ideaHelpers';
 
@@ -64,11 +64,7 @@ export default function App() {
       {popout?.kind === 'import' && <ImportPopout />}
       {popout?.kind === 'round' && <RoundPopout />}
       {popout?.kind === 'outbox' && <OutboxPopout />}
-      {popout?.kind === 'ai' && (
-        <Modal title={<h2>AI</h2>} label={popout.kind} onClose={closePopout} width={720} height={260}>
-          <div className="modal-body">Coming next.</div>
-        </Modal>
-      )}
+      {popout?.kind === 'ai' && <AiPopout />}
     </Stage>
   );
 }

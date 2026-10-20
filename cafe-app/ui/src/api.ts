@@ -21,3 +21,5 @@ export const ideaPost = (id: string, what: 'stage' | 'review' | 'draft' | 'reply
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
 }
+
+export const getAiStatus = () => fetch('/api/ai/status').then((r) => handle<any>(r));

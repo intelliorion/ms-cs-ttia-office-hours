@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
+import { chipText } from '../popouts/aiUi';
 import { baseName, unsentCount } from '../popouts/titleHelpers';
 
 export function TitleBar() {
-  const { openPopout, refresh, setNotice, state } = useStore();
+  const { openPopout, refresh, setNotice, state, ai, refreshAi } = useStore();
+  useEffect(() => { void refreshAi(); }, [refreshAi]);
   const n = unsentCount(state?.outbox);
   /** Writes a file through the server and says only its name. */
   const write = async (url: string) => {
@@ -22,7 +25,9 @@ export function TitleBar() {
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>
         <button className="pill" data-action="review-pack" onClick={() => void write('/api/review-pack')}>Review pack</button>
         <button className="pill" data-action="status-csv" onClick={() => void write('/api/status-export')}>status.csv</button>
-        <button className="pill" data-action="ai" onClick={() => openPopout({ kind: 'ai' })}>AI</button>
+        <button className="pill" data-action="ai" title="AI helper" onClick={() => openPopout({ kind: 'ai' })}>
+          <span className="ai-dot" data-on={ai?.provider ? 'true' : 'false'} aria-hidden="true" />{chipText(ai)}
+        </button>
       </div>
     </header>
   );

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { getState, getGraph } from '../api';
+import { getState, getGraph, getAiStatus } from '../api';
+import type { AiStatus } from '../popouts/aiUi';
 
 export type Popout =
   | null
@@ -25,6 +26,8 @@ export interface AppState {
   popout: Popout;
   notice: Notice | null;
   suggest: Suggest | null;
+  ai: AiStatus | null;
+  refreshAi: () => Promise<void>;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
   hover: (id: string | null) => void;
@@ -37,7 +40,8 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null, ai: null,
+  refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
     try {
       const [state, graph] = await Promise.all([getState(), getGraph().catch(() => null)]);

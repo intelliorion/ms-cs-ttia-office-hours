@@ -142,3 +142,59 @@ describe('left panel view', () => {
     expect(esc({ modal: false, leftView: list, detailsVisible: true, drawer: null, card: false, target: div })).toBe('none');
   });
 });
+
+describe('quality', () => {
+  it('cycles Full → Lite → Flat → Full and labels the pill', async () => {
+    const { nextQuality, qualityLabel } = await import('./store');
+    expect([nextQuality('full'), nextQuality('lite'), nextQuality('flat')]).toEqual(['lite', 'flat', 'full']);
+    expect(['full', 'lite', 'flat'].map((q) => qualityLabel(q as any))).toEqual(['Quality: Full', 'Quality: Lite', 'Quality: Flat']);
+  });
+  it('reads and writes the per-browser quality, ignoring junk and broken storage', async () => {
+    const { readQuality, writeQuality, readQualityByHand } = await import('./store');
+    localStorage.clear();
+    expect(readQuality()).toBeNull();
+    writeQuality('lite', true);
+    expect([readQuality(), readQualityByHand()]).toEqual(['lite', true]);
+    localStorage.setItem('cafe-quality', 'ultra');
+    expect(readQuality()).toBeNull();
+    const get = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => { throw new Error('blocked'); };
+    try { expect(readQuality()).toBeNull(); expect(readQualityByHand()).toBe(false); } finally { Storage.prototype.getItem = get; }
+    localStorage.clear();
+  });
+  it('spots software WebGL renderers', async () => {
+    const { detectSoftwareGl } = await import('./store');
+    for (const r of ['ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)', 'llvmpipe (LLVM 15.0.7, 256 bits)',
+      'Mesa OffScreen', 'ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0)', 'Google SwiftShader', 'ANGLE (Software)'])
+      expect(detectSoftwareGl(r)).toBe(true);
+    for (const r of [null, '', 'ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)', 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)', 'Intel(R) UHD Graphics 620'])
+      expect(detectSoftwareGl(r)).toBe(false);
+  });
+  it('auto-picks Lite once on software graphics, and never overrides a quality set by hand', async () => {
+    const { useStore, SOFTWARE_NOTICE, SLOW_NOTICE } = await import('./store');
+    localStorage.clear();
+    useStore.setState({ quality: 'full', qualitySetByHand: false, notice: null });
+    useStore.getState().autoPickQuality('Google SwiftShader');
+    expect(useStore.getState()).toMatchObject({ quality: 'lite', qualitySetByHand: false, notice: { text: SOFTWARE_NOTICE } });
+    // Second load: something is stored, so no auto-pick and no notice.
+    useStore.setState({ quality: 'full', notice: null });
+    useStore.getState().autoPickQuality('Google SwiftShader');
+    expect(useStore.getState()).toMatchObject({ quality: 'full', notice: null });
+    // A hardware renderer on a fresh browser stays Full.
+    localStorage.clear();
+    useStore.getState().autoPickQuality('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060)');
+    expect(useStore.getState().quality).toBe('full');
+    // The fps watchdog drops Full to Lite once...
+    useStore.getState().slowQuality();
+    expect(useStore.getState()).toMatchObject({ quality: 'lite', notice: { text: SLOW_NOTICE } });
+    expect(localStorage.getItem('cafe-quality')).toBe('lite');
+    // ...but not a quality the operator picked.
+    useStore.getState().setQuality('full');
+    useStore.setState({ notice: null });
+    useStore.getState().slowQuality();
+    expect(useStore.getState()).toMatchObject({ quality: 'full', qualitySetByHand: true, notice: null });
+    useStore.getState().cycleQuality();
+    expect([useStore.getState().quality, localStorage.getItem('cafe-quality'), localStorage.getItem('cafe-quality-by-hand')]).toEqual(['lite', 'lite', '1']);
+    localStorage.clear();
+  });
+});

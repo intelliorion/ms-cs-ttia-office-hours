@@ -28,8 +28,16 @@ panels, large white titles and pill buttons at the bottom.
 - **Narrow windows.** Below 1000px wide the side panels become drawers: tap the "Ideas" tab on the left or
   "Charts" on the right; close with the X or Esc. The universe stays behind them. The Ideas drawer shows an idea's details the
   same way, with Back; Esc goes Back first, then closes the drawer.
-- **Bottom centre.** Reset view, Labels and Focus.
+- **Bottom centre.** Reset view, Labels, Focus and Quality.
 - **Focus.** The Focus button (or the F key) hides every panel and drawer so only the universe shows; clicks still work. Click again (Show panels) to bring them back.
+- **Quality.** The Quality button cycles Full → Lite → Flat. **Full** is the whole look (bloom, antialiasing,
+  sharp on high-DPI screens). **Lite** drops the bloom pass and antialiasing, draws at 1× pixel density, uses a sixth of
+  the background stars, draws the quiet links in a few batches, moves labels in whole pixels, and drops the blur behind
+  the glass panels; soft coloured halos (larger and pulsing on the selected star) and a glow on the selection's links
+  keep it glowing. **Flat** is the 2D map (also used automatically when the browser has no WebGL). On the first load a
+  browser with software graphics (SwiftShader, llvmpipe and the like, as on many virtual desktops) starts in Lite and
+  says so; in Full, if the first few seconds draw under 20 fps it switches to Lite once and says so. The choice is
+  remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
 - **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
   and the AI chip (which shows who is answering).

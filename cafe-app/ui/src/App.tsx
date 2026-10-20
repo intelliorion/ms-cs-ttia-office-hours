@@ -13,25 +13,27 @@ import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { NodeCard } from './popouts/NodeCard';
-import { focusLabel, focusKeyApplies, escAction, isNarrow } from './state/store';
+import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
-    leftView, openIdea, backToList, drawer, setDrawer } = useStore();
+    leftView, openIdea, backToList, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
   // No card for the idea whose details are already showing in the panel.
   const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
   const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
   useEffect(() => { void refresh(); }, [refresh]);
+  // Lite drops the panels' backdrop blur too (theme.css), so the quality is on the root element.
+  useEffect(() => { document.documentElement.dataset.quality = quality; }, [quality]);
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout };
+      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice };
     }
-  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout]);
+  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice]);
   useEffect(() => {
     // One Esc handler: idea details go Back, then a drawer closes, then the star card closes. A modal handles its own Esc.
     const on = (e: KeyboardEvent) => {
@@ -58,7 +60,8 @@ export default function App() {
       <Stage focus={focus}>
         {graph && (
           <Universe graph={graph} layout={graph.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus}
-            viewNonce={viewNonce} onSelect={onSelect} onHover={hover} />
+            viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
+            quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}
         <TitleBar />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
@@ -84,6 +87,7 @@ export default function App() {
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
+          <button className="pill" data-action="quality" data-quality={quality} title="Cycle Full → Lite → Flat" onClick={cycleQuality}>{qualityLabel(quality)}</button>
         </div>
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}

@@ -412,3 +412,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .pk-agent{margin-top:8px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:8px 10px;border-left:3px solid var(--amber);background:rgba(245,179,107,.06);border-radius:0 4px 4px 0}
 .pk-ok{font-size:13px;color:var(--teal)}
 .pk-agent .copy-fallback{width:100%}
+/* Lite quality: blurring the moving universe behind every glass panel costs more than the 3D scene on software
+   graphics, so the panels keep their glass colour but drop the blur, a little more opaque to stay readable. */
+:root[data-quality="lite"] .panel{backdrop-filter:none;background:rgba(30,40,40,.8)}
+:root[data-quality="lite"] .nodecard,:root[data-quality="lite"] .modal,:root[data-quality="lite"] .drawer{backdrop-filter:none;background:rgba(26,35,35,.94)}

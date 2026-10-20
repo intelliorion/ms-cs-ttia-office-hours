@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard|design]  (ai, inbox and design need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard|design|quality]  (ai, inbox and design need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -45,8 +45,17 @@ async function post(url, body) {
   return res.json();
 }
 
-async function page(browser, errors) {
+// The tour's Chrome draws with SwiftShader, so a fresh browser would auto-pick Lite quality (with a notice).
+// Every shot except the quality ones keeps Full, set by hand, so they stay comparable with earlier tours.
+async function pinFull(ctx) {
+  await ctx.addInitScript(() => {
+    try { if (!localStorage.getItem('cafe-quality')) { localStorage.setItem('cafe-quality', 'full'); localStorage.setItem('cafe-quality-by-hand', '1'); } } catch { /* no storage */ }
+  });
+}
+
+async function page(browser, errors, { fresh = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  if (!fresh) await pinFull(ctx);
   const p = await ctx.newPage();
   p.on('console', (m) => { if (m.type() === 'error' && !/favicon/i.test(m.text())) errors.push(m.text()); });
   p.on('pageerror', (e) => errors.push(String(e)));
@@ -438,6 +447,7 @@ async function ideaCardShots(p) {
 // Below 1000px wide: the side panels become drawers behind two edge tabs.
 async function drawersShots(browser, errors) {
   const ctx = await browser.newContext({ viewport: { width: 900, height: 700 }, deviceScaleFactor: 1 });
+  await pinFull(ctx);
   const p = await ctx.newPage();
   p.on('console', (m) => { if (m.type() === 'error' && !/favicon/i.test(m.text())) errors.push(m.text()); });
   p.on('pageerror', (e) => errors.push(String(e)));
@@ -481,6 +491,63 @@ async function emptyShot(errors, restart) {
   await shot(p, '18-empty-3d.png');
   await gl.close();
   await fs.rm(empty, { recursive: true, force: true });
+}
+
+// Quality: a fresh browser on SwiftShader auto-picks Lite (with its notice); then the same scene in Full, Lite and Flat,
+// with the measured frame time (requestAnimationFrame, as scripts/make-scale-data.mjs measures it) for Full and Lite.
+async function frameStats(p, seconds = 5) {
+  const d = await p.evaluate((ms) => new Promise((resolve) => {
+    const d = []; let last = performance.now(); const end = last + ms;
+    const step = (t) => { d.push(t - last); last = t; if (t < end) requestAnimationFrame(step); else resolve(d); };
+    requestAnimationFrame(step);
+  }), seconds * 1000);
+  const s = [...d].sort((a, c) => a - c);
+  return { frames: d.length, avgMs: Math.round(d.reduce((a, c) => a + c, 0) / d.length), p95Ms: Math.round(s[Math.floor(s.length * 0.95)]) };
+}
+
+async function qualityShots(gl, errors) {
+  const assert = (ok, msg) => { if (!ok) throw new Error(`quality: ${msg}`); };
+  const p = await page(gl, errors, { fresh: true });
+  await p.waitForSelector('canvas');
+  await sleep(1500);
+  const auto = await p.evaluate(() => ({ q: document.querySelector('[data-testid="universe"]')?.getAttribute('data-quality'), notice: document.querySelector('.notice')?.textContent ?? '',
+    pill: document.querySelector('[data-action="quality"]')?.textContent, stored: localStorage.getItem('cafe-quality'), hand: localStorage.getItem('cafe-quality-by-hand') }));
+  console.log(`  auto-pick: ${JSON.stringify(auto)}`);
+  assert(auto.q === 'lite' && auto.pill === 'Quality: Lite' && auto.stored === 'lite' && auto.hand === '0', 'SwiftShader did not auto-pick Lite');
+  assert(auto.notice.startsWith('Lite quality picked for this browser'), 'no auto-pick notice');
+  await p.evaluate(() => window.__cafe.setNotice(null));
+  const ID = 'idea:CAFE-2026-002';
+  const SETTLE = 6000;
+  const set = async (q, selected) => {
+    await p.evaluate(([q, id]) => { window.__cafe.select(id); window.__cafe.setQuality(q); }, [q, selected ? ID : null]);
+    await sleep(SETTLE);
+    if (q !== 'flat') assert(await p.evaluate((q) => document.querySelector('[data-testid="universe"]')?.getAttribute('data-quality') === q, q), `not in ${q}`);
+  };
+  const times = {};
+  await set('full', false);
+  await p.mouse.move(960, 1075);
+  await shot(p, '50-full.png');
+  times.fullIdle = await frameStats(p);
+  await set('full', true);
+  await shot(p, '50-full-selected.png');
+  times.fullSelected = await frameStats(p);
+  await set('lite', false);
+  await shot(p, '51-lite.png');
+  times.liteIdle = await frameStats(p);
+  await set('lite', true);
+  await shot(p, '52-lite-selected.png');
+  times.liteSelected = await frameStats(p);
+  await set('flat', true);
+  assert(await p.isVisible('[data-testid="flat2d"]'), 'Flat did not draw the 2D map');
+  await shot(p, '53-flat.png');
+  // The pill cycles Flat → Full and says so; the choice is remembered as set by hand.
+  await p.click('[data-action="quality"]');
+  assert((await p.textContent('[data-action="quality"]')) === 'Quality: Full', 'the pill did not cycle to Full');
+  assert(await p.evaluate(() => localStorage.getItem('cafe-quality') === 'full' && localStorage.getItem('cafe-quality-by-hand') === '1'), 'the choice was not stored');
+  const nodes = await (await fetch(`${base}/api/graph`)).json().then((g) => `${g.nodes.length} stars, ${g.edges.length} links`);
+  console.log(`  frame time (${nodes}, SwiftShader, 1920×1080): ${JSON.stringify(times)}`);
+  await fs.writeFile(path.join(out, 'frame-times.json'), JSON.stringify({ scene: nodes, ...times }, null, 2));
+  await p.context().close();
 }
 
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
@@ -608,6 +675,14 @@ async function main() {
     if (only === 'empty') {
       await gl.close();
       await emptyShot(errors, restart);
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'quality') {
+      await p.context().close(); // its Full universe would keep drawing in the background and skew the frame times
+      await qualityShots(gl, errors);
+      await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;
       return;

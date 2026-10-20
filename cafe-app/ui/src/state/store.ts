@@ -26,6 +26,30 @@ export function focusKeyApplies(e: { key: string; ctrlKey?: boolean; metaKey?: b
   return !(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable);
 }
 
+/** How much the universe draws: Full (bloom), Lite (no post-processing, soft halos), Flat (the 2D map). */
+export type Quality = 'full' | 'lite' | 'flat';
+const QUALITIES: Quality[] = ['full', 'lite', 'flat'];
+const QUALITY_KEY = 'cafe-quality';
+const QUALITY_HAND_KEY = 'cafe-quality-by-hand';
+export const nextQuality = (q: Quality): Quality => QUALITIES[(QUALITIES.indexOf(q) + 1) % QUALITIES.length];
+export const qualityLabel = (q: Quality) => `Quality: ${q[0].toUpperCase()}${q.slice(1)}`;
+/** The stored quality, or null when this browser has none yet. */
+export function readQuality(): Quality | null {
+  try { const v = localStorage.getItem(QUALITY_KEY); return QUALITIES.includes(v as Quality) ? (v as Quality) : null; } catch { return null; }
+}
+/** Was the stored quality picked by the operator (so nothing switches it automatically)? */
+export function readQualityByHand(): boolean { try { return localStorage.getItem(QUALITY_HAND_KEY) === '1'; } catch { return false; } }
+export function writeQuality(q: Quality, byHand: boolean) {
+  try { localStorage.setItem(QUALITY_KEY, q); localStorage.setItem(QUALITY_HAND_KEY, byHand ? '1' : '0'); } catch { /* storage unavailable */ }
+}
+/** A software WebGL renderer (virtual desktops, headless browsers): full quality draws a few frames a second there. */
+export function detectSoftwareGl(renderer: string | null): boolean {
+  if (!renderer) return false;
+  return /swiftshader|llvmpipe|softpipe|software|mesa offscreen|microsoft basic render|gdi generic|apple software/i.test(renderer);
+}
+export const SOFTWARE_NOTICE = 'Lite quality picked for this browser (software graphics). Change it with the Quality button.';
+export const SLOW_NOTICE = 'Switched to Lite quality: this browser was drawing under 20 fps.';
+
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
 /** What the left (Ideas) panel shows: the list, or one idea's details with a Back button. */
@@ -67,6 +91,15 @@ export interface AppState {
   /** Focus mode: only the universe (and the title bar) show. */
   focus: boolean;
   toggleFocus: () => void;
+  quality: Quality;
+  /** The operator picked the quality with the button: never switch it automatically. */
+  qualitySetByHand: boolean;
+  setQuality: (q: Quality) => void;
+  cycleQuality: () => void;
+  /** First load only (nothing stored): a software renderer starts in Lite, with a notice. */
+  autoPickQuality: (renderer: string | null) => void;
+  /** The fps watchdog: Full drew under 20 fps, so drop to Lite once (unless set by hand). */
+  slowQuality: () => void;
   popout: Popout;
   leftView: LeftView;
   /** Show an idea's details in the left panel (and select its star). */
@@ -94,7 +127,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -115,6 +148,18 @@ export const useStore = create<AppState>((set) => ({
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
+  setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
+  cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),
+  autoPickQuality: (renderer) => {
+    if (readQuality() !== null || !detectSoftwareGl(renderer)) return;
+    writeQuality('lite', false);
+    set({ quality: 'lite', qualitySetByHand: false, notice: { text: SOFTWARE_NOTICE, kind: 'ok' } });
+  },
+  slowQuality: () => set((s) => {
+    if (s.quality !== 'full' || s.qualitySetByHand) return {};
+    writeQuality('lite', false);
+    return { quality: 'lite', notice: { text: SLOW_NOTICE, kind: 'ok' } };
+  }),
   openPopout: (p) => set({ popout: p, drawer: null }),
   openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return openIdeaPatch(id, isNarrow()); }),
   backToList: () => set(backPatch()),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Bloom, EffectComposer } from '@react-three/postprocessing';
@@ -8,6 +8,8 @@ import { Stars } from './Stars';
 import { Links } from './Links';
 import { Flat2D } from './Flat2D';
 import { useFlyTo } from './useFlyTo';
+import { frameWatch, probeGl } from './quality';
+import type { Quality } from '../state/store';
 import { bounds, degrees, neighbourhood, type Graph, type Vec3 } from './graphView';
 
 export interface UniverseProps {
@@ -22,20 +24,20 @@ export interface UniverseProps {
   viewNonce?: number;
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
+  /** Full (bloom), Lite (no post-processing, soft halos) or Flat (the 2D map). Default full. */
+  quality?: Quality;
+  /** Told the WebGL renderer name once, before the first frame, so a software renderer can start in Lite. */
+  onProbe?: (renderer: string | null) => void;
+  /** Watch the frame rate in Full and call onSlow once if it averages under 20 fps. */
+  watchFps?: boolean;
+  onSlow?: () => void;
 }
 
 const SPIN = 0.03; // rad/s while idle
 const IDLE_AFTER_MS = 8000;
 const MAX_PAN = 400;
 
-export function hasWebGL(): boolean {
-  try {
-    const c = document.createElement('canvas');
-    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null;
-    gl?.getExtension('WEBGL_lose_context')?.loseContext(); // release the probe context at once
-    return !!gl;
-  } catch { return false; }
-}
+export function hasWebGL(): boolean { return probeGl().webgl; }
 
 /** Fixed camera framing: the graph fits the centre gap between the panels (x 480–1440 of 1920). */
 function homeFor(radius: number, focus = false) {
@@ -50,20 +52,29 @@ export function Universe(input: UniverseProps) {
   useEffect(() => { if (gone) select(null); }, [gone, select]);
   const props = gone ? { ...input, selectedId: null } : input;
   const empty = !props.graph.nodes.length;
-  const [webgl] = useState(hasWebGL);
+  const [probe] = useState(probeGl);
+  const webgl = probe.webgl;
+  // Report the renderer before the canvas is made, so a first load on software graphics never builds Full first.
+  const [probed, setProbed] = useState(false);
+  const { onProbe } = props;
+  useLayoutEffect(() => { if (webgl) onProbe?.(probe.renderer); setProbed(true); }, [webgl, probe.renderer, onProbe]);
   const [cursor, setCursor] = useState(false);
   const down = useRef<{ x: number; y: number } | null>(null);
   const onHover = (id: string | null) => { setCursor(!!id); props.onHover(id); };
-  if (!webgl) return <div className="universe flat"><Flat2D {...props} /></div>;
+  const quality = props.quality ?? 'full';
+  const lite = quality === 'lite';
+  if (!webgl || quality === 'flat') return <div className="universe flat" data-quality={webgl ? 'flat' : 'no-webgl'}><Flat2D {...props} /></div>;
+  if (!probed) return <div className="universe" data-testid="universe" />;
   return (
     <div
-      className="universe" data-testid="universe" style={{ cursor: cursor ? 'pointer' : 'default' }}
+      className="universe" data-testid="universe" data-quality={quality} style={{ cursor: cursor ? 'pointer' : 'default' }}
       onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }}
     >
       <Canvas
+        key={quality /* the context options differ, so a new quality makes a new canvas */}
         resize={{ offsetSize: true }}
-        dpr={[1, 2]}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        dpr={lite ? 1 : [1, 2]}
+        gl={{ antialias: !lite, powerPreference: 'high-performance' }}
         camera={{ fov: 45, near: 1, far: 4000, position: [0, 120, 400] }}
         onPointerMissed={(e) => {
           const d = down.current;
@@ -79,7 +90,8 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover }: UniverseProps) {
+function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
+  const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
   const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
   const pos = useMemo(() => {
@@ -133,6 +145,12 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
   const first = useRef(true);
   useEffect(() => { if (first.current) { first.current = false; return; } flyHome(); }, [viewNonce, flyHome]);
 
+  // The fps watchdog (Full only): one verdict over the first few seconds of frames.
+  const watch = useMemo(() => (watchFps ? frameWatch() : null), [watchFps]);
+  useFrame((_, dt) => {
+    if (watch && typeof document !== 'undefined' && document.visibilityState === 'visible' && watch(dt * 1000) === 'slow') onSlow?.();
+  });
+
   useFrame((_, dt) => {
     if (!spin.current || selectedId) return;
     if (performance.now() - lastDown.current < IDLE_AFTER_MS) return;
@@ -141,11 +159,11 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
 
   return (
     <>
-      <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} />
+      <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
       <ambientLight intensity={0.2} />
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={selectedId} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} onSelect={onSelect} onHover={onHover} />
+        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lite={lite} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}
@@ -155,9 +173,12 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
           if (t && t.length() > MAX_PAN) t.setLength(MAX_PAN);
         }}
       />
-      <EffectComposer multisampling={4}>
-        <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
-      </EffectComposer>
+      {/* Lite draws straight to the screen: no bloom passes, no multisampled buffers. */}
+      {!lite && (
+        <EffectComposer multisampling={4}>
+          <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
+        </EffectComposer>
+      )}
     </>
   );
 }

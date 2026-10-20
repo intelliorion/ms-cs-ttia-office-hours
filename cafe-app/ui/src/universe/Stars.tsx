@@ -3,7 +3,7 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
 import { DIM, NODE_COLOURS, labelAlways, labelSpotVisible, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
-import { haloTexture } from './haloTexture';
+import { haloTexture, softHaloTexture } from './haloTexture';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
 
@@ -17,11 +17,64 @@ export interface StarsProps {
   labels: boolean;
   /** Focus mode: no side panels, so labels may use the whole stage. */
   focus?: boolean;
+  /** Lite quality: no bloom, so the halos carry the glow (larger, with a pulse on the selected star). */
+  lite?: boolean;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }
 
 const HALO = 3; // halo diameter is 3× the star diameter
+/** Lite halos, as multiples of the star diameter: every star, and the selected one (which also pulses). */
+export const LITE_HALO = 6;
+export const LITE_HALO_SELECTED = 8.5;
+export const LITE_HALO_OPACITY = 0.55;
+/** Lite also puts a small white-hot glint on each star, standing in for the bright centre bloom gives in Full. */
+export const LITE_GLINT = 1.5;
+const WHITE = new Color('#ffffff');
+/**
+ * Lite labels move in whole pixels and only once a label has drifted a pixel or more: on software graphics
+ * re-styling a few hundred labels every frame costs more than drawing the scene.
+ */
+const LITE_LABEL = {
+  eps: 1,
+  calculatePosition: (el: Object3D, camera: import('three').Camera, size: { width: number; height: number }) => {
+    const v = tmpL.setFromMatrixPosition(el.matrixWorld).project(camera);
+    return [Math.round((v.x + 1) * size.width / 2), Math.round((1 - v.y) * size.height / 2)];
+  },
+};
+const tmpL = new Vector3();
+const tmpF = new Vector3();
+
+/** A halo's diameter this frame. */
+export function haloDiameter(size: number, o: { lite: boolean; selected: boolean; hovered: boolean; t: number }): number {
+  if (!o.lite) return size * 2 * HALO * (o.hovered ? 1.15 : 1);
+  if (o.selected) return size * 2 * LITE_HALO_SELECTED * (1 + 0.08 * Math.sin(o.t * 2.4));
+  return size * 2 * LITE_HALO * (o.hovered ? 1.15 : 1);
+}
+
+interface InstanceSink { setMatrixAt(i: number, m: Matrix4): void; setColorAt(i: number, c: Color): void }
+/** One billboarded halo per star: writes every instance's matrix and colour for this frame (no rendering needed). */
+export function writeHalos(h: InstanceSink, f: {
+  nodes: GNode[]; pos: Map<string, Vec3>; sizes: number[]; base: Color[]; bright: number[]; hood: Set<string> | null;
+  selectedId: string | null; hoverIndex: number; lite: boolean; t: number; facing: Quaternion; glint?: InstanceSink | null;
+}): number {
+  for (let i = 0; i < f.nodes.length; i++) {
+    const id = f.nodes[i].id;
+    const lit = !f.hood || f.hood.has(id);
+    const p = f.pos.get(id)!;
+    h.setColorAt(i, tmpC.copy(f.base[i]).multiplyScalar(f.bright[i] * (lit ? 0.85 : 0.5)));
+    tmpS.setScalar(haloDiameter(f.sizes[i], { lite: f.lite, selected: id === f.selectedId, hovered: i === f.hoverIndex, t: f.t }));
+    h.setMatrixAt(i, tmpM.compose(tmpP.set(p[0], p[1], p[2]), f.facing, tmpS));
+    if (f.glint) {
+      f.glint.setColorAt(i, tmpC.copy(f.base[i]).lerp(WHITE, 0.4).multiplyScalar(f.bright[i] * (lit ? 0.9 : 0.4)));
+      tmpS.setScalar(f.sizes[i] * 2 * LITE_GLINT * (i === f.hoverIndex || id === f.selectedId ? 1.2 : 1));
+      // Just in front of the sphere (towards the camera), so the depth test keeps it over its own star only.
+      tmpP.add(tmpF.set(0, 0, 1).applyQuaternion(f.facing).multiplyScalar(f.sizes[i] * 1.05));
+      f.glint.setMatrixAt(i, tmpM.compose(tmpP, f.facing, tmpS));
+    }
+  }
+  return f.nodes.length;
+}
 const tmpM = new Matrix4(); const tmpC = new Color(); const tmpQ = new Quaternion(); const tmpS = new Vector3(); const tmpP = new Vector3();
 const dummy = new Object3D();
 const tmpV = new Vector3(); const tmpW = new Vector3();
@@ -41,9 +94,10 @@ function emissiveByInstance(m: Material) {
 }
 
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
-export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, onSelect, onHover }: StarsProps) {
+export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, lite = false, onSelect, onHover }: StarsProps) {
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
+  const glint = useRef<InstancedMesh>(null);
   const hit = useRef<InstancedMesh>(null);
   const n = nodes.length;
   const sizes = useMemo(() => nodes.map((d) => starSize(d, deg.get(d.id) ?? 0)), [nodes, deg]);
@@ -54,6 +108,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
   const labelEls = useRef(new Map<string, HTMLDivElement>());
   const labelBox = useRef(new Map<string, [number, number]>());
   const frame = useRef(0);
+  const bright = useRef<number[]>([]);
   const size = useThree((st) => st.size);
 
   useLayoutEffect(() => {
@@ -77,18 +132,18 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
     const t = clock.elapsedTime;
     // Halos face the camera: undo the parent group's rotation.
     h.parent!.getWorldQuaternion(tmpQ).invert().multiply(camera.quaternion);
+    const b = bright.current; b.length = n;
     for (let i = 0; i < n; i++) {
       const id = nodes[i].id;
       const lit = !hood || hood.has(id);
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
-      const b = (lit ? 1 : DIM) * (i === hoverIndex || id === selectedId ? 1.4 : 1) * twinkle;
-      c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b));
-      h.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b * (lit ? 0.85 : 0.5)));
-      const p = pos.get(id)!;
-      tmpS.setScalar(sizes[i] * 2 * HALO * (i === hoverIndex ? 1.15 : 1));
-      h.setMatrixAt(i, tmpM.compose(tmpP.set(p[0], p[1], p[2]), tmpQ, tmpS));
+      b[i] = (lit ? 1 : DIM) * (i === hoverIndex || id === selectedId ? 1.4 : 1) * twinkle;
+      c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
     }
+    const g = lite ? glint.current : null;
+    writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g });
     c.instanceColor!.needsUpdate = true; h.instanceColor!.needsUpdate = true; h.instanceMatrix.needsUpdate = true;
+    if (g) { g.instanceColor!.needsUpdate = true; g.instanceMatrix.needsUpdate = true; }
     if (frame.current++ % 3 === 0) placeLabels(camera);
   });
 
@@ -134,13 +189,19 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
   return (
     <group ref={root}>
       <instancedMesh key={`core-${n}`} ref={core} args={[undefined, undefined, n]} frustumCulled={false}>
-        <sphereGeometry args={[1, 24, 16]} />
+        <sphereGeometry args={lite ? [1, 16, 12] : [1, 24, 16]} />
         <meshStandardMaterial color="#000000" emissive="#ffffff" emissiveIntensity={1.6} roughness={1} metalness={0} toneMapped={false} onUpdate={emissiveByInstance} />
       </instancedMesh>
       <instancedMesh key={`halo-${n}`} ref={halo} args={[undefined, undefined, n]} frustumCulled={false} renderOrder={2}>
         <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial map={haloTexture()} transparent blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial map={lite ? softHaloTexture() : haloTexture()} transparent opacity={lite ? LITE_HALO_OPACITY : 1} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
+      {lite && (
+        <instancedMesh key={`glint-${n}`} ref={glint} args={[undefined, undefined, n]} frustumCulled={false} renderOrder={3}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial map={haloTexture()} transparent blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
+        </instancedMesh>
+      )}
       <instancedMesh
         key={`hit-${n}`} ref={hit} args={[undefined, undefined, n]}
         onPointerMove={(e) => { e.stopPropagation(); const id = pick(e); if (id !== hoverId) onHover(id); }}
@@ -168,7 +229,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
         const show = labels || labelAlways(d) || d.id === hoverId || (hood !== null && hood.has(d.id));
         if (!show) return null;
         return (
-          <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+          <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }} {...(lite ? LITE_LABEL : {})}>
             <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId ? ' hot' : ''}`}>
               <div className="l1" title={d.label}>{starLabel(d.label)}</div>
               {d.type === 'Idea' && <div className="l2">{d.attrs?.closed ? `Closed · ${d.attrs.closed}` : String(d.attrs?.stageLabel ?? '')}</div>}

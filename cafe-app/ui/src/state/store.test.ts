@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+const api = vi.hoisted(() => ({ getState: vi.fn(), getGraph: vi.fn(), getAiStatus: vi.fn() }));
+vi.mock('../api', () => api);
 import { ideasByStage, waitingSummary, supportCounts, functionRegion } from './store';
 
 const idea = (o: any) => ({ id: 'CAFE-2026-001', title: 't', stage: 1, support: [], overdue: [], sent: {}, due: {}, flags: [], ...o });
@@ -39,5 +42,34 @@ describe('keepSame', () => {
     expect(k).not.toBe(a);
     expect(k.layout).toBe(a.layout);
     expect(keepSame(null, b)).toBe(b);
+  });
+});
+
+describe('refresh', () => {
+  it('keeps the loaded universe and says why when the graph cannot be read', async () => {
+    const { useStore } = await import('./store');
+    const prev = { nodes: [{ id: 'a' }], edges: [], layout: {} };
+    useStore.setState({ graph: prev, notice: null });
+    api.getState.mockResolvedValue({ ideas: [] });
+    api.getGraph.mockRejectedValue(new Error('bad cache'));
+    await useStore.getState().refresh();
+    expect(useStore.getState().graph).toBe(prev);
+    expect(useStore.getState().state).toEqual({ ideas: [] });
+    expect(useStore.getState().notice).toEqual({ text: "Couldn't refresh the universe: bad cache", kind: 'error' });
+  });
+});
+
+describe('drawers', () => {
+  it('opens one drawer at a time, closes it, and a pop-out closes it', async () => {
+    const { useStore } = await import('./store');
+    useStore.getState().setDrawer('ideas');
+    expect(useStore.getState().drawer).toBe('ideas');
+    useStore.getState().setDrawer('charts');
+    expect(useStore.getState().drawer).toBe('charts');
+    useStore.getState().setDrawer(null);
+    expect(useStore.getState().drawer).toBeNull();
+    useStore.getState().setDrawer('ideas');
+    useStore.getState().openPopout({ kind: 'import' });
+    expect(useStore.getState().drawer).toBeNull();
   });
 });

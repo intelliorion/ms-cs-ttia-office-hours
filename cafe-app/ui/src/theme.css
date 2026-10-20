@@ -227,3 +227,22 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ai-busy{font-size:12.5px;color:var(--amber);align-self:center}
 .criteria.suggested label,.suggested-box{border-color:rgba(245,179,107,.7)!important;background:rgba(245,179,107,.07)}
 .sg-by{font-size:12.5px;color:var(--amber);margin:6px 0 0}
+
+/* Narrow windows (below 1000px): the side panels become drawers over the universe. */
+.edge-tab,.drawer{display:none}
+@media (max-width:999px){
+  .stage .side-panel{display:none}
+  .edge-tab{display:flex;position:fixed;top:50%;z-index:40;align-items:center;justify-content:center;width:30px;height:110px;margin-top:-55px;padding:0;border:1px solid var(--panel-border);background:rgba(30,40,40,.82);color:var(--text);font:inherit;font-size:13px;letter-spacing:.06em;cursor:pointer;writing-mode:vertical-rl}
+  .edge-tab.left{left:0;border-left:0;border-radius:0 6px 6px 0}
+  .edge-tab.right{right:0;border-right:0;border-radius:6px 0 0 6px}
+  .edge-tab:hover,.edge-tab[aria-expanded="true"]{border-color:var(--teal);color:#fff}
+  .drawer{display:flex;flex-direction:column;position:fixed;top:0;bottom:0;width:min(440px,calc(100vw - 48px));z-index:50;box-sizing:border-box;border-radius:0;background:rgba(30,40,40,.92);backdrop-filter:blur(14px);box-shadow:0 0 40px rgba(0,0,0,.6);animation:drawer-in .18s ease-out}
+  .drawer.left{left:0;border-left:0}
+  .drawer.right{right:0;border-right:0;--from:100%}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 6px 18px}
+  .drawer .drawer-head h2{padding:0}
+  .drawer .panel-body{flex:1;height:auto}
+  .drawer-scroll{overflow-y:auto}
+}
+@keyframes drawer-in{from{transform:translateX(var(--from,-100%))}to{transform:none}}
+.drawer .latelist{flex:none}

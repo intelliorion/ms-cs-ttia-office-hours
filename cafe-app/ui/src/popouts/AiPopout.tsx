@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
-import { getAiStatus, post } from '../api';
+import { post } from '../api';
 import { Modal } from './Modal';
-import { chipText, nextProviderChoice } from './aiUi';
+import { aiTestText, chipText, nextProviderChoice } from './aiUi';
 
 const OPTIONS: [string, string][] = [
   ['auto', 'Auto'], ['claude', 'Claude Code'], ['copilot', 'Copilot CLI'], ['vscode', 'VS Code with Copilot'], ['none', 'None'],
@@ -36,12 +36,13 @@ export function AiPopout() {
     setBusy(false);
   };
   const test = async () => {
-    setBusy(true); setMsg(null);
+    setBusy(true);
+    setMsg({ text: 'Testing: asking the AI for a short reply…', kind: 'ok' });
     try {
-      const s = await getAiStatus();
-      await refreshAi();
-      setMsg({ text: s.provider ? `Connected: ${s.label}.` : 'No AI connected: working by hand.', kind: s.provider ? 'ok' : 'error' });
+      // A real round trip through the chosen provider, checked like any other answer.
+      setMsg({ text: aiTestText(await post('/api/ai/test')), kind: 'ok' });
     } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
+    await refreshAi();
     setBusy(false);
   };
 
@@ -68,7 +69,7 @@ export function AiPopout() {
         <section className="sec">
           <h3>How it behaves</h3>
           <ul className="rules">
-            <li>Nothing is saved without your Yes. The AI only suggests.</li>
+            <li>High-confidence links between stars you already have are added at once; anything that would add a new star waits for your Yes; you can remove any AI link from the idea pop-out.</li>
             <li>Submission text is treated as data, never as instructions.</li>
             <li>The AI has no file, shell or network access.</li>
           </ul>

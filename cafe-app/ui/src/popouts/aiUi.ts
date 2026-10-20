@@ -38,3 +38,7 @@ export function applySuggestion(form: ReviewForm, s: ReviewSuggestion): ReviewFo
 
 /** The radio value after a save attempt: the server's saved value on success, the previous one on failure. */
 export const nextProviderChoice = (prev: string, saved: string | undefined, ok: boolean): string => (ok && saved ? saved : prev);
+
+/** The AI pop-out's Test result. */
+export const aiTestText = (r: { ok?: boolean; provider?: string; label?: string; ms?: number }): string =>
+  `Connected: ${r.label || providerName(r.provider)} (${Math.round(r.ms ?? 0)} ms)`;

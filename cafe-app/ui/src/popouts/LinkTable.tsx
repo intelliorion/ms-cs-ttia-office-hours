@@ -3,7 +3,7 @@ import { confidenceText, type LinkRow } from './ideaHelpers';
 
 const TYPE_KEY: Record<string, string> = { 'Pain point': 'PainPoint', 'System or data': 'System' };
 
-/** Links with relation, the other star, source and confidence; unconfirmed ones get Confirm and Remove. */
+/** Links with relation, the other star, source and confidence. Unconfirmed links get Confirm; every AI link gets Remove. */
 export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: {
   rows: LinkRow[]; busy: boolean; onConfirm: (edgeId: string) => void; onRemove: (edgeId: string) => void; compact?: boolean;
 }) {
@@ -22,10 +22,10 @@ export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: 
             </div>
             <div className="lk-sub">
               <span className="src" title={r.edge.description || r.source}>{r.source}</span>
-              {!r.confirmed && (
+              {(!r.confirmed || r.source.startsWith('ai:')) && (
                 <span className="lk-acts">
-                  <span className="tag">Unconfirmed</span>
-                  <button className="btn sm primary" disabled={busy} data-action="confirm-link" onClick={() => onConfirm(r.edge.id)}>Confirm</button>
+                  {!r.confirmed && <span className="tag">Unconfirmed</span>}
+                  {!r.confirmed && <button className="btn sm primary" disabled={busy} data-action="confirm-link" onClick={() => onConfirm(r.edge.id)}>Confirm</button>}
                   <button className="btn sm" disabled={busy} data-action="remove-link" onClick={() => onRemove(r.edge.id)}>Remove</button>
                 </span>
               )}

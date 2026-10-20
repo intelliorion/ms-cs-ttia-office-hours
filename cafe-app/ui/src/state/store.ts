@@ -12,6 +12,7 @@ export type Popout =
 
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
 export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }
+export type Drawer = 'ideas' | 'charts' | null;
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
 export interface AppState {
@@ -27,6 +28,9 @@ export interface AppState {
   notice: Notice | null;
   suggest: Suggest | null;
   ai: AiStatus | null;
+  /** Below 1000px wide the side panels become drawers; which one is open. */
+  drawer: Drawer;
+  setDrawer: (d: Drawer) => void;
   refreshAi: () => Promise<void>;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
@@ -40,20 +44,26 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null, ai: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null, ai: null, drawer: null,
+  setDrawer: (d) => set({ drawer: d }),
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
     try {
-      const [state, graph] = await Promise.all([getState(), getGraph().catch(() => null)]);
+      let graphError: string | null = null;
+      const [state, graph] = await Promise.all([getState(), getGraph().catch((e: Error) => { graphError = e.message; return null; })]);
       // Keep the old graph (or its layout) when nothing changed, so the universe and its camera stay where they are.
-      set((s) => ({ state, graph: keepSame(s.graph, graph) }));
-    } catch (e) { set({ notice: { text: (e as Error).message } }); }
+      // A graph that cannot be read never blanks a universe that is already loaded.
+      set((s) => ({
+        state, graph: graph ? keepSame(s.graph, graph) : s.graph,
+        ...(graphError ? { notice: { text: `Couldn't refresh the universe: ${graphError}`, kind: 'error' as const } } : {}),
+      }));
+    } catch (e) { set({ notice: { text: (e as Error).message, kind: 'error' } }); }
   },
   select: (id) => set({ selectedId: id }),
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
-  openPopout: (p) => set({ popout: p }),
+  openPopout: (p) => set({ popout: p, drawer: null }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
   setSuggest: (x) => set({ suggest: x }),

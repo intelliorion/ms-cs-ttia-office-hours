@@ -69,7 +69,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSe
   }, [nodes, pos, sizes, base]);
 
   useFrame(({ clock, camera }) => {
-    const c = core.current, h = halo.current; if (!c || !h) return;
+    const c = core.current, h = halo.current; if (!c || !h || !n) return; // no stars yet: nothing to light
     const t = clock.elapsedTime;
     // Halos face the camera: undo the parent group's rotation.
     h.parent!.getWorldQuaternion(tmpQ).invert().multiply(camera.quaternion);

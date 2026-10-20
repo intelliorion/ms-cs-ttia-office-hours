@@ -41,7 +41,13 @@ function homeFor(radius: number) {
   return { position: new Vector3(0, 0.36, 1).normalize().multiplyScalar(d), target: new Vector3(0, -radius * 0.08, 0) };
 }
 
-export function Universe(props: UniverseProps) {
+export function Universe(input: UniverseProps) {
+  // A selected star that is no longer in the graph (say its link was removed) clears the selection.
+  const gone = !!input.selectedId && !input.graph.nodes.some((n) => n.id === input.selectedId);
+  const { onSelect: select } = input;
+  useEffect(() => { if (gone) select(null); }, [gone, select]);
+  const props = gone ? { ...input, selectedId: null } : input;
+  const empty = !props.graph.nodes.length;
   const [webgl] = useState(hasWebGL);
   const [cursor, setCursor] = useState(false);
   const down = useRef<{ x: number; y: number } | null>(null);
@@ -66,6 +72,7 @@ export function Universe(props: UniverseProps) {
         <Scene {...props} onHover={onHover} />
       </Canvas>
       <div className="universe-vignette" />
+      {empty && <div className="flat2d-empty" data-testid="universe-empty">Import an export to light up the universe</div>}
     </div>
   );
 }

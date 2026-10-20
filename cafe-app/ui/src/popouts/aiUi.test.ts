@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextProviderChoice, chipText, extractNotice, applySuggestion, providerName } from './aiUi';
+import { nextProviderChoice, chipText, extractNotice, applySuggestion, providerName, aiTestText } from './aiUi';
 
 describe('chipText', () => {
   it('names the connected provider', () => {
@@ -44,4 +44,11 @@ describe('nextProviderChoice', () => {
   it('takes the saved value on success', () => expect(nextProviderChoice('auto', 'claude', true)).toBe('claude'));
   it('keeps the previous value on failure', () => expect(nextProviderChoice('auto', 'claude', false)).toBe('auto'));
   it('keeps the previous value when the server returns none', () => expect(nextProviderChoice('claude', undefined, true)).toBe('claude'));
+});
+
+describe('aiTestText', () => {
+  it('says who answered and how long it took', () => {
+    expect(aiTestText({ ok: true, provider: 'fake', label: 'Fake (test)', ms: 12 })).toBe('Connected: Fake (test) (12 ms)');
+    expect(aiTestText({ ok: true, provider: 'claude', ms: 1500 })).toBe('Connected: Claude Code (1500 ms)');
+  });
 });

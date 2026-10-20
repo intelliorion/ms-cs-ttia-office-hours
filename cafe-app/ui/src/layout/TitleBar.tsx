@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
 import { chipText } from '../popouts/aiUi';
-import { baseName, unsentCount } from '../popouts/titleHelpers';
+import { baseName, titleSub, unsentCount } from '../popouts/titleHelpers';
 
 export function TitleBar() {
   const { openPopout, refresh, setNotice, state, ai, refreshAi } = useStore();
@@ -18,7 +18,7 @@ export function TitleBar() {
   };
   return (
     <header className="titlebar">
-      <div><span className="name">Creators' Café</span><span className="sub">Operator console{state ? ` · ${state.today}` : ''}</span></div>
+      <div><span className="name">Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
         <button className="pill" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import</button>
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Round</button>

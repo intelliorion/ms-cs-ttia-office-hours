@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ApiError } from '../api';
 import { approveAndCopy } from './ideaHelpers';
-import { importReportLines, roundFieldsUnblock, groupOutbox, baseName, unsentCount } from './titleHelpers';
+import { importReportLines, roundFieldsUnblock, groupOutbox, baseName, unsentCount, titleSub } from './titleHelpers';
 
 describe('importReportLines', () => {
   it('words new ideas, skipped rows, unread rows, unused columns and flags', () => {
@@ -80,5 +80,13 @@ describe('approveAndCopy', () => {
   it('turns missing settings into Set first', async () => {
     await expect(approveAndCopy('k', { post: async () => { throw new ApiError('x', ['Teams link']); }, copyText: async () => true } as any))
       .rejects.toThrow('Set first: Teams link. Open Round to fill them in.');
+  });
+});
+
+describe('titleSub', () => {
+  it('names the round and today', () => {
+    expect(titleSub({ today: '2026-10-19', round: { id: 'ROUND-2026-Q4' } })).toBe('Operator console · ROUND-2026-Q4 · 2026-10-19');
+    expect(titleSub({ today: '2026-10-19', round: {} })).toBe('Operator console · 2026-10-19');
+    expect(titleSub(null)).toBe('Operator console');
   });
 });

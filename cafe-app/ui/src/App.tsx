@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
+import { Drawers } from './layout/Drawers';
 import { useStore } from './state/store';
 import { IdeasList } from './panels/IdeasList';
 import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
@@ -33,38 +34,41 @@ export default function App() {
     }
   }, [select, onSelect, hover, toggleLabels, resetView, openPopout, closePopout]);
   return (
-    <Stage>
-      {graph && (
-        <Universe graph={graph} layout={graph.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels}
-          viewNonce={viewNonce} onSelect={onSelect} onHover={hover} />
-      )}
-      <TitleBar />
-      {notice && !popout && <div className="notice" role="status">{notice.text}</div>}
-      {cardFor && <NodeCard nodeId={cardFor} />}
-      <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
-        <IdeasList />
-      </Panel>
-      <Panel title="Pipeline" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
-        <div className="sub-h">Ideas by stage</div>
-        <StageChart />
-        <div className="sub-h">Waiting on you</div>
-        <Waiting />
-      </Panel>
-      <Panel title="Demand" side="right" style={{ left: 1460, top: 572, width: 440, height: 488 }}>
-        <div className="sub-h">Support requested</div>
-        <SupportChart />
-        <div className="sub-h">Function · region</div>
-        <FunctionChart />
-      </Panel>
-      <div className="abs" style={{ left: 480, top: 1010, width: 960, display: 'flex', justifyContent: 'center', gap: 16 }}>
-        <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
-        <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
-      </div>
-      {popout?.kind === 'idea' && <IdeaPopout id={popout.id} />}
-      {popout?.kind === 'import' && <ImportPopout />}
-      {popout?.kind === 'round' && <RoundPopout />}
-      {popout?.kind === 'outbox' && <OutboxPopout />}
-      {popout?.kind === 'ai' && <AiPopout />}
-    </Stage>
+    <>
+      <Stage>
+        {graph && (
+          <Universe graph={graph} layout={graph.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels}
+            viewNonce={viewNonce} onSelect={onSelect} onHover={hover} />
+        )}
+        <TitleBar />
+        {notice && !popout && <div className="notice" role="status">{notice.text}</div>}
+        {cardFor && <NodeCard nodeId={cardFor} />}
+        <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
+          <IdeasList />
+        </Panel>
+        <Panel title="Pipeline" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
+          <div className="sub-h">Ideas by stage</div>
+          <StageChart />
+          <div className="sub-h">Waiting on you</div>
+          <Waiting />
+        </Panel>
+        <Panel title="Demand" side="right" style={{ left: 1460, top: 572, width: 440, height: 488 }}>
+          <div className="sub-h">Support requested</div>
+          <SupportChart />
+          <div className="sub-h">Function · region</div>
+          <FunctionChart />
+        </Panel>
+        <div className="abs" style={{ left: 480, top: 1010, width: 960, display: 'flex', justifyContent: 'center', gap: 16 }}>
+          <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
+          <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
+        </div>
+        {popout?.kind === 'idea' && <IdeaPopout id={popout.id} />}
+        {popout?.kind === 'import' && <ImportPopout />}
+        {popout?.kind === 'round' && <RoundPopout />}
+        {popout?.kind === 'outbox' && <OutboxPopout />}
+        {popout?.kind === 'ai' && <AiPopout />}
+      </Stage>
+      <Drawers />
+    </>
   );
 }

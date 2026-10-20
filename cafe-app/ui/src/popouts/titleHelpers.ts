@@ -46,3 +46,7 @@ export const baseName = (p: string) => String(p).split(/[\\/]/).filter(Boolean).
 
 /** Unsent emails: drafts and approved ones. */
 export const unsentCount = (outbox: { status: string }[] | undefined) => (outbox ?? []).filter((m) => m.status !== 'sent').length;
+
+/** The title bar's subtitle: the round and today's date. */
+export const titleSub = (state: { today?: string; round?: { id?: string } } | null | undefined): string =>
+  ['Operator console', state?.round?.id, state?.today].filter(Boolean).join(' · ');

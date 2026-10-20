@@ -11,6 +11,10 @@ cafe-app/scripts/acceptance.mjs
 cafe-app/scripts/make-scale-data.mjs
 cafe-app/scripts/make-test-data.mjs
 cafe-app/scripts/ui-tour.mjs
+cafe-app/skills/LICENSE-superpowers.md
+cafe-app/skills/README.md
+cafe-app/skills/brainstorming.md
+cafe-app/skills/writing-plans.md
 cafe-app/src/ai/apply.ts
 cafe-app/src/ai/connector.ts
 cafe-app/src/ai/providers/claude.ts
@@ -24,6 +28,8 @@ cafe-app/src/checklist/checklist.ts
 cafe-app/src/clock.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
+cafe-app/src/design/cafecheck.ts
+cafe-app/src/design/store.ts
 cafe-app/src/exports/status.ts
 cafe-app/src/graph/build.ts
 cafe-app/src/graph/d3-force-3d.d.ts
@@ -76,6 +82,7 @@ cafe-app/tests/ai.test.ts
 cafe-app/tests/checklist.test.ts
 cafe-app/tests/clock.test.ts
 cafe-app/tests/copilot-live.test.ts
+cafe-app/tests/design-store.test.ts
 cafe-app/tests/due-status.test.ts
 cafe-app/tests/e2e.test.ts
 cafe-app/tests/files.test.ts
@@ -178,7 +185,10 @@ docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 scripts/build-github-agent.sh
 scripts/build.sh
+scripts/fetch-without-zip.ps1
+scripts/fetch-without-zip.sh
 scripts/install-local.sh
+scripts/make-manifest.sh
 skills/ms-cs-ttia-creators-cafe/SKILL.md
 skills/ms-cs-ttia-creators-cafe/references/how-to-start-ai.md
 skills/ms-cs-ttia-csic-repository/SKILL.md

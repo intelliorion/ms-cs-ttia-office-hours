@@ -31,7 +31,7 @@ export const valueWordsIn = (text: string): string[] => matches(VALUE_RE, text);
 /** Everything the idea and its design say, as one searchable text. */
 export function designText(idea: Idea, state: DesignState): string {
   const parts: string[] = [idea.title, idea.challenge ?? '', ...idea.outcomes, idea.current_process ?? '', state.summary ?? ''];
-  for (const f of state.features) parts.push(f.name, f.tool ?? '', f.reason ?? '');
+  for (const f of state.features) parts.push(f.name, f.what ?? '', f.tool ?? '', f.reason ?? '');
   for (const s of state.steps) parts.push(s.answer ?? '');
   return parts.filter(Boolean).join('\n');
 }
@@ -39,9 +39,21 @@ export function designText(idea: Idea, state: DesignState): string {
 export function cafeCheck(idea: Idea, state: DesignState): CafeCheck {
   const text = designText(idea, state);
   const csic = matches(CSIC_RE, text);
+  const data = matches(DATA_RE, text);
+  // The feature flags the tool picker set (AI or operator) count as much as the words.
+  const flagged: string[] = [];
+  for (const f of state.features) {
+    const name = f.name.replace(/\s+/g, ' ').trim();
+    if (f.flags.includes('needs-live-system')) flagged.push(`live system: ${name}`);
+    if (f.flags.includes('personal-data')) {
+      flagged.push(`personal data: ${name}`);
+      data.push(`personal data: ${name}`);
+    }
+  }
   for (const f of state.features) {
     if (f.tool && f.tool.toLowerCase() === 'custom app') csic.unshift('custom app');
   }
-  const csicFlags = [...new Set(csic)];
-  return { valueWords: valueWordsIn(text), dataFlags: matches(DATA_RE, text), csicFlags, ok: csicFlags.length === 0 };
+  const csicFlags = [...new Set([...csic, ...flagged])];
+  const dataFlags = [...new Set(data)];
+  return { valueWords: valueWordsIn(text), dataFlags, csicFlags, ok: csicFlags.length === 0 };
 }

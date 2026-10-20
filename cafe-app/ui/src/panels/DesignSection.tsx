@@ -5,7 +5,8 @@ import {
   AI_WAIT, buildInstruction, cafeCheckRows, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
 } from './designHelpers';
 
-export interface DesignView { state: any; designMd: string }
+/** GET …/design: the state, the live design.md and the idea folder relative to the workspace (newer servers). */
+export interface DesignView { state: any; designMd: string; folder?: string }
 export interface PlanView { planMd?: string; files: string[] }
 /** Runs one design call: busy state, notice, and a refresh after. `ai` names the section waiting on the AI. Null on failure. */
 export type DesignCall = <T = any>(fn: () => Promise<T>, o: { ai?: string; ok: (r: T) => string | undefined }) => Promise<T | null>;
@@ -41,6 +42,8 @@ function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
   step: any; off: boolean; onAnswer: (body: any) => Promise<unknown>; onIdk: () => void; onOutbox: () => void;
 }) {
   const [text, setText] = useState('');
+  /** Changing a saved answer: the box reopens with the answer in it. */
+  const [changing, setChanging] = useState(false);
   const st = stepStatus(step);
   return (
     <li className={`ds-step ${st.kind}`} data-step={step.n}>
@@ -49,8 +52,20 @@ function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
         <span className="ds-q">{step.question}</span>
       </div>
       {step.why && <div className="ds-why">{step.why}</div>}
-      {st.kind === 'answered' ? (
-        <div className="ds-a"><span className="ds-st">{st.label}</span>{step.answer}</div>
+      {st.kind === 'answered' && changing ? (
+        <div className="ds-own">
+          <textarea rows={2} value={text} aria-label={`New answer to question ${step.n}`} disabled={off} onChange={(e) => setText(e.target.value)} />
+          <div className="ds-own-acts">
+            <button className="btn sm ghost" data-action="cancel-change" disabled={off} onClick={() => { setChanging(false); setText(''); }}>Cancel</button>
+            <button className="btn sm primary" data-action="save-changed-answer" disabled={off || !text.trim()}
+              onClick={async () => { if (await onAnswer({ answer: text })) { setChanging(false); setText(''); } }}>Save answer</button>
+          </div>
+        </div>
+      ) : st.kind === 'answered' ? (
+        <div className="ds-a">
+          <span className="ds-st">{st.label}</span>{step.answer}
+          <button className="link-btn ds-change" data-action="change-answer" disabled={off} onClick={() => { setText(step.answer ?? ''); setChanging(true); }}>Change answer</button>
+        </div>
       ) : (
         <>
           {st.kind === 'asked' && (
@@ -165,8 +180,8 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onOut
             {aiWorking ? 'Working…' : steps.length ? 'Next question' : 'Start with the first question'}</button>
         )}
         {!handQ && <button className="btn" data-action="hand-question" disabled={off} onClick={() => setHandQ({ question: '', suggested: '' })}>Add a question by hand</button>}
-        {phase === 'designing' && finish === null && steps.length > 0 && (
-          <button className="btn" data-action="hand-finish" disabled={off} onClick={() => setFinish('')}>Finish by hand</button>
+        {finish === null && steps.length > 0 && (
+          <button className="btn" data-action="hand-finish" disabled={off} onClick={() => setFinish(s.summary ?? '')}>Finish by hand</button>
         )}
         {phase === 'done' && (
           <button className="btn primary" data-action="approve-design" disabled={off}
@@ -194,7 +209,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
   const off = busy || aiWorking;
   const write = () => call(() => designPost(idea.id, 'plan'), { ai: 'plan', ok: (r: any) => `Wrote ${r.files.length} file${r.files.length === 1 ? '' : 's'}: plan.md and the starter kits.` });
   const copy = async () => {
-    const text = buildInstruction(idea.id, idea.slug);
+    const text = buildInstruction(idea.id, idea.slug, design.folder);
     setFallback(null); setCopied(null);
     if (await copyText(text)) setCopied('Build instruction copied. Paste it into Claude Code or Copilot.');
     else setFallback(text);

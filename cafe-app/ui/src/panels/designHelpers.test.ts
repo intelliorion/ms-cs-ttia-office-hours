@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildInstruction, cafeCheckRows, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
-  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE,
+  approvedTools, buildInstruction, cafeCheckRows, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
+  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS,
 } from './designHelpers';
 
 // The suggest route's mixed reply: a saved DesignFeature first, then AI ToolPickFeatures.
@@ -131,6 +131,15 @@ describe('buildInstruction', () => {
   it('folder without a slug is the bare ID', () => {
     expect(ideaFolder('CAFE-2026-002')).toBe('ideas/CAFE-2026-002');
   });
+  it('the folder the server sent wins over the guessed one', () => {
+    const real = 'ideas/CAFE-2026-002-desk-booking-assistant';
+    expect(ideaFolder('CAFE-2026-002', 'other-slug', real)).toBe(real);
+    expect(ideaFolder('CAFE-2026-002', 'other-slug', '  ')).toBe('ideas/CAFE-2026-002-other-slug');
+    const t = buildInstruction('CAFE-2026-002', 'other-slug', real);
+    expect(t).toContain(`${real}/design.md`);
+    expect(t).toContain(`Write only inside ${real}/kit/custom-app/`);
+    expect(t).not.toContain('other-slug');
+  });
 });
 
 describe('small helpers', () => {
@@ -141,5 +150,20 @@ describe('small helpers', () => {
   });
   it('suggested answers one per line, at most four', () => {
     expect(suggestedLines('a\n\n b \nc\nd\ne')).toEqual(['a', 'b', 'c', 'd']);
+  });
+});
+
+describe('approvedTools', () => {
+  it('reads the server list from /api/state, else falls back to the local list', () => {
+    expect(approvedTools({ approvedTools: ['Power Apps', 'New tool'] })).toEqual(['Power Apps', 'New tool']);
+    expect(approvedTools({})).toEqual([...APPROVED_TOOLS]);
+    expect(approvedTools(null)).toEqual([...APPROVED_TOOLS]);
+    expect(approvedTools({ approvedTools: [] })).toEqual([...APPROVED_TOOLS]);
+    expect(approvedTools({ approvedTools: 'Power Apps' })).toEqual([...APPROVED_TOOLS]);
+  });
+  it('featureRows keeps a tool only when it is on the list it is given', () => {
+    const raw = [{ id: 'a', name: 'A', tool: 'New tool', flags: [] }];
+    expect(featureRows(raw)[0].tool).toBe('');
+    expect(featureRows(raw, { tools: ['New tool'] })[0].tool).toBe('New tool');
   });
 });

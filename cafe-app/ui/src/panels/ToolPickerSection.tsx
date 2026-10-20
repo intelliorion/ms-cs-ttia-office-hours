@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { designPost } from '../api';
+import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
-  AI_WAIT, APPROVED_TOOLS, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, flagsFor, flagWord, mergeRows,
+  AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, flagsFor, flagWord, mergeRows,
   pathwayText, picksBody, picksProblem, type FeatureRow,
 } from './designHelpers';
 import type { DesignCall, DesignView } from './DesignSection';
@@ -15,11 +16,13 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
   idea: any; design: DesignView | null; busy: boolean; aiWorking: boolean; noAi: boolean; aiName: (p?: string) => string; call: DesignCall;
 }) {
   const saved = design?.state.features;
+  // The server's approved list is the source of truth; the local copy covers an older server.
+  const tools = approvedTools(useStore((x) => x.state));
   const [rows, setRows] = useState<FeatureRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const savedKey = JSON.stringify(saved ?? null);
   // Saved picks fill the rows, unless the operator has unsaved changes.
-  useEffect(() => { if (!dirty) setRows(featureRows(saved)); // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!dirty) setRows(featureRows(saved, { tools })); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedKey]);
 
   const edit = (key: string, patch: Partial<FeatureRow>) => {
@@ -30,7 +33,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     const r = await call(() => designPost(idea.id, 'tools/suggest'), {
       ai: 'tools', ok: (x: any) => `Features suggested by ${aiName(x.provider)}. Nothing is saved until you press Save.`,
     });
-    if (r) { setRows((rs) => mergeRows(rs, featureRows(r.features, { fromAi: true }))); setDirty(true); }
+    if (r) { setRows((rs) => mergeRows(rs, featureRows(r.features, { fromAi: true, tools }))); setDirty(true); }
   };
   const problem = dirty ? picksProblem(rows) : null;
   const save = async () => {
@@ -38,7 +41,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     const r = await call(() => designPost(idea.id, 'tools', body), {
       ok: () => `Saved ${features(body.features.length)}. approach.md is written and the universe shows the tools.`,
     });
-    if (r) { setDirty(false); setRows(featureRows(r.state.features)); }
+    if (r) { setDirty(false); setRows(featureRows(r.state.features, { tools })); }
   };
   const builder = idea.people?.builder;
   const off = busy || aiWorking;
@@ -64,7 +67,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                 <select className="tp-tool" value={r.tool} aria-label={`Tool for ${r.name || 'this feature'}`} disabled={off} data-action="tool"
                   onChange={(e) => edit(r.key, { tool: e.target.value })}>
                   <option value="">Pick a tool…</option>
-                  {APPROVED_TOOLS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {tools.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <button className="tp-x" aria-label={`Remove ${r.name || 'this feature'}`} title="Remove" disabled={off}
                   onClick={() => { setRows((rs) => rs.filter((x) => x.key !== r.key)); setDirty(true); }}>×</button>
@@ -88,7 +91,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
         <div className="rv-foot">
           <span className={`hint${problem ? ' warn' : ''}`}>{problem ?? 'Saving writes approach.md and links each feature to its tool.'}</span>
           <span className="tp-acts">
-            <button className="btn ghost" data-action="tools-undo" disabled={off} onClick={() => { setRows(featureRows(saved)); setDirty(false); }}>Undo changes</button>
+            <button className="btn ghost" data-action="tools-undo" disabled={off} onClick={() => { setRows(featureRows(saved, { tools })); setDirty(false); }}>Undo changes</button>
             <button className="btn primary" data-action="tools-save" disabled={off || Boolean(problem)} onClick={() => void save()}>Save</button>
           </span>
         </div>

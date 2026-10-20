@@ -3,6 +3,16 @@
 /** The approved tools, canonical labels in the server's order (src/graph/ontology.ts APPROVED_TOOLS). */
 export const APPROVED_TOOLS = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'] as const;
 export const CUSTOM_APP = 'custom app';
+
+/** The approved tools: the server's list from /api/state when it sent one, else the local copy. */
+export function approvedTools(state?: { approvedTools?: unknown } | null): string[] {
+  const list = state?.approvedTools;
+  if (Array.isArray(list)) {
+    const tools = list.filter((t): t is string => typeof t === 'string' && t.trim() !== '');
+    if (tools.length) return tools;
+  }
+  return [...APPROVED_TOOLS];
+}
 /** The server rejects a longer summary (POST …/design/finish). */
 export const SUMMARY_MAX = 600;
 export const AGENT_FILE = 'kit/custom-app/BUILD-WITH-AGENT.md';
@@ -61,10 +71,11 @@ export function flagsFor(tool: string, flags: string[]): string[] {
  * Rows from either shape: a saved DesignFeature ({id, name, what?, tool?, reason?, pathway?, flags}) or an AI
  * ToolPickFeature ({name, what, tool, reason, flags}). `suggested` marks the rows the AI added (no saved id).
  */
-export function featureRows(raw: unknown, opts: { fromAi?: boolean } = {}): FeatureRow[] {
+export function featureRows(raw: unknown, opts: { fromAi?: boolean; tools?: readonly string[] } = {}): FeatureRow[] {
   if (!Array.isArray(raw)) return [];
+  const known: readonly string[] = opts.tools ?? APPROVED_TOOLS;
   return raw.filter((f) => f && typeof f === 'object' && str((f as any).name).trim()).map((f: any) => {
-    const tool = (APPROVED_TOOLS as readonly string[]).includes(f.tool) ? f.tool : '';
+    const tool = known.includes(f.tool) ? f.tool : '';
     const flags = Array.isArray(f.flags) ? f.flags.filter((x: unknown): x is string => typeof x === 'string') : [];
     return {
       key: str(f.id) || newKey(),
@@ -143,12 +154,16 @@ export function designPhase(state: { features?: unknown[]; summary?: string; app
 
 export const hasAgentKit = (files: string[] | undefined) => (files ?? []).includes(AGENT_FILE);
 
-/** The idea's folder in the workspace, as the server names it (ideas/<id>-<slug>). */
-export const ideaFolder = (ideaId: string, slug?: string) => `ideas/${slug ? `${ideaId}-${slug}` : ideaId}`;
+/**
+ * The idea's folder in the workspace. `folder` is the real one the server sent (GET …/design); without it,
+ * the name the server would give it (ideas/<id>-<slug>).
+ */
+export const ideaFolder = (ideaId: string, slug?: string, folder?: string) =>
+  (folder?.trim() ? folder.trim().replace(/\/+$/, '') : `ideas/${slug ? `${ideaId}-${slug}` : ideaId}`);
 
 /** The instruction an operator pastes into Claude Code or Copilot to build the custom-app part. */
-export function buildInstruction(ideaId: string, slug?: string): string {
-  const dir = ideaFolder(ideaId, slug);
+export function buildInstruction(ideaId: string, slug?: string, folder?: string): string {
+  const dir = ideaFolder(ideaId, slug, folder);
   return [
     `Build the custom-app proof of concept for Café idea ${ideaId}.`,
     `Read ${dir}/design.md, ${dir}/plan.md and ${dir}/${AGENT_FILE} first, and follow ${AGENT_FILE}.`,

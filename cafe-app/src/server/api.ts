@@ -25,7 +25,7 @@ import { saveToolPicks, toolPickInput, mergeSuggestions } from '../design/tools'
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
-import { designPlanInput, writePlan, readPlan, NOT_APPROVED } from '../design/kits';
+import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
@@ -138,7 +138,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('GET', '/api/ideas/:id/design', async ({ params }) => {
     const idea = await loadIdea(root, params.id);
     const state = await readDesign(root, idea.id);
-    return { state, designMd: renderDesignMd(idea, state) };
+    const folder = path.relative(root, await ideaDir(root, idea.id)).split(path.sep).join('/');
+    return { state, designMd: renderDesignMd(idea, state), folder };
   });
   add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => {
     const idea = await loadIdea(root, params.id);
@@ -159,6 +160,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     if (body.question !== undefined) {
       // A hand-written question, for when no AI is available.
       if (typeof body.question !== 'string' || !body.question.trim()) throw new DesignError('Write the question first');
+      assertNoOpenStep(state);
       const suggested = Array.isArray(body.suggested) ? body.suggested.filter((x: unknown) => typeof x === 'string') : [];
       const out = await applyDesignEvent(root, idea, { t: 'step', question: String(body.question), suggested, source: 'operator' }, clock);
       return { ...out, step: out.state.steps[out.state.steps.length - 1] };
@@ -196,7 +198,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const idea = await loadIdea(root, params.id);
     const state = await readDesign(root, idea.id);
     if (!state.approvedAt) throw new DesignError(NOT_APPROVED);
-    const { output } = await byHand(() => ai.runWith(designPlanTask, designPlanInput(idea, state)))();
+    let output;
+    try { ({ output } = await ai.runWith(designPlanTask, designPlanInput(idea, state))); } catch { throw new DesignError(PLAN_NEEDS_AI); }
     const { files } = await writePlan(root, idea, state, output);
     return { files };
   });

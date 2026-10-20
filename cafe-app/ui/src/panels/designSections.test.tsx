@@ -155,6 +155,57 @@ describe('IdeaDetails design sections', () => {
     expect(api.ideaPost).not.toHaveBeenCalled();
   });
 
+  it('Change answer reopens the box with the answer in it and saving posts the new answer', async () => {
+    const answered = designState({ steps: [{ n: 1, question: 'What must it show?', suggested: ['Sorting'], source: 'operator', answer: 'Sorting' }] });
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: answered, designMd: '' } : { files: [] }));
+    api.designPost.mockImplementation(async () => ({ state: answered, designMd: '' }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('.ds-step[data-step="1"] [data-action="change-answer"]');
+    const box = el.querySelector('.ds-step[data-step="1"] textarea') as HTMLTextAreaElement;
+    expect(box.value).toBe('Sorting');
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+      set.call(box, 'Sorting by due date');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click('.ds-step[data-step="1"] [data-action="save-changed-answer"]');
+    await flush();
+    expect(api.designPost).toHaveBeenCalledWith(ID, 'design/answer', { n: 1, answer: 'Sorting by due date' });
+    expect(el.querySelector('.ds-step[data-step="1"] [data-action="change-answer"]')).toBeTruthy();
+  });
+
+  it('Finish by hand shows whenever there is a step, even with no features picked', async () => {
+    const noFeatures = designState({ features: [] });
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: noFeatures, designMd: '' } : { files: [] }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-action="hand-finish"]')).toBeTruthy();
+  });
+
+  it('Copy build instruction uses the folder the server sent', async () => {
+    const approved = designState({ summary: 'S', approvedAt: '2026-10-20', status: 'approved' });
+    const folder = 'ideas/CAFE-2026-001-real-folder-name';
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design'
+      ? { state: approved, designMd: '', folder } : { files: ['kit/custom-app/BUILD-WITH-AGENT.md', 'plan.md'] }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="copy-instruction"]');
+    await flush();
+    const text = (api.copyText.mock.calls as any[])[0][0] as string;
+    expect(text).toContain(`${folder}/design.md`);
+    expect(text).not.toContain('desk-request-sorter');
+  });
+
+  it('the tool list comes from /api/state when the server sends one', async () => {
+    useStore.setState({ state: { ...STATE, approvedTools: ['Power Apps', 'Server-only tool'] } });
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    const opts = [...el.querySelectorAll('[data-testid="tool-picker"] select option')].map((o) => o.textContent);
+    expect(opts).toContain('Server-only tool');
+    expect(opts).not.toContain('Dataiku');
+  });
+
   it('a failed re-read keeps the design on screen', async () => {
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();

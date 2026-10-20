@@ -161,6 +161,31 @@ describe('design brainstorm routes', () => {
     expect(idea.closed).toBeUndefined();
   });
 
+  it('a feature flagged needs-live-system (no custom app) is a CSIC flag, and approval suggests closing as Routed to CSIC', async () => {
+    const s = await server();
+    await s.post(`/api/ideas/${ID}/tools`, { features: [
+      { name: 'Slot lookup', what: 'Reads free slots', tool: 'Power Apps', flags: ['needs-live-system'] },
+      { name: 'Requester list', tool: 'Power Apps', flags: ['personal-data'] },
+    ] });
+    const idea = await loadIdea(s.root, ID);
+    await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows slots from sample data.' }, clock);
+    const st = await readDesign(s.root, ID);
+    expect(st.cafeCheck!.csicFlags.length).toBeGreaterThan(0);
+    expect(st.cafeCheck!.csicFlags).toEqual(['live system: Slot lookup', 'personal data: Requester list']);
+    expect(st.cafeCheck!.dataFlags).toContain('personal data: Requester list');
+    const body = await json(await s.post(`/api/ideas/${ID}/design/approve`));
+    expect(body.suggest).toMatchObject({ closeAs: 'csic' });
+    expect(body.notice).toContain(CSIC_NOTE);
+  });
+
+  it('the Café check reads a feature\'s "what" line', async () => {
+    const s = await server();
+    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Sync', what: 'Keeps an API to Workday in step', tool: 'Power Apps' }] });
+    const idea = await loadIdea(s.root, ID);
+    await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows a sync.' }, clock);
+    expect((await readDesign(s.root, ID)).cafeCheck!.csicFlags).toEqual(expect.arrayContaining(['api to', 'workday']));
+  });
+
   it('approve with a clean Café check gives no suggestion', async () => {
     const s = await server();
     await s.post(`/api/ideas/${ID}/design/step`, { question: 'What must it show?' });
@@ -182,6 +207,23 @@ describe('design brainstorm routes', () => {
     const a = await json(await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'The scheduling desk' }));
     expect(a.designMd).toContain('The scheduling desk');
     expect((await s.post(`/api/ideas/${ID}/design/step`, { question: '  ' })).status).toBe(400);
+  });
+
+  it('a hand-written question waits for the open one, like the AI path', async () => {
+    const s = await server();
+    await s.post(`/api/ideas/${ID}/design/step`, { question: 'Who uses it?' });
+    const r = await s.post(`/api/ideas/${ID}/design/step`, { question: 'What does it replace?' });
+    expect(r.status).toBe(400);
+    expect((await json(r)).error).toMatch(/^Answer question 1 first/);
+    expect((await readDesign(s.root, ID)).steps).toHaveLength(1);
+  });
+
+  it('GET design returns the idea folder relative to the workspace', async () => {
+    const s = await server();
+    const got = await json(await fetch(`${s.base}/api/ideas/${ID}/design`));
+    const dir = await ideaDir(s.root, ID);
+    expect(got.folder).toBe(path.relative(s.root, dir).split(path.sep).join('/'));
+    expect(got.folder).toMatch(new RegExp(`^ideas/${ID}-`));
   });
 
   it('injection text in an answer stays inside the step: no stage move, no extra ticks, no new headings', async () => {

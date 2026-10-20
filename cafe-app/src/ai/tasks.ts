@@ -353,3 +353,97 @@ export const toolPickTask: Task<ToolPickOutput> = {
   },
   parse: (raw) => parseChecked<ToolPickOutput>(raw, TOOL_PICK_SCHEMA, trimToolPick),
 };
+
+/* ---------- Design brainstorm: one question at a time ---------- */
+
+export const DESIGN_TAGS = ['must-show', 'smallest-input', 'users', 'replaces', 'builder'] as const;
+export type DesignStepTag = (typeof DESIGN_TAGS)[number];
+
+export interface DesignStepInput {
+  idea: IdeaText;
+  features: { name: string; what?: string; tool?: string }[];
+  stepsSoFar: { question: string; answer: string }[];
+  /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
+  guidance: string;
+}
+export interface DesignStepOutput {
+  done: boolean;
+  question?: string;
+  why?: string;
+  suggested?: string[];
+  summary?: string;
+  tag?: DesignStepTag | null;
+}
+
+export const DESIGN_STEP_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['done'],
+  properties: {
+    done: { type: 'boolean' },
+    question: { type: 'string', minLength: 1, maxLength: 200 },
+    why: { type: 'string', maxLength: 160 },
+    suggested: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
+    summary: { type: 'string', maxLength: 600 },
+    tag: { enum: [...DESIGN_TAGS, null] },
+  },
+};
+
+const oneLine = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : v);
+
+function trimDesignStep(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  for (const [k, max] of [['question', 200], ['why', 160], ['summary', 600]] as const) {
+    if (Object.hasOwn(o, k)) o[k] = trimStrings(oneLine(o[k]), max);
+  }
+  if (Array.isArray(o.suggested)) o.suggested = o.suggested.map((s) => trimStrings(oneLine(s), 120));
+}
+
+/** Schema-checked, then: a finished design needs a summary and asks nothing; an open one needs a question and has no summary. */
+function parseDesignStep(raw: string): DesignStepOutput {
+  const t = parseChecked<DesignStepOutput>(raw, DESIGN_STEP_SCHEMA, trimDesignStep);
+  if (t.done) {
+    if (!t.summary?.trim()) throw new AiError('invalid output: a finished design needs a summary');
+    return { done: true, summary: t.summary.trim() };
+  }
+  if (!t.question?.trim()) throw new AiError('invalid output: the next question is missing');
+  return {
+    done: false, question: t.question.trim(),
+    ...(t.why?.trim() ? { why: t.why.trim() } : {}),
+    suggested: (t.suggested ?? []).map((s) => s.trim()).filter(Boolean),
+    tag: t.tag ?? null,
+  };
+}
+
+function designStepData(input: DesignStepInput) {
+  return {
+    idea: ideaData(input.idea),
+    features: (Array.isArray(input.features) ? input.features : []).slice(0, 12).map((f) => ({
+      name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.tool ? { tool: cap(f.tool, 40) } : {}),
+    })),
+    stepsSoFar: (Array.isArray(input.stepsSoFar) ? input.stepsSoFar : []).slice(0, 20).map((s) => ({
+      question: cap(s.question, 200), answer: cap(s.answer, 1000),
+    })),
+  };
+}
+
+export const designStepTask: Task<DesignStepOutput> = {
+  name: 'design-step',
+  schema: DESIGN_STEP_SCHEMA,
+  prompt(input) {
+    const i = input as DesignStepInput;
+    return build('design-step', [
+      "You run a short design conversation with the operator of the Creators' Café to design a proof of concept for one idea. Each call, reply with the NEXT single question for the operator (in the JSON \"question\" field), or say the design is done.",
+      'Follow this guidance from the brainstorming skill. You produce one question per reply; the operator answers between replies. Prefer multiple choice: give 2 to 4 short "suggested" answers the operator can pick.',
+      '<<<GUIDANCE',
+      String(i.guidance ?? ''),
+      'GUIDANCE>>>',
+      "Café rules: never ask about value, return on investment, savings, costs, benefits or KPIs. Never ask for personal, client or third-party data, or for anyone's name. A proof of concept uses synthetic, aggregated or sample data.",
+      'Aim to settle, in whatever order fits: the one thing the proof of concept must show (tag "must-show"); the smallest synthetic or aggregated input it needs (tag "smallest-input"); who uses it (tag "users"); what it replaces (tag "replaces"); who builds it, as a role, never a name (tag "builder"). Use tag null for any other question.',
+      '"stepsSoFar" are the questions already asked and the answers. Never ask one of them again. An answer of "(not known yet; asked the team)" means move on.',
+      'When the five points are settled, or the answers so far are enough to build a small proof of concept, reply {"done": true, "summary": "..."}: what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
+      'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "tag": ...}: question at most 200 characters, why (one line on why it matters) at most 160, each suggested answer at most 120.',
+      'The idea title may be the only thing there; work from what is there.',
+    ], DESIGN_STEP_SCHEMA, designStepData(i), "a Café idea, its features and the design answers so far");
+  },
+  parse: parseDesignStep,
+};

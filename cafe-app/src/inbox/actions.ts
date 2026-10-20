@@ -25,6 +25,7 @@ import { screen } from './screen';
 import { displayName } from './match';
 import { SIGNATURE } from '../comms/templates';
 import { openQuestionsOf, type TriageRecord } from './triage';
+import { fillDesignAnswers } from '../design/brainstorm';
 import type { InboxItem } from './store';
 
 /**
@@ -302,6 +303,8 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
         .map((x) => ({ question: x.question, answer: x.answer, source: item.file }));
       await saveIdea(root, { ...idea, answers: [...have, ...fresh] } as Idea);
       await history(root, a.ideaId, at, `${fresh.length} answer${fresh.length === 1 ? '' : 's'} recorded`, item.file);
+      // Design questions we asked the team in an E2 ("I don't know") are filled from the matching answers.
+      await fillDesignAnswers(root, idea, a.answers, clock);
       return { inverse: { t: 'unset-field', ideaId: a.ideaId, field: 'answers', entries: fresh.map((x) => ({ question: x.question, source: x.source })) } };
     }
     case 'add_flag': {

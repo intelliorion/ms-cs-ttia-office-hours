@@ -41,7 +41,8 @@ export function pathwayLabel(tool: string, builder?: string): string {
 
 export interface PickInput { id?: string; name: string; what?: string; tool?: string; reason?: string; flags?: string[] }
 
-const str = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+/** One line of plain text: every whitespace run (newlines too) becomes one space, so AI text can never start a heading or field. */
+const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /**
  * Checks the operator's picks and turns them into design features. A tool must resolve to an
@@ -129,10 +130,14 @@ export async function saveToolPicks(
   const features = validatePicks(rawFeatures, builderOf(idea));
   const prev = await readDesign(root, id);
   const picked = features.some((f) => f.tool);
-  const status = prev.status === 'approved' ? 'approved'
-    : picked ? 'designing'
+  // Changing the features of an approved design reopens it: the approval was for the old features.
+  const changed = JSON.stringify(prev.features) !== JSON.stringify(features);
+  const reopen = prev.status === 'approved' && changed;
+  const status = prev.status === 'approved' && !reopen ? 'approved'
+    : picked || reopen ? 'designing'
     : prev.status === 'designing' ? 'designing' : 'picking';
   const state: DesignState = { ...prev, status, features };
+  if (reopen) delete state.approvedAt;
   const tools = toolsMap(features);
   const withTools: Idea = { ...idea, tools };
   state.cafeCheck = cafeCheck(withTools, state);

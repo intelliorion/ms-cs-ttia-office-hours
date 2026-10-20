@@ -21,12 +21,18 @@ export interface DesignFeature {
   flags: string[];
 }
 
+/** What a brainstorm question settles (the AI says; a hand-written question has none). */
+export type DesignTag = 'must-show' | 'smallest-input' | 'users' | 'replaces' | 'builder';
+
 export interface DesignStep {
   n: number;
   question: string;
   suggested: string[];
-  answer?: string;
+  /** Before an answer: who wrote the question. After: where the answer came from. */
   source: StepSource;
+  answer?: string;
+  why?: string;
+  tag?: DesignTag;
   askedTeam?: { emailKey: string };
 }
 
@@ -39,6 +45,9 @@ export interface DesignState {
   cafeCheck?: CafeCheck;
   approvedAt?: string;
 }
+
+/** Said in design.md and on approval when the Café check has a CSIC flag. */
+export const CSIC_NOTE = 'This idea has a CSIC feature, so that part goes to the CSIC Repository, not a Café build.';
 
 export function emptyDesign(): DesignState {
   return { version: 1, status: 'not-started', features: [], steps: [] };
@@ -70,12 +79,24 @@ export async function writeDesign(root: string, id: string, state: DesignState):
 
 const bullets = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).join('\n') : '- (none yet)');
 
+/** Free text as one Markdown line: whitespace runs collapse and a leading # or - is escaped, so it can never add a heading or a field. */
+export const mdLine = (text: string | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim().replace(/^([#>*+-]|\d+[.)])/, '\\$1');
+
+/** The answer to the step tagged `tag`; with no tags at all (hand-written steps), the first step stands for the smallest input. */
+function tagged(state: DesignState, tag: DesignTag): string | undefined {
+  const hit = state.steps.find((s) => s.tag === tag && s.answer?.trim());
+  if (hit) return hit.answer;
+  if (tag === 'smallest-input' && !state.steps.some((s) => s.tag)) return state.steps[0]?.answer;
+  return undefined;
+}
+
 export function renderDesignMd(idea: Idea, state: DesignState): string {
   const check = cafeCheck(idea, state);
   const out: string[] = [`# ${idea.title}`, ''];
-  out.push('## What it must show', '', state.summary?.trim() || idea.outcomes.map((o) => `- ${o}`).join('\n') || '(not yet answered)', '');
-  const first = state.steps[0];
-  out.push('## Smallest input', '', first?.answer?.trim() || '(not yet answered)', '');
+  if (state.status === 'approved' && state.approvedAt) out.push(`Approved on ${state.approvedAt}.`, '');
+  const mustShow = mdLine(state.summary) || mdLine(tagged(state, 'must-show'));
+  out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || '(not yet answered)', '');
+  out.push('## Smallest input', '', mdLine(tagged(state, 'smallest-input')) || '(not yet answered)', '');
   out.push('## Features and tools', '');
   if (state.features.length === 0) out.push('(not yet answered)');
   for (const f of state.features) {
@@ -84,11 +105,15 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   }
   out.push('', '## Decisions so far', '');
   if (state.steps.length === 0) out.push('(not yet answered)');
-  for (const s of state.steps) out.push(`**Q${s.n}. ${s.question}**`, '', s.answer?.trim() || '(not yet answered)', '');
+  for (const s of state.steps) {
+    const open = s.askedTeam ? '(asked the team in an E2; waiting for the reply)' : '(not yet answered)';
+    out.push(`**Q${s.n}. ${mdLine(s.question).replace(/\*/g, '')}**`, '', mdLine(s.answer) || open, '');
+  }
   out.push('## Café check', '');
   out.push('**Value words**', check.valueWords.length ? bullets(check.valueWords) : '- Clean', '');
   out.push('**Data flags**', check.dataFlags.length ? bullets(check.dataFlags) : '- Clean', '');
   out.push('**CSIC flags**', check.csicFlags.length ? bullets(check.csicFlags) : '- Clean', '');
+  if (check.csicFlags.length) out.push(CSIC_NOTE, '');
   return out.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 

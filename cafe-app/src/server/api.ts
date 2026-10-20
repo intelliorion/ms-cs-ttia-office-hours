@@ -19,9 +19,12 @@ import { writeStatusCsv } from '../exports/status';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, toolPickInput, mergeSuggestions } from '../design/tools';
+import {
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError,
+} from '../design/brainstorm';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
@@ -147,6 +150,36 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const { state, designFile } = await saveToolPicks(root, params.id, body.features, { clock, steps: await steps() });
     return { state, designMd: await readFile(designFile, 'utf8') };
   });
+  // Design series: the brainstorm. One question at a time; every change re-renders design.md and the Café check.
+  add('POST', '/api/ideas/:id/design/step', async ({ params, body }) => {
+    const idea = await loadIdea(root, params.id);
+    const state = await readDesign(root, idea.id);
+    if (body.question !== undefined) {
+      // A hand-written question, for when no AI is available.
+      const suggested = Array.isArray(body.suggested) ? body.suggested.filter((x: unknown) => typeof x === 'string') : [];
+      const out = await applyDesignEvent(root, idea, { t: 'step', question: String(body.question), suggested, source: 'operator' }, clock);
+      return { ...out, step: out.state.steps[out.state.steps.length - 1] };
+    }
+    if (isDone(state)) return { state, designMd: renderDesignMd(idea, state) };
+    assertNoOpenStep(state);
+    const { output } = await byHand(() => ai.runWith(designStepTask, designStepInput(idea, state)))();
+    const out = await applyDesignEvent(root, idea, stepEvent(output), clock);
+    return output.done ? out : { ...out, step: out.state.steps[out.state.steps.length - 1] };
+  });
+  add('POST', '/api/ideas/:id/design/answer', async ({ params, body }) => {
+    const idea = await loadIdea(root, params.id);
+    const n = Number(body.n);
+    const given = [typeof body.answer === 'string', body.suggestedIndex !== undefined, body.idk === true].filter(Boolean).length;
+    if (given !== 1) throw new DesignError('Send one of: an answer, a suggested answer or "I don\'t know"');
+    if (body.idk === true) return askTeam(root, idea, n, clock);
+    if (typeof body.answer === 'string') return applyDesignEvent(root, idea, { t: 'answer', n, answer: body.answer, source: 'operator' }, clock);
+    const step = (await readDesign(root, idea.id)).steps.find((s) => s.n === n);
+    if (!step) throw new DesignError(`No question ${n}`);
+    const i = Number(body.suggestedIndex);
+    if (!Number.isInteger(i) || i < 0 || i >= step.suggested.length) throw new DesignError('Pick one of the suggested answers');
+    return applyDesignEvent(root, idea, { t: 'answer', n, answer: step.suggested[i], source: 'ai-suggested' }, clock);
+  });
+  add('POST', '/api/ideas/:id/design/approve', async ({ params }) => approveDesign(root, params.id, clock));
   // Inbox. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {

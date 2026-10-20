@@ -56,6 +56,39 @@ const TOOL_PICK = {
   ],
 };
 
+/** A scripted brainstorm: must-show, smallest input, builder, then done. Which one depends on how many Q/A pairs the prompt carries. */
+const DESIGN_STEPS = [
+  {
+    done: false, tag: 'must-show', question: 'What is the one thing this proof of concept must show?',
+    why: 'A proof of concept proves one thing well; everything else can wait.',
+    suggested: ['That requests can be sorted automatically', 'That a first reply can be drafted for a person to check', 'That the team can see every request in one place'],
+  },
+  {
+    done: false, tag: 'smallest-input', question: 'What is the smallest input it needs to show that?',
+    why: 'Synthetic or aggregated data keeps the proof of concept a Café build.',
+    suggested: ['Twenty made-up sample requests in a spreadsheet', 'A weekly count of requests by type', 'Three example emails written for the test'],
+  },
+  {
+    done: false, tag: 'builder', question: 'Who in the team will build the proof of concept?',
+    why: 'A named builder makes it Citizen-Led; without one it stays Assisted Citizen.',
+    suggested: ['A citizen builder in the team', 'Someone to be named after the first session', 'The team with TTIA help'],
+  },
+];
+const DESIGN_DONE = {
+  done: true,
+  summary: 'A proof of concept that shows the one thing agreed above, using a small synthetic sample, built by the team with the tools picked for each feature.',
+};
+
+/** How many Q/A pairs the design-step prompt carries (its DATA block's stepsSoFar). */
+function stepsSoFar(prompt: string): number {
+  const start = prompt.lastIndexOf('<<<DATA');
+  const end = prompt.lastIndexOf('DATA>>>');
+  try {
+    const data = JSON.parse(prompt.slice(start + '<<<DATA'.length, end)) as { stepsSoFar?: unknown[] };
+    return Array.isArray(data.stepsSoFar) ? data.stepsSoFar.length : 0;
+  } catch { return 0; }
+}
+
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
 
 export function fakeProvider(): Provider {
@@ -69,6 +102,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(TOOL_PICK);
+      if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },

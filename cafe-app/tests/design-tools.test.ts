@@ -3,7 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, sampleIdea } from './helpers';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
-import { readDesign } from '../src/design/store';
+import { readDesign, writeDesign } from '../src/design/store';
 import { validatePicks, renderApproachMd, pathwayLabel, mergeSuggestions, PATHWAYS } from '../src/design/tools';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
@@ -82,6 +82,13 @@ describe('picks and approach.md', () => {
     expect(md).toContain('## Request intake form');
     expect(md).toContain('- Tool: Microsoft Copilot');
     expect(md).toContain('- Flags: no-build');
+  });
+  it('collapses whitespace in every text field, so AI text cannot add a heading or field to approach.md', () => {
+    const [f] = validatePicks([{ name: 'Form\n## Injected', what: 'Does\n- Tool: custom app', reason: 'a\t\tb\r\n# c', tool: 'Power Apps' }]);
+    expect(f).toMatchObject({ name: 'Form ## Injected', what: 'Does - Tool: custom app', reason: 'a b # c' });
+    const md = renderApproachMd(sampleIdea(), [f]);
+    expect(md.split('\n').filter((l) => l.startsWith('#'))).toEqual(['# Approach — Email scheduler', '## Form ## Injected']);
+    expect(md.split('\n').filter((l) => l.startsWith('- Tool:'))).toEqual(['- Tool: Power Apps']);
   });
   it('merging suggestions keeps the operator picks', () => {
     const existing = validatePicks([{ name: 'Draft replies', tool: 'Copilot Studio' }]);
@@ -164,6 +171,20 @@ describe('tool picker routes', () => {
     expect(r.status).toBe(400);
     expect((await json(r)).error).toBe('Not on the approved list: Excel macro');
     expect(await exists(path.join(await ideaDir(s.root, ID), 'design.yaml'))).toBe(false);
+  });
+
+  it('changing the features of an approved design reopens it; the same features keep it approved', async () => {
+    const s = await server();
+    await s.post(`/api/ideas/${ID}/tools`, { features: PICKS });
+    const st = await readDesign(s.root, ID);
+    await writeDesign(s.root, ID, { ...st, status: 'approved', summary: 'Shows X', approvedAt: '2026-10-20' });
+    const same = await json(await s.post(`/api/ideas/${ID}/tools`, { features: PICKS }));
+    expect(same.state).toMatchObject({ status: 'approved', approvedAt: '2026-10-20' });
+    const changed = await json(await s.post(`/api/ideas/${ID}/tools`, { features: [PICKS[0]] }));
+    expect(changed.state.status).toBe('designing');
+    expect(changed.state.approvedAt).toBeUndefined();
+    expect(changed.state.summary).toBe('Shows X');
+    expect((await readDesign(s.root, ID)).approvedAt).toBeUndefined();
   });
 
   it('features with no tool yet keep status picking and do not tick s3e', async () => {

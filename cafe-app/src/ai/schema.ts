@@ -59,22 +59,35 @@ export function validate(schema: JsonSchema, value: unknown, at = '$'): string[]
   return errs;
 }
 
+export const MAX_JSON_ATTEMPTS = 64;
+
 /**
- * The first top-level balanced {...} in the text that parses as JSON, or undefined.
- * One pass, O(n): strings are tracked only inside braces; when a top-level object
- * closes and does not parse, scanning carries on after it, never from the start.
+ * The first balanced {...} in the text that parses as a JSON object, or undefined.
+ * Each candidate start is scanned once, tracking strings, escapes and depth. If the
+ * candidate never closes or does not parse, scanning resumes at the character after
+ * that candidate's start (never from the beginning). At most MAX_JSON_ATTEMPTS
+ * candidates are tried, so the work is bounded by O(n * 64).
  */
 export function firstJsonObject(text: string): unknown {
-  let depth = 0; let start = -1; let inStr = false; let esc = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (depth === 0) { if (c === '{') { depth = 1; start = i; } continue; }
-    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
-    if (c === '"') inStr = true;
-    else if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) {
-      try { return JSON.parse(text.slice(start, i + 1)); } catch { /* not JSON: keep scanning after it */ }
+  let from = 0;
+  for (let attempt = 0; attempt < MAX_JSON_ATTEMPTS; attempt++) {
+    const start = text.indexOf('{', from);
+    if (start === -1) return undefined;
+    let depth = 0; let inStr = false; let esc = false; let end = -1;
+    for (let i = start; i < text.length; i++) {
+      const c = text[i];
+      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '{') depth++;
+      else if (c === '}' && --depth === 0) { end = i; break; }
     }
+    if (end !== -1) {
+      try {
+        const v: unknown = JSON.parse(text.slice(start, end + 1));
+        if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+      } catch { /* not JSON: try the next candidate */ }
+    }
+    from = start + 1;
   }
   return undefined;
 }

@@ -80,9 +80,19 @@ describe('schema validator', () => {
     expect(() => parseChecked('{'.repeat(20000), extractTask.schema)).toThrow(/invalid output/);
     expect(Date.now() - t0).toBeLessThan(200);
     t0 = Date.now();
-    expect(firstJsonObject('{x}'.repeat(15000) + '{"a":1}')).toEqual({ a: 1 });
+    // More than 64 failed candidates: the scan gives up (fails safe as invalid output).
+    expect(firstJsonObject('{x}'.repeat(15000) + '{"a":1}')).toBeUndefined();
+    expect(firstJsonObject('{x}'.repeat(10) + '{"a":1}')).toEqual({ a: 1 });
     expect(Date.now() - t0).toBeLessThan(200);
     expect(firstJsonObject('Here: {not json} and {"a":"}{"}')).toEqual({ a: '}{' });
+    expect(firstJsonObject('Use { to start. {"a":1}')).toEqual({ a: 1 });
+    expect(firstJsonObject('{see {"a":1}}')).toEqual({ a: 1 });
+    expect(firstJsonObject('Here you go: {"a":{"b":2}} and {"c":3}')).toEqual({ a: { b: 2 } });
+    expect(firstJsonObject('a "{" quote then {"a":1}')).toEqual({ a: 1 });
+    t0 = Date.now();
+    expect(firstJsonObject('{'.repeat(20000) + '{"a":1}')).toBeUndefined();
+    expect(firstJsonObject('{'.repeat(60000))).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(200);
   });
 });
 
@@ -260,6 +270,29 @@ describe('/api/ai routes', () => {
     expect(again.added).toBe(0);
     const sug = await (await post(s.base, '/api/ai/review-suggest', { id: 'CAFE-2026-001' })).json() as any;
     expect(sug.error).toMatch(/^Working by hand: .*invalid output/);
+  });
+
+  it('a node that exists only through a pending AI link is still new for the next extract', async () => {
+    const reply = JSON.stringify({
+      nodes: [{ type: 'Capability', label: 'Ticketing and status' }],
+      links: [{ from: 'idea', to: 'Ticketing and status', rel: 'NEEDS', description: 'Tracks requests', confidence: 0.9 }],
+    });
+    const c = createConnector({ providers: [fake(reply)], settings: DEFAULT_SETTINGS });
+    const s = await startServer('2026-10-19', { connector: c });
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
+    await saveIdea(s.root, sampleIdea({ challenge: 'One' }));
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
+    const one = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
+    expect(one).toMatchObject({ added: 1, unconfirmed: 1 });
+    const two = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
+    expect(two).toMatchObject({ added: 1, unconfirmed: 1 });
+    expect(two.suggestions.newNodes.map((n: any) => n.id)).toEqual(['capability:ticketing-and-status']);
+    // Once the operator confirms the first link, the node is known and a third idea's 0.9 link is confirmed.
+    await post(s.base, '/api/graph/confirm', { edgeId: 'idea:CAFE-2026-001|NEEDS|capability:ticketing-and-status' });
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-003', slug: 'three', title: 'Three', challenge: 'Three', dedupe_key: 'three' }));
+    const three = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-003' })).json() as any;
+    expect(three).toMatchObject({ added: 1, unconfirmed: 0 });
+    expect(three.suggestions.newNodes).toEqual([]);
   });
 
   it('errors say "Working by hand" and settings can switch the AI off', async () => {

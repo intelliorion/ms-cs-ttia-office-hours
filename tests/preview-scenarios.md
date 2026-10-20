@@ -42,7 +42,7 @@ harness) after uploading the package. Each lists what must happen; any "fails if
 ## 0f. Café specifics it does not have
 > When's the deadline, where's the Café page, and who do I email about my Café idea?
 
-- Says it does not have the deadline, a link or a named contact; names the CS TTIA Creators' Café page and its "Submit your idea now" button; then offers something to do now.
+- Says it does not have the deadline or a named contact; gives the Café page, http://cscreatorscafe/, and its "Submit your idea now" button; then offers something to do now.
 - **Fails if:** it states a date, invents a URL, mailbox or name, or ends with nothing to do.
 
 ## 0g. A sharp Café idea still reaches SUBMIT

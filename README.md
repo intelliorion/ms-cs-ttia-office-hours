@@ -130,7 +130,7 @@ CHANGELOG.md                              what changed, when
   questions (idea, desired outcome), first-come first-served review on
   feasibility and themes, and the Café-vs-Repository comparison. It does not
   know the current deadline, the MS Form link, the selection timeline, the
-  Café page and form URLs, the design-series dates, or the catalogue of
+  design-series dates, or the catalogue of
   selected use cases, and says so. Supply them as a knowledge source or add
   them where the TTIA comment marks the spot in
   `skills/ms-cs-ttia-creators-cafe/references/how-to-start-ai.md`.

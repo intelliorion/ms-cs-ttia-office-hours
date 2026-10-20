@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-14 (Café link)
+
+- The Creators' Café page link, http://cscreatorscafe/ (firm network), is now
+  in the Café skill and the start-here reference; the agent gives it for
+  "where's the Café page", submissions and "was mine selected?". The form
+  link, deadline and design-series dates are still to come from TTIA.
+
 ## 2026-10-14 (map, single package)
 
 - **Start-here map shown on request.** The Café reference now has a text

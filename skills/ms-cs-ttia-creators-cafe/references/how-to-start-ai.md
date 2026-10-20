@@ -61,9 +61,10 @@ colleague asks about one, say it is not on the approved list and point them at
 TTIA's AI & ML pillar. Licences or access for a listed tool are a Tech
 Governance & Enablement question.
 
-The Café's own page is the **CS TTIA Creators' Café** page on the Corporate
-Services intranet; its **Submit your idea now** button opens the MS Form.
-<!-- TTIA: add the page URL, form URL, current deadline and design-series dates here when published. -->
+The Café's own page is the **CS TTIA Creators' Café** page,
+**http://cscreatorscafe/** (firm network; the agent cannot open it). Its
+**Submit your idea now** button opens the MS Form.
+<!-- TTIA: add the form URL, current deadline and design-series dates here when published. -->
 
 ## 2 · New idea and use case — the two doors
 

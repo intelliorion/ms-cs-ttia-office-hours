@@ -63,7 +63,7 @@ forbid using them to fill a form field.
 
 | source | why |
 |---|---|
-| Creators' Café SharePoint page | current deadline, MS Form link, contact route, selected use cases — the agent says it does not have these until a source provides them |
+| Creators' Café page (http://cscreatorscafe/) | current deadline, MS Form link, contact route, selected use cases — the agent says it does not have these until a source provides them |
 | CSIC pathway and control policy documents | how a pathway or control works |
 | The "How I want to use & Build AI" map (http://ttia-ai-diagram/, firm network) | already in the Café skill as a text map plus this link; a live copy keeps tool lists current |
 
@@ -114,7 +114,7 @@ Teams app manifest values, if the admin centre asks:
 | Short description | `Creators' Café, CSIC intake and value coach for CS, run by TTIA.` |
 | Long description | the Description in section 1 |
 | Developer / publisher | `Corporate Services — TTIA` |
-| Privacy / terms URLs | _your choice_ — the Café or TTIA SharePoint page until a policy URL exists |
+| Privacy / terms URLs | _your choice_ — the Café page (http://cscreatorscafe/) until a policy URL exists |
 
 ## 9. Test before publishing
 

@@ -266,7 +266,7 @@ async function inboxHandShots(p, restart) {
   await p.waitForSelector('[data-testid="item-notice"]');
   console.log('  undo notice:', await p.textContent('[data-testid="item-notice"]'));
   await sleep(1000);
-  await shot(p, '26-inbox-undo-refused.png');
+  await shot(p, '26-inbox-undo-partial.png');
   await p.keyboard.press('Escape');
   await post('/api/ai/provider', { provider: 'auto' });
 }

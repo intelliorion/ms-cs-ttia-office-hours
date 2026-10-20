@@ -124,10 +124,11 @@ instead of names.
 
 **How an idea is matched**
 
-- A Café ID in the subject or the file name is a sure match.
-- The idea's title in the subject is a likely match.
-- An ID or title only in the body, or only the sender, is not enough: the app asks "Which idea?" and you
-  pick. Below 0.7 it always asks.
+- A Café ID in the subject, the file name or the body is a sure match (1.0).
+- The whole idea title in the subject or file name is a likely match (0.9).
+- A sender who submitted exactly one idea is a likely match (0.8).
+- The title only in the body is unsure (0.6), so the app asks "Which idea?" and you pick.
+- Anything below 0.7 asks. The AI can lower a confidence, and so make the app ask, but it never raises one.
 
 **What you see for each item.** Three groups:
 
@@ -163,7 +164,7 @@ Inbox can be tested without a real AI. See Test hook below.
 New folders in the workspace:
 
 ```
-inbox/               dropped files, newest first
+inbox/               dropped files
 inbox/held/          files the app will not read
 inbox/.items/        one small file per dropped item (what was found, what was done)
 inbox/undo.jsonl     a log of every apply and Undo

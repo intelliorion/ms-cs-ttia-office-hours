@@ -121,7 +121,7 @@ export const duplicateNotice = (item: Pick<InboxItemView, 'name' | 'receivedAt'>
 
 /** Problems to list under "Working by hand": the app's notes and anything that could not be read. */
 export function handProblems(item: Pick<InboxItemView, 'triage' | 'problems'>): string[] {
-  return [...new Set([...(item.triage?.notes ?? []), ...(item.problems ?? [])].map((s) => oneLine(s, 300)).filter(Boolean))];
+  return [...new Set([...(item.triage?.notes ?? []), ...(item.problems ?? [])].map((s) => oneLine(s, 300)).filter((s) => s && !/^no ai: working by hand\.?$/i.test(s)))];
 }
 
 /** Needs a hand: no AI answer, or the app could not sort it. */

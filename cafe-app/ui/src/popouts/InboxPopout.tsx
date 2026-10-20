@@ -62,6 +62,18 @@ export function InboxPopout() {
     }
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
+  /** Any drop on the pop-out or its backdrop is read here; the window listener below stops the browser opening the file. */
+  const onDropAnywhere = (e: { preventDefault: () => void; dataTransfer: DataTransfer | null }) => {
+    e.preventDefault(); setOver(false);
+    if (going.current) { setNotice({ text: 'Wait for the current item to finish.', kind: 'error' }); return; }
+    void dropFiles(e.dataTransfer?.files);
+  };
+  useEffect(() => {
+    const stop = (e: Event) => e.preventDefault();
+    const leave = (e: DragEvent) => { if (!e.relatedTarget) setOver(false); };
+    window.addEventListener('dragover', stop); window.addEventListener('drop', stop); window.addEventListener('dragleave', leave);
+    return () => { window.removeEventListener('dragover', stop); window.removeEventListener('drop', stop); window.removeEventListener('dragleave', leave); };
+  }, []);
   const dropFiles = async (files: FileList | File[] | null | undefined) => {
     for (const f of [...(files ?? [])]) await dropping(() => inboxDropFile(f));
     if (input.current) input.current.value = '';
@@ -78,13 +90,9 @@ export function InboxPopout() {
 
   return (
     <Modal title={<><div className="pop-id">Inbox</div><h2>{waiting ? `${waiting} waiting on you` : 'Nothing waiting'}</h2></>}
-      label="Inbox" onClose={closePopout} width={1060} height={900} className="inbox-pop">
-      {/* The whole pop-out takes the drop, so a file let go outside the zone is read, not opened by the browser. */}
-      <div className="ib-body" data-testid="inbox-body"
-        style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
-        onDrop={(e) => { e.preventDefault(); setOver(false); void dropFiles(e.dataTransfer.files); }}>
+      label="Inbox" onClose={closePopout} width={1060} height={900} className="inbox-pop"
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDrop={onDropAnywhere}>
+      <div className="ib-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div className="pop-strip ib-top">
         <div className={`dropzone ib-drop${over ? ' over' : ''}${busy ? ' busy' : ''}`} data-testid="inbox-drop">
           <div className="dz-t">{busy ?? 'Drop anything: exports, emails, transcripts, notes'}</div>

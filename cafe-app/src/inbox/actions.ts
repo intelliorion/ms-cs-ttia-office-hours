@@ -110,7 +110,7 @@ export function labelOf(a: Action): string {
   switch (a.t) {
     case 'file_email': return `File it in ${a.ideaId}`;
     case 'reply_received': return `Mark the reply as received on ${a.ideaId}`;
-    case 'record_answers': return `Record ${a.answers.length} answer${a.answers.length === 1 ? '' : 's'} on ${a.ideaId}`;
+    case 'record_answers': return `Save ${a.answers.length} answer${a.answers.length === 1 ? '' : 's'} on ${a.ideaId}`;
     case 'log_step': return `Log "${STEP_WORDS[a.step] ?? a.step}" on ${a.ideaId}`;
     case 'add_flag': return `Add a flag on ${a.ideaId}: ${a.text}`;
     case 'name_builder': return `Name ${a.name} as the builder of ${a.ideaId}`;

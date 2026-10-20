@@ -3,8 +3,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /** Centred glass pop-out over the dimmed universe. Esc, ✕ or a click on the backdrop closes it; focus stays inside. */
-export function Modal({ title, label, actions, onClose, children, width = 1100, height = 820, className = '' }: {
+export function Modal({ title, label, actions, onClose, children, width = 1100, height = 820, className = '', onDragOver, onDrop }: {
   title: ReactNode; label: string; actions?: ReactNode; onClose: () => void; children: ReactNode; width?: number; height?: number; className?: string;
+  onDragOver?: (e: React.DragEvent) => void; onDrop?: (e: React.DragEvent) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -29,7 +30,7 @@ export function Modal({ title, label, actions, onClose, children, width = 1100, 
   }, []);
 
   return (
-    <div className="modal-back" data-testid="modal-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-back" data-testid="modal-back" onDragOver={onDragOver} onDrop={onDrop} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={box} className={`panel modal ${className}`} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}
         style={{ width, height }}>
         <div className="modal-head">

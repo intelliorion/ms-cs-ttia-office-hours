@@ -124,7 +124,7 @@ async function popouts2Shots(p, gl, errors, restart) {
   await p.fill('[data-field="open"]', '2026-10-05');
   await p.fill('[data-field="deadline"]', '2026-10-30');
   await p.fill('[data-field="reviewBy"]', '2026-11-13');
-  await p.fill('[data-field="operatorName"]', 'Johnny Hao');
+  await p.fill('[data-field="operatorName"]', 'Café operator');
   await p.fill('[data-field="formLink"]', 'https://forms.example.com/cafe');
   await click(p, '[data-action="save-round"]');
   await sleep(500);

@@ -76,7 +76,7 @@ export function createApp({ root, clock, connector }: ServerOptions): http.Serve
       if (!LOCAL_HOST.test(req.headers.host ?? '') || (origin !== undefined && !LOCAL_ORIGIN.test(origin))) return send(res, 403, { error: 'This app only answers on localhost' });
       const url = new URL(req.url ?? '/', 'http://localhost');
       if (req.method === 'GET' && url.pathname === '/') {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         res.end(await fs.readFile(path.join(WEB_DIR, 'index.html')));
         return;
       }
@@ -85,7 +85,7 @@ export function createApp({ root, clock, connector }: ServerOptions): http.Serve
         const type = TYPES[path.extname(file).toLowerCase()];
         const body = type && file.startsWith(WEB_DIR + path.sep) ? await fs.readFile(file).catch(() => null) : null;
         if (!body || !type) return send(res, 404, { error: 'Not found' });
-        res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable' });
+        res.writeHead(200, { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' });
         res.end(body);
         return;
       }

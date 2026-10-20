@@ -27,7 +27,7 @@ export function StageChart() {
 }
 
 function HBars({ rows, colour, height }: { rows: [string, number][]; colour: string; height: number }) {
-  const top = rows.slice(0, 6).reverse();
+  const top = useMemo(() => rows.slice(0, 6).reverse(), [rows]);
   const option = useMemo(() => ({
     grid: { left: 8, right: 30, top: 4, bottom: 4, containLabel: true },
     tooltip: { trigger: 'axis', axisPointer: { type: 'none' } },

@@ -8,7 +8,7 @@ import { createConnector, defaultProviders, type Provider } from '../src/ai/conn
 import { extractTask, reviewSuggestTask } from '../src/ai/tasks';
 import { validate, parseChecked, firstJsonObject } from '../src/ai/schema';
 import { vscodeProvider } from '../src/ai/providers/vscode';
-import { copilotProvider } from '../src/ai/providers/copilot';
+import { copilotProvider, COPILOT_ARGS } from '../src/ai/providers/copilot';
 import { DEFAULT_SETTINGS, type Settings } from '../src/round/round';
 import { saveIdea } from '../src/ideas/store';
 import { startServer, sampleIdea } from './helpers';
@@ -168,16 +168,25 @@ describe('AI connector', () => {
     expect((await c.run(extractTask, INPUT)).nodes).toHaveLength(2);
   });
 
-  it("Copilot CLI is never chosen by 'auto', only when pinned, and carries a sandbox note", async () => {
+  it("Copilot CLI sits in 'auto' after Claude Code and before the VS Code helper, with a verified note", async () => {
     const cop: Provider = { ...copilotProvider(), available: async () => true, complete: async () => JSON.stringify(VALID) };
     const auto = connector([cop]);
-    expect((await auto.status()).provider).toBeNull();
-    await expect(auto.run(extractTask, INPUT)).rejects.toThrow(/No AI available/);
-    expect((await auto.choices()).find((c) => c.id === 'copilot')).toMatchObject({ available: true, note: 'Sandbox not yet verified on this machine' });
-    expect((await auto.choices()).find((c) => c.id === 'auto')?.available).toBe(false);
+    expect(await auto.status()).toEqual({ provider: 'copilot', label: 'Copilot CLI', note: 'Verified with Copilot CLI 1.0.100' });
+    expect((await auto.choices()).find((c) => c.id === 'copilot')).toMatchObject({ available: true, note: 'Verified with Copilot CLI 1.0.100' });
+    expect((await auto.choices()).find((c) => c.id === 'auto')?.available).toBe(true);
+    const order = connector([fake('{}', { available: async () => false }), cop, fake('{}', { id: 'vscode', label: 'Copilot (VS Code)' })]);
+    expect((await order.status()).provider).toBe('copilot');
     const pinned = connector([cop], { ...DEFAULT_SETTINGS, ai: { provider: 'copilot' } });
-    expect(await pinned.status()).toEqual({ provider: 'copilot', label: 'Copilot CLI', note: 'Sandbox not yet verified on this machine' });
     expect((await pinned.run(extractTask, INPUT)).nodes).toHaveLength(2);
+  });
+
+  it('Copilot CLI is run with the prompt on stdin, every built-in tool excluded and CAFE_COPILOT_BIN honoured', async () => {
+    expect(COPILOT_ARGS).not.toContain('-p');
+    expect(COPILOT_ARGS.slice(0, 5)).toEqual(['-s', '--output-format', 'text', '--no-ask-user', '--disable-builtin-mcps']);
+    expect(COPILOT_ARGS.find((a) => a.startsWith('--excluded-tools='))).toContain('bash');
+    const old = process.env.CAFE_COPILOT_BIN;
+    process.env.CAFE_COPILOT_BIN = '/nonexistent/copilot';
+    try { expect(await copilotProvider().available()).toBe(true); } finally { if (old === undefined) delete process.env.CAFE_COPILOT_BIN; else process.env.CAFE_COPILOT_BIN = old; }
   });
 
   it('review suggestion is schema checked', async () => {
@@ -336,8 +345,7 @@ describe('/api/ai routes', () => {
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
     await saveIdea(s.root, sampleIdea());
     const st0 = await (await fetch(`${s.base}/api/ai/status`)).json() as any;
-    expect(st0.provider).not.toBe('copilot');
-    expect(st0.choices.find((c: any) => c.id === 'copilot').note).toBe('Sandbox not yet verified on this machine');
+    expect(st0.choices.find((c: any) => c.id === 'copilot').note).toBe('Verified with Copilot CLI 1.0.100');
     const bad = await post(s.base, '/api/ai/provider', { provider: 'fake' });
     expect(bad.status).toBe(400);
     expect((await post(s.base, '/api/ai/provider', { provider: 'none' })).status).toBe(200);

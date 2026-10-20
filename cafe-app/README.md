@@ -201,13 +201,15 @@ took. The choice is saved in `rules/settings.yaml`.
 | Provider | Found by | Command |
 |---|---|---|
 | Claude Code | `which claude` | `claude -p --output-format text --tools "" --max-turns 1 --strict-mcp-config --no-session-persistence`, prompt on stdin, in an empty temp folder, `CAFE_*` variables removed |
-| Copilot CLI | `which copilot` | `copilot -p <prompt> --deny-tool shell --deny-tool write --deny-tool read --deny-tool view --deny-tool fetch --deny-tool url --disable-builtin-mcps` |
+| Copilot CLI | `which copilot`, or the binary named by `CAFE_COPILOT_BIN` | `copilot -s --output-format text --no-ask-user --disable-builtin-mcps --excluded-tools=<every built-in tool> --deny-tool=shell --deny-tool=write --deny-tool=url --deny-tool=memory`, prompt on stdin, in an empty temp folder, `CAFE_*` variables removed |
 | VS Code helper | `~/.cafe-ai/vscode-helper.json` (`{port, token, model}`) and a `GET /health` on 127.0.0.1 that answers `ok: true` | `POST /complete` with the `x-cafe-token` header |
 
-Auto takes the first one found, in that order. **Copilot CLI is used only when you pick it.** Its flags are
-not yet verified, because it was not installed where this was built, and the chip shows "Sandbox not yet
-verified on this machine". Check the flags against `copilot --help` on a machine that has it before relying
-on it. The prompt goes on its command line, so other local users can see it with `ps`.
+Auto takes the first one found, in that order. Copilot CLI was checked against the real CLI (1.0.100): asked to
+run `ls`, read `/etc/hosts` or a file, or fetch a URL, it answers that it cannot, and the chip note says
+"Verified with Copilot CLI 1.0.100". Tools are switched off with `--excluded-tools` naming each built-in tool,
+because `--available-tools` with no value is ignored by the CLI. A newer CLI that adds a tool would need that list
+extended (`src/ai/providers/copilot.ts`). Set `CAFE_COPILOT_BIN=/path/to/copilot` when it is not on PATH. The
+prompt goes on stdin, so it does not show in `ps`.
 
 The VS Code helper is a small extension in `vscode-helper/`; see
 [`vscode-helper/README.md`](vscode-helper/README.md) for installing it and its security notes.

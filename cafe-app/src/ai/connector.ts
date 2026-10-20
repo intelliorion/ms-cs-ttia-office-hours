@@ -39,7 +39,7 @@ const CHOICE_LABELS: Record<AiChoice, string> = {
   auto: 'Automatic', claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', none: 'No AI: work by hand',
 };
 
-/** Claude Code, Copilot CLI (pinned only), then the VS Code helper. The fake comes first only when CAFE_AI_FAKE=1. */
+/** Claude Code, Copilot CLI, then the VS Code helper. The fake comes first only when CAFE_AI_FAKE=1. */
 export function defaultProviders(env: NodeJS.ProcessEnv = process.env): Provider[] {
   const real = [claudeProvider(), copilotProvider(), vscodeProvider()];
   return env.CAFE_AI_FAKE === '1' ? [fakeProvider(), ...real] : real;

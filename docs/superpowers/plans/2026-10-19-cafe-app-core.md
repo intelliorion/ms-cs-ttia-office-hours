@@ -107,7 +107,7 @@ cafe-app/
 - [ ] **Step 1: Create the branch and the package files**
 
 ```bash
-cd /Users/chongranhao/github/ms-cs-ttia-office-hours
+cd <repo root>
 git switch -c cafe-app-core
 mkdir -p cafe-app/src/workspace cafe-app/tests
 ```
@@ -3696,8 +3696,8 @@ Expected: all PASS, no type errors.
 
 This step needs the CLI from Task 12, so use a short script instead. Create `/tmp/cafe-ui-check.ts`:
 ```ts
-import { initWorkspace } from '/Users/chongranhao/github/ms-cs-ttia-office-hours/cafe-app/src/workspace/init';
-import { createApp } from '/Users/chongranhao/github/ms-cs-ttia-office-hours/cafe-app/src/server/server';
+import { initWorkspace } from './cafe-app/src/workspace/init';
+import { createApp } from './cafe-app/src/server/server';
 
 const root = '/tmp/cafe-ui-check';
 const clock = () => '2026-10-19';

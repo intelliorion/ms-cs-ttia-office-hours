@@ -44,6 +44,10 @@ export function starSize(node: Pick<GNode, 'type'>, degree: number): number {
 
 export const labelAlways = (node: Pick<GNode, 'type'>) => ALWAYS.includes(node.type);
 
+/** Star labels show in full up to this many characters; a longer one is cut with an ellipsis (the full text stays in the tooltip). */
+export const LABEL_MAX = 40;
+export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
+
 export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null) {
   const dashed = !edge.confirmed;
   if (selected) {

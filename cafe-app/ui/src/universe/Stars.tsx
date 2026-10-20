@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
-import { DIM, NODE_COLOURS, labelAlways, labelSpotVisible, phase, ringColour, starSize, type GNode, type Vec3 } from './graphView';
+import { DIM, NODE_COLOURS, labelAlways, labelSpotVisible, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture } from './haloTexture';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
@@ -170,7 +170,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
             <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId ? ' hot' : ''}`}>
-              <div className="l1" title={d.label}>{d.label}</div>
+              <div className="l1" title={d.label}>{starLabel(d.label)}</div>
               {d.type === 'Idea' && <div className="l2">{d.attrs?.closed ? `Closed · ${d.attrs.closed}` : String(d.attrs?.stageLabel ?? '')}</div>}
             </div>
           </Html>

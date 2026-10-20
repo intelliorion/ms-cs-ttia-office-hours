@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent } from './graphView';
+import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -46,5 +46,15 @@ describe('labelSpotVisible', () => {
     expect(v(1500, 1700, 1920, false)).toBe(true);
     expect(v(250, 400, 960, true)).toBe(true); // a half-size canvas: 500..800 on the stage
     expect(v(200, 400, 960, true)).toBe(false);
+  });
+  it('star labels: up to 40 characters in full, longer ones cut with an ellipsis', () => {
+    expect(starLabel('Collaboration Tooling Guidance')).toBe('Collaboration Tooling Guidance');
+    const forty = 'x'.repeat(LABEL_MAX);
+    expect(starLabel(forty)).toBe(forty);
+    const long = 'A very long idea title that goes on and on past the limit';
+    const cut = starLabel(long);
+    expect(cut.endsWith('…')).toBe(true);
+    expect(cut.length).toBeLessThanOrEqual(LABEL_MAX);
+    expect(long.startsWith(cut.slice(0, -1))).toBe(true);
   });
 });

@@ -6,7 +6,7 @@ import { readText, writeFileAtomic } from '../workspace/files';
 import { APPROVED_TOOLS } from '../graph/ontology';
 import type { DesignPlanInput, DesignPlanOutput, DesignPlanTask } from '../ai/tasks';
 import { mdLine, renderCafeCheckMd, skillGuidance, type DesignFeature, type DesignState } from './store';
-import { cafeCheck } from './cafecheck';
+import { cafeCheck, valueWordsIn } from './cafecheck';
 import { builderOf, pathwayLabel } from './tools';
 
 /**
@@ -22,6 +22,12 @@ export const NOT_APPROVED = 'Design is not approved yet';
 export const CUSTOM_APP_CSIC = 'A custom app is TTIA-Led: this idea needs the CSIC Repository before any build beyond a proof of concept.';
 export const DATA_RULE = 'Use synthetic data only: made-up, aggregated or sample data. Never personal, client or third-party data, and never a live connection to another system.';
 export const AGENT_FILE = 'BUILD-WITH-AGENT.md';
+export const NOT_PICKED_HEADING = '### Not picked';
+export const NOT_PICKED_NOTE = 'These tools were not picked for any feature; move the task or pick the tool.';
+
+/** Every word of the AI's plan, for the same value-word scan the Café check runs on the design. */
+export const planText = (plan: DesignPlanOutput): string =>
+  [...plan.tasks.flatMap((t) => [t.title, t.detail, t.done_when]), ...plan.risks].filter(Boolean).join('\n');
 
 /** The kit folder name for a tool: the canonical label in lower kebab case ("Power Apps" → "power-apps"). */
 export const toolSlug = (tool: string): string => tool.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -73,14 +79,25 @@ export function renderPlanMd(idea: Idea, state: DesignState, plan: DesignPlanOut
   out.push('## The one thing to show', '', oneThingToShow(state), '');
   out.push('## Tasks', '');
   if (!plan.tasks.length) out.push('(no tasks yet)', '');
-  for (const tool of toolsIn(plan.tasks)) {
+  const picked = new Set(state.features.map((f) => f.tool).filter(Boolean));
+  for (const tool of toolsIn(plan.tasks).filter((t) => picked.has(t))) {
     out.push(`### ${tool}`, '', `Pathway: ${pathwayLabel(tool, builder)}`, '');
     out.push(...taskLines(byTool(plan.tasks, tool)), '');
+  }
+  // A task whose tool no feature picked has no kit: it goes last, never under a kit's tool.
+  const stray = plan.tasks.filter((t) => !picked.has(t.tool));
+  if (stray.length) {
+    out.push(NOT_PICKED_HEADING, '', NOT_PICKED_NOTE, '');
+    for (const t of stray) out.push(...taskLines([t]).map((l, i) => (i === 0 ? `${l} (${mdLine(t.tool)})` : l)));
+    out.push('');
   }
   out.push('## Risks', '');
   out.push(plan.risks.length ? plan.risks.map((r) => `- ${mdLine(r)}`).join('\n') : '- (none named)', '');
   // The same check and the same renderer as design.md, so the section is a verbatim copy.
   out.push(renderCafeCheckMd(cafeCheck(idea, state)));
+  // The plan's own words get the same value-word scan; the design's check above stays as it is.
+  const planValue = valueWordsIn(planText(plan));
+  if (planValue.length) out.push(`Value words in the plan: ${planValue.join(', ')}`, '');
   return out.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 

@@ -7,7 +7,9 @@ import { readDesign, emptyDesign, renderDesignMd, loadSkill, type DesignState } 
 import { applyDesignEvent, askTeam } from '../src/design/brainstorm';
 import {
   renderPlanMd, kitFiles, designPlanInput, oneThingToShow, toolSlug, CUSTOM_APP_CSIC, AGENT_FILE,
+  NOT_PICKED_HEADING, NOT_PICKED_NOTE,
 } from '../src/design/kits';
+import { cafeCheck, valueWordsIn } from '../src/design/cafecheck';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
@@ -103,8 +105,11 @@ describe('plan.md and kits (renderers)', () => {
     expect(md.startsWith('# Plan — Email scheduler\n')).toBe(true);
     expect(md).toContain('## The one thing to show\n\nShows slots.\n');
     const h3 = md.split('\n').filter((l) => l.startsWith('### '));
-    expect(h3).toEqual(APPROVED_TOOLS.map((t) => `### ${t}`));
-    expect(md).toContain('- [ ] **Task 1 for Copilot Studio**\n  Detail 1\n  Done when: Done 1');
+    // Only custom app was picked: every other tool's task goes under the final Not picked heading.
+    expect(h3).toEqual(['### custom app', NOT_PICKED_HEADING]);
+    expect(md).toContain('- [ ] **Task 1 for Copilot Studio** (Copilot Studio)\n  Detail 1\n  Done when: Done 1');
+    const all = renderPlanMd(idea, { ...state, features: APPROVED_TOOLS.map((tool, i) => ({ id: `f${i}`, name: `F${i}`, tool, flags: [] })) }, plan);
+    expect(all.split('\n').filter((l) => l.startsWith('### '))).toEqual(APPROVED_TOOLS.map((t) => `### ${t}`));
     expect(md).toContain('## Risks\n\n- Risk one');
     const h2 = md.split('\n').filter((l) => l.startsWith('## '));
     expect(h2).toEqual(['## The one thing to show', '## Tasks', '## Risks', '## Café check']);
@@ -279,5 +284,78 @@ describe('Task 3 carry-overs', () => {
     expect(state.steps[0].answer).toBeUndefined();
     expect(state.steps[0].askedTeam).toEqual({ emailKey });
     expect((await loadIdea(root, ID)).checklist.s3c).toBeUndefined();
+  });
+});
+
+describe('Task 6 carry-overs', () => {
+  const base: DesignState = {
+    ...emptyDesign(), status: 'approved', approvedAt: '2026-10-20', summary: 'Shows slots.',
+    features: [
+      { id: 'a', name: 'Form', tool: 'Power Apps', flags: [] },
+      { id: 'b', name: 'Engine', tool: 'custom app', flags: ['custom-app'] },
+    ],
+    steps: [],
+  };
+  const t = (title: string, tool: string, extra: Partial<DesignPlanOutput['tasks'][number]> = {}) => ({ title, detail: 'D', tool, done_when: 'W', ...extra });
+
+  it('plan.md: a task whose tool no feature picked goes under a final Not picked heading, never under a kit', () => {
+    const idea = sampleIdea({ stage: 3 });
+    const plan: DesignPlanOutput = { tasks: [t('Clean the sample', 'Dataiku'), t('Build the form', 'Power Apps'), t('Hand over', 'custom app')], risks: [] };
+    const md = renderPlanMd(idea, base, plan);
+    const tasks = md.slice(md.indexOf('## Tasks'), md.indexOf('## Risks'));
+    expect(tasks.split('\n').filter((l) => l.startsWith('### '))).toEqual(['### Power Apps', '### custom app', NOT_PICKED_HEADING]);
+    const notPicked = tasks.slice(tasks.indexOf(NOT_PICKED_HEADING));
+    expect(notPicked).toContain(`${NOT_PICKED_HEADING}\n\n${NOT_PICKED_NOTE}\n`);
+    expect(notPicked).toContain('- [ ] **Clean the sample** (Dataiku)');
+    expect(tasks.slice(0, tasks.indexOf(NOT_PICKED_HEADING))).not.toContain('Clean the sample');
+    expect(md).not.toContain('### Dataiku');
+    // No kit for the unpicked tool either.
+    expect(Object.keys(kitFiles(idea, base, plan)).some((p) => p.startsWith('kit/dataiku/'))).toBe(false);
+    // Every task picked: no Not picked heading.
+    expect(renderPlanMd(idea, base, { tasks: plan.tasks.slice(1), risks: [] })).not.toContain(NOT_PICKED_HEADING);
+  });
+
+  it("plan.md: the Café check's value-word scan also runs over the plan's titles, details, done-when lines and risks", () => {
+    const idea = sampleIdea({ stage: 3 });
+    expect(valueWordsIn('Saves 20% and cuts costs; ROI next')).toEqual(['20%', 'costs', 'roi']);
+    const plan: DesignPlanOutput = {
+      tasks: [t('Measure the ROI', 'Power Apps'), t('Build', 'Power Apps', { detail: 'Show the savings' }), t('Hand over', 'custom app', { done_when: 'Saves 20%' })],
+      risks: ['KPI not agreed'],
+    };
+    const md = renderPlanMd(idea, base, plan);
+    expect(md).toContain('Value words in the plan: roi, savings, 20%, kpi');
+    // The design's own check stays exactly as design.md has it.
+    expect(cafeCheck(idea, base).valueWords).toEqual([]);
+    expect(cafeSection(md).startsWith(cafeSection(renderDesignMd(idea, base)))).toBe(true);
+    expect(md.trimEnd().endsWith('Value words in the plan: roi, savings, 20%, kpi')).toBe(true);
+    // A clean plan adds no line.
+    expect(renderPlanMd(idea, base, { tasks: [t('A', 'Power Apps'), t('B', 'Power Apps'), t('C', 'custom app')], risks: [] })).not.toContain('Value words in the plan');
+  });
+
+  it('a done event on an approved design (AI or /design/finish) clears approvedAt and sets it back to designing', async () => {
+    const s = await server();
+    await approvedDesign(s);
+    expect((await readDesign(s.root, ID))).toMatchObject({ status: 'approved', approvedAt: '2026-10-20' });
+    // The AI's done event, applied directly.
+    const idea = await loadIdea(s.root, ID);
+    const ai = await applyDesignEvent(s.root, idea, { t: 'done', summary: 'A different summary from the AI.' }, clock);
+    expect(ai.state.status).toBe('designing');
+    expect(ai.state.approvedAt).toBeUndefined();
+    expect(ai.designMd).not.toContain('Approved on');
+    // Approve again, then finish by hand: the same.
+    expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
+    const fin = await json(await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'A changed summary by hand.' }));
+    expect(fin.state.status).toBe('designing');
+    expect(fin.state.approvedAt).toBeUndefined();
+    expect(await readDesign(s.root, ID)).toMatchObject({ status: 'designing', summary: 'A changed summary by hand.' });
+    expect((await readDesign(s.root, ID)).approvedAt).toBeUndefined();
+    // The plan now waits for a new approval.
+    expect((await json(await s.post(`/api/ideas/${ID}/plan`))).error).toBe('Design is not approved yet');
+  });
+
+  it('/api/state exposes the approved tools list', async () => {
+    const s = await server();
+    const st = await json(await s.get('/api/state'));
+    expect(st.approvedTools).toEqual(APPROVED_TOOLS);
   });
 });

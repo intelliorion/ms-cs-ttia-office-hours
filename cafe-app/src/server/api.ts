@@ -27,7 +27,7 @@ import {
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
-import { edgeId } from '../graph/ontology';
+import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
 
 
@@ -68,6 +68,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
       criteria: CRITERIA,
       decisions: DECISION_LABELS,
       fields: { round: ROUND_FIELDS, settings: SETTING_FIELDS },
+      approvedTools: APPROVED_TOOLS,
     };
   });
 

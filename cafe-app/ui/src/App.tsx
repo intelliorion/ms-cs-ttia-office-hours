@@ -4,38 +4,50 @@ import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
 import { Drawers } from './layout/Drawers';
 import { useStore } from './state/store';
-import { IdeasList } from './panels/IdeasList';
+import { IdeasPane } from './panels/IdeasPane';
 import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
 import { Universe } from './universe/Universe';
-import { IdeaPopout } from './popouts/IdeaPopout';
 import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { NodeCard } from './popouts/NodeCard';
-import { focusLabel, focusKeyApplies } from './state/store';
+import { focusLabel, focusKeyApplies, escAction, isNarrow } from './state/store';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView } = useStore();
-  // Any star, an idea included, is only selected; its card offers "Open idea" for the pop-out.
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
+    leftView, openIdea, backToList, drawer, setDrawer } = useStore();
+  // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
-  const cardFor = selectedId && !popout && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
+  // No card for the idea whose details are already showing in the panel.
+  const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
+  const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, click: onSelect, openIdea: (id: string) => { select(`idea:${id}`); openPopout({ kind: 'idea', id }); }, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout };
+      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout };
     }
-  }, [select, onSelect, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout]);
+  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout]);
   useEffect(() => {
-    if (!cardFor || popout) return;
-    const on = (e: KeyboardEvent) => { if (e.key === 'Escape') select(null); };
+    // One Esc handler: idea details go Back, then a drawer closes, then the star card closes. A modal handles its own Esc.
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const detailsVisible = !focus && (!isNarrow() || drawer === 'ideas');
+      const a = escAction({ modal: !!popout, leftView, detailsVisible, drawer, card: !!cardFor, target: e.target });
+      if (a === 'none') return;
+      e.preventDefault();
+      if (a === 'blur') (e.target as HTMLElement).blur?.();
+      else if (a === 'back') backToList();
+      else if (a === 'drawer') setDrawer(null);
+      else select(null);
+    };
     document.addEventListener('keydown', on);
     return () => document.removeEventListener('keydown', on);
-  }, [cardFor, popout, select]);
+  }, [cardFor, popout, select, focus, drawer, leftView, backToList, setDrawer]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => { if (focusKeyApplies(e, !!popout)) { e.preventDefault(); toggleFocus(); } };
     document.addEventListener('keydown', on);
@@ -49,11 +61,11 @@ export default function App() {
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover} />
         )}
         <TitleBar />
-        {notice && !popout && <div className="notice" role="status">{notice.text}</div>}
+        {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
         {cardFor && <NodeCard nodeId={cardFor} />}
         {!focus && <>
         <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
-          <IdeasList />
+          <IdeasPane />
         </Panel>
         <Panel title="Pipeline" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
           <div className="sub-h">Ideas by stage</div>
@@ -73,7 +85,6 @@ export default function App() {
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
         </div>
-        {popout?.kind === 'idea' && <IdeaPopout id={popout.id} />}
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}
         {popout?.kind === 'outbox' && <OutboxPopout />}

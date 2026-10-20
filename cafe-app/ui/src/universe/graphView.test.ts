@@ -35,3 +35,16 @@ describe('extent', () => {
   it('is null for no points, so an empty graph never yields NaN', () => expect(extent([])).toBeNull());
   it('spans the points', () => expect(extent([[1, 5], [-3, 2], [4, -1]])).toEqual({ x0: -3, x1: 4, y0: -1, y1: 5 }));
 });
+
+describe('labelSpotVisible', () => {
+  it('keeps labels out from under the side panels, unless Focus (or drawers) frees the whole stage', async () => {
+    const { labelSpotVisible: v } = await import('./graphView');
+    expect(v(600, 800, 1920, true)).toBe(true);
+    expect(v(470, 600, 1920, true)).toBe(false); // starts under the Ideas panel
+    expect(v(1300, 1450, 1920, true)).toBe(false); // runs under the right panels
+    expect(v(100, 300, 1920, false)).toBe(true);
+    expect(v(1500, 1700, 1920, false)).toBe(true);
+    expect(v(250, 400, 960, true)).toBe(true); // a half-size canvas: 500..800 on the stage
+    expect(v(200, 400, 960, true)).toBe(false);
+  });
+});

@@ -15,7 +15,7 @@ const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcr
  * the AI's words (summary, answers, flags, names) are rendered as text and nothing else.
  */
 export function InboxPopout() {
-  const { state, inbox, refreshInbox, refresh, closePopout, openPopout, select, notice, setNotice } = useStore();
+  const { state, inbox, refreshInbox, refresh, closePopout, openIdea, notice, setNotice } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const going = useRef(false); // set at once, so a second click in the same tick cannot start a second call
   const [over, setOver] = useState(false);
@@ -94,7 +94,7 @@ export function InboxPopout() {
     setPaste('');
   };
 
-  const openIdea = (id: string) => { select(`idea:${id}`); openPopout({ kind: 'idea', id }); };
+
   const waiting = (inbox?.counts.new ?? 0) + (inbox?.counts.ok ?? 0) + (inbox?.counts.held ?? 0);
 
   return (

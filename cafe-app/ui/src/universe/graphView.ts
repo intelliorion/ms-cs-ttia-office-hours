@@ -79,3 +79,17 @@ export function extent(points: ReadonlyArray<readonly [number, number, ...number
   for (const [x, y] of points) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   return { x0, x1, y0, y1 };
 }
+
+/** The 1920-wide stage: the Ideas panel covers x < 480 and the Pipeline and Demand panels x > 1440. */
+export const STAGE_W = 1920;
+export const CLEAR_LEFT = 480;
+export const CLEAR_RIGHT = 1440;
+/**
+ * Can a label sit at this box (left and right edges, in canvas pixels)? With the side panels showing, only inside the
+ * centre gap between them; with Focus on (or on a narrow window, where the panels are drawers) the whole stage.
+ */
+export function labelSpotVisible(x0: number, x1: number, canvasWidth: number, panels: boolean): boolean {
+  if (!panels) return true;
+  const k = canvasWidth > 0 ? STAGE_W / canvasWidth : 1;
+  return x0 * k >= CLEAR_LEFT && x1 * k <= CLEAR_RIGHT;
+}

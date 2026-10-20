@@ -7,7 +7,7 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 
 | File | What it is | What to expect |
 |---|---|---|
-| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. Row 7 has no title, so the import reports it. Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
+| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. The 7th submission has no title, so the import reports it as row 8 (the header is row 1). Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
 | 02-reply-with-id.eml | Priya Nair answers our three questions; subject has CAFE-2026-002 | Sure match to Desk booking assistant. Our quoted E2 is split off below "-----Original Message-----". |
 | 03-reply-no-id.eml | Reply whose subject is only the idea title | Likely match to Desk booking assistant (title in subject). |
 | 04-sender-only.eml | Mateo Álvarez writes "Quick update" | No ID or title, so a sender match (submitter, 0.8) or a question to you. |

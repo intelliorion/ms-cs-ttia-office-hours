@@ -145,7 +145,7 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
       <ambientLight intensity={0.2} />
       <group ref={spin}>
         <Links edges={graph.edges} pos={pos} selectedId={selectedId} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} onSelect={onSelect} onHover={onHover} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}

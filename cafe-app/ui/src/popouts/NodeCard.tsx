@@ -8,7 +8,7 @@ import { LinkTable } from './LinkTable';
 
 /** Small floating card for any star that is not an idea: its links and where each came from. */
 export function NodeCard({ nodeId }: { nodeId: string }) {
-  const { graph, select, refresh, state, openPopout } = useStore();
+  const { graph, select, refresh, state, openIdea } = useStore();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const node = graph?.nodes.find((n: any) => n.id === nodeId);
@@ -30,7 +30,7 @@ export function NodeCard({ nodeId }: { nodeId: string }) {
         <div className="ic-body">
           {m.emails.length > 0 && <div className="r3">{m.emails.map((e) => <span key={e} className={`mail${e.includes('✓') ? ' done' : ''}`}>{e}</span>)}</div>}
           {m.late && <div className="late">{m.late}</div>}
-          <button className="pill" data-action="open-idea" onClick={() => openPopout({ kind: 'idea', id: m.id })}>Open idea</button>
+          <button className="pill" data-action="open-idea" onClick={() => openIdea(m.id)}>Open idea</button>
         </div>
       </section>
     );

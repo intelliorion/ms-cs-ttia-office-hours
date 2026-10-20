@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -72,23 +72,57 @@ async function seedAiLinks() {
   await fs.writeFile(path.join(dir, 'ai-links.jsonl'), links.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
 
-// The idea pop-out, a review's suggestion inside it, and the card for a star that is not an idea.
+// Ideas open in the left panel, not a pop-out: a real click on a list item shows its details beside the universe
+// (star selected and highlighted), a review's suggestion inside them, Back to the list, then a star's card → Open idea.
+const DETAILS = '[data-testid="idea-details"]';
 async function popoutShots(p) {
-  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002')); // the card's Open idea
-  await p.waitForSelector('.idea-pop');
+  const assert = (ok, msg) => { if (!ok) throw new Error(`panel: ${msg}`); };
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await sleep(1500);
+  const item = p.locator('.idea-list li').filter({ has: p.locator('.iid', { hasText: '2026-002' }) });
+  await item.click(); // a real pointer click
+  await p.waitForSelector(DETAILS);
+  assert((await p.locator('[role="dialog"]').count()) === 0, 'a list click opened a dialog');
+  assert(await p.isHidden('.idea-list'), 'the list still shows beside the details');
+  assert((await p.evaluate(() => document.querySelector('.side-panel.left .id-scroll').scrollWidth <= document.querySelector('.side-panel.left .id-scroll').clientWidth)), 'the details overflow sideways');
   await sleep(3500);
-  await shot(p, '06-popout.png');
-  // A CSIC review through the page: tick two criteria, pick the decision, give a reason, save.
-  const crit = p.locator('.idea-pop .criteria input');
+  await p.mouse.move(960, 1060);
+  await shot(p, '30-panel-idea.png');
+  // A CSIC review through the panel: tick two criteria, pick the decision, give a reason, save.
+  const crit = p.locator(`${DETAILS} .criteria input`);
   await crit.nth(0).check(); await crit.nth(2).check();
-  await p.selectOption('.idea-pop [data-action="decision"]', 'csic');
-  await p.fill('.idea-pop textarea.reason', 'It needs the live shared mailbox, so it belongs in the CSIC Repository.');
-  await p.click('.idea-pop [data-action="save-review"]');
+  await p.selectOption(`${DETAILS} [data-action="decision"]`, 'csic');
+  await p.fill(`${DETAILS} textarea.reason`, 'It needs the live shared mailbox, so it belongs in the CSIC Repository.');
+  await p.click(`${DETAILS} [data-action="save-review"]`);
   await p.waitForSelector('[data-testid="suggest"]');
   await sleep(800);
-  await shot(p, '07-popout-suggest.png');
-  await p.click('.idea-pop [data-action="suggest-no"]');
+  await shot(p, '07-panel-suggest.png');
+  await p.click(`${DETAILS} [data-action="suggest-no"]`);
+  await p.click(`${DETAILS} [data-action="back"]`);
+  await p.waitForSelector(DETAILS, { state: 'detached' });
+  assert(await p.isVisible('.idea-list'), 'Back did not show the list');
+  assert((await p.evaluate(() => document.querySelector('.idea-list li.sel')?.textContent ?? '')).includes('2026-002'), 'Back lost the selection');
+  await sleep(800);
+  await shot(p, '31-panel-back.png');
+  // Esc closes the star card that the kept selection shows; then select the star again and open it from its card.
   await p.keyboard.press('Escape');
+  await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
+  await p.waitForSelector('[data-testid="ideacard"]');
+  await sleep(1500);
+  await p.click('[data-testid="ideacard"] [data-action="open-idea"]');
+  await p.waitForSelector(DETAILS);
+  assert((await p.locator('[role="dialog"]').count()) === 0, 'Open idea opened a dialog');
+  assert((await p.locator('[data-testid="ideacard"]').count()) === 0, 'the card stayed over the details');
+  await sleep(2500);
+  await shot(p, '32-card-open.png');
+  // The lower sections (Graph links, Details, History) in the same column.
+  await p.evaluate(() => { const el = document.querySelector('.side-panel.left .id-scroll'); el.scrollTop = el.scrollHeight; });
+  await sleep(500);
+  await shot(p, '33-panel-lower.png');
+  // Esc in the details goes Back.
+  await p.mouse.click(960, 1070); // focus off any control (empty bottom of the stage)
+  await p.keyboard.press('Escape');
+  await p.waitForSelector(DETAILS, { state: 'detached' });
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
   await sleep(1500);
   await p.evaluate(() => window.__cafe.click('capability:agent-design-guidance'));
@@ -183,24 +217,24 @@ async function aiShots(p) {
   await shot(p, '16-ai-test.png');
   await p.keyboard.press('Escape');
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
-  await p.waitForSelector('.idea-pop');
+  await p.waitForSelector('[data-testid="idea-details"]');
   await sleep(3000);
-  await p.click('.idea-pop [data-action="ai-grow"]');
-  await p.waitForSelector('.idea-pop .pop-notice:has-text("Added")', { timeout: 60000 });
+  await p.click('[data-testid="idea-details"] [data-action="ai-grow"]');
+  await p.waitForSelector('[data-testid="idea-details"] .pop-notice:has-text("Added")', { timeout: 60000 });
   await sleep(3500);
-  await p.locator('.idea-pop [data-action="ai-grow"]').scrollIntoViewIfNeeded();
+  await p.locator('[data-testid="idea-details"] [data-action="ai-grow"]').scrollIntoViewIfNeeded();
   await shot(p, '14-grown.png');
   // A confirmed AI link still has Remove.
-  const row = p.locator('.idea-pop li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]');
+  const row = p.locator('[data-testid="idea-details"] li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]');
   await row.scrollIntoViewIfNeeded();
   await row.evaluate((el) => { el.style.outline = '1px solid #f5b36b'; });
   await sleep(500);
   await shot(p, '17-ai-link-remove.png');
   await row.evaluate((el) => { el.style.outline = ''; });
   await row.locator('[data-action="remove-link"]').click();
-  await p.waitForSelector('.idea-pop .pop-notice:has-text("Link removed.")');
-  await p.waitForSelector('.idea-pop li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]', { state: 'detached' });
-  await p.keyboard.press('Escape');
+  await p.waitForSelector('[data-testid="idea-details"] .pop-notice:has-text("Link removed.")');
+  await p.waitForSelector('[data-testid="idea-details"] li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]', { state: 'detached' });
+  await p.click('[data-testid="idea-details"] [data-action="back"]');
 }
 
 // The Inbox: a reply sorted by the fake AI (Applied + Needs your OK), a held list of people, and a note with no Café ID.
@@ -319,11 +353,12 @@ async function ideaCardShots(p) {
   assert((await p.locator('[role="dialog"]').count()) === 0, 'selecting opened a dialog');
   await shot(p, '20-idea-card.png');
   await p.click('[data-testid="ideacard"] [data-action="open-idea"]');
-  await p.waitForSelector('[role="dialog"]');
+  await p.waitForSelector('[data-testid="idea-details"]');
+  assert((await p.locator('[role="dialog"]').count()) === 0, 'Open idea opened a dialog');
   await sleep(2500);
   await shot(p, '21-idea-card-open.png');
-  await p.keyboard.press('Escape');
-  await p.waitForSelector('[role="dialog"]', { state: 'detached' });
+  await p.click('[data-testid="idea-details"] [data-action="back"]');
+  await p.waitForSelector('[data-testid="idea-details"]', { state: 'detached' });
   await p.evaluate(() => window.__cafe.select(null));
 }
 
@@ -341,6 +376,13 @@ async function drawersShots(browser, errors) {
   await p.waitForSelector('[data-testid="drawer"] .idea-list');
   await sleep(800);
   await shot(p, '15-drawers.png');
+  // The drawer hosts an idea's details the same way, with Back; Esc goes Back first, then closes the drawer.
+  await p.locator('[data-testid="drawer"] .idea-list li').first().click();
+  await p.waitForSelector('[data-testid="drawer"] [data-testid="idea-details"]');
+  await sleep(1500);
+  await shot(p, '15-drawer-idea.png');
+  await p.click('[data-testid="drawer"] [data-action="back"]');
+  await p.waitForSelector('[data-testid="drawer"] .idea-list');
   await p.keyboard.press('Escape');
   await p.waitForSelector('[data-testid="drawer"]', { state: 'detached' });
   await p.click('[data-action="drawer-charts"]');
@@ -420,7 +462,7 @@ async function main() {
       process.exitCode = errors.length ? 1 : 0;
       return;
     }
-    if (only === 'popout') {
+    if (only === 'popout' || only === 'panel') {
       await popoutShots(p);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');

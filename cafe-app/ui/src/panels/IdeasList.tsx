@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
 import { STAGE_RING } from '../universe/graphView';
 import { filterIdeas, stageKey, emailChips } from './filterIdeas';
 
-export function IdeasList() {
-  const { state, select, hover, openPopout, selectedId } = useStore();
+/** The list stays mounted while an idea's details show (hidden), so its search, chips and scroll are kept for Back. */
+export function IdeasList({ hidden = false }: { hidden?: boolean }) {
+  const { state, hover, openPopout, openIdea, selectedId } = useStore();
+  const listRef = useRef<HTMLUListElement>(null);
+  const scrollTop = useRef(0);
+  // A hidden (display:none) list can lose its scroll offset; put it back when the list shows again.
+  useLayoutEffect(() => { if (!hidden && listRef.current) listRef.current.scrollTop = scrollTop.current; }, [hidden]);
   const [q, setQ] = useState('');
   const [stages, setStages] = useState<string[]>([]);
   const ideas: any[] = state?.ideas ?? [];
@@ -21,7 +26,7 @@ export function IdeasList() {
   const chips: [string, string][] = [...Object.keys(state.stageNames).map((k): [string, string] => [k, state.stageNames[k]]), ['closed', 'Closed']];
   const toggle = (k: string) => setStages((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
   return (
-    <div className="ideas">
+    <div className="ideas" hidden={hidden} style={hidden ? { display: 'none' } : undefined}>
       <input className="search" type="search" placeholder="Search ID, title or function" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search ideas" />
       <div className="chips">
         {chips.map(([k, n]) => (
@@ -29,7 +34,7 @@ export function IdeasList() {
         ))}
       </div>
       <div className="count">{shown.length} of {ideas.length} ideas</div>
-      <ul className="idea-list">
+      <ul className="idea-list" ref={listRef} onScroll={(e) => { scrollTop.current = e.currentTarget.scrollTop; }}>
         {shown.map((i) => {
           const key = stageKey(i);
           const id = `idea:${i.id}`;
@@ -37,7 +42,7 @@ export function IdeasList() {
           const late = i.overdue?.[0];
           return (
             <li key={i.id} className={selectedId === id ? 'sel' : ''} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
-              onClick={() => { select(id); openPopout({ kind: 'idea', id: i.id }); }}>
+              onClick={() => openIdea(i.id)}>
               <div className="r1" title={i.title}><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
               <div className="r2">
                 <span className="fr">{[i.function, i.region].filter(Boolean).join(' · ') || '—'}</span>

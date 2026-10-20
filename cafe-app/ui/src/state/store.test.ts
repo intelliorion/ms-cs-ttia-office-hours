@@ -107,3 +107,38 @@ describe('focus mode', () => {
     expect(k({ key: 'x', target: { tagName: 'DIV' } }, false)).toBe(false);
   });
 });
+
+describe('left panel view', () => {
+  it('opening an idea shows its details, selects its star, closes any modal and turns Focus off', async () => {
+    const { openIdeaPatch } = await import('./store');
+    expect(openIdeaPatch('CAFE-2026-002', false)).toEqual({ leftView: { kind: 'idea', id: 'CAFE-2026-002' }, selectedId: 'idea:CAFE-2026-002', popout: null, focus: false, drawer: null });
+    expect(openIdeaPatch('CAFE-2026-002', true).drawer).toBe('ideas');
+  });
+  it('back returns to the list and keeps the selection', async () => {
+    const mem: Record<string, string> = {};
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v; } });
+    const { useStore, backPatch } = await import('./store');
+    expect(backPatch()).toEqual({ leftView: { kind: 'list' }, notice: null, suggest: null });
+    useStore.setState({ focus: true, popout: { kind: 'inbox' } });
+    useStore.getState().openIdea('CAFE-2026-003');
+    expect(useStore.getState()).toMatchObject({ leftView: { kind: 'idea', id: 'CAFE-2026-003' }, selectedId: 'idea:CAFE-2026-003', focus: false, popout: null });
+    expect(mem['cafe-focus']).toBe('0');
+    useStore.setState({ notice: { text: 'x' }, suggest: { id: 'CAFE-2026-003', stage: 3, label: 'y' } });
+    useStore.getState().backToList();
+    expect(useStore.getState()).toMatchObject({ leftView: { kind: 'list' }, selectedId: 'idea:CAFE-2026-003', notice: null, suggest: null });
+    vi.unstubAllGlobals();
+  });
+  it('Esc: a modal handles its own, then details go back, then a drawer closes, then the card', async () => {
+    const { escAction: esc } = await import('./store');
+    const idea = { kind: 'idea', id: 'x' } as const, list = { kind: 'list' } as const;
+    const div = { tagName: 'DIV' };
+    expect(esc({ modal: true, leftView: idea, detailsVisible: true, drawer: null, card: true, target: div })).toBe('none');
+    expect(esc({ modal: false, leftView: idea, detailsVisible: true, drawer: 'ideas', card: true, target: div })).toBe('back');
+    expect(esc({ modal: false, leftView: idea, detailsVisible: true, drawer: null, card: false, target: { tagName: 'TEXTAREA' } })).toBe('blur');
+    expect(esc({ modal: false, leftView: idea, detailsVisible: true, drawer: null, card: false, target: { tagName: 'INPUT', type: 'checkbox' } })).toBe('back');
+    expect(esc({ modal: false, leftView: idea, detailsVisible: false, drawer: null, card: true, target: div })).toBe('deselect');
+    expect(esc({ modal: false, leftView: list, detailsVisible: true, drawer: 'charts', card: true, target: div })).toBe('drawer');
+    expect(esc({ modal: false, leftView: list, detailsVisible: true, drawer: null, card: true, target: div })).toBe('deselect');
+    expect(esc({ modal: false, leftView: list, detailsVisible: true, drawer: null, card: false, target: div })).toBe('none');
+  });
+});

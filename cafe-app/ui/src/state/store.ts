@@ -5,7 +5,6 @@ import type { InboxView } from '../popouts/inboxHelpers';
 
 export type Popout =
   | null
-  | { kind: 'idea'; id: string }
   | { kind: 'import' }
   | { kind: 'round' }
   | { kind: 'outbox' }
@@ -29,6 +28,33 @@ export function focusKeyApplies(e: { key: string; ctrlKey?: boolean; metaKey?: b
 
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
+/** What the left (Ideas) panel shows: the list, or one idea's details with a Back button. */
+export type LeftView = { kind: 'list' } | { kind: 'idea'; id: string };
+export const LIST_VIEW: LeftView = { kind: 'list' };
+/** Below 1000px the side panels are drawers (see theme.css). */
+export function isNarrow(): boolean { try { return window.matchMedia('(max-width: 999px)').matches; } catch { return false; } }
+/**
+ * Opening an idea: the left panel shows its details, its star is selected (the universe flies to it),
+ * any modal closes, Focus turns off so the panel shows, and on a narrow window the Ideas drawer opens to host it.
+ */
+export function openIdeaPatch(id: string, narrow: boolean) {
+  return { leftView: { kind: 'idea', id } as LeftView, selectedId: `idea:${id}`, popout: null, focus: false, drawer: (narrow ? 'ideas' : null) as Drawer };
+}
+/** Back to the list: the selection and the camera stay; the idea's notice and suggestion go. */
+export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null }; }
+export type EscAction = 'none' | 'blur' | 'back' | 'drawer' | 'deselect';
+/** What Esc does, in order: a modal handles its own; a text field lets go; idea details go back; a drawer closes; a star card closes. */
+export function escAction(s: { modal: boolean; leftView: LeftView; detailsVisible: boolean; drawer: Drawer; card: boolean; target?: any }): EscAction {
+  if (s.modal) return 'none';
+  const t = s.target; const tag = String(t?.tagName ?? '').toUpperCase();
+  const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && !/^(checkbox|radio|button|submit)$/i.test(String(t?.type ?? ''))) || t?.isContentEditable;
+  if (typing && s.leftView.kind === 'idea' && s.detailsVisible) return 'blur';
+  if (s.leftView.kind === 'idea' && s.detailsVisible) return 'back';
+  if (s.drawer) return 'drawer';
+  if (s.card) return 'deselect';
+  return 'none';
+}
+
 export interface AppState {
   state: any | null;
   graph: any | null;
@@ -42,6 +68,10 @@ export interface AppState {
   focus: boolean;
   toggleFocus: () => void;
   popout: Popout;
+  leftView: LeftView;
+  /** Show an idea's details in the left panel (and select its star). */
+  openIdea: (id: string) => void;
+  backToList: () => void;
   notice: Notice | null;
   suggest: Suggest | null;
   ai: AiStatus | null;
@@ -64,7 +94,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -86,6 +116,8 @@ export const useStore = create<AppState>((set) => ({
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
   openPopout: (p) => set({ popout: p, drawer: null }),
+  openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return openIdeaPatch(id, isNarrow()); }),
+  backToList: () => set(backPatch()),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
   setSuggest: (x) => set({ suggest: x }),

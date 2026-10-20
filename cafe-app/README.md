@@ -17,15 +17,20 @@ panels, large white titles and pill buttons at the bottom.
   pain points, capabilities, tools and systems orbit the ideas they relate to. Click a star to fly to it and
   see its card; hover to light up its links. Links below 0.7 confidence are dashed and marked unconfirmed.
   If the browser has no WebGL it falls back to a flat 2D map.
-- **Left: ideas.** The list of ideas, with a coloured ring for the stage. Click one to open it.
+- **Left: ideas.** The list of ideas, with a coloured ring for the stage. Click one and the universe flies to
+  its star (its links lit, the rest dimmed) while the left panel switches to that idea's details, in one column:
+  any suggested move (Yes/No), Review, Stage, Emails, Graph links (Confirm/Remove, Grow the universe), Details
+  and History. **← Back** (or Esc) returns to the list where you left it (same search, filters and scroll); the
+  star stays selected. Opening an idea turns Focus off so the panel shows.
 - **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
-- **Pop-outs.** The idea (review, emails, stage, history, graph links), Import, Round, Outbox and AI open in
-  front of the universe; close them with the X.
+- **Pop-outs.** Import, Round, Outbox, Inbox and AI open in front of the universe; close them with the X or Esc.
+  Ideas never open in a pop-out: an idea link in the Inbox or the late list opens it in the left panel.
 - **Narrow windows.** Below 1000px wide the side panels become drawers: tap the "Ideas" tab on the left or
-  "Charts" on the right; close with the X or Esc. The universe stays behind them.
+  "Charts" on the right; close with the X or Esc. The universe stays behind them. The Ideas drawer shows an idea's details the
+  same way, with Back; Esc goes Back first, then closes the drawer.
 - **Bottom centre.** Reset view, Labels and Focus.
 - **Focus.** The Focus button (or the F key) hides every panel and drawer so only the universe shows; clicks still work. Click again (Show panels) to bring them back.
-- **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button opens the pop-out. Clicking an idea in the Ideas list opens the pop-out directly.
+- **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
 - **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
   and the AI chip (which shows who is answering).
 
@@ -92,12 +97,12 @@ npm run dev:ui                                        # the UI with hot reload; 
    appear as stars and in the left list.
 3. **Idea** (click it in the list or the universe): read it, draft E1, and set the stage forward or back, or
    close it. Every change is logged and nothing is ever blocked.
-4. **Review** (in the idea pop-out): tick the five criteria, pick a decision, give a reason. Saving drafts
+4. **Review** (in the idea's details, left panel): tick the five criteria, pick a decision, give a reason. Saving drafts
    the decision email and suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
    once you close it as CSIC. Links the idea has in the universe are listed here too, with Confirm and
    Remove.
-5. **Emails** (in the idea pop-out) and **Outbox** (pop-out): approve and copy, send from Outlook, mark as
+5. **Emails** (in the idea's details) and **Outbox** (pop-out): approve and copy, send from Outlook, mark as
    sent. E2 starts a five-day reply clock; use "Reply received" on the idea when they answer. Marking E3,
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
 6. **Round** (pop-out): write `status.csv` and the review pack for TTIA.
@@ -186,9 +191,9 @@ ideas/<idea>/notes/       transcripts, notes and documents filed against an idea
 
 With no AI, everything above works by hand and nothing breaks. With one, the app can do two things:
 
-- **Grow the universe from this idea** (in the idea pop-out): reads the idea's title, challenge, current
+- **Grow the universe from this idea** (in the idea's details): reads the idea's title, challenge, current
   process and outcomes and proposes capabilities, systems, pain points and tools, with links.
-- **Suggest a review** (in the idea pop-out): fills in the five criteria, a decision and a reason for you to
+- **Suggest a review** (in the idea's details): fills in the five criteria, a decision and a reason for you to
   edit. It is highlighted until you change it.
 
 The **AI chip** in the title bar says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
@@ -223,7 +228,7 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 - The answer is **checked against a schema** before anything is used. Anything else is thrown away and the
   app says it is working by hand.
 - **High-confidence links between stars you already have are added at once; anything that would add a new
-  star waits for your Yes; you can remove any AI link from the idea pop-out.** A link below 0.7 comes in as
+  star waits for your Yes; you can remove any AI link from the idea's details.** A link below 0.7 comes in as
   pending (dashed, unconfirmed) until you confirm it. **New stars always need a Yes**, whatever the AI's
   confidence. After "Grow the universe" the app says how many links were added and how many wait for you.
   A link you removed is not proposed again.
@@ -261,7 +266,7 @@ the fly-to lands, and saves `scale-universe.png` and `scale-report.json`. Nothin
 
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so
-a full tour takes several minutes. `--only=panels|hover|popout|popouts2|ai|inbox|inboxhand|drawers|empty` runs one part; `--only=ai` and `--only=inbox`
+a full tour takes several minutes. `--only=panels|hover|panel|popouts2|ai|inbox|inboxhand|drawers|focus|ideacard|empty` runs one part (`panel`, also `popout`, clicks a list item and checks the idea opens in the left panel with no dialog, Back, and the star card's Open idea); `--only=ai` and `--only=inbox`
 need `CAFE_AI_FAKE=1`; `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
 
 ## Before the first round

@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
-import { DIM, NODE_COLOURS, labelAlways, phase, ringColour, starSize, type GNode, type Vec3 } from './graphView';
+import { DIM, NODE_COLOURS, labelAlways, labelSpotVisible, phase, ringColour, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture } from './haloTexture';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
@@ -15,6 +15,8 @@ export interface StarsProps {
   selectedId: string | null;
   hoverId: string | null;
   labels: boolean;
+  /** Focus mode: no side panels, so labels may use the whole stage. */
+  focus?: boolean;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }
@@ -39,7 +41,7 @@ function emissiveByInstance(m: Material) {
 }
 
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
-export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSelect, onHover }: StarsProps) {
+export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, onSelect, onHover }: StarsProps) {
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
   const hit = useRef<InstancedMesh>(null);
@@ -93,6 +95,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSe
   // Never cluttered: labels are placed in priority order and any that would overlap one already placed is hidden.
   const placeLabels = (camera: import('three').Camera) => {
     const g = root.current; if (!g) return;
+    const narrowNow = typeof window !== 'undefined' && window.innerWidth < 1000;
     const rank = (id: string, type: string, i: number) =>
       (id === selectedId || id === hoverId ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (TYPE_RANK[type] ?? 9) * 10 - sizes[i];
     const order = nodes.map((d, i) => [d, i] as const).filter(([d]) => labelEls.current.has(d.id))
@@ -116,7 +119,9 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSe
       const top = y - wh[1] / 2 + 2, bottom = y + wh[1] / 2 - 2;
       const right: Box = [x + off - 4, top, x + off + 2 + wh[0], bottom];
       const left: Box = [x - off - 2 - wh[0], top, x - off + 4, bottom];
-      const free = (b: Box) => !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+      // Not under the side panels (unless Focus hides them, or the window is narrow and they are drawers).
+      const panels = !focus && !narrowNow;
+      const free = (b: Box) => labelSpotVisible(b[0], b[2], size.width, panels) && !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
       const box = tmpV.z > 1 ? null : free(right) ? right : free(left) ? left : null;
       el.style.visibility = box ? 'visible' : 'hidden';
       el.classList.toggle('left', box === left);

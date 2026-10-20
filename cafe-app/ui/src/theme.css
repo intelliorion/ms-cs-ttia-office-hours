@@ -318,3 +318,32 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ib-more{align-self:flex-start;margin-top:4px}
 .ib-guess{font-style:normal;color:var(--amber);font-size:12px}
 .ib-idea .iid{text-decoration:none;display:inline-block}
+
+/* Idea details in the left panel (and the narrow Ideas drawer): one column, Back on top, the rest scrolls. */
+.idea-detail{display:flex;flex-direction:column;flex:1;min-height:0;color:var(--text)}
+.id-head{flex:none;display:flex;align-items:center;gap:10px;padding:2px 0 8px}
+.id-head .iid{margin:0}
+.id-head .stg{margin-left:auto}
+.btn.back{padding:6px 14px 6px 12px;font-size:14px;border-color:rgba(125,211,207,.7);color:#fff;background:rgba(125,211,207,.14)}
+.btn.back:hover{background:rgba(125,211,207,.26)}
+.id-title{flex:none;margin:0;font-size:21px;line-height:1.25;font-weight:700;color:#fff;overflow-wrap:anywhere}
+.idea-detail .pop-sub{flex:none;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:13px}
+.idea-detail .pop-strip{padding:8px 0;max-height:240px;border-top:1px solid rgba(160,190,185,.16)}
+.idea-detail .suggest-bar{flex-wrap:wrap;gap:8px 10px;padding:8px 10px}
+.idea-detail .sg-t{flex:1 1 100%;font-size:15px}
+.id-scroll{flex:1 1 0;min-height:0;overflow-y:auto;overflow-x:hidden;margin-right:-10px;padding-right:10px;border-top:1px solid rgba(160,190,185,.16)}
+.id-scroll::-webkit-scrollbar{width:6px}
+.id-scroll::-webkit-scrollbar-thumb{background:rgba(160,190,185,.3);border-radius:3px}
+.idea-detail .sec h3{font-size:17px}
+.idea-detail select,.idea-detail textarea{background:rgba(10,14,14,.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:14px;padding:7px 10px;outline:none;max-width:100%;box-sizing:border-box}
+.idea-detail select:focus,.idea-detail textarea:focus{border-color:var(--teal)}
+.idea-detail select option,.idea-detail select optgroup{background:#151c1c;color:var(--text)}
+.idea-detail .stage-menu select{flex:1;min-width:0}
+.idea-detail .rv-foot{flex-wrap:wrap}
+.idea-detail .rv-foot .btn{margin-left:auto}
+.idea-detail .field-row{grid-template-columns:1fr;gap:0}
+.idea-detail .mr2{padding-left:0;flex-wrap:wrap}
+.idea-detail .mails .acts{max-width:none;margin-left:auto}
+.idea-detail .ai-row .btn{white-space:normal;text-align:left}
+.idea-detail .history li{grid-template-columns:48px 1fr auto;gap:8px;font-size:13.5px}
+.idea-detail .copy-fallback textarea{width:100%}

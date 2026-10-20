@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
 import { useStore } from '../state/store';
-import { IdeasList } from '../panels/IdeasList';
+import { IdeasPane } from '../panels/IdeasPane';
 import { StageChart, SupportChart, FunctionChart, Waiting } from '../panels/Charts';
 
 /**
@@ -9,12 +8,7 @@ import { StageChart, SupportChart, FunctionChart, Waiting } from '../panels/Char
  */
 export function Drawers() {
   const { drawer, setDrawer } = useStore();
-  useEffect(() => {
-    if (!drawer) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(null); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [drawer, setDrawer]);
+  // Esc is handled in App (escAction): idea details go Back first, then the drawer closes.
   return (
     <>
       <button className="edge-tab left" data-action="drawer-ideas" aria-expanded={drawer === 'ideas'} onClick={() => setDrawer(drawer === 'ideas' ? null : 'ideas')}>Ideas</button>
@@ -26,7 +20,7 @@ export function Drawers() {
             <button className="x" aria-label="Close" onClick={() => setDrawer(null)}>✕</button>
           </div>
           {drawer === 'ideas' ? (
-            <div className="panel-body"><IdeasList /></div>
+            <div className="panel-body"><IdeasPane /></div>
           ) : (
             <div className="panel-body drawer-scroll">
               <div className="sub-h">Ideas by stage</div>

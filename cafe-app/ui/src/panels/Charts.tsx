@@ -50,11 +50,11 @@ export function FunctionChart() {
 }
 
 export function Waiting() {
-  const { state, select, openPopout } = useStore();
+  const { state, openIdea } = useStore();
   if (!state) return null;
   const w = waitingSummary(state);
   const kpis: [number, string, boolean][] = [[w.drafts, 'Drafts to approve', false], [w.approved, 'Approved, not sent', false], [w.repliesDue, 'Replies due', false], [w.late, 'Replies late', w.late > 0]];
-  const open = (id: string) => { select(`idea:${id}`); openPopout({ kind: 'idea', id }); };
+  const open = openIdea;
   const byId = new Map<string, any>(state.ideas.map((i: any) => [i.id, i]));
   return (
     <>

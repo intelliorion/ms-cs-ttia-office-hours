@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { getState, getGraph, getAiStatus } from '../api';
+import { getState, getGraph, getAiStatus, getInbox } from '../api';
 import type { AiStatus } from '../popouts/aiUi';
+import type { InboxView } from '../popouts/inboxHelpers';
 
 export type Popout =
   | null
@@ -8,6 +9,7 @@ export type Popout =
   | { kind: 'import' }
   | { kind: 'round' }
   | { kind: 'outbox' }
+  | { kind: 'inbox' }
   | { kind: 'ai' };
 
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
@@ -43,6 +45,9 @@ export interface AppState {
   notice: Notice | null;
   suggest: Suggest | null;
   ai: AiStatus | null;
+  /** What GET /api/inbox said last; null until read or when it can't be read. */
+  inbox: InboxView | null;
+  refreshInbox: () => Promise<void>;
   /** Below 1000px wide the side panels become drawers; which one is open. */
   drawer: Drawer;
   setDrawer: (d: Drawer) => void;
@@ -59,8 +64,9 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, notice: null, suggest: null, ai: null, drawer: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
+  refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
     try {

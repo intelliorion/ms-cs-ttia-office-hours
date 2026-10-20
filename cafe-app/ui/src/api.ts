@@ -23,3 +23,11 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 export const getAiStatus = () => fetch('/api/ai/status').then((r) => handle<any>(r));
+
+export const getInbox = () => fetch('/api/inbox').then((r) => handle<any>(r));
+/** A dropped file goes up as its own bytes; the server keeps it as dropped. */
+export const inboxDropFile = (file: File) =>
+  fetch('/api/inbox/drop', { method: 'POST', headers: { 'x-filename': file.name, 'content-type': 'application/octet-stream' }, body: file }).then((r) => handle<any>(r));
+export const inboxDropText = (text: string, name?: string) => post('/api/inbox/drop', name ? { text, name } : { text });
+export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismiss' | 'delete' | 'draft-held-reply', body: unknown = {}) =>
+  post(`/api/inbox/${encodeURIComponent(id)}/${what}`, body);

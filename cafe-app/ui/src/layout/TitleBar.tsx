@@ -3,10 +3,12 @@ import { useStore } from '../state/store';
 import { post } from '../api';
 import { chipText } from '../popouts/aiUi';
 import { baseName, titleSub, unsentCount } from '../popouts/titleHelpers';
+import { inboxCount } from '../popouts/inboxHelpers';
 
 export function TitleBar() {
-  const { openPopout, refresh, setNotice, state, ai, refreshAi } = useStore();
-  useEffect(() => { void refreshAi(); }, [refreshAi]);
+  const { openPopout, refresh, setNotice, state, ai, refreshAi, inbox, refreshInbox } = useStore();
+  useEffect(() => { void refreshAi(); void refreshInbox(); }, [refreshAi, refreshInbox]);
+  const waiting = inboxCount(inbox?.counts);
   const n = unsentCount(state?.outbox);
   /** Writes a file through the server and says only its name. */
   const write = async (url: string) => {
@@ -20,6 +22,7 @@ export function TitleBar() {
     <header className="titlebar">
       <div><span className="name">Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
+        <button className={`pill${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>Inbox ({waiting})</button>
         <button className="pill" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import</button>
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Round</button>
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>

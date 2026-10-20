@@ -11,6 +11,7 @@ import { IdeaPopout } from './popouts/IdeaPopout';
 import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
+import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { NodeCard } from './popouts/NodeCard';
 import { focusLabel, focusKeyApplies } from './state/store';
@@ -76,6 +77,7 @@ export default function App() {
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}
         {popout?.kind === 'outbox' && <OutboxPopout />}
+        {popout?.kind === 'inbox' && <InboxPopout />}
         {popout?.kind === 'ai' && <AiPopout />}
       </Stage>
       {!focus && <Drawers />}

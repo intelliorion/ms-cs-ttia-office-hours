@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty|focus|ideacard]  (ai needs CAFE_AI_FAKE=1;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|inbox|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -203,6 +203,34 @@ async function aiShots(p) {
   await p.keyboard.press('Escape');
 }
 
+// The Inbox: a reply sorted by the fake AI (Applied + Needs your OK), a held list of people, and a note with no Café ID.
+async function inboxShots(p) {
+  const fx = path.join(APP, 'tests/fixtures/inbox');
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await p.click('.titlebar [data-action="inbox"]');
+  await p.waitForSelector('[data-testid="inbox-drop"]');
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(fx, 'reply.eml'));
+  await p.waitForSelector('.ib-item [data-group="applied"]', { timeout: 120000 });
+  await p.waitForSelector('.ib-item [data-group="ok"]');
+  await sleep(1200);
+  await shot(p, '22-inbox-drop.png');
+  const hist = await (await fetch(`${base}/api/ideas/CAFE-2026-001/history`)).json();
+  if (!hist.some((h) => h.action === 'inbox')) throw new Error('inbox: no Inbox line in the idea history');
+  console.log('  history:', hist.filter((h) => h.action === 'inbox').map((h) => h.detail).join(' | '));
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(fx, 'held-tracker.csv'));
+  await p.waitForSelector('.ib-item [data-group="held"]', { timeout: 120000 });
+  await sleep(800);
+  await shot(p, '23-inbox-held.png');
+  await p.fill('[data-testid="inbox-paste"]', 'Quick call notes. Someone on the desk team asked for a weekly summary of open requests by region.\nThey will send an example next week.');
+  await p.click('[data-action="add-note"]');
+  await p.waitForSelector('[data-testid="which-idea"]', { timeout: 120000 });
+  await sleep(800);
+  await shot(p, '24-inbox-ask.png');
+  // The title bar count follows the inbox: one waiting reply, one held, one asking.
+  console.log('  title bar:', await p.textContent('.titlebar [data-action="inbox"]'));
+  await p.keyboard.press('Escape');
+}
+
 // Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.
 async function ideaCardShots(p) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`ideacard: ${msg}`); };
@@ -362,6 +390,13 @@ async function main() {
       process.exitCode = errors.length ? 1 : 0;
       return;
     }
+    if (only === 'inbox') {
+      await inboxShots(p);
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     if (only === 'drawers') {
       await gl.close();
       const narrow = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
@@ -420,7 +455,7 @@ async function main() {
     await shot(p, '05-hover.png');
     await p.evaluate(() => window.__cafe.hover(null));
     await popoutShots(p);
-    if (process.env.CAFE_AI_FAKE === '1') await aiShots(p);
+    if (process.env.CAFE_AI_FAKE === '1') { await aiShots(p); await inboxShots(p); }
     await drawersShots(gl, errors);
     await popouts2Shots(p, gl, errors, restart);
     await gl.close();

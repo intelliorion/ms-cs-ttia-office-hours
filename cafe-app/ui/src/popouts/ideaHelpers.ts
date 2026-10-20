@@ -61,6 +61,9 @@ export async function approveAndCopy(
   }
 }
 
+/** Paths in a history line shown by their last part only, so the line never says where the app keeps things. */
+const baseNames = (s: unknown) => String(s ?? '').replace(/\S*[\\/](\S+)/g, '$1');
+
 export interface HistoryEntry { at: string; action: string; by?: string; step?: string; detail?: string; source?: string }
 
 /** One history entry in plain words. */
@@ -80,6 +83,8 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
       const to = String(h.detail ?? '').split(' → ').pop() ?? '';
       return to.startsWith('Closed · ') ? `Closed: ${to.slice('Closed · '.length)}` : `Moved to ${to}`;
     }
+    case 'inbox': return `Inbox: ${baseNames(h.detail)}${h.source ? ` (from ${String(h.source).split(/[\\/]/).pop()})` : ''}`;
+    case 'inbox-undo': return `Inbox: ${baseNames(h.detail)}`;
     default: return [h.action, h.detail].filter(Boolean).join(': ');
   }
 }

@@ -21,6 +21,7 @@ import { createConnector, defaultProviders, saveAiProvider, type Connector } fro
 import { extractTask, reviewSuggestTask, pingTask } from '../ai/tasks';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
+import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
@@ -114,5 +115,30 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const { provider, output } = await ai.runWith(reviewSuggestTask, { idea: extractInput(idea, []).idea });
     return { ...output, provider };
   })());
+  // Inbox. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
+  add('GET', '/api/inbox', async () => inboxView(root));
+  add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {
+    if (headers['x-filename'] !== undefined) {
+      const name = path.basename(String(headers['x-filename']));
+      if (!name) throw new Error('The file needs a name');
+      if (!raw.length) throw new Error('Nothing was dropped');
+      return processDrop(root, name, new Uint8Array(raw), ai, clock);
+    }
+    const text = typeof body.text === 'string' ? body.text : '';
+    if (!text.trim()) throw new Error('Paste something first');
+    const name = typeof body.name === 'string' && body.name.trim() ? path.basename(body.name.trim()) : 'Pasted note';
+    return processDrop(root, name, text, ai, clock);
+  });
+  add('POST', '/api/inbox/:id/apply', async ({ params, body }) => {
+    const ids = Array.isArray(body.actionIds) ? body.actionIds.map(String) : [];
+    return { item: await applyRecords(root, params.id, ids, clock) };
+  });
+  add('POST', '/api/inbox/:id/undo', async ({ params, body }) => ({ item: await undoRecord(root, params.id, String(body.recordId ?? ''), clock) }));
+  add('POST', '/api/inbox/:id/choose', async ({ params, body }) => ({ item: await chooseIdea(root, params.id, String(body.ideaId ?? ''), ai, clock) }));
+  add('POST', '/api/inbox/:id/dismiss', async ({ params }) => ({ item: await dismissItem(root, params.id) }));
+  add('POST', '/api/inbox/:id/delete', async ({ params }) => deleteItem(root, params.id));
+  add('POST', '/api/inbox/:id/draft-held-reply', async ({ params, body }) =>
+    draftHeldReply(root, params.id, clock, typeof body.ideaId === 'string' ? body.ideaId : undefined));
+
   add('POST', '/api/status-export', async () => ({ file: await writeStatusCsv(root, clock) }));
 }

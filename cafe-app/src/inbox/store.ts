@@ -31,6 +31,8 @@ export interface InboxItem {
   /** Filled by Task 3 (actions). */
   actions?: unknown[];
   problems?: string[];
+  /** Where a held file was before it moved to inbox/held/ (lets an interrupted hold finish the move). */
+  heldFrom?: string;
   /** Only on the value saveDrop returns for a repeat drop; never stored. */
   duplicate?: true;
 }
@@ -79,7 +81,7 @@ export async function saveDrop(root: string, name: string, data: Uint8Array | st
     name,
     type: parsed.type,
     hash,
-    receivedAt: new Date().toISOString(),
+    receivedAt: `${clock()}T${new Date().toISOString().slice(11)}`, // the clock's date, the real time of day
     status: 'new',
     text: parsed.text,
     meta: parsed.meta,
@@ -89,15 +91,21 @@ export async function saveDrop(root: string, name: string, data: Uint8Array | st
   return item;
 }
 
-/** All items, newest first. */
-export async function listItems(root: string): Promise<InboxItem[]> {
+/** All items, newest first. A sidecar that can't be read is skipped and named in `problems` (if given). */
+export async function listItems(root: string, problems?: string[]): Promise<InboxItem[]> {
   const names = (await fs.readdir(itemsDir(root)).catch(() => [] as string[])).filter((n) => /^in-[0-9a-f]{12}\.json$/.test(n));
   const items: InboxItem[] = [];
-  for (const n of names) {
-    const text = await readText(path.join(itemsDir(root), n));
-    if (text) items.push(JSON.parse(text) as InboxItem);
+  for (const n of names.sort()) {
+    try {
+      const text = await readText(path.join(itemsDir(root), n));
+      const item = text ? (JSON.parse(text) as InboxItem) : undefined;
+      if (!item || typeof item.id !== 'string' || typeof item.hash !== 'string') throw new Error('not an item');
+      items.push(item);
+    } catch {
+      problems?.push(`Couldn't read inbox/.items/${n}`);
+    }
   }
-  return items.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || a.id.localeCompare(b.id));
+  return items.sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)) || a.id.localeCompare(b.id));
 }
 
 export async function getItem(root: string, id: string): Promise<InboxItem | undefined> {
@@ -114,24 +122,45 @@ export async function updateItem(root: string, id: string, patch: Partial<InboxI
   return next;
 }
 
-/** Hold an item: move its file to inbox/held/, drop the extracted text and quoted part, keep the reasons. */
+/**
+ * Hold an item: keep only the subject and the sender's display name, drop the text and everything else
+ * read from it, and move the file to inbox/held/. The cleared sidecar is written first, so a crash
+ * mid-way never leaves personal data in it; calling again finishes the move and changes nothing else.
+ */
 export async function holdItem(root: string, id: string, reasons: string[]): Promise<InboxItem> {
   const item = await getItem(root, id);
   if (!item) throw new Error(`No inbox item ${id}`);
   let file = item.file;
+  let heldFrom = item.heldFrom;
   if (!file.startsWith('inbox/held/')) {
     const held = paths(root).held;
     await fs.mkdir(held, { recursive: true });
     const ext = path.extname(file);
-    const name = await freeName(held, path.basename(file, ext), ext);
-    await fs.rename(abs(root, file), path.join(held, name));
-    file = `inbox/held/${name}`;
+    heldFrom = file;
+    file = `inbox/held/${await freeName(held, path.basename(file, ext), ext)}`;
   }
-  const { text: _t, triage: _tr, actions: _a, ...rest } = item;
-  const meta = item.meta ? { ...item.meta } : undefined;
-  if (meta) delete meta.quoted;
-  const next: InboxItem = { ...rest, file, status: 'held', hold: { reasons }, ...(meta ? { meta } : {}) };
+  const from = item.meta?.from?.replace(/<[^>]*>/g, '').replace(/^"|"$/g, '').trim();
+  const meta = {
+    ...(item.meta?.subject ? { subject: item.meta.subject } : {}),
+    ...(from && !from.includes('@') ? { from } : {}),
+  };
+  const next: InboxItem = {
+    id: item.id,
+    file,
+    name: item.name,
+    type: item.type,
+    hash: item.hash,
+    receivedAt: item.receivedAt,
+    status: 'held',
+    meta,
+    hold: { reasons },
+    ...(item.problems?.length ? { problems: item.problems } : {}),
+    ...(heldFrom ? { heldFrom } : {}),
+  };
   await writeItem(root, next);
+  if (heldFrom && !(await exists(abs(root, file))) && (await exists(abs(root, heldFrom)))) {
+    await fs.rename(abs(root, heldFrom), abs(root, file));
+  }
   return next;
 }
 

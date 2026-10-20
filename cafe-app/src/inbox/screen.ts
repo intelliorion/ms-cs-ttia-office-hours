@@ -1,5 +1,5 @@
 import { listIdeas } from '../ideas/store';
-import type { InboxMeta, ParsedDrop } from './parse';
+import { PERSON_NAME, type InboxMeta, type ParsedDrop } from './parse';
 
 /** Personal-data screen. Code rules only, no AI: anything it flags is held and never read further. */
 
@@ -23,8 +23,30 @@ const SENSITIVE: [RegExp, string][] = [
   [/\bsocial security (number|no)\b/i, 'social security number'],
 ];
 const NAME_HEADER = /^(full |first |last )?name$|^(employee|staff|client|customer)( name)?$/i;
-const PERSON_NAME = /^[A-Z][a-zA-Z'’-]+(?:\s+[A-Z0-9][a-zA-Z0-9'’-]*){1,3}$/;
 const TRACKER_FILE = /tracker|roster|register|headcount/i;
+
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const ADDRESS_HEADER = /^\s*(?:>\s*)*(From|To|Cc|Bcc|Reply-To|Sent|Subject|Date):/i;
+// Shapes that look like phone numbers but are not: dates, times, date-times, dotted quads (IP addresses, versions)
+const NOT_PHONES = [
+  /\b\d{4}-\d{2}-\d{2}(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?/g,
+  /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b/g,
+  /\b\d{1,2}:\d{2}(?::\d{2})?\b/g,
+  /\b\d{1,3}(?:\.\d{1,3}){3}\b/g,
+];
+
+/** Text with the addresses on quoted From/To/Cc header lines (and their wrapped continuations) removed. */
+function withoutAddressHeaders(lines: string[]): string {
+  let inHeader = false;
+  return lines
+    .map((l) => {
+      const m = l.match(ADDRESS_HEADER);
+      if (m) inHeader = /^(From|To|Cc|Bcc|Reply-To)$/i.test(m[1]);
+      else if (!/^\s/.test(l) || !l.trim()) inHeader = false;
+      return inHeader ? l.replace(EMAIL, ' ') : l;
+    })
+    .join('\n');
+}
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const distinct = (xs: string[]) => [...new Set(xs)];
@@ -67,7 +89,7 @@ export function screen(text: string, meta: ScreenMeta = {}): ScreenResult {
   const headerAddrs = new Set(
     [meta.from, ...(meta.to ?? []), ...(meta.cc ?? [])].join(' ').toLowerCase().match(/[\w.%+-]+@[\w.-]+/g) ?? [],
   );
-  const emails = distinct((text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? []).map((e) => e.toLowerCase())).filter((e) => {
+  const emails = distinct((withoutAddressHeaders(lines).match(EMAIL) ?? []).map((e) => e.toLowerCase())).filter((e) => {
     const local = e.split('@')[0];
     return !headerAddrs.has(e) && !ROLE_MAILBOXES.test(local) && !known.has(norm(local));
   });
@@ -79,9 +101,9 @@ export function screen(text: string, meta: ScreenMeta = {}): ScreenResult {
   const ids = distinct(text.match(/\b[A-Z]{1,3}\d{5,}\b/g) ?? []);
   if (ids.length >= 3) reasons.push(`Has ${ids.length} employee or ID numbers`);
 
+  const phoneText = NOT_PHONES.reduce((t, re) => t.replace(re, ' ; '), text);
   const phones = distinct(
-    (text.match(/(?<![\w+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{1,5}\)[ .-]?)?\d{2,5}(?:[ .-]\d{2,5}){1,4}(?![\w])/g) ?? [])
-      .filter((p) => !/^\d{4}-\d{2}-\d{2}$/.test(p))
+    (phoneText.match(/(?<![\w+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{1,5}\)[ .-]?)?\d{2,5}(?:[ .-]\d{2,5}){1,4}(?![\w])/g) ?? [])
       .map((p) => p.replace(/\D/g, ''))
       .filter((d) => d.length >= 9 && d.length <= 15),
   );

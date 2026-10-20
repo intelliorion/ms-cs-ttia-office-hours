@@ -9,15 +9,20 @@ import { fixedClock } from '../src/clock';
 import { parseDrop, splitQuoted, msgFieldsToParsed } from '../src/inbox/parse';
 import { screen, screenDrop, knownParticipants } from '../src/inbox/screen';
 import { saveDrop, listItems, getItem, updateItem, holdItem, deleteHeld, itemsDir } from '../src/inbox/store';
+import { writeFile } from 'node:fs/promises';
 
 const FIX = (name: string) => fileURLToPath(new URL(`./fixtures/inbox/${name}`, import.meta.url));
 const bytes = async (name: string) => new Uint8Array(await readFile(FIX(name)));
 const exists = (p: string) => access(p).then(() => true, () => false);
 
 function buildDocx(paragraphs: string[]): Uint8Array {
-  const body = paragraphs
-    .map((p) => `<w:p><w:r><w:t xml:space="preserve">${p}</w:t></w:r></w:p>`)
-    .join('');
+  return docxFromBody(paragraphs.map(para).join(''));
+}
+const para = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
+const table = (rows: string[][]) =>
+  `<w:tbl>${rows.map((r) => `<w:tr>${r.map((c) => `<w:tc><w:tcPr/>${para(c)}</w:tc>`).join('')}</w:tr>`).join('')}</w:tbl>`;
+
+function docxFromBody(body: string): Uint8Array {
   return zipSync({
     '[Content_Types].xml': strToU8(
       '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -96,7 +101,7 @@ describe('parseDrop', () => {
       senderName: 'Person 2',
       senderEmail: 'person.2@example.com',
       messageDeliveryTime: 'Tue, 20 Oct 2026 09:30:00 GMT',
-      body: "Answers below.\r\n\r\nFrom: Creators' Café <cafe@example.com>\r\nOur questions",
+      body: "Answers below.\r\n\r\nFrom: Creators' Café <cafe@example.com>\r\nSent: 20 October 2026 09:12\r\nOur questions",
       recipients: [
         { name: "Creators' Café", smtpAddress: 'cafe@example.com', recipType: 'to' },
         { name: 'Person 3', email: 'person.3@example.com', recipType: 'cc' },
@@ -274,5 +279,116 @@ describe('inbox store', () => {
     const sidecars = await readdir(itemsDir(root));
     expect(sidecars).toHaveLength(2);
     expect(sidecars.every((n) => n.endsWith('.json'))).toBe(true);
+  });
+});
+
+describe('fix round 1', () => {
+  const clock = fixedClock('2026-10-20');
+
+  it('keeps .docx tables as tab-separated rows, so a name table is held', () => {
+    const body = para('Team list') + table([['Name', 'Role'], ['Person 41', 'lead'], ['Person 42', 'member'], ['Person 43', 'member'], ['Person 44', 'sponsor']]);
+    const p = parseDrop('team.docx', docxFromBody(body));
+    expect(p.text).toBe('Team list\nName\tRole\nPerson 41\tlead\nPerson 42\tmember\nPerson 43\tmember\nPerson 44\tsponsor');
+    expect(screenDrop('team.docx', p, [])).toEqual({ hold: true, reasons: ['Lists 4 people by name'] });
+  });
+
+  it('a held email keeps only the subject and the sender display name', async () => {
+    const root = await tmpWorkspace();
+    const item = await saveDrop(root, 'reply.eml', await bytes('reply.eml'), clock);
+    await holdItem(root, item.id, ['Has 5 personal email addresses']);
+    const sidecar = await readFile(path.join(itemsDir(root), `${item.id}.json`), 'utf8');
+    expect(sidecar).not.toContain('@');
+    expect(sidecar).not.toContain('Person 3');
+    expect(JSON.parse(sidecar).meta).toEqual({ subject: 'RE: CAFE-2026-001 Email scheduler: two quick questions', from: 'Person 2' });
+
+    const t = await saveDrop(root, 'transcript.vtt', await bytes('transcript.vtt'), clock);
+    await holdItem(root, t.id, ['x']);
+    const tSidecar = await readFile(path.join(itemsDir(root), `${t.id}.json`), 'utf8');
+    expect(tSidecar).not.toMatch(/Person [239]/);
+  });
+
+  it('does not count timestamps or IP addresses as phone numbers', () => {
+    expect(screen('Sessions: 2026-10-20 10:30, 2026-10-21 11:45, 2026-10-22 09:15 and 2026-10-23T14:00', {}).hold).toBe(false);
+    expect(screen('Servers 10.0.0.12, 192.168.1.20, 172.16.4.33 and 10.20.30.40', {}).hold).toBe(false);
+    expect(screen('Call +44 20 7946 0001, +44 20 7946 0002 or +44 20 7946 0003', {}).reasons).toEqual(['Has 3 phone numbers']);
+  });
+
+  it('does not count addresses on quoted From/To/Cc lines', async () => {
+    const raw = [
+      'From: Person 2 <person.2@example.com>',
+      'To: cafe@example.com',
+      'Subject: RE: CAFE-2026-001',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'Yes, Thursday works.',
+      '',
+      'From: Creators\' Café <cafe@example.com>',
+      'Sent: 20 October 2026 09:12',
+      'To: Person 2 <person.2@example.com>',
+      'Cc: a.one@example.com; b.two@example.com; c.three@example.com;',
+      ' d.four@example.com; e.five@example.com',
+      'Subject: CAFE-2026-001',
+      '',
+      'Does Thursday work?',
+    ].join('\r\n');
+    const p = parseDrop('r.eml', strToU8(raw));
+    expect(p.text).toBe('Yes, Thursday works.');
+    expect(screenDrop('r.eml', p, ['Person 2'])).toEqual({ hold: false, reasons: [] });
+  });
+
+  it('joins a wrapped "On … wrote:" line and only treats a real From: header as a quote', () => {
+    expect(splitQuoted('Yes.\n\nOn Mon, 19 Oct 2026 at 10:00, Person 1 <person.1@example.com>\nwrote:\n> Shall we?')).toEqual({
+      text: 'Yes.',
+      quoted: 'On Mon, 19 Oct 2026 at 10:00, Person 1 <person.1@example.com>\nwrote:\n> Shall we?',
+    });
+    expect(splitQuoted('Sounds good.\nFrom: Monday we can start.\nThanks')).toEqual({
+      text: 'Sounds good.\nFrom: Monday we can start.\nThanks',
+      quoted: undefined,
+    });
+  });
+
+  it('holdItem is idempotent and recovers when the move did not finish', async () => {
+    const root = await tmpWorkspace();
+    const item = await saveDrop(root, 'held-tracker.csv', await bytes('held-tracker.csv'), clock);
+    const first = await holdItem(root, item.id, ['Lists 12 people by name']);
+    const second = await holdItem(root, item.id, ['Lists 12 people by name']);
+    expect(second).toEqual(first);
+    expect(await exists(path.join(root, first.file))).toBe(true);
+    expect((await readdir(path.join(root, 'inbox', 'held')))).toEqual(['2026-10-20-held-tracker.csv']);
+
+    // a crash after the sidecar write but before the rename: the file is still in inbox/
+    const other = await saveDrop(root, 'note.txt', await bytes('note.txt'), clock);
+    const sidecarPath = path.join(itemsDir(root), `${other.id}.json`);
+    const half = { ...other, status: 'held', file: 'inbox/held/2026-10-20-note.txt', heldFrom: other.file, hold: { reasons: ['x'] } };
+    delete (half as { text?: string }).text;
+    await writeFile(sidecarPath, JSON.stringify(half));
+    const recovered = await holdItem(root, other.id, ['x']);
+    expect(recovered.file).toBe('inbox/held/2026-10-20-note.txt');
+    expect(await exists(path.join(root, recovered.file))).toBe(true);
+    expect(await exists(path.join(root, other.file))).toBe(false);
+  });
+
+  it('vtt fallback speakers must look like names', () => {
+    const vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nPerson 5: hello\n\n00:00:02.000 --> 00:00:03.000\nNote: this is not a speaker';
+    const p = parseDrop('t.vtt', strToU8(vtt));
+    expect(p.meta.speakers).toEqual(['Person 5']);
+    expect(p.text).toBe('Person 5: hello\nNote: this is not a speaker');
+  });
+
+  it('skips a corrupt sidecar and reports it; receivedAt uses the clock date', async () => {
+    const root = await tmpWorkspace();
+    const item = await saveDrop(root, 'note.txt', await bytes('note.txt'), clock);
+    expect(item.receivedAt.startsWith('2026-10-20T')).toBe(true);
+    await writeFile(path.join(itemsDir(root), 'in-000000000000.json'), '{ not json');
+    const problems: string[] = [];
+    expect(await listItems(root, problems)).toHaveLength(1);
+    expect(problems).toEqual(["Couldn't read inbox/.items/in-000000000000.json"]);
+  });
+
+  it('refuses a .docx whose text part inflates past 20 MB', () => {
+    const big = docxFromBody(para('x'.repeat(21 * 1024 * 1024)));
+    const p = parseDrop('big.docx', big);
+    expect(p.text).toBe('');
+    expect(p.problems?.[0]).toMatch(/too big/);
   });
 });

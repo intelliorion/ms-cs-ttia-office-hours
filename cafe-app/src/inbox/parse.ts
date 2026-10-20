@@ -68,12 +68,25 @@ function decode(bytes: Uint8Array, charset = 'utf-8'): string {
   }
 }
 
+/** A person-looking name: capitalised words, e.g. "Person 21" or "Jane Doe". */
+export const PERSON_NAME = /^[A-Z][a-zA-Z'’-]+(?:\s+[A-Z0-9][a-zA-Z0-9'’-]*){1,3}$/;
+
+const QUOTE_HEADER = /^(Sent|To|Subject|Date|Cc):/i;
+
+function quoteStartsAt(lines: string[], i: number): boolean {
+  const l = lines[i];
+  if (/^>/.test(l) || /^-{3,}\s*Original Message\s*-{3,}/i.test(l)) return true;
+  if (/^From: /.test(l)) return lines.slice(i + 1, i + 4).some((n) => QUOTE_HEADER.test(n.trim()));
+  const t = l.trim();
+  if (!/^On /.test(t)) return false;
+  // Gmail wraps a long "On …, Name <addr>" line before "wrote:"
+  return /^On .* wrote:$/.test(t) || (i + 1 < lines.length && /^On .* wrote:$/.test(`${t} ${lines[i + 1].trim()}`));
+}
+
 /** Split a reply into the new text and the quoted earlier message(s). */
 export function splitQuoted(text: string): { text: string; quoted: string | undefined } {
   const lines = nl(text).split('\n');
-  const start = lines.findIndex(
-    (l) => /^From: /.test(l) || /^-{3,}\s*Original Message\s*-{3,}/i.test(l) || /^On .* wrote:$/.test(l.trim()) || /^>/.test(l),
-  );
+  const start = lines.findIndex((_, i) => quoteStartsAt(lines, i));
   if (start < 0) return { text: text.trim(), quoted: undefined };
   let cut = start;
   while (cut > 0 && /^\s*(_{5,}|-{5,})?\s*$/.test(lines[cut - 1])) cut--; // Outlook's ____ rule and blank lines
@@ -277,7 +290,7 @@ function parseVtt(raw: string): ParsedDrop {
     let said = entities(cue.replace(/<[^>]+>/g, '')).trim();
     if (!speaker) {
       const m = said.match(/^([^:]{1,60}):\s+(.*)$/);
-      if (m) [speaker, said] = [m[1].trim(), m[2]];
+      if (m && PERSON_NAME.test(m[1].trim())) [speaker, said] = [m[1].trim(), m[2]];
     }
     if (speaker && !speakers.includes(speaker)) speakers.push(speaker);
     lines.push(speaker ? `${speaker}: ${said}` : said);
@@ -287,11 +300,30 @@ function parseVtt(raw: string): ParsedDrop {
 
 // ---------- .docx ----------
 
+const DOCX_XML_MAX = 20 * 1024 * 1024;
+
 function parseDocx(bytes: Uint8Array): ParsedDrop {
   try {
-    const xml = unzipSync(bytes, { filter: (f) => f.name === 'word/document.xml' })['word/document.xml'];
+    let tooBig = false;
+    const xml = unzipSync(bytes, {
+      filter: (f) => {
+        if (f.name !== 'word/document.xml') return false;
+        if (f.originalSize > DOCX_XML_MAX) tooBig = true;
+        return !tooBig;
+      },
+    })['word/document.xml'];
+    if (tooBig) throw new Error('its text is too big to read, over 20 MB');
     if (!xml) throw new Error('no word/document.xml');
-    const text = entities(strFromU8(xml).replace(/<w:tab\/>/g, '\t').replace(/<w:br\/>|<\/w:p>/g, '\n').replace(/<[^>]+>/g, ''))
+    const text = entities(
+      strFromU8(xml)
+        .replace(/<w:tab\/>/g, '\t')
+        .replace(/<\/w:p>(?=\s*<\/w:tc>)/g, '') // a cell's last paragraph ends with the cell
+        .replace(/<\/w:tc>/g, '\t')
+        .replace(/<\/w:tr>/g, '\n')
+        .replace(/<w:br\/>|<\/w:p>/g, '\n')
+        .replace(/<[^>]+>/g, ''),
+    )
+      .replace(/\t+\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     return { type: 'document', text, meta: {} };

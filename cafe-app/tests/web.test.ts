@@ -10,7 +10,8 @@ afterEach(() => close?.());
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../web');
 
-// A raw socket request: the path goes out exactly as written, with no URL normalisation.
+// A raw socket request: the path goes out exactly as written. The server runs it through new URL(),
+// which collapses literal /../ and /%2e%2e/ segments, so the traversal targets below use encoded slashes (%2f).
 function rawGet(base: string, p: string): Promise<{ status: number; headers: http.IncomingHttpHeaders }> {
   const u = new URL(base);
   return new Promise((resolve, reject) => {
@@ -65,7 +66,7 @@ describe('web page', () => {
     // Real files outside web/ with an allowed extension, so only the folder guard can stop them.
     const targets: [string, string][] = [
       ['/assets/..%2f..%2fvscode-helper%2fextension.js', 'vscode-helper/extension.js'],
-      ['/assets/%2e%2e/%2e%2e/vscode-helper/lib.js', 'vscode-helper/lib.js'],
+      ['/assets/%2e%2e%2f%2e%2e%2fvscode-helper%2flib.js', 'vscode-helper/lib.js'],
     ];
     for (const [p, rel] of targets) {
       const file = path.resolve(WEB, '..', rel);

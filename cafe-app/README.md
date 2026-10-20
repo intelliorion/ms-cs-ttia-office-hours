@@ -21,8 +21,10 @@ panels, large white titles and pill buttons at the bottom.
 - **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
 - **Pop-outs.** The idea (review, emails, stage, history, graph links), Import, Round, Outbox and AI open in
   front of the universe; close them with the X.
+- **Narrow windows.** Below 1000px wide the side panels become drawers: tap the "Ideas" tab on the left or
+  "Charts" on the right; close with the X or Esc. The universe stays behind them.
 - **Bottom centre.** Reset view and Labels.
-- **Title bar.** The Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
+- **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
   and the AI chip (which shows who is answering).
 
 ## Run it
@@ -109,7 +111,8 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
 
 The **AI chip** in the title bar says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
 "No AI: working by hand"). Click it to pick a provider (Auto, Claude Code, Copilot CLI, VS Code or None) and
-press Test. The choice is saved in `rules/settings.yaml`.
+press Test, which asks the AI for a tiny checked reply (up to 30 seconds) and says who answered and how long it
+took. The choice is saved in `rules/settings.yaml`.
 
 ### The providers and how each is found
 
@@ -135,9 +138,14 @@ The VS Code helper is a small extension in `vscode-helper/`; see
   leave the app, each capped in length. No names, email addresses or ids.
 - The answer is **checked against a schema** before anything is used. Anything else is thrown away and the
   app says it is working by hand.
-- **Nothing is saved without your Yes.** AI links come in as pending (dashed, unconfirmed) until you
-  confirm them. **New stars always need a Yes**, whatever the AI's confidence. A link you removed is not
-  proposed again.
+- **High-confidence links between stars you already have are added at once; anything that would add a new
+  star waits for your Yes; you can remove any AI link from the idea pop-out.** A link below 0.7 comes in as
+  pending (dashed, unconfirmed) until you confirm it. **New stars always need a Yes**, whatever the AI's
+  confidence. After "Grow the universe" the app says how many links were added and how many wait for you.
+  A link you removed is not proposed again.
+- If `graph/ai-links.jsonl` has a line the app cannot read, that line is skipped (and kept in the file), the
+  rest of the universe still shows, and `GET /api/graph` lists it under `problems`. A broken
+  `graph/layout.json` is only a cache: the app lays the universe out afresh.
 - One AI call runs at a time, behind the server's lock, for up to 90 seconds.
 
 ### Test hook
@@ -157,8 +165,8 @@ node scripts/ui-tour.mjs --workspace /tmp/cafe-tour-ws --out /tmp/cafe-tour-shot
 
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so
-a full tour takes several minutes. `--only=panels|hover|popout|popouts2|ai` runs one part; `--only=ai`
-needs `CAFE_AI_FAKE=1` in the environment. The tour reports any console error and exits non-zero.
+a full tour takes several minutes. `--only=panels|hover|popout|popouts2|ai|drawers|empty` runs one part; `--only=ai`
+needs `CAFE_AI_FAKE=1` in the environment, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
 
 ## Before the first round
 

@@ -2,7 +2,8 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai]  (ai needs CAFE_AI_FAKE=1)
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty]  (ai needs CAFE_AI_FAKE=1;
+//   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -53,7 +54,8 @@ async function page(browser, errors) {
   return p;
 }
 
-// Two pending AI links (below 0.7, so dashed and unconfirmed) for the pop-out and the star card.
+// Two pending AI links (below 0.7, so dashed and unconfirmed) for the pop-out and the star card, and one
+// 0.9 link between stars the form already made, which is added confirmed and can still be removed.
 async function seedAiLinks() {
   const dir = path.join(workspace, 'graph');
   await fs.mkdir(dir, { recursive: true });
@@ -64,6 +66,8 @@ async function seedAiLinks() {
     { from: 'capability:agent-design-guidance', to: 'tool:copilot-studio', rel: 'BUILT_WITH', description: 'Agent design guidance is usually built with Copilot Studio',
       source: 'ai: extract, CAFE-2026-002 Support Requested', confidence: 0.55, status: 'pending',
       newNodes: [{ id: 'tool:copilot-studio', type: 'Tool', label: 'Copilot Studio' }] },
+    { from: 'idea:CAFE-2026-002', to: 'capability:ai-solution-brainstorming', rel: 'NEEDS', description: 'Brainstorm where an agent fits the intake',
+      source: 'ai: extract, CAFE-2026-002 Business Challenge', confidence: 0.9, status: 'pending' },
   ];
   await fs.writeFile(path.join(dir, 'ai-links.jsonl'), links.map((l) => JSON.stringify(l)).join('\n') + '\n');
 }
@@ -173,6 +177,10 @@ async function aiShots(p) {
   await p.waitForSelector('.ai-pop');
   await sleep(800);
   await shot(p, '13-ai-chip.png');
+  await p.click('.ai-pop [data-action="ai-test"]');
+  await p.waitForSelector('.ai-pop .pop-notice:has-text("Connected:")', { timeout: 40000 });
+  await sleep(300);
+  await shot(p, '16-ai-test.png');
   await p.keyboard.press('Escape');
   await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002'));
   await p.waitForSelector('.idea-pop');
@@ -182,6 +190,58 @@ async function aiShots(p) {
   await sleep(3500);
   await p.locator('.idea-pop [data-action="ai-grow"]').scrollIntoViewIfNeeded();
   await shot(p, '14-grown.png');
+  // A confirmed AI link still has Remove.
+  const row = p.locator('.idea-pop li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]');
+  await row.scrollIntoViewIfNeeded();
+  await row.evaluate((el) => { el.style.outline = '1px solid #f5b36b'; });
+  await sleep(500);
+  await shot(p, '17-ai-link-remove.png');
+  await row.evaluate((el) => { el.style.outline = ''; });
+  await row.locator('[data-action="remove-link"]').click();
+  await p.waitForSelector('.idea-pop .pop-notice:has-text("Link removed.")');
+  await p.waitForSelector('.idea-pop li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]', { state: 'detached' });
+  await p.keyboard.press('Escape');
+}
+
+// Below 1000px wide: the side panels become drawers behind two edge tabs.
+async function drawersShots(browser, errors) {
+  const ctx = await browser.newContext({ viewport: { width: 900, height: 700 }, deviceScaleFactor: 1 });
+  const p = await ctx.newPage();
+  p.on('console', (m) => { if (m.type() === 'error' && !/favicon/i.test(m.text())) errors.push(m.text()); });
+  p.on('pageerror', (e) => errors.push(String(e)));
+  await p.goto(base, { waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(2500);
+  await shot(p, '15-narrow.png');
+  await p.click('[data-action="drawer-ideas"]');
+  await p.waitForSelector('[data-testid="drawer"] .idea-list');
+  await sleep(800);
+  await shot(p, '15-drawers.png');
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('[data-testid="drawer"]', { state: 'detached' });
+  await p.click('[data-action="drawer-charts"]');
+  await p.waitForSelector('[data-testid="drawer"] .kpis');
+  await sleep(1200);
+  await shot(p, '15-drawers-charts.png');
+  await p.click('[data-testid="drawer"] .x');
+  await p.waitForSelector('[data-testid="drawer"]', { state: 'detached' });
+  await ctx.close();
+}
+
+// A workspace with no ideas: the 3D universe says what to do.
+async function emptyShot(errors, restart) {
+  const empty = `${workspace}-empty`;
+  if (!safeToDelete(empty)) throw new Error(`Refusing to delete ${empty}`);
+  await fs.rm(empty, { recursive: true, force: true });
+  await restart({}, empty);
+  const gl = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
+  const p = await page(gl, errors);
+  await p.waitForSelector('canvas');
+  await p.waitForSelector('[data-testid="universe-empty"]');
+  await sleep(1500);
+  await shot(p, '18-empty-3d.png');
+  await gl.close();
+  await fs.rm(empty, { recursive: true, force: true });
 }
 
 const shot = async (p, name) => { await p.screenshot({ path: path.join(out, name), timeout: 120000 }); console.log(`  ${name}`); };
@@ -200,12 +260,12 @@ async function main() {
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   await fs.mkdir(out, { recursive: true });
-  const launch = (env = {}) => spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', workspace, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } });
+  const launch = (env = {}, ws = workspace) => spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', ws, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } });
   let server = launch();
-  const restart = async (env) => {
+  const restart = async (env, ws) => {
     server.kill('SIGTERM');
     await new Promise((r) => (server.exitCode !== null ? r() : server.once('exit', r)));
-    server = launch(env);
+    server = launch(env, ws);
     await waitForServer();
   };
   const errors = [];
@@ -257,6 +317,22 @@ async function main() {
       process.exitCode = errors.length ? 1 : 0;
       return;
     }
+    if (only === 'drawers') {
+      await gl.close();
+      const narrow = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
+      await drawersShots(narrow, errors);
+      await narrow.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'empty') {
+      await gl.close();
+      await emptyShot(errors, restart);
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     if (only === 'panels') {
       await p.mouse.move(200, 330);
       await shot(p, '05-panels.png');
@@ -281,6 +357,8 @@ async function main() {
     await shot(p, '05-hover.png');
     await p.evaluate(() => window.__cafe.hover(null));
     await popoutShots(p);
+    if (process.env.CAFE_AI_FAKE === '1') await aiShots(p);
+    await drawersShots(gl, errors);
     await popouts2Shots(p, gl, errors, restart);
     await gl.close();
 
@@ -294,6 +372,7 @@ async function main() {
     await sleep(300);
     await shot(f, '06-flat-selected.png');
     await flat.close();
+    await emptyShot(errors, restart);
   } finally {
     server.kill('SIGTERM');
   }

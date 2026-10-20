@@ -23,6 +23,28 @@ const REVIEW = {
   reason: 'Looks feasible with sample data and could be reused, but no builder is named yet. Ask the team who will build it.',
 };
 
+/** Fits tests/fixtures/inbox/reply.eml: Person 2 answering the two E2 questions on CAFE-2026-001. */
+const TRIAGE = {
+  summary: 'Person 2 answers our two questions about the email scheduler: about 40 requests a week, triaged by hand.',
+  kind: 'reply',
+  ideaId: 'CAFE-2026-001',
+  matchConfidence: 0.95,
+  facts: {
+    answers: [
+      { question: 'How many requests a week?', answer: 'About 40 a week, mostly from the EMEA desk, peaking at month end.' },
+      { question: 'Who does it today?', answer: 'Two people triage them by hand in a shared mailbox, about half a day each week.' },
+    ],
+    replyReceived: true,
+    builderNamed: null,
+    newFlags: [],
+    stageHint: null,
+    graph: {
+      nodes: [{ type: 'PainPoint', label: 'Manual request triage' }, { type: 'System', label: 'Shared mailbox' }],
+      links: [{ from: 'idea', to: 'Manual request triage', rel: 'REPLACES', description: 'Requests are triaged by hand today', confidence: 0.8 }],
+    },
+  },
+};
+
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
 
 export function fakeProvider(): Provider {
@@ -34,6 +56,7 @@ export function fakeProvider(): Provider {
       if (!enabled()) throw new Error('The fake AI is off');
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
+      if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },

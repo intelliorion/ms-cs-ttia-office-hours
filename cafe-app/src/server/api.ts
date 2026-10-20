@@ -23,6 +23,17 @@ import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
 
+
+/**
+ * The file name from the x-filename header. The UI sends it percent-encoded (headers carry Latin-1 only);
+ * a raw name that isn't valid encoding is kept as given. Any folder part is dropped.
+ */
+export function fileNameOf(header: unknown): string {
+  const sent = String(header ?? '');
+  let decoded = sent;
+  try { decoded = decodeURIComponent(sent); } catch { /* not encoded */ }
+  return path.basename(decoded.replace(/\\/g, '/'));
+}
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
   const ai = connector ?? createConnector({ providers: defaultProviders(), settings: () => loadSettings(root) });
@@ -57,7 +68,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/settings', async ({ body }) => saveSettings(root, body));
 
   add('POST', '/api/import', async ({ raw, headers }) => {
-    const name = path.basename(String(headers['x-filename'] ?? ''));
+    const name = fileNameOf(headers['x-filename']);
     if (!/\.(csv|xlsx)$/i.test(name)) throw new Error('Drop a .csv or .xlsx export');
     const file = path.join(paths(root).inbox, `${clock()}-${name}`);
     await writeFileAtomic(file, raw);
@@ -119,11 +130,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {
     if (headers['x-filename'] !== undefined) {
-      // The UI sends the name percent-encoded (headers are Latin-1 only); a raw name that isn't valid encoding is kept as given.
-      const sent = String(headers['x-filename']);
-      let decoded = sent;
-      try { decoded = decodeURIComponent(sent); } catch { /* not encoded */ }
-      const name = path.basename(decoded.replace(/\\/g, '/'));
+      const name = fileNameOf(headers['x-filename']);
       if (!name) throw new Error('The file needs a name');
       if (!raw.length) throw new Error('Nothing was dropped');
       return processDrop(root, name, new Uint8Array(raw), ai, clock);

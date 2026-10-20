@@ -155,15 +155,18 @@ const words = (s: string) => s.toLowerCase().replace(/^\s*\d{1,2}[.)]\s*/, '').r
 /**
  * Is this the same question? Forgiving of wording, strict about meaning: after lowercasing and dropping
  * punctuation and any leading number, one contains the other, or at least 60% of the shorter one's words
- * appear in the other.
+ * appear in the other. A shorter side of under 3 words must instead cover 60% of the longer one's words.
  */
 export function sameQuestion(a: string, b: string): boolean {
   const x = words(a); const y = words(b);
   if (!x.length || !y.length) return false;
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  if (` ${long.join(' ')} `.includes(` ${short.join(' ')} `)) return true;
   const have = new Set(long);
-  return short.filter((w) => have.has(w)).length / short.length >= 0.6;
+  const shared = short.filter((w) => have.has(w)).length;
+  // Under 3 words ("budget") the shorter one must cover 60% of the longer one, not just appear in it.
+  if (short.length < 3) return shared / long.length >= 0.6;
+  if (` ${long.join(' ')} `.includes(` ${short.join(' ')} `)) return true;
+  return shared / short.length >= 0.6;
 }
 
 /** Build the actions for a triaged item. Act only on a non-null ideaId; when asking, the only action is ask_idea. */

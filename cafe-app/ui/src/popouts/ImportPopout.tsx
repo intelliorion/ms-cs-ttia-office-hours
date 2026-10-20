@@ -3,6 +3,7 @@ import { useStore } from '../state/store';
 import { ApiError } from '../api';
 import { Modal } from './Modal';
 import { importReportLines, type ImportReport } from './titleHelpers';
+import { filenameHeader } from './inboxHelpers';
 
 export function ImportPopout() {
   const { closePopout, refresh } = useStore();
@@ -16,7 +17,7 @@ export function ImportPopout() {
     if (!file || busy) return;
     setBusy(true); setError(null); setReport(null);
     try {
-      const res = await fetch('/api/import', { method: 'POST', headers: { 'x-filename': file.name, 'content-type': 'application/octet-stream' }, body: file });
+      const res = await fetch('/api/import', { method: 'POST', headers: { 'x-filename': filenameHeader(file.name), 'content-type': 'application/octet-stream' }, body: file });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new ApiError(data.error ?? `Import failed (${res.status})`);
       setReport({ file: file.name, r: data });

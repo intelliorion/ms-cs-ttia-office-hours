@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, FIXTURE } from './helpers';
 
@@ -56,6 +56,17 @@ describe('api', () => {
     expect(state.ideas[0]).not.toHaveProperty('missingToAdvance');
     expect(state.stageNames['3']).toBe('Design series');
     expect(state.closures.csic).toBe('Routed to CSIC');
+  });
+
+  it('imports an export whose name has non-Latin-1 characters, sent encoded, and keeps the name', async () => {
+    const { base, root } = await boot();
+    const name = 'Café – export.csv';
+    const res = await fetch(`${base}/api/import`, {
+      method: 'POST', headers: { 'x-filename': encodeURIComponent(name), 'content-type': 'application/octet-stream' }, body: await readFile(FIXTURE),
+    });
+    expect(res.status).toBe(200);
+    expect((await j(res)).created).toHaveLength(3);
+    expect((await readdir(path.join(root, 'inbox'))).filter((n) => n.endsWith('.csv'))).toEqual(['2026-10-19-Café – export.csv']);
   });
 
   it('sets a stage freely, logs it, and shows the history', async () => {

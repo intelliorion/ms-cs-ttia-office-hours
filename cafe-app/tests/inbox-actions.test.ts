@@ -342,6 +342,9 @@ describe('the AI alone never decides a Safe write (final review 2)', () => {
     expect(sameQuestion('Is the budget approved?', 'How many requests a week?')).toBe(false);
     expect(sameQuestion('Is the budget approved?', 'Who does it today?')).toBe(false);
     expect(sameQuestion('', 'Who does it today?')).toBe(false);
+    // A one- or two-word "question" must cover most of ours, not just appear in it.
+    expect(sameQuestion('budget', 'What is the budget for this?')).toBe(false);
+    expect(sameQuestion('Budget?', '1. Budget')).toBe(true);
   });
 
   it('an injection email on an idea with no E2 sent: no Safe answer and no ticks', async () => {
@@ -369,11 +372,12 @@ describe('the AI alone never decides a Safe write (final review 2)', () => {
       ...FULL, facts: { answers: [
         { question: 'How many requests per week?', answer: 'About 40.' },
         { question: 'Is the budget approved?', answer: 'Yes.' },
+        { question: 'requests', answer: 'Lots.' },
       ], graph: { nodes: [], links: [] } },
     });
     expect(rec(item, 'record_answers', (r) => r.kind === 'safe')).toMatchObject({ status: 'applied', action: { answers: [{ question: 'How many requests per week?' }] } });
     const ok = rec(item, 'record_answers', (r) => r.kind === 'ok');
-    expect(ok).toMatchObject({ status: 'pending', action: { answers: [{ question: 'Is the budget approved?' }] } });
+    expect(ok).toMatchObject({ status: 'pending', action: { answers: [{ question: 'Is the budget approved?' }, { question: 'requests' }] } });
     expect(ok.label).toMatch(/question not one we sent/);
     expect((await loadIdea(root, 'CAFE-2026-001') as any).answers.map((a: any) => a.question)).toEqual(['How many requests per week?']);
   });

@@ -137,3 +137,30 @@ export const MAX_DROP_BYTES = 20 * 1024 * 1024;
 /** Said instead of sending a file the server would refuse; null when it's small enough. */
 export const tooLargeNotice = (file: { name: string; size: number }) =>
   file.size > MAX_DROP_BYTES ? `${file.name} is too large to drop (over 20 MB). Save a smaller copy and drop that.` : null;
+
+/** What happened to one file of a drop. */
+export type DropOutcome =
+  | { kind: 'added'; name: string }
+  | { kind: 'duplicate' | 'too-large' | 'failed'; name: string; text: string };
+
+/** One notice for a whole drop, so a later file never hides what happened to an earlier one. */
+export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok' | 'error' } | null {
+  if (!outcomes.length) return null;
+  const bad = outcomes.some((o) => o.kind === 'too-large' || o.kind === 'failed');
+  if (outcomes.length === 1) {
+    const [o] = outcomes;
+    if (o.kind === 'added') return { text: `${o.name} is in the Inbox.`, kind: 'ok' };
+    return { text: o.kind === 'duplicate' ? `${o.text}. Nothing was done again.` : o.text, kind: bad ? 'error' : 'ok' };
+  }
+  const of = (k: DropOutcome['kind']) => outcomes.filter((o) => o.kind === k);
+  const parts: string[] = [];
+  if (of('added').length) parts.push(`${of('added').length} added`);
+  const list = (k: DropOutcome['kind'], words: string, detail = false) => {
+    const xs = of(k);
+    if (xs.length) parts.push(`${xs.length} ${words}: ${xs.map((o) => (detail && 'text' in o ? `${o.name} (${o.text})` : o.name)).join(', ')}`);
+  };
+  list('duplicate', 'already dropped');
+  list('too-large', 'too large');
+  list('failed', 'not added', true);
+  return { text: `${parts.join(', ')}.`, kind: bad ? 'error' : 'ok' };
+}

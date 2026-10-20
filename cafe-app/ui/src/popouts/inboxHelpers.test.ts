@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   confidenceWord, groupActions, itemHeadline, canUndo, applyableIds, inboxCount, askCandidates, isAsking, dayOf,
-  duplicateNotice, handProblems, needsHand, typeWord, filenameHeader, tooLargeNotice, MAX_DROP_BYTES, type ActionRecord, type InboxItemView,
+  duplicateNotice, handProblems, needsHand, typeWord, filenameHeader, tooLargeNotice, MAX_DROP_BYTES, dropSummary, type ActionRecord, type InboxItemView,
 } from './inboxHelpers';
 
 const rec = (id: string, t: string, status: ActionRecord['status'], extra: Partial<ActionRecord> = {}): ActionRecord =>
@@ -117,5 +117,25 @@ describe('tooLargeNotice (final review 5)', () => {
     expect(MAX_DROP_BYTES).toBe(20 * 1024 * 1024);
     expect(tooLargeNotice({ name: 'big.xlsx', size: MAX_DROP_BYTES + 1 })).toBe('big.xlsx is too large to drop (over 20 MB). Save a smaller copy and drop that.');
     expect(tooLargeNotice({ name: 'ok.eml', size: MAX_DROP_BYTES })).toBeNull();
+  });
+});
+
+describe('dropSummary: one notice for a multi-file drop', () => {
+  it('a single file keeps its own words', () => {
+    expect(dropSummary([{ kind: 'added', name: 'a.eml' }])).toEqual({ text: 'a.eml is in the Inbox.', kind: 'ok' });
+    expect(dropSummary([{ kind: 'duplicate', name: 'a.eml', text: 'Already dropped on 20 Oct 2026: a.eml' }])).toEqual({ text: 'Already dropped on 20 Oct 2026: a.eml. Nothing was done again.', kind: 'ok' });
+    expect(dropSummary([{ kind: 'failed', name: 'a.eml', text: 'Boom' }])).toEqual({ text: 'Boom', kind: 'error' });
+    expect(dropSummary([])).toBeNull();
+  });
+  it('several files: counts per outcome, names for anything not added', () => {
+    expect(dropSummary([
+      { kind: 'added', name: 'a.eml' }, { kind: 'added', name: 'b.vtt' },
+      { kind: 'too-large', name: 'big.xlsx', text: 'x' },
+    ])).toEqual({ text: '2 added, 1 too large: big.xlsx.', kind: 'error' });
+    expect(dropSummary([
+      { kind: 'added', name: 'a.eml' }, { kind: 'duplicate', name: 'b.eml', text: 'x' },
+      { kind: 'failed', name: 'c.msg', text: 'Boom' }, { kind: 'failed', name: 'd.msg', text: 'Bang' },
+    ])).toEqual({ text: '1 added, 1 already dropped: b.eml, 2 not added: c.msg (Boom), d.msg (Bang).', kind: 'error' });
+    expect(dropSummary([{ kind: 'added', name: 'a' }, { kind: 'duplicate', name: 'b', text: 'x' }])).toEqual({ text: '1 added, 1 already dropped: b.', kind: 'ok' });
   });
 });

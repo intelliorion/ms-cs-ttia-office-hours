@@ -5,7 +5,7 @@ import { Modal } from './Modal';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
   applyableIds, askCandidates, canUndo, confidenceWord, dayOf, duplicateNotice, groupActions, handProblems, isAsking, itemHeadline,
-  needsHand, tooLargeNotice, typeWord, type ActionRecord, type InboxItemView,
+  dropSummary, needsHand, tooLargeNotice, typeWord, type ActionRecord, type DropOutcome, type InboxItemView,
 } from './inboxHelpers';
 
 const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇' };
@@ -45,22 +45,23 @@ export function InboxPopout() {
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
 
-  /** A drop can wait on the AI for up to 90 seconds; say which part it is on. */
-  const dropping = async (fn: () => Promise<any>) => {
-    if (going.current) return;
+  /** A drop can wait on the AI for up to 90 seconds; say which part it is on. Returns what happened, for the caller's notice. */
+  const dropping = async (name: string, fn: () => Promise<any>): Promise<DropOutcome | null> => {
+    if (going.current) return null;
     going.current = true;
     setBusy('Reading…');
     slow.current = setTimeout(() => setBusy('Asking the AI… (this can take a minute)'), 1500);
-    let res: any = null;
-    try { res = await fn(); } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
-    if (slow.current) clearTimeout(slow.current);
-    if (res?.item) {
-      if (res.duplicate) {
+    let out: DropOutcome;
+    try {
+      const res = await fn();
+      if (res?.duplicate && res.item) {
         setDupes((d) => ({ ...d, [res.item.id]: duplicateNotice(res.item) }));
-        setNotice({ text: `${duplicateNotice(res.item)}. Nothing was done again.`, kind: 'ok' });
-      } else setNotice({ text: `${res.item.name} is in the Inbox.`, kind: 'ok' });
-    }
+        out = { kind: 'duplicate', name: res.item.name, text: duplicateNotice(res.item) };
+      } else out = { kind: 'added', name: res?.item?.name ?? name };
+    } catch (e) { out = { kind: 'failed', name, text: (e as Error).message }; }
+    if (slow.current) clearTimeout(slow.current);
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
+    return out;
   };
   /** Any drop on the pop-out or its backdrop is read here; the window listener below stops the browser opening the file. */
   const onDropAnywhere = (e: { preventDefault: () => void; dataTransfer: DataTransfer | null }) => {
@@ -75,17 +76,21 @@ export function InboxPopout() {
     return () => { window.removeEventListener('dragover', stop); window.removeEventListener('drop', stop); window.removeEventListener('dragleave', leave); };
   }, []);
   const dropFiles = async (files: FileList | File[] | null | undefined) => {
+    const outcomes: DropOutcome[] = [];
     for (const f of [...(files ?? [])]) {
       const big = tooLargeNotice(f);
-      if (big) { setNotice({ text: big, kind: 'error' }); continue; }
-      await dropping(() => inboxDropFile(f));
+      if (big) { outcomes.push({ kind: 'too-large', name: f.name, text: big }); continue; }
+      const out = await dropping(f.name, () => inboxDropFile(f));
+      if (out) outcomes.push(out);
     }
+    setNotice(dropSummary(outcomes));
     if (input.current) input.current.value = '';
   };
   const addNote = async () => {
     const text = paste.trim();
     if (!text) return;
-    await dropping(() => inboxDropText(text));
+    const out = await dropping('Your note', () => inboxDropText(text));
+    if (out) setNotice(dropSummary([out]));
     setPaste('');
   };
 

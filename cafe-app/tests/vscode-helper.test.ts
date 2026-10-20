@@ -27,9 +27,9 @@ describe('vscode helper package', () => {
 
 describe('vscode helper request handling', () => {
   const TOKEN = 'a'.repeat(64);
-  const model = { name: 'fake-model', complete: async (p: string) => `echo:${p}` };
+  const model = { name: 'fake-model', vendor: 'fake', complete: async (p: string, _s?: AbortSignal) => `echo:${p}` };
   async function run(ctx: object, f: (base: string) => Promise<void>) {
-    const s = http.createServer((q, r) => { void handleRequest({ token: TOKEN, reason: '', getModel: () => model, ...ctx }, q, r); });
+    const s = http.createServer((q, r) => { void handleRequest({ token: TOKEN, reason: '', getModel: async () => model, ...ctx }, q, r); });
     await new Promise<void>((r) => s.listen(0, '127.0.0.1', r));
     try { await f(`http://127.0.0.1:${(s.address() as AddressInfo).port}`); } finally { s.close(); }
   }
@@ -37,8 +37,12 @@ describe('vscode helper request handling', () => {
     fetch(`${base}/complete`, { method: 'POST', body, headers: { 'content-type': 'application/json', 'x-cafe-token': TOKEN, ...headers } });
 
   it('reports health with and without a model', async () => {
-    await run({}, async (b) => { expect(await (await fetch(`${b}/health`)).json()).toEqual({ ok: true, model: 'fake-model' }); });
-    await run({ getModel: () => null, reason: 'none' }, async (b) => { expect(await (await fetch(`${b}/health`)).json()).toEqual({ ok: false, reason: 'none' }); });
+    await run({}, async (b) => { expect(await (await fetch(`${b}/health`)).json()).toEqual({ ok: true, model: 'fake-model', vendor: 'fake' }); });
+    await run({ getModel: async () => null, reason: () => 'none' }, async (b) => {
+      const res = await fetch(`${b}/health`);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ ok: false, reason: 'none' });
+    });
   });
   it('completes with a good token', () => run({}, async (b) => {
     const res = await post(b, JSON.stringify({ prompt: 'hi' }));
@@ -64,4 +68,29 @@ describe('vscode helper request handling', () => {
     });
     expect(status).toBe(403);
   }));
+
+  it('delivers 413 for a chunked body over the cap (no content-length)', () => run({}, async (b) => {
+    const port = Number(new URL(b).port);
+    const status = await new Promise<number>((resolve, reject) => {
+      const r = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/complete', headers: { 'x-cafe-token': TOKEN, 'content-type': 'application/json', 'transfer-encoding': 'chunked' } }, (res) => { res.resume(); resolve(res.statusCode!); });
+      r.on('error', reject);
+      r.write('{"prompt":"');
+      for (let i = 0; i < 30; i++) r.write('x'.repeat(10 * 1024));
+      r.end('"}');
+    });
+    expect(status).toBe(413);
+  }));
+  it('cancels the model request when the client disconnects', async () => {
+    let cancelled!: () => void;
+    const seen = new Promise<void>((r) => { cancelled = r; });
+    const slow = { name: 'slow', vendor: 'fake', complete: (_p: string, signal: AbortSignal) => new Promise<string>((resolve) => { signal.addEventListener('abort', () => { cancelled(); resolve(''); }); }) };
+    await run({ getModel: async () => slow }, async (b) => {
+      const req = http.request({ host: '127.0.0.1', port: Number(new URL(b).port), method: 'POST', path: '/complete', headers: { 'x-cafe-token': TOKEN, 'content-type': 'application/json' } });
+      req.on('error', () => {});
+      req.end('{"prompt":"y"}');
+      await new Promise((r) => setTimeout(r, 150));
+      req.destroy();
+      await seen;
+    });
+  });
 });

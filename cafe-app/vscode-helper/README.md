@@ -11,14 +11,14 @@ Reload VS Code. Run **Creators' Café: AI helper status** to see the port, the m
 
 ## How the app finds it
 
-On start the extension listens on `127.0.0.1` (random port) and writes `~/.cafe-ai/vscode-helper.json` as `{ port, token, model }` (file mode 0600). The Café app reads that file, calls `GET /health`, and sends `POST /complete` with the `x-cafe-token` header and `{ "prompt": "..." }`; the reply is `{ "text": "..." }`. The file is removed when the extension stops. If VS Code is closed, the app works by hand as before.
+On start the extension listens on `127.0.0.1` (random port) and writes `~/.cafe-ai/vscode-helper.json` as `{ port, token, model }` (file mode 0600). The Café app reads that file, calls `GET /health` (200 `{ ok: true, model, vendor }`, or 503 `{ ok: false, reason }` when no model is available), and sends `POST /complete` with the `x-cafe-token` header and `{ "prompt": "..." }`; the reply is `{ "text": "..." }`. The file is removed when the extension stops. If VS Code is closed, the app works by hand as before.
 
 ## Security notes
 
-- Localhost only: binds 127.0.0.1, refuses non-loopback peers and any Host header other than localhost or 127.0.0.1.
+- Localhost only: binds 127.0.0.1, refuses non-loopback peers and any Host header other than localhost, 127.0.0.1 or [::1].
 - A fresh 32-byte random token per run, compared in constant time; wrong token gives 403. Bodies over 200 KB give 413.
 - It sends the prompt text to the model and returns the text. It never reads workspace files, never runs commands, and gives the model no tools.
 
 ## Open question
 
-Does the firm approve using the Copilot language-model API from an extension, and sending Café submission text to the Copilot model? Until that is confirmed, treat this helper as optional and off by default; the app works without it.
+Does the firm approve using the Copilot language-model API from an extension, and sending Café submission text to the Copilot model? Until that is confirmed, do not install it on firm machines. Once installed it starts automatically whenever VS Code starts (`onStartupFinished`) and writes the token file; to stop it, disable or uninstall the extension (the file is removed when it stops). The app works without it.

@@ -5,10 +5,13 @@ import type { Clock } from '../clock';
 import { APP_DIR } from '../workspace/paths';
 import { MissingSettingsError } from '../comms/outbox';
 import { registerApi } from './api';
+import type { Connector } from '../ai/connector';
 
 export interface ServerOptions {
   root: string;
   clock: Clock;
+  /** The AI connector. Tests inject one; otherwise it is built from the settings and the installed tools. */
+  connector?: Connector;
 }
 
 export interface RequestInfo {
@@ -51,14 +54,14 @@ function readBody(req: http.IncomingMessage): Promise<Buffer> {
   });
 }
 
-export function createApp({ root, clock }: ServerOptions): http.Server {
+export function createApp({ root, clock, connector }: ServerOptions): http.Server {
   const routes: { method: string; pattern: RegExp; keys: string[]; handler: Handler }[] = [];
   const add: AddRoute = (method, route, handler) => {
     const keys: string[] = [];
     const pattern = new RegExp(`^${route.replace(/:(\w+)/g, (_m, k: string) => { keys.push(k); return '([^/]+)'; })}$`);
     routes.push({ method, pattern, keys, handler });
   };
-  registerApi(add, { root, clock });
+  registerApi(add, { root, clock, connector });
   // Every POST waits for the one before it, so two clicks cannot interleave their file writes.
   let lock: Promise<unknown> = Promise.resolve();
   const exclusive = <T>(fn: () => Promise<T>): Promise<T> => {

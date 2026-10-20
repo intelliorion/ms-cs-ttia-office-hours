@@ -5,7 +5,7 @@ import { paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
 import { loadRound, saveRound, loadSettings, saveSettings } from '../round/store';
-import { listIdeas, ideaDir } from '../ideas/store';
+import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
 import { setStage } from '../ideas/stage';
@@ -15,11 +15,20 @@ import { draftEmail, listOutboxChecked, approve, markSent, updateDraft } from '.
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { writeStatusCsv } from '../exports/status';
-import { rebuildGraph, setAiLinkStatus } from '../graph/store';
+import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
+import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
+import { extractTask, reviewSuggestTask } from '../ai/tasks';
+import { extractInput, toAiLinks } from '../ai/apply';
+import { edgeId } from '../graph/ontology';
 
-export function registerApi(add: AddRoute, { root, clock }: { root: string; clock: Clock }): void {
+export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
+  const ai = connector ?? createConnector({ providers: defaultProviders(), settings: () => loadSettings(root) });
+  /** AI failures never change anything; they tell the operator to carry on by hand. */
+  const byHand = <T>(fn: () => Promise<T>) => async () => {
+    try { return await fn(); } catch (e) { throw new Error(`Working by hand: ${(e as Error).message}`); }
+  };
 
   add('GET', '/api/state', async () => {
     const [round, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
@@ -78,5 +87,27 @@ export function registerApi(add: AddRoute, { root, clock }: { root: string; cloc
   });
   add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });
+
+  add('GET', '/api/ai/status', async () => ({ ...(await ai.status()), choices: await ai.choices() }));
+  add('POST', '/api/ai/provider', async ({ body }) => {
+    const settings = await saveAiProvider(root, body.provider);
+    return { ...(await ai.status()), choice: settings.ai?.provider };
+  });
+  add('POST', '/api/ai/extract', async ({ body }) => byHand(async () => {
+    const idea = await loadIdea(root, String(body.id));
+    const before = await rebuildGraph(root);
+    const { provider, output } = await ai.runWith(extractTask, extractInput(idea, before.nodes));
+    const links = toAiLinks(idea.id, output, before, await readAiLinks(root), provider);
+    for (const l of links) await appendAiLink(root, l);
+    const after = await rebuildGraph(root);
+    const ids = new Set(links.map((l) => edgeId(l.from, l.rel, l.to)));
+    const added = after.edges.filter((e) => ids.has(e.id));
+    return { added: added.length, unconfirmed: added.filter((e) => !e.confirmed).length, links: added };
+  })());
+  add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(async () => {
+    const idea = await loadIdea(root, String(body.id));
+    const { provider, output } = await ai.runWith(reviewSuggestTask, { idea: extractInput(idea, []).idea });
+    return { ...output, provider };
+  })());
   add('POST', '/api/status-export', async () => ({ file: await writeStatusCsv(root, clock) }));
 }

@@ -17,7 +17,12 @@ export interface Settings {
   distList?: string;
   deckTemplate?: string;
   capacity: { ideasPerRound: number; sessionsPerWeek: number };
+  /** Which coding tool lends the app an LLM. 'auto' tries Claude Code, Copilot CLI, then VS Code. */
+  ai?: { provider?: AiChoice };
 }
+
+export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';
+export const AI_CHOICES: AiChoice[] = ['auto', 'claude', 'copilot', 'vscode', 'none'];
 
 export const DEFAULT_SETTINGS: Settings = { capacity: { ideasPerRound: 3, sessionsPerWeek: 2 } };
 

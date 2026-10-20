@@ -1,0 +1,57 @@
+import { ALLOWED, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
+import type { Idea } from '../ideas/idea';
+import type { ExtractInput, ExtractOutput } from './tasks';
+
+/** What the extract task is told already exists, so it reuses those labels. */
+export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
+  const labels = (t: NodeType) => nodes.filter((n) => n.type === t).map((n) => n.label).slice(0, 200);
+  return {
+    idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
+    existing: { capabilities: labels('Capability'), systems: labels('System'), painPoints: labels('PainPoint') },
+  };
+}
+
+/**
+ * Turns checked extract output into pending AI links. A link is kept only if both
+ * ends resolve (to the idea, a proposed node or an existing node), the relation's
+ * ends have the right types, and the same link was not already there or removed.
+ */
+export function toAiLinks(
+  ideaId: string, out: ExtractOutput,
+  graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
+): AiLink[] {
+  const ideaNode = nodeId('Idea', ideaId);
+  const key = (s: string) => s.trim().toLowerCase();
+  const proposed = new Map<string, GNode>();
+  for (const n of out.nodes) {
+    const label = n.label.trim();
+    if (label && !proposed.has(key(label))) proposed.set(key(label), { id: nodeId(n.type, label), type: n.type, label });
+  }
+  const existing = new Map<string, GNode>();
+  for (const n of graph.nodes) if (n.type !== 'Idea' && n.type !== 'Person' && !existing.has(key(n.label))) existing.set(key(n.label), n);
+  const known = new Set(graph.nodes.map((n) => n.id));
+  const seen = new Set([...graph.edges.map((e) => e.id), ...previous.map((l) => edgeId(l.from, l.rel, l.to))]);
+
+  const resolve = (label: string): GNode | undefined => {
+    if (key(label) === 'idea') return { id: ideaNode, type: 'Idea', label: 'idea' };
+    return existing.get(key(label)) ?? proposed.get(key(label));
+  };
+
+  const links: AiLink[] = [];
+  for (const l of out.links) {
+    const from = resolve(l.from); const to = resolve(l.to);
+    if (!from || !to) continue;
+    const [ft, tt] = ALLOWED[l.rel];
+    if (from.type !== ft || to.type !== tt) continue;
+    const id = edgeId(from.id, l.rel, to.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
+    links.push({
+      from: from.id, to: to.id, rel: l.rel, description: l.description, confidence: l.confidence,
+      source: `ai:${provider}:challenge`, status: 'pending',
+      ...(newNodes.length ? { newNodes } : {}),
+    });
+  }
+  return links;
+}

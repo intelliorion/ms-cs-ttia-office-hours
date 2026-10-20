@@ -116,6 +116,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 - Word files: `.docx`.
 - Notes and pasted text.
 - Dropping a file anywhere on the Inbox pop-out works, not only on the dashed zone.
+- Want something to try? `test-data/` holds 12 synthetic files (exports, emails, a transcript, a Word file, a held tracker, a PDF) with a README on what to expect; regenerate with `npm run test-data` (script: `scripts/make-test-data.mjs`).
 
 **What is held.** PDFs and images show "can't read this yet". Lists of people (for example a tracker with
 names, phone numbers or employee ids) are held too. A held file moves to `inbox/held/`, is not read any

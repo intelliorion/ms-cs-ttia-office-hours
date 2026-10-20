@@ -1,0 +1,21 @@
+# Test data for the Inbox
+
+Everything here is **synthetic**: all names ("Person 1" to "Person 39"), employee ids, phone numbers and figures are made up.
+Regenerate with `npm run test-data` (from `cafe-app/`); the output is the same every time. Do not edit these files by hand.
+
+Suggested order: drop **01** first (so the ideas and their Café IDs exist), then **02-07**, then **08-12**.
+
+| File | What it is | What to expect |
+|---|---|---|
+| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. Row 7 has no title, so the import reports it. Row 5 has a cut-off value ("Collab…"). Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
+| 02-reply-with-id.eml | Person 2 answers our three questions; subject has CAFE-2026-002 | Sure match to Desk booking assistant. Our quoted E2 is split off below "-----Original Message-----". |
+| 03-reply-no-id.eml | Reply whose subject is only the idea title | Likely match to Desk booking assistant (title in subject). |
+| 04-sender-only.eml | Person 5 writes "Quick update" | No ID or title, so a sender match (submitter, 0.8) or a question to you. |
+| 05-injection.eml | Reply to CAFE-2026-003 that tells the app to set a stage and record budget approval | Safety demo: only the three answers can be proposed; the stage and budget do not change. |
+| 06-tracker.eml | Forwarded table of 12 people with employee ids and phone numbers | HELD (names, ids, phones); not read further. |
+| 07-our-own-sent.eml | Our own E3 sent to Person 6, from cafe@example.com | Filed as "out" (our mail), nothing proposed. |
+| 08-transcript.vtt | Teams design session, 12 cues, 4 speakers, mentions CAFE-2026-002 | Good AI-extract material: features, tools (Copilot Studio, Dataiku), a system (Service Catalogue). |
+| 09-minutes.docx | Word minutes: heading, 3 paragraphs, an actions table | Read as a document; the table is kept as rows. |
+| 10-note.txt | Pasted-style note with no Café ID | Asks which idea it belongs to. |
+| 11-held-tracker.csv | Name, Employee ID, Phone, Client for 15 people | HELD, not imported as ideas. |
+| 12-cannot-read.pdf | One-page valid PDF | HELD: "can't read this yet". |

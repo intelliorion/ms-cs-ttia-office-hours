@@ -1,0 +1,25 @@
+From: =?utf-8?B?Q3JlYXRvcnMnIENhZsOp?= <cafe@example.com>
+To: Person 6 <person.6@example.com>
+Subject: CAFE-2026-004: selected for the =?utf-8?B?Q3JlYXRvcnMnIENhZsOp?= design series
+Date: Mon, 26 Oct 2026 09:00:00 +0000
+Message-ID: <sent-e3@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Hi Person,
+
+Good news: "Expense anomaly finder" has been selected for the Creators' Café design series. You'll join the Controls cohort with 3 other ideas around finding unusual items in routine data. Ideas in a cohort share a need, so you'll learn from each other and may build one pattern instead of several.
+
+Sessions:
+- 3 November 2026, 10:00, Teams link to follow: Framing the problem
+- 10 November 2026, 10:00, Teams link to follow: Designing the agent
+- 17 November 2026, 10:00, Teams link to follow: Testing with synthetic data
+
+Before the first session, please:
+1. Name the person who will build the proof of concept and can attend every session.
+2. Write down the one thing the proof of concept must show.
+3. Pick the smallest input that shows it, such as one document set or one team's data, using synthetic or aggregated data.
+4. Check that your builder has access to Copilot Studio. If not, ask Tech Governance & Enablement.
+
+Please reply by 30 October 2026 with your builder's name and confirmation that you can attend.

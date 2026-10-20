@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpWorkspace, sampleIdea } from './helpers';
@@ -8,7 +8,8 @@ import { fixedClock } from '../src/clock';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import type { Triage } from '../src/ai/tasks';
-import { appendAiLink, rebuildGraph, readAiLinks } from '../src/graph/store';
+import { appendAiLink, rebuildGraph, readAiLinks, setAiLinkStatus } from '../src/graph/store';
+import { setStage } from '../src/ideas/stage';
 import { kindOf, type Action, type ActionRecord } from '../src/inbox/actions';
 import { processDrop, applyRecords, undoRecord } from '../src/inbox/flow';
 import type { InboxItem } from '../src/inbox/store';
@@ -19,7 +20,7 @@ const clock = fixedClock('2026-10-20');
 
 const IDEAS = [
   sampleIdea({ people: { submitter: 'Person 2', team: [] }, support: ['Agent Design Guidance'] }),
-  sampleIdea({ id: 'CAFE-2026-002', slug: 'catalogue-tagging', title: 'Catalogue tagging', function: 'GSS', support: ['Document reading'], people: { submitter: 'Person 4', team: [] }, dedupe_key: 'b' }),
+  sampleIdea({ id: 'CAFE-2026-002', slug: 'catalogue-tagging', title: 'Catalogue tagging', function: 'GSS', support: ['Document reading', 'Catalogue lookup'], people: { submitter: 'Person 4', team: [] }, dedupe_key: 'b' }),
 ];
 
 function connectorFor(reply: Triage | (() => never)) {
@@ -43,11 +44,13 @@ const FULL: Triage = {
     graph: {
       nodes: [
         { type: 'Capability', label: 'Document reading' },
+        { type: 'Capability', label: 'Catalogue lookup' },
         { type: 'PainPoint', label: 'Manual request triage' },
         { type: 'System', label: 'Person 3' },
       ],
       links: [
         { from: 'idea', to: 'Document reading', rel: 'NEEDS', description: 'Reads the requests', confidence: 0.8 },
+        { from: 'idea', to: 'Catalogue lookup', rel: 'NEEDS', description: 'Maybe looks things up', confidence: 0.5 },
         { from: 'idea', to: 'Manual request triage', rel: 'REPLACES', description: 'Triaged by hand today', confidence: 0.8 },
         { from: 'Document reading', to: 'Person 3', rel: 'USES_DATA', description: 'A person, not a system', confidence: 0.9 },
       ],
@@ -88,7 +91,7 @@ describe('kindOf: code decides the kind', () => {
     [{ t: 'draft_email', ideaId: 'CAFE-2026-001', template: 'E2' }, 'ok'],
     [{ t: 'ask_idea', candidates: [] }, 'ok'],
     [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link()] }, 'safe'],
-    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ confidence: 0.5 })] }, 'ok'],
+    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ confidence: 0.5 })] }, 'safe'],
     [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ newNodes: [{ id: 'capability:document-reading', type: 'Capability', label: 'Document reading' }] })] }, 'ok'],
     [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [] }, 'ok'],
   ];
@@ -127,6 +130,8 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
     // Graph: the safe link is confirmed; the new-star link isn't there yet; no person became a node.
     const g = await rebuildGraph(root);
     expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toMatchObject({ confirmed: true });
+    // Below 0.7 between existing stars: applied at once, drawn dashed (unconfirmed).
+    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:catalogue-lookup')).toMatchObject({ confirmed: false });
     expect(g.nodes.some((n) => n.id === 'painpoint:manual-request-triage')).toBe(false);
     const all = JSON.stringify((await readAiLinks(root)).links) + JSON.stringify(item.actions);
     expect(all).not.toMatch(/person-3/);
@@ -168,14 +173,14 @@ describe('Undo is field-level (Review Focus 5)', () => {
     expect(after.region).toBe('EMEA');
   });
 
-  it('reply_received: undo leaves s2d alone when the operator ticked it, not this item', async () => {
-    const root = await tmpWorkspace('2026-10-19');
-    await saveIdea(root, { ...IDEAS[0], checklist: { s2d: { done: true, by: 'operator', at: '2026-10-19', source: 'reply received' } } });
-    await saveIdea(root, IDEAS[1]);
-    const { item } = await processDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), connectorFor(FULL), clock);
-    const r = rec(item, 'reply_received');
-    if (r) await undoRecord(root, item.id, r.id, clock);
-    expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s2d).toMatchObject({ done: true, by: 'operator' });
+  it('reply_received: undo leaves s2d alone when the operator re-ticked it after the apply', async () => {
+    const { root, item } = await setup();
+    const idea = await loadIdea(root, 'CAFE-2026-001');
+    expect(idea.checklist.s2d).toMatchObject({ done: true, source: item.file });
+    await saveIdea(root, { ...idea, checklist: { ...idea.checklist, s2d: { done: true, by: 'operator', at: '2026-10-21', source: 'reply received' } } });
+    const after = await undoRecord(root, item.id, rec(item, 'reply_received').id, clock);
+    expect(rec(after, 'reply_received').status).toBe('undone');
+    expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s2d).toMatchObject({ done: true, by: 'operator', source: 'reply received' });
   });
 
   it('record_answers: undo removes only the answers this item recorded', async () => {
@@ -209,6 +214,25 @@ describe('Undo is field-level (Review Focus 5)', () => {
     const g = await rebuildGraph(root);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toBe(false);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-002|NEEDS|capability:agent-design-guidance')).toBe(true);
+  });
+
+  it('graph_links: a link the operator confirmed after the apply is kept, and Undo says so', async () => {
+    const { root, item } = await setup();
+    await setAiLinkStatus(root, 'idea:CAFE-2026-001|NEEDS|capability:document-reading', 'confirmed');
+    const after = await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
+    expect(rec(after, 'graph_links', (r) => r.kind === 'safe').note).toMatch(/Kept the link .*document-reading.*confirmed/);
+    const links = (await readAiLinks(root)).links;
+    expect(links.find((l) => l.to === 'capability:document-reading')!.status).toBe('confirmed');
+    expect(links.find((l) => l.to === 'capability:catalogue-lookup')!.status).toBe('removed');
+  });
+
+  it('a failing undo log never marks an applied action failed', async () => {
+    const root = await tmpWorkspace('2026-10-19');
+    for (const i of IDEAS) await saveIdea(root, i);
+    await mkdir(path.join(root, 'inbox', 'undo.jsonl'), { recursive: true }); // appendFile on a directory fails
+    const { item } = await processDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), connectorFor(FULL), clock);
+    expect(rec(item, 'file_email').status).toBe('applied');
+    expect((item.actions as ActionRecord[]).some((r) => r.status === 'failed')).toBe(false);
   });
 
   it('undo twice is refused; undo.jsonl gets a line for each apply and undo', async () => {
@@ -253,6 +277,30 @@ describe('Needs your OK: applied only on Apply', () => {
     expect((after.actions as ActionRecord[]).find((x) => x.id === r.id)!.status).toBe('applied');
     await undoRecord(root, item.id, r.id, clock);
     expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(1);
+  });
+
+  it('suggest_stage: closing as CSIC then Undo puts stage, closed and route back exactly', async () => {
+    const { root, item } = await setup({ ...FULL, facts: { ...FULL.facts, stageHint: 'closed-csic' } });
+    const before = await loadIdea(root, 'CAFE-2026-001');
+    const r = rec(item, 'suggest_stage');
+    await applyRecords(root, item.id, [r.id], clock);
+    const closed = await loadIdea(root, 'CAFE-2026-001');
+    expect(closed).toMatchObject({ closed: { as: 'csic' }, route: 'CSIC Repository' });
+    expect(closed.closed!.followUp).toBeTruthy();
+    await undoRecord(root, item.id, r.id, clock);
+    const after = await loadIdea(root, 'CAFE-2026-001');
+    expect(after.stage).toBe(before.stage);
+    expect(after.closed).toBeUndefined();
+    expect(after.route).toBeUndefined();
+  });
+
+  it('suggest_stage: if the operator moved it again, Undo keeps their stage and says so', async () => {
+    const { root, item } = await setup();
+    const r = rec(item, 'suggest_stage');
+    await applyRecords(root, item.id, [r.id], clock);
+    await setStage(root, 'CAFE-2026-001', { stage: 4 }, clock);
+    await expect(undoRecord(root, item.id, r.id, clock)).rejects.toThrow(/moved since/);
+    expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(4);
   });
 
   it('graph_links with a new star: apply adds it unconfirmed; undo removes it', async () => {

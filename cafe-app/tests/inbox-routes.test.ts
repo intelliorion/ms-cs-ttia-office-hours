@@ -57,6 +57,16 @@ describe('/api/inbox: exports', () => {
     expect(await exists(path.join(s.root, ...item.file.split('/')))).toBe(true);
   });
 
+  it('Undo of an import keeps an idea the operator has worked in since, and says so (Review Focus 5)', async () => {
+    const s = await server();
+    const { item } = await s.drop('export.csv', await readFile(FIXTURE));
+    await s.post('/api/ideas/CAFE-2026-002/tick', { step: 's2a', done: true });
+    const r = await json(await s.post(`/api/inbox/${item.id}/undo`, { recordId: item.actions[0].id }));
+    expect(r.note).toMatch(/CAFE-2026-002 has changed since the import; close it instead/);
+    expect(r.item.actions[0]).toMatchObject({ status: 'undone', note: r.note });
+    expect((await ideaFolders(s.root)).map((f) => f.slice(0, 13))).toEqual(['CAFE-2026-002']);
+  });
+
   it('Review Focus 3: the same drop twice is a duplicate and applies nothing', async () => {
     const s = await server();
     const first = await s.drop('export.csv', await readFile(FIXTURE));
@@ -124,6 +134,34 @@ describe('/api/inbox: emails and notes', () => {
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
     graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.some((e: any) => e.id === id)).toBe(false);
+  });
+
+  it('a link below 0.7 between existing stars is applied at once, unconfirmed (dashed); Undo removes it', async () => {
+    const s = await server(triageConnector({
+      summary: 'Invoices may need design guidance.', kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
+    }));
+    await s.drop('export.csv', await readFile(FIXTURE));
+    const { item } = await json(await s.post('/api/inbox/drop', { text: 'Update on CAFE-2026-003.', name: 'update' }));
+    const g = item.actions.find((r: any) => r.action.t === 'graph_links');
+    expect(g).toMatchObject({ kind: 'safe', status: 'applied', inverse: { t: 'remove-ai-links' } });
+    const id = 'idea:CAFE-2026-003|NEEDS|capability:agent-design-guidance';
+    let graph = await json(await fetch(`${s.base}/api/graph`));
+    expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: false });
+    await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
+    graph = await json(await fetch(`${s.base}/api/graph`));
+    expect(graph.edges.some((e: any) => e.id === id)).toBe(false);
+  });
+
+  it('choose is refused once something was applied: undo it first', async () => {
+    const s = await server();
+    await s.drop('export.csv', await readFile(FIXTURE));
+    const { item } = await s.drop('reply.eml', await readFile(FIX('reply.eml')));
+    expect(item.actions.some((r: any) => r.status === 'applied')).toBe(true);
+    const r = await s.post(`/api/inbox/${item.id}/choose`, { ideaId: 'CAFE-2026-002' });
+    expect(r.status).toBe(400);
+    expect((await json(r)).error).toBe('Undo what was done first');
+    expect(await readdir(path.join(s.root, 'ideas', (await ideaFolders(s.root)).find((f) => f.startsWith('CAFE-2026-002'))!))).not.toContain('emails');
   });
 
   it('"Which idea?": choose re-triages with how: chosen and then acts on that idea', async () => {

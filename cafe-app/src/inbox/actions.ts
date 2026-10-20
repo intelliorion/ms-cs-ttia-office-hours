@@ -1,22 +1,24 @@
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Clock } from '../clock';
 import { paths } from '../workspace/paths';
-import { appendHistory, writeFileAtomic } from '../workspace/files';
+import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
 import { loadSteps, type StageNo } from '../rules/stages';
 import { listIdeas, loadIdea, saveIdea, ideaDir, nextId, slugify } from '../ideas/store';
 import { normalizeIdea, type Closure, type Idea } from '../ideas/idea';
 import { setStage } from '../ideas/stage';
 import { changes, type StageTarget } from '../ideas/suggest';
 import { tick } from '../checklist/checklist';
-import { currentRoundId } from '../round/store';
+import { currentRoundId, loadSettings } from '../round/store';
+import { renderHandoff } from '../review/review';
 import { importExport } from '../import/importRows';
 import { readTable } from '../import/readExport';
 import { mapHeader } from '../import/columns';
 import { draftEmail } from '../comms/outbox';
 import { buildGraph } from '../graph/build';
 import { appendAiLink, readAiLinks, setAiLinkStatus } from '../graph/store';
-import { edgeId, CONFIRMED_AT, type AiLink } from '../graph/ontology';
+import { edgeId, type AiLink } from '../graph/ontology';
 import { planAiLinks } from '../ai/apply';
 import type { ExtractOutput } from '../ai/tasks';
 import { screen } from './screen';
@@ -51,10 +53,15 @@ export type Inverse =
   | { t: 'untick'; ideaId: string; step: string; source: string }
   | { t: 'unset-field'; ideaId: string; field: 'answers'; entries: { question: string; source: string }[] }
   | { t: 'set-field'; ideaId: string; field: 'people.builder'; value: string | null; expect: string }
-  | { t: 'set-field'; ideaId: string; field: 'stage'; value: StageTarget; expect: StageTarget }
+  | { t: 'set-field'; ideaId: string; field: 'stage'; value: Where; expect: Where }
   | { t: 'remove-flag'; ideaId: string; text: string }
-  | { t: 'remove-ai-links'; edgeIds: string[] }
-  | { t: 'remove-ideas'; ids: string[] };
+  /** was: each link's status when it was added; a link whose status has changed since (e.g. confirmed) is kept. */
+  | { t: 'remove-ai-links'; edgeIds: string[]; was?: Record<string, AiLink['status']> }
+  /** prints: a fingerprint of each folder when it was created; a folder changed since is kept. */
+  | { t: 'remove-ideas'; ids: string[]; prints?: Record<string, string> };
+
+/** Where an idea is, field by field: what a stage change touches. */
+export interface Where { stage: StageNo; closed?: Idea['closed']; route?: string }
 
 export interface ActionRecord {
   id: string;
@@ -65,6 +72,8 @@ export interface ActionRecord {
   label: string;
   at?: string;
   undoneAt?: string;
+  /** Plain English, set by Undo when part of it was kept (e.g. "CAFE-2026-002 has changed since the import; close it instead"). */
+  note?: string;
   inverse?: Inverse;
   /** What an import did (created, duplicates, errors, flags). */
   result?: unknown;
@@ -83,7 +92,8 @@ export function kindOf(action: Action, ctx: { needsHand?: boolean } = {}): Kind 
     case 'log_step':
       return SAFE_STEPS.includes(action.step) ? 'safe' : 'ok';
     case 'graph_links':
-      return action.links.length > 0 && action.links.every((l) => !l.newNodes?.length && l.confidence >= CONFIRMED_AT) ? 'safe' : 'ok';
+      // Links between stars that already exist are Safe; below 0.7 they stay unconfirmed (drawn dashed).
+      return action.links.length > 0 && action.links.every((l) => !l.newNodes?.length) ? 'safe' : 'ok';
     default:
       return 'ok';
   }
@@ -184,8 +194,8 @@ async function planGraph(root: string, item: InboxItem, idea: Idea, out: Extract
   const { links } = planAiLinks(idea.id, filtered, buildGraph(ideas, previous), previous, provider);
   const sourced = links.map((l) => ({ ...l, source: `ai:${provider}:${item.file}` }));
   return {
-    safe: sourced.filter((l) => !l.newNodes?.length && l.confidence >= CONFIRMED_AT),
-    ok: sourced.filter((l) => l.newNodes?.length || l.confidence < CONFIRMED_AT),
+    safe: sourced.filter((l) => !l.newNodes?.length),
+    ok: sourced.filter((l) => l.newNodes?.length),
   };
 }
 
@@ -259,11 +269,10 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       return { inverse: { t: 'set-field', ideaId: a.ideaId, field: 'people.builder', value: people.builder ?? null, expect: a.name } };
     }
     case 'suggest_stage': {
-      const idea = await loadIdea(root, a.ideaId);
-      const before: StageTarget = idea.closed ? { closeAs: idea.closed.as } : { stage: idea.stage };
+      const before = whereOf(await loadIdea(root, a.ideaId));
       const target: StageTarget = a.closeAs ? { closeAs: a.closeAs } : { stage: a.stage as StageNo };
-      await setStage(root, a.ideaId, target, clock);
-      return { inverse: { t: 'set-field', ideaId: a.ideaId, field: 'stage', value: before, expect: target } };
+      const after = whereOf(await setStage(root, a.ideaId, target, clock));
+      return { inverse: { t: 'set-field', ideaId: a.ideaId, field: 'stage', value: before, expect: after } };
     }
     case 'create_idea': {
       const { ideas, problems } = await listIdeas(root);
@@ -277,7 +286,7 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       });
       const dir = await saveIdea(root, idea);
       await appendHistory(dir, { at, action: 'created', by: 'app', source: item.file });
-      return { inverse: { t: 'remove-ideas', ids: [id] } };
+      return { inverse: { t: 'remove-ideas', ids: [id], prints: { [id]: await fingerprint(dir) } } };
     }
     case 'graph_links': {
       const had = new Set((await readAiLinks(root)).links.map((l) => edgeId(l.from, l.rel, l.to)));
@@ -289,13 +298,16 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
         had.add(id); added.push(id);
       }
       if (added.length) await history(root, a.ideaId, at, `${added.length} link${added.length === 1 ? '' : 's'} added to the universe`, item.file);
-      return added.length ? { inverse: { t: 'remove-ai-links', edgeIds: added } } : {};
+      const was = Object.fromEntries(added.map((id) => [id, a.links.find((l) => edgeId(l.from, l.rel, l.to) === id)!.status]));
+      return added.length ? { inverse: { t: 'remove-ai-links', edgeIds: added, was } } : {};
     }
     case 'import_export': {
       const hold = await screenExport(root, a.file, item.name);
       if (hold.length) throw new Error(`Not imported: ${hold.join('; ')}`);
       const report = await importExport(root, abs(root, a.file), { clock, steps: await loadSteps(root) });
-      return { inverse: { t: 'remove-ideas', ids: report.created.map((c) => c.id) }, result: report };
+      const prints: Record<string, string> = {};
+      for (const c of report.created) prints[c.id] = await fingerprint(await ideaDir(root, c.id));
+      return { inverse: { t: 'remove-ideas', ids: report.created.map((c) => c.id), prints }, result: report };
     }
     case 'draft_email': {
       const email = await draftEmail(root, { template: a.template, ideaId: a.ideaId }, clock);
@@ -314,10 +326,15 @@ export async function undoAction(root: string, item: InboxItem, recordId: string
   if (record.status !== 'applied') throw new Error('There is nothing to undo yet');
   const inv = record.inverse;
   const at = clock();
-  if (inv) await replay(root, item, inv, clock);
+  const out = inv ? await replay(root, item, inv, clock) : { did: 0, kept: [] as string[] };
+  // Nothing could be changed back, only kept: stay applied and say why.
+  if (out.did === 0 && out.kept.length) throw new Error(out.kept.join('; '));
   const ideaId = 'ideaId' in record.action ? record.action.ideaId : undefined;
   if (ideaId && inv && inv.t !== 'untick') await history(root, ideaId, at, `Undone: ${record.label}`, item.file, 'inbox-undo').catch(() => undefined);
-  return { ...record, status: 'undone', undoneAt: `${at}T${new Date().toISOString().slice(11)}` };
+  return {
+    ...record, status: 'undone', undoneAt: `${at}T${new Date().toISOString().slice(11)}`,
+    ...(out.kept.length ? { note: out.kept.join('; ') } : {}),
+  };
 }
 
 const safeRel = (root: string, f: string) => {
@@ -329,22 +346,52 @@ const safeRel = (root: string, f: string) => {
   return p;
 };
 
-async function replay(root: string, item: InboxItem, inv: Inverse, clock: Clock): Promise<void> {
+export function whereOf(idea: Idea): Where {
+  return { stage: idea.stage, ...(idea.closed ? { closed: idea.closed } : {}), ...(idea.route !== undefined ? { route: idea.route } : {}) };
+}
+const sameWhere = (a: Where, b: Where) =>
+  a.stage === b.stage && JSON.stringify(a.closed ?? null) === JSON.stringify(b.closed ?? null) && (a.route ?? null) === (b.route ?? null);
+
+/** A folder's fingerprint: its file names plus the bytes of each file. Any later edit, tick or added file changes it. */
+export async function fingerprint(dir: string): Promise<string> {
+  const h = createHash('sha256');
+  const walk = async (d: string, pre: string): Promise<void> => {
+    for (const e of (await fs.readdir(d, { withFileTypes: true })).sort((x, y) => x.name.localeCompare(y.name))) {
+      const p = path.join(d, e.name);
+      h.update(`${pre}${e.name}${e.isDirectory() ? '/' : ''}\0`);
+      if (e.isDirectory()) await walk(p, `${pre}${e.name}/`);
+      else h.update(await fs.readFile(p));
+    }
+  };
+  await walk(dir, '');
+  return h.digest('hex');
+}
+
+type Replayed = { did: number; kept: string[] };
+
+async function replay(root: string, _item: InboxItem, inv: Inverse, clock: Clock): Promise<Replayed> {
+  const out: Replayed = { did: 0, kept: [] };
   switch (inv.t) {
     case 'remove-file':
       for (const f of inv.files) {
         const p = safeRel(root, f);
-        if (inv.onlyDraft && !/\nstatus: draft\n/.test(await fs.readFile(p, 'utf8').catch(() => ''))) continue;
+        if (inv.onlyDraft && !/\nstatus: draft\n/.test(await fs.readFile(p, 'utf8').catch(() => ''))) {
+          out.kept.push(`${f} is no longer a draft, so it was kept`);
+          continue;
+        }
         await fs.rm(p, { force: true });
+        out.did++;
       }
-      return;
+      return out;
     case 'untick': {
       const idea = await loadIdea(root, inv.ideaId);
       const s = idea.checklist[inv.step];
+      // Ticked by someone else since (or already open): nothing of ours to change back.
       if (s?.done && s.source === inv.source) {
         await tick(root, inv.ideaId, inv.step, false, { by: 'app', source: inv.source, clock, steps: await loadSteps(root) });
       }
-      return;
+      out.did++;
+      return out;
     }
     case 'unset-field': {
       const idea = await loadIdea(root, inv.ideaId) as Idea & { answers?: { question: string; source: string }[] };
@@ -352,40 +399,68 @@ async function replay(root: string, item: InboxItem, inv: Inverse, clock: Clock)
       const answers = (idea.answers ?? []).filter((x) => !drop(x));
       const { answers: _old, ...rest } = idea;
       await saveIdea(root, (answers.length ? { ...rest, answers } : rest) as Idea);
-      return;
+      out.did++;
+      return out;
     }
     case 'remove-flag': {
       const idea = await loadIdea(root, inv.ideaId);
       await saveIdea(root, { ...idea, flags: idea.flags.filter((f) => f !== inv.text) });
-      return;
+      out.did++;
+      return out;
     }
     case 'set-field': {
       const idea = await loadIdea(root, inv.ideaId);
       if (inv.field === 'people.builder') {
         const { builder, ...people } = idea.people as Idea['people'] & { builder?: string };
-        if (builder !== inv.expect) return;
+        if (builder !== inv.expect) { out.kept.push(`The builder of ${inv.ideaId} has changed since, so it was kept`); return out; }
         await saveIdea(root, { ...idea, people: (inv.value ? { ...people, builder: inv.value } : people) as Idea['people'] });
-      } else {
-        const now: StageTarget = idea.closed ? { closeAs: idea.closed.as } : { stage: idea.stage };
-        if (JSON.stringify(now) !== JSON.stringify(inv.expect)) return;
-        await setStage(root, inv.ideaId, inv.value, clock);
+        out.did++;
+        return out;
       }
-      return;
+      if (!sameWhere(whereOf(idea), inv.expect)) {
+        out.kept.push(`${inv.ideaId} has moved since, so its stage was kept; set it by hand`);
+        return out;
+      }
+      const { closed: _c, route: _r, ...rest } = idea;
+      const prev: Idea = { ...rest, stage: inv.value.stage, ...(inv.value.closed ? { closed: inv.value.closed } : {}), ...(inv.value.route !== undefined ? { route: inv.value.route } : {}) };
+      const dir = await saveIdea(root, prev);
+      await appendHistory(dir, { at: clock(), action: 'stage', by: 'operator', detail: 'Undone from the Inbox' });
+      const handoff = path.join(dir, 'csic-handoff.md');
+      if ((await readText(handoff)) !== undefined) await writeFileAtomic(handoff, renderHandoff(prev, await loadSettings(root)));
+      out.did++;
+      return out;
     }
-    case 'remove-ai-links':
-      for (const id of inv.edgeIds) await setAiLinkStatus(root, id, 'removed').catch(() => undefined);
-      return;
+    case 'remove-ai-links': {
+      const now = new Map((await readAiLinks(root)).links.map((l) => [edgeId(l.from, l.rel, l.to), l.status]));
+      for (const id of inv.edgeIds) {
+        const status = now.get(id);
+        if (!status || status === 'removed') continue;
+        if (inv.was?.[id] && status !== inv.was[id]) { out.kept.push(`Kept the link ${id.split('|').join(' ')}: you ${status} it since`); continue; }
+        await setAiLinkStatus(root, id, 'removed');
+        out.did++;
+      }
+      return out;
+    }
     case 'remove-ideas':
       for (const id of inv.ids) {
         const dir = await ideaDir(root, id).catch(() => undefined);
-        if (dir) await fs.rm(dir, { recursive: true, force: true });
+        if (!dir) continue;
+        if (inv.prints?.[id] && (await fingerprint(dir)) !== inv.prints[id]) {
+          out.kept.push(`${id} has changed since the import; close it instead`);
+          continue;
+        }
+        await fs.rm(dir, { recursive: true, force: true });
+        out.did++;
       }
-      return;
+      return out;
   }
 }
 
 /** undo.jsonl: an append-only log of every apply and undo (like history.log, the one non-atomic write). */
 export async function logUndo(root: string, entry: { op: 'apply' | 'undo'; item: string; record: string; t: string; inverse?: Inverse }): Promise<void> {
-  await fs.mkdir(paths(root).inbox, { recursive: true });
-  await fs.appendFile(path.join(paths(root).inbox, 'undo.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, 'utf8');
+  // A log failure never turns a done action into a failed one.
+  try {
+    await fs.mkdir(paths(root).inbox, { recursive: true });
+    await fs.appendFile(path.join(paths(root).inbox, 'undo.jsonl'), `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, 'utf8');
+  } catch { /* the inverse is on the item; the log is a convenience */ }
 }

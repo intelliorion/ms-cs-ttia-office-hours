@@ -36,12 +36,16 @@ async function save(root: string, item: InboxItem, records: ActionRecord[]): Pro
   return updateItem(root, item.id, { actions: records, status: statusOf(item, records) });
 }
 
+/** Apply one record, then save the sidecar at once, so an applied action always has its inverse on disk. */
 async function applyOne(root: string, item: InboxItem, records: ActionRecord[], i: number, clock: Clock): Promise<void> {
   try {
     records[i] = await applyAction(root, item, records[i], clock);
-    await logUndo(root, { op: 'apply', item: item.id, record: records[i].id, t: records[i].action.t, inverse: records[i].inverse });
   } catch (e) {
     records[i] = { ...records[i], status: 'failed', error: (e as Error).message };
+  }
+  await updateItem(root, item.id, { actions: [...records] });
+  if (records[i].status === 'applied') {
+    await logUndo(root, { op: 'apply', item: item.id, record: records[i].id, t: records[i].action.t, inverse: records[i].inverse });
   }
 }
 
@@ -72,6 +76,7 @@ export async function processItem(
     id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending', label: labelOf(action),
   }));
   const records = [...kept, ...fresh];
+  await updateItem(root, id, { actions: [...records] });
   for (let i = kept.length; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, item, records, i, clock);
   return save(root, item, records);
 }
@@ -105,6 +110,7 @@ export async function undoRecord(root: string, id: string, recordId: string, clo
   const records = [...recordsOf(item)];
   const i = records.findIndex((r) => r.id === recordId);
   records[i] = await undoAction(root, item, recordId, clock);
+  await updateItem(root, item.id, { actions: [...records] });
   await logUndo(root, { op: 'undo', item: item.id, record: recordId, t: records[i].action.t, inverse: records[i].inverse });
   return save(root, item, records);
 }
@@ -112,6 +118,8 @@ export async function undoRecord(root: string, id: string, recordId: string, clo
 export async function chooseIdea(root: string, id: string, ideaId: string, connector: Connector | null | undefined, clock: Clock): Promise<InboxItem> {
   const item = await load(root, id);
   if (item.status === 'held') throw new Error('A held item is not read, so it has no idea to choose');
+  // Choosing again after something was applied would file it twice or act on the wrong idea.
+  if (recordsOf(item).some((r) => r.status === 'applied')) throw new Error('Undo what was done first');
   const { ideas } = await listIdeas(root);
   if (!ideas.some((i) => i.id === ideaId)) throw new Error(`No idea ${ideaId}`);
   return processItem(root, id, connector, clock, { ideaId });

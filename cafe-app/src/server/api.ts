@@ -133,7 +133,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const ids = Array.isArray(body.actionIds) ? body.actionIds.map(String) : [];
     return { item: await applyRecords(root, params.id, ids, clock) };
   });
-  add('POST', '/api/inbox/:id/undo', async ({ params, body }) => ({ item: await undoRecord(root, params.id, String(body.recordId ?? ''), clock) }));
+  add('POST', '/api/inbox/:id/undo', async ({ params, body }) => {
+    const recordId = String(body.recordId ?? '');
+    const item = await undoRecord(root, params.id, recordId, clock);
+    const note = (item.actions as { id: string; note?: string }[] | undefined)?.find((r) => r.id === recordId)?.note;
+    return note ? { item, note } : { item };
+  });
   add('POST', '/api/inbox/:id/choose', async ({ params, body }) => ({ item: await chooseIdea(root, params.id, String(body.ideaId ?? ''), ai, clock) }));
   add('POST', '/api/inbox/:id/dismiss', async ({ params }) => ({ item: await dismissItem(root, params.id) }));
   add('POST', '/api/inbox/:id/delete', async ({ params }) => deleteItem(root, params.id));

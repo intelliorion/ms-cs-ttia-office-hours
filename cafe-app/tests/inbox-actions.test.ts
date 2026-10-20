@@ -442,4 +442,17 @@ describe('processDrop and filing (final review 6, 7)', () => {
     expect(rec(item, 'file_email').action).toMatchObject({ direction: 'out' });
     expect(await readdir(path.join(await ideaDir(root, 'CAFE-2026-001'), 'emails', 'out'))).toHaveLength(2);
   });
+
+  it('our own email is only filed: nothing the AI read in it is proposed (acceptance 07)', async () => {
+    const root = await tmpWorkspace('2026-10-19');
+    for (const i of IDEAS) await saveIdea(root, i);
+    await sentE2(root);
+    await saveSettings(root, { operatorName: 'Person 2' });
+    const { item } = await processDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), connectorFor(FULL), clock);
+    expect((item.actions as ActionRecord[]).map((r) => r.action.t)).toEqual(['file_email']);
+    expect(rec(item, 'file_email')).toMatchObject({ kind: 'safe', status: 'applied', action: { direction: 'out' } });
+    const idea = await loadIdea(root, 'CAFE-2026-001');
+    expect(idea.flags).toEqual([]);
+    expect(idea.checklist.s2d?.done).toBeFalsy();
+  });
 });

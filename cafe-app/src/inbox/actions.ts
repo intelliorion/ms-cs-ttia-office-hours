@@ -181,9 +181,11 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   if (tr.ask || !tr.ideaId) return { actions: [{ t: 'ask_idea', candidates: tr.candidates }] };
   const ideaId = tr.ideaId;
   const idea = await loadIdea(root, ideaId);
-  const actions: Action[] = [{ t: 'file_email', ideaId, direction: await directionOf(root, item) }];
+  const direction = await directionOf(root, item);
+  const actions: Action[] = [{ t: 'file_email', ideaId, direction }];
   const facts = tr.ai?.facts;
-  if (!facts) return { actions };
+  // Our own email is only filed: what we wrote is not news about the idea (no flags, stage, links or answers from it).
+  if (!facts || direction === 'out') return { actions };
 
   // The AI's facts alone never make a Safe write: an answer is Safe only against a question we sent,
   // a reply only when we asked (E2 or E2R sent), attendance only when we invited (E3 sent).

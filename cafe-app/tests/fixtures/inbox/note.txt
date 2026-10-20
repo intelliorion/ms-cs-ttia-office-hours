@@ -1,0 +1,3 @@
+Call with Person 2 about CAFE-2026-001 Email scheduler.
+They will send counts for the last quarter by Friday.
+Person 3 offered to help build the first version.

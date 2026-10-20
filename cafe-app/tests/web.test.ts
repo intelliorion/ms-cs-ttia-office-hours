@@ -23,6 +23,19 @@ function rawGet(base: string, p: string): Promise<{ status: number; headers: htt
   });
 }
 
+function rawGetBody(base: string, p: string): Promise<{ status: number; body: string }> {
+  const u = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: u.hostname, port: u.port, path: p, method: 'GET' }, (r) => {
+      let body = '';
+      r.on('data', (c) => (body += c));
+      r.on('end', () => resolve({ status: r.statusCode ?? 0, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 describe('web page', () => {
   it('serves the built page, never cached', async () => {
     const s = await startServer();
@@ -49,8 +62,17 @@ describe('web page', () => {
   it('serves assets only from the build folder', async () => {
     const s = await startServer();
     close = () => s.server.close();
-    for (const p of ['/assets/..%2f..%2fpackage.json', '/assets/%2e%2e/%2e%2e/package.json', '/assets/../package.json', '/assets/..%2f..%2fsrc%2fserver%2fserver.ts']) {
-      expect((await rawGet(s.base, p)).status, p).not.toBe(200);
+    // Real files outside web/ with an allowed extension, so only the folder guard can stop them.
+    const targets: [string, string][] = [
+      ['/assets/..%2f..%2fvscode-helper%2fextension.js', 'vscode-helper/extension.js'],
+      ['/assets/%2e%2e/%2e%2e/vscode-helper/lib.js', 'vscode-helper/lib.js'],
+    ];
+    for (const [p, rel] of targets) {
+      const file = path.resolve(WEB, '..', rel);
+      expect(fs.existsSync(file), rel).toBe(true);
+      const r = await rawGetBody(s.base, p);
+      expect(r.status, p).not.toBe(200);
+      expect(r.body, p).not.toBe(fs.readFileSync(file, 'utf8'));
     }
     expect((await fetch(`${s.base}/assets/nope.js`)).status).toBe(404);
   });
@@ -58,7 +80,13 @@ describe('web page', () => {
   it('refuses file types the build never produces', async () => {
     const s = await startServer();
     close = () => s.server.close();
-    expect((await rawGet(s.base, '/assets/x.html')).status).toBe(404);
+    // index.html really exists under web/, so only the extension list refuses it.
+    expect((await rawGet(s.base, '/assets/..%2findex.html')).status).toBe(404);
+  });
+
+  it('has no route at /index.html', async () => {
+    const s = await startServer();
+    close = () => s.server.close();
     expect((await rawGet(s.base, '/index.html')).status).toBe(404);
   });
 });

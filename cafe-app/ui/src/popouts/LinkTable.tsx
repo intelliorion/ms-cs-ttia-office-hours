@@ -18,6 +18,7 @@ export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: 
               <span className="rel">{r.out ? `${r.rel} →` : `← ${r.rel}`}</span>
               <span className="dot" style={{ background: colour }} aria-hidden="true" />
               <span className="other" title={`${r.other.label} (${r.other.type})`}>{r.other.label}</span>
+              {r.other.unapproved && <span className="tag amber" data-testid="not-approved">Not on the approved list</span>}
               <span className={`conf${r.confirmed ? '' : ' low'}`}>{confidenceText(r.confidence)}</span>
             </div>
             <div className="lk-sub">

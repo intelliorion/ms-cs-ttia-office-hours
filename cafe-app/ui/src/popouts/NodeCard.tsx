@@ -53,6 +53,7 @@ export function NodeCard({ nodeId }: { nodeId: string }) {
         <div>
           <div className="nc-type"><span className="dot" style={{ background: colour }} />{NODE_LABELS[node.type as keyof typeof NODE_LABELS] ?? node.type}</div>
           <h2>{node.label}</h2>
+          {node.type === 'Tool' && node.attrs?.approved === false && <span className="tag amber" data-testid="not-approved">Not on the approved list</span>}
           <div className="nc-sub">{rows.length} link{rows.length === 1 ? '' : 's'}{unconfirmed ? ` · ${unconfirmed} unconfirmed` : ''}</div>
         </div>
         <button className="x" aria-label="Close" onClick={() => select(null)}>✕</button>

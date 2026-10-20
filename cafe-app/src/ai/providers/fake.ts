@@ -10,11 +10,13 @@ const EXTRACT = {
     { type: 'Capability', label: 'Document parsing' },
     { type: 'Capability', label: 'Workflow routing' },
     { type: 'System', label: 'Shared mailbox' },
+    { type: 'Tool', label: 'Microsoft Planner' },
   ],
   links: [
     { from: 'idea', to: 'Document parsing', rel: 'NEEDS', description: 'Reads the incoming requests', confidence: 0.9 },
     { from: 'idea', to: 'Workflow routing', rel: 'NEEDS', description: 'Sends each request to the right team', confidence: 0.9 },
     { from: 'Document parsing', to: 'Shared mailbox', rel: 'USES_DATA', description: 'Requests arrive in a shared mailbox', confidence: 0.6 },
+    { from: 'Workflow routing', to: 'Microsoft Planner', rel: 'BUILT_WITH', description: 'Tasks tracked in Planner', confidence: 0.8 },
   ],
 };
 const REVIEW = {

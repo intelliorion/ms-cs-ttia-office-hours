@@ -172,3 +172,37 @@ describe('store and layout', () => {
     expect(await readFile(file, 'utf8')).toContain('{"from": "torn');
   });
 });
+
+import { APPROVED_TOOLS, canonicalTool, isApprovedTool } from '../src/graph/ontology';
+import { planAiLinks } from '../src/ai/apply';
+
+describe('approved tools', () => {
+  it('maps variants to canonical labels and detects unapproved tools', () => {
+    expect(APPROVED_TOOLS).toHaveLength(6);
+    expect(canonicalTool('Microsoft Copilot Studio')).toBe('Copilot Studio');
+    expect(canonicalTool('  power  APPS ')).toBe('Power Apps');
+    expect(canonicalTool('Custom app')).toBe('custom app');
+    expect(canonicalTool('custom code')).toBe('custom app');
+    expect(isApprovedTool('UiPath')).toBe(true);
+    for (const t of ['Microsoft Planner', 'Power Automate', 'Microsoft Teams']) expect(isApprovedTool(t)).toBe(false);
+  });
+  it('merges approved AI tools into the existing star and flags the rest', () => {
+    const graph = {
+      nodes: [{ id: 'tool:copilot-studio', type: 'Tool' as const, label: 'Copilot Studio' }, { id: 'capability:routing', type: 'Capability' as const, label: 'Routing' }],
+      edges: [{ id: 'f', from: 'capability:routing', to: 'tool:copilot-studio', rel: 'BUILT_WITH' as const, description: '', source: 'form:CAFE-1', confidence: 1, confirmed: true }],
+    };
+    const out = {
+      nodes: [{ type: 'Capability' as const, label: 'Doc parsing' }, { type: 'Tool' as const, label: 'Microsoft Copilot Studio' }, { type: 'Tool' as const, label: 'Microsoft Planner' }],
+      links: [
+        { from: 'Doc parsing', to: 'Microsoft Copilot Studio', rel: 'BUILT_WITH' as const, description: 'Bot', confidence: 0.9 },
+        { from: 'Doc parsing', to: 'Microsoft Planner', rel: 'BUILT_WITH' as const, description: 'Tasks', confidence: 0.9 },
+      ],
+    };
+    const { links, newNodes } = planAiLinks('CAFE-1', out as any, graph, [], 'fake');
+    expect(links[0].to).toBe('tool:copilot-studio');
+    expect(links[0].newNodes?.map((n) => n.id)).not.toContain('tool:copilot-studio');
+    const planner = links[1];
+    expect(planner.description).toBe('Tasks — not on the approved list');
+    expect(newNodes.find((n) => n.id === 'tool:microsoft-planner')?.attrs).toEqual({ approved: false });
+  });
+});

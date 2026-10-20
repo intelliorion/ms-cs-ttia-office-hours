@@ -90,6 +90,7 @@ export const extractTask: Task<ExtractOutput> = {
     return build('extract', [
       "Read the idea's challenge, current process and outcomes.",
       'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint), the systems or data it uses (System) and tools (Tool).',
+      'Approved tools: Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath, custom app. When the text means one of these, use exactly that label for the Tool. Any other tool is not on the approved list.',
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
       'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System, Capability BUILT_WITH Tool.',
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
@@ -238,7 +239,7 @@ export const triageTask: Task<Triage> = {
       'facts.replyReceived: true only if this is the reply we are waiting for. facts.builderNamed: the person the sender says will build it, or null. facts.attendanceConfirmed: true only if they confirm they can attend every session.',
       'facts.newFlags: at most 3 short concerns (at most 80 characters each), such as "Needs client data". facts.stageHint: only if the text clearly says so, else null.',
       '"peoplePresent" lists the people in the To or Cc lines or speaking in a meeting. They are context only, never graph nodes.',
-      'facts.graph: capabilities (Capability), pain points (PainPoint), systems or data (System) and tools (Tool) the text shows the idea needs, as in the extract task. Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System, Capability BUILT_WITH Tool. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
+      'Approved tools: Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath, custom app. When the text means one of these, use exactly that label for the Tool. facts.graph: capabilities (Capability), pain points (PainPoint), systems or data (System) and tools (Tool) the text shows the idea needs, as in the extract task. Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System, Capability BUILT_WITH Tool. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
     ], TRIAGE_SCHEMA, triageData(input as TriageInput), 'something dropped in the Inbox');
   },
   parse: parseTriage,

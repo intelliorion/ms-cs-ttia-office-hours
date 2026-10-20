@@ -20,7 +20,7 @@ export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USE
 export const AI_NODE_TYPES: NodeType[] = ['PainPoint', 'Capability', 'Tool', 'System'];
 export const CONFIRMED_AT = 0.7;
 
-export interface GNode { id: string; type: NodeType; label: string; attrs?: Record<string, string | number> }
+export interface GNode { id: string; type: NodeType; label: string; attrs?: Record<string, string | number | boolean> }
 export interface GEdge {
   id: string; from: string; to: string; rel: Relation; description: string;
   source: string; confidence: number; confirmed: boolean;
@@ -42,3 +42,20 @@ export function nodeId(type: NodeType, label: string): string {
   return `${type.toLowerCase()}:${slug(label)}`;
 }
 export const edgeId = (from: string, rel: Relation, to: string) => `${from}|${rel}|${to}`;
+
+/** The Café's approved tools (app design section 6). Anything else is "not on the approved list". */
+export const APPROVED_TOOLS: string[] = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'];
+const TOOL_ALIASES: Record<string, string> = {
+  'microsoft copilot': 'Microsoft Copilot', 'copilot': 'Microsoft Copilot', 'm365 copilot': 'Microsoft Copilot', 'microsoft 365 copilot': 'Microsoft Copilot',
+  'copilot studio': 'Copilot Studio', 'microsoft copilot studio': 'Copilot Studio',
+  'power apps': 'Power Apps', 'powerapps': 'Power Apps', 'microsoft power apps': 'Power Apps',
+  'dataiku': 'Dataiku', 'dataiku dss': 'Dataiku',
+  'uipath': 'UiPath', 'ui path': 'UiPath',
+  'custom app': 'custom app', 'custom application': 'custom app', 'custom code': 'custom app', 'custom-built app': 'custom app', 'bespoke app': 'custom app',
+};
+/** The canonical approved label for a tool name, or undefined when it is not on the list. */
+export function canonicalTool(label: string): string | undefined {
+  return TOOL_ALIASES[label.trim().toLowerCase().replace(/\s+/g, ' ')];
+}
+export const isApprovedTool = (label: string) => canonicalTool(label) !== undefined;
+export const NOT_APPROVED_NOTE = ' — not on the approved list';

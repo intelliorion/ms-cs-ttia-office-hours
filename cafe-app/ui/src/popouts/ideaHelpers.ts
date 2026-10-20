@@ -94,7 +94,7 @@ export interface LinkRow {
   rel: string;
   /** Arrow from the node's side: out when the node is the link's "from". */
   out: boolean;
-  other: { id: string; label: string; type: string };
+  other: { id: string; label: string; type: string; unapproved?: boolean };
   source: string;
   confidence: number;
   confirmed: boolean;
@@ -112,7 +112,7 @@ export function nodeLinks(graph: { nodes: GNode[]; edges: GEdge[] } | null | und
       const n = byId.get(otherId);
       return {
         edge: e, rel: e.rel, out,
-        other: { id: otherId, label: n?.label ?? otherId, type: n ? NODE_LABELS[n.type] ?? n.type : '' },
+        other: { id: otherId, label: n?.label ?? otherId, type: n ? NODE_LABELS[n.type] ?? n.type : '', ...(n?.type === 'Tool' && n.attrs?.approved === false ? { unapproved: true } : {}) },
         source: e.source, confidence: e.confidence, confirmed: e.confirmed,
       };
     })

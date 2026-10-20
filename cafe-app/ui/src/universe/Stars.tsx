@@ -1,9 +1,11 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
-import { Billboard, Html } from '@react-three/drei';
+import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
 import { DIM, NODE_COLOURS, labelAlways, phase, ringColour, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture } from './haloTexture';
+
+const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
 
 export interface StarsProps {
   nodes: GNode[];
@@ -149,6 +151,11 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSe
             <ringGeometry args={[sizes[i] * 1.75, sizes[i] * 1.75 + 0.32, 64]} />
             <meshBasicMaterial color={ringColour(d)} transparent opacity={!hood || hood.has(d.id) ? 0.9 : DIM} depthWrite={false} toneMapped={false} />
           </mesh>
+        </Billboard>
+      ))}
+      {nodes.map((d, i) => d.type === 'Tool' && d.attrs?.approved === false && (
+        <Billboard key={`na-${d.id}`} position={pos.get(d.id)}>
+          <Line points={RING_PTS} color="#f59e0b" lineWidth={1} dashed dashSize={0.12} gapSize={0.1} transparent opacity={!hood || hood.has(d.id) ? 0.95 : DIM} scale={sizes[i] * 1.75} />
         </Billboard>
       ))}
       {nodes.map((d) => {

@@ -1,4 +1,4 @@
-import { ALLOWED, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
+import { ALLOWED, NOT_APPROVED_NOTE, canonicalTool, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
 
@@ -32,8 +32,16 @@ export function planAiLinks(
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
   for (const n of out.nodes) {
-    const label = n.label.trim();
-    if (label && !proposed.has(key(label))) proposed.set(key(label), { id: nodeId(n.type, label), type: n.type, label });
+    const raw = n.label.trim();
+    if (!raw || proposed.has(key(raw))) continue;
+    // A Tool the Café approves takes its canonical label (so it merges with that star); any other
+    // tool is kept, flagged, for the operator to decide.
+    const canon = n.type === 'Tool' ? canonicalTool(raw) : undefined;
+    const label = canon ?? raw;
+    proposed.set(key(raw), {
+      id: nodeId(n.type, label), type: n.type, label,
+      ...(n.type === 'Tool' && !canon ? { attrs: { approved: false } } : {}),
+    });
   }
   const existing = new Map<string, GNode>();
   for (const n of graph.nodes) if (n.type !== 'Idea' && n.type !== 'Person' && !existing.has(key(n.label))) existing.set(key(n.label), n);
@@ -59,9 +67,10 @@ export function planAiLinks(
     const id = edgeId(from.id, l.rel, to.id);
     if (seen.has(id)) continue;
     seen.add(id);
+    const unapproved = [from, to].some((n) => n.type === 'Tool' && n.attrs?.approved === false);
     const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
     links.push({
-      from: from.id, to: to.id, rel: l.rel, description: l.description, confidence: l.confidence,
+      from: from.id, to: to.id, rel: l.rel, description: unapproved ? `${l.description}${NOT_APPROVED_NOTE}` : l.description, confidence: l.confidence,
       source: `ai:${provider}:challenge`, status: 'pending',
       ...(newNodes.length ? { newNodes } : {}),
     });

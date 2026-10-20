@@ -178,3 +178,7 @@ Routed by stage inside the CSIC Repository: proposal, and a proof of concept
 with users, ask 1 to 3 and 6; approved asks 2 to 4; in build asks 4 to 6. An
 idea never reaches these questions: it is a Café conversation. A live
 initiative that went through CSIC is a value story.
+
+## Getting the repo where "Download ZIP" is blocked
+
+Some corporate filters block archive downloads but allow single files. `git clone` usually still works; if not, copy one script from the browser and run it: `scripts/fetch-without-zip.ps1` (Windows PowerShell) or `scripts/fetch-without-zip.sh` (bash). It reads `MANIFEST.txt` and fetches every file one by one. After adding files, run `bash scripts/make-manifest.sh` to refresh the manifest.

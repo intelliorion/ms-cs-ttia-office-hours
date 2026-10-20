@@ -13,6 +13,18 @@ export type Popout =
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
 export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }
 export type Drawer = 'ideas' | 'charts' | null;
+/** Pill label for the Focus button. */
+export const focusLabel = (on: boolean) => (on ? 'Show panels' : 'Focus');
+const FOCUS_KEY = 'cafe-focus';
+export function readFocus(): boolean { try { return localStorage.getItem(FOCUS_KEY) === '1'; } catch { return false; } }
+function writeFocus(on: boolean) { try { localStorage.setItem(FOCUS_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ } }
+/** Should the F shortcut act? Not while typing, with a modifier, or with a pop-out open. */
+export function focusKeyApplies(e: { key: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; target?: any }, popoutOpen: boolean): boolean {
+  if ((e.key !== 'f' && e.key !== 'F') || e.ctrlKey || e.metaKey || e.altKey || popoutOpen) return false;
+  const t = e.target; const tag = String(t?.tagName ?? '').toUpperCase();
+  return !(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable);
+}
+
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
 export interface AppState {
@@ -24,6 +36,9 @@ export interface AppState {
   labels: boolean;
   /** Bumped by Reset view; the universe flies home when it changes. */
   viewNonce: number;
+  /** Focus mode: only the universe (and the title bar) show. */
+  focus: boolean;
+  toggleFocus: () => void;
   popout: Popout;
   notice: Notice | null;
   suggest: Suggest | null;
@@ -44,7 +59,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, popout: null, notice: null, suggest: null, ai: null, drawer: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), popout: null, notice: null, suggest: null, ai: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
@@ -63,6 +78,7 @@ export const useStore = create<AppState>((set) => ({
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
+  toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
   openPopout: (p) => set({ popout: p, drawer: null }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),

@@ -23,7 +23,8 @@ panels, large white titles and pill buttons at the bottom.
   front of the universe; close them with the X.
 - **Narrow windows.** Below 1000px wide the side panels become drawers: tap the "Ideas" tab on the left or
   "Charts" on the right; close with the X or Esc. The universe stays behind them.
-- **Bottom centre.** Reset view and Labels.
+- **Bottom centre.** Reset view, Labels and Focus.
+- **Focus.** The Focus button (or the F key) hides every panel and drawer so only the universe shows; clicks still work. Click again (Show panels) to bring them back.
 - **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
   and the AI chip (which shows who is answering).
 

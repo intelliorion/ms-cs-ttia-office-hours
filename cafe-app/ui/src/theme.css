@@ -246,3 +246,6 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 }
 @keyframes drawer-in{from{transform:translateX(var(--from,-100%))}to{transform:none}}
 .drawer .latelist{flex:none}
+
+/* Focus mode: the card sits top-centre, clear of the graph. */
+.stage.focus .nodecard{left:745px}

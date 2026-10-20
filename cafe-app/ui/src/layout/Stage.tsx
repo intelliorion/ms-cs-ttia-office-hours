@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 const W = 1920, H = 1080;
 const fit = () => Math.min(window.innerWidth / W, window.innerHeight / H);
 
-export function Stage({ children }: { children: ReactNode }) {
+export function Stage({ children, focus = false }: { children: ReactNode; focus?: boolean }) {
   const [scale, setScale] = useState(fit);
   useEffect(() => {
     const on = () => setScale(fit());
@@ -12,7 +12,7 @@ export function Stage({ children }: { children: ReactNode }) {
   }, []);
   return (
     <div className="stage-wrap">
-      <div className="stage" data-testid="stage" style={{ transform: `scale(${scale})` }}>{children}</div>
+      <div className={`stage${focus ? ' focus' : ''}`} data-testid="stage" style={{ transform: `scale(${scale})` }}>{children}</div>
     </div>
   );
 }

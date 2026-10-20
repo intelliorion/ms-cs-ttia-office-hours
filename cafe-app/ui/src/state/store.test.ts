@@ -73,3 +73,37 @@ describe('drawers', () => {
     expect(useStore.getState().drawer).toBeNull();
   });
 });
+
+describe('focus mode', () => {
+  it('labels the pill', async () => { const { focusLabel } = await import('./store'); expect([focusLabel(false), focusLabel(true)]).toEqual(['Focus', 'Show panels']); });
+  it('toggleFocus flips, persists, closes drawers and re-frames', async () => {
+    const mem: Record<string, string> = {};
+    vi.stubGlobal('localStorage', { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v; } });
+    const { useStore } = await import('./store');
+    const n = useStore.getState().viewNonce;
+    useStore.getState().setDrawer('ideas');
+    useStore.getState().toggleFocus();
+    expect(useStore.getState()).toMatchObject({ focus: true, drawer: null, viewNonce: n + 1 });
+    expect(mem['cafe-focus']).toBe('1');
+    useStore.getState().toggleFocus();
+    expect(useStore.getState().focus).toBe(false);
+    expect(mem['cafe-focus']).toBe('0');
+    vi.unstubAllGlobals();
+  });
+  it('survives unavailable storage', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } });
+    const { readFocus, useStore } = await import('./store');
+    expect(readFocus()).toBe(false);
+    expect(() => useStore.getState().toggleFocus()).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+  it('F ignores typing, modifiers and open pop-outs', async () => {
+    const { focusKeyApplies: k } = await import('./store');
+    expect(k({ key: 'f', target: { tagName: 'DIV' } }, false)).toBe(true);
+    expect(k({ key: 'F', target: { tagName: 'INPUT' } }, false)).toBe(false);
+    expect(k({ key: 'f', target: { tagName: 'TEXTAREA' } }, false)).toBe(false);
+    expect(k({ key: 'f', target: { tagName: 'DIV' } }, true)).toBe(false);
+    expect(k({ key: 'f', metaKey: true, target: { tagName: 'DIV' } }, false)).toBe(false);
+    expect(k({ key: 'x', target: { tagName: 'DIV' } }, false)).toBe(false);
+  });
+});

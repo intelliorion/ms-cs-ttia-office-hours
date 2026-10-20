@@ -16,6 +16,8 @@ export interface UniverseProps {
   selectedId: string | null;
   hoverId: string | null;
   labels: boolean;
+  /** Focus mode: the graph fits the whole stage instead of the centre gap. */
+  focus?: boolean;
   /** Bumped by Reset view. */
   viewNonce?: number;
   onSelect: (id: string | null) => void;
@@ -36,8 +38,8 @@ export function hasWebGL(): boolean {
 }
 
 /** Fixed camera framing: the graph fits the centre gap between the panels (x 480–1440 of 1920). */
-function homeFor(radius: number) {
-  const d = Math.min(600, Math.max(60, radius * 2.85));
+function homeFor(radius: number, focus = false) {
+  const d = Math.min(600, Math.max(60, radius * (focus ? 1.75 : 2.85)));
   return { position: new Vector3(0, 0.36, 1).normalize().multiplyScalar(d), target: new Vector3(0, -radius * 0.08, 0) };
 }
 
@@ -77,9 +79,9 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, hoverId, labels, viewNonce = 0, onSelect, onHover }: UniverseProps) {
+function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover }: UniverseProps) {
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
-  const home = useMemo(() => homeFor(radius), [radius]);
+  const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
   const pos = useMemo(() => {
     const m = new Map<string, Vec3>();
     for (const n of graph.nodes) {

@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty]  (ai needs CAFE_AI_FAKE=1;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty|focus]  (ai needs CAFE_AI_FAKE=1;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -322,6 +322,17 @@ async function main() {
       const narrow = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
       await drawersShots(narrow, errors);
       await narrow.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'focus') {
+      await p.evaluate(() => window.__cafe.toggleFocus());
+      await sleep(2500);
+      await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
+      await sleep(3500);
+      await shot(p, '19-focus.png');
+      await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;
       return;

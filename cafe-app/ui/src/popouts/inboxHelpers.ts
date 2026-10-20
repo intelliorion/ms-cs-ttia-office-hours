@@ -15,6 +15,7 @@ export interface ActionRecord {
   inverse?: unknown;
   result?: unknown;
   error?: string;
+  note?: string;
 }
 
 export interface InboxItemView {

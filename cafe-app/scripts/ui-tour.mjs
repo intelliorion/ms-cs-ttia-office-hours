@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|inbox|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -231,6 +231,46 @@ async function inboxShots(p) {
   await p.keyboard.press('Escape');
 }
 
+// The Inbox with no AI (provider pinned to None, no fake): the "Working by hand" badge and problems, then an Undo
+// that is partly refused because an idea the import made has been worked on since. Runs without CAFE_AI_FAKE.
+const THIRD_EXPORT = [
+  'ID,Title,Submitter Name,CS Function,Region,Participation Type,Team Members and Lead,Business Challenge,Desired Outcomes,Current Process,Support Requested,Have you already experimented with AI for this idea?',
+  '21,Visitor badge reminders,Person 21 (CS),Workplace,EMEA,Individual,,Visitor badges are chased by email each morning.,;#Save time;#,Email the front desk.,;#Agent Design Guidance;#,No',
+  '22,Vendor invoice triage,Person 22 (CS),Finance Ops,AMER,Individual,,Invoices are sorted by hand into queues.,;#Improve quality;#,Read each invoice.,;#AI Solution Brainstorming;#,No',
+].join('\n');
+
+async function inboxHandShots(p, restart) {
+  const fx = path.join(APP, 'tests/fixtures/inbox');
+  await restart({ CAFE_AI_FAKE: '' });
+  await post('/api/ai/provider', { provider: 'none' });
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(2500);
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await p.click('.titlebar [data-action="inbox"]');
+  await p.waitForSelector('[data-testid="inbox-drop"]');
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(fx, 'transcript.vtt'));
+  await p.waitForSelector('[data-testid="needs-hand"]', { timeout: 120000 });
+  await sleep(1000);
+  await shot(p, '25-inbox-by-hand.png');
+
+  const before = new Set((await (await fetch(`${base}/api/state`)).json()).ideas.map((i) => i.id));
+  const csv = path.join(workspace, 'third-export.csv');
+  await fs.writeFile(csv, THIRD_EXPORT);
+  await p.setInputFiles('[data-testid="inbox-file"]', csv);
+  await p.waitForSelector('.ib-item:has-text("third-export.csv") [data-action="undo"]', { timeout: 120000 });
+  const made = (await (await fetch(`${base}/api/state`)).json()).ideas.map((i) => i.id).filter((id) => !before.has(id));
+  if (made.length < 2) throw new Error(`inbox undo: expected two new ideas, got ${made.length}`);
+  await post(`/api/ideas/${made[0]}/tick`, { step: 's2a', done: true });
+  await p.click('.ib-item:has-text("third-export.csv") [data-action="undo"]');
+  await p.waitForSelector('[data-testid="item-notice"]');
+  console.log('  undo notice:', await p.textContent('[data-testid="item-notice"]'));
+  await sleep(1000);
+  await shot(p, '26-inbox-undo-refused.png');
+  await p.keyboard.press('Escape');
+  await post('/api/ai/provider', { provider: 'auto' });
+}
+
 // Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.
 async function ideaCardShots(p) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`ideacard: ${msg}`); };
@@ -397,6 +437,13 @@ async function main() {
       process.exitCode = errors.length ? 1 : 0;
       return;
     }
+    if (only === 'inboxhand') {
+      await inboxHandShots(p, restart);
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
     if (only === 'drawers') {
       await gl.close();
       const narrow = await chromium.launch({ channel: 'chrome', headless: true, args: GPU });
@@ -458,6 +505,7 @@ async function main() {
     if (process.env.CAFE_AI_FAKE === '1') { await aiShots(p); await inboxShots(p); }
     await drawersShots(gl, errors);
     await popouts2Shots(p, gl, errors, restart);
+    await inboxHandShots(p, restart);
     await gl.close();
 
     console.log('No WebGL:');

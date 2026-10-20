@@ -17,6 +17,7 @@ const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcr
 export function InboxPopout() {
   const { state, inbox, refreshInbox, refresh, closePopout, openPopout, select, notice, setNotice } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
+  const going = useRef(false); // set at once, so a second click in the same tick cannot start a second call
   const [over, setOver] = useState(false);
   const [paste, setPaste] = useState('');
   const [dupes, setDupes] = useState<Record<string, string>>({});
@@ -31,21 +32,23 @@ export function InboxPopout() {
   const ideaTitle = (id: string) => state?.ideas?.find((i: any) => i.id === id)?.title ?? '';
 
   /** Runs one inbox call, then reads the inbox, the ideas and the universe again so new stars and links show. */
-  const run = async <T,>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null) => {
-    if (busy) return;
+  const run: Run = async (label, fn, ok, say) => {
+    if (going.current) return;
+    going.current = true;
     setBusy(label);
+    const tell = say ?? ((n: Note | null) => setNotice(n));
     try {
       const r = await fn();
       const text = ok?.(r);
-      setNotice(text ? { text, kind: 'ok' } : null);
-    } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
-    await Promise.all([refreshInbox(), refresh()]);
-    setBusy(null);
+      tell(text ? { text, kind: 'ok' } : null);
+    } catch (e) { tell({ text: (e as Error).message, kind: 'error' }); }
+    try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
 
   /** A drop can wait on the AI for up to 90 seconds; say which part it is on. */
   const dropping = async (fn: () => Promise<any>) => {
-    if (busy) return;
+    if (going.current) return;
+    going.current = true;
     setBusy('Reading…');
     slow.current = setTimeout(() => setBusy('Asking the AI… (this can take a minute)'), 1500);
     let res: any = null;
@@ -57,8 +60,7 @@ export function InboxPopout() {
         setNotice({ text: `${duplicateNotice(res.item)}. Nothing was done again.`, kind: 'ok' });
       } else setNotice({ text: `${res.item.name} is in the Inbox.`, kind: 'ok' });
     }
-    await Promise.all([refreshInbox(), refresh()]);
-    setBusy(null);
+    try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
   const dropFiles = async (files: FileList | File[] | null | undefined) => {
     for (const f of [...(files ?? [])]) await dropping(() => inboxDropFile(f));
@@ -77,12 +79,14 @@ export function InboxPopout() {
   return (
     <Modal title={<><div className="pop-id">Inbox</div><h2>{waiting ? `${waiting} waiting on you` : 'Nothing waiting'}</h2></>}
       label="Inbox" onClose={closePopout} width={1060} height={900} className="inbox-pop">
+      {/* The whole pop-out takes the drop, so a file let go outside the zone is read, not opened by the browser. */}
+      <div className="ib-body" data-testid="inbox-body"
+        style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setOver(false); void dropFiles(e.dataTransfer.files); }}>
       <div className="pop-strip ib-top">
-        <div
-          className={`dropzone ib-drop${over ? ' over' : ''}${busy ? ' busy' : ''}`} data-testid="inbox-drop"
-          onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); void dropFiles(e.dataTransfer.files); }}
-        >
+        <div className={`dropzone ib-drop${over ? ' over' : ''}${busy ? ' busy' : ''}`} data-testid="inbox-drop">
           <div className="dz-t">{busy ?? 'Drop anything: exports, emails, transcripts, notes'}</div>
           <div className="hint">Or paste below. Everything dropped here is read as data, never as instructions. Lists of people are held, not read.</div>
           <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files for the Inbox" disabled={!!busy}
@@ -112,11 +116,13 @@ export function InboxPopout() {
           </button>
         )}
       </div>
+      </div>
     </Modal>
   );
 }
 
-type Run = <T>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null) => Promise<void>;
+type Note = { text: string; kind?: 'ok' | 'error' };
+type Run = <T>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null, say?: (n: Note | null) => void) => Promise<void>;
 
 function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
   item: InboxItemView; busy: boolean; dupe?: string; ideaTitle: (id: string) => string; openIdea: (id: string) => void; run: Run;
@@ -124,6 +130,8 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
   const g = groupActions(item.actions);
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [sureDelete, setSureDelete] = useState(false);
+  const [msg, setMsg] = useState<Note | null>(null);
+  const go = <T,>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null) => run(label, fn, ok, setMsg);
   const pending = applyableIds(item.actions);
   const chosen = picked ? pending.filter((id) => picked.has(id)) : pending;
   const toggle = (id: string) => setPicked((p) => { const s = new Set(p ?? pending); if (s.has(id)) s.delete(id); else s.add(id); return s; });
@@ -133,17 +141,17 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
   const hand = needsHand(item);
   const matched = !held && !asking && t?.ideaId ? t.ideaId : null;
   const conf = t && !t.export && !held ? confidenceWord(t.confidence) : null;
-  const apply = (ids: string[]) => run('Applying…', () => inboxPost(item.id, 'apply', { actionIds: ids }), () => `Applied ${ids.length === 1 ? 'one change' : `${ids.length} changes`}.`);
+  const apply = (ids: string[]) => go('Applying…', () => inboxPost(item.id, 'apply', { actionIds: ids }), () => `Applied ${ids.length === 1 ? 'one change' : `${ids.length} changes`}.`);
 
   return (
     <li className={`ib-item st-${item.status}`} data-item={item.id} data-status={item.status}>
       <div className="ib-r1">
-        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[item.type] ?? '◇'}</span> {typeWord(item.type)}</span>
+        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[held ? 'unknown' : item.type] ?? '◇'}</span> {typeWord(held ? 'unknown' : item.type)}</span>
         <span className="ib-head">{itemHeadline(item)}</span>
         <span className="ib-when">{dayOf(item.receivedAt)}</span>
         {!held && item.status !== 'dismissed' && (
           <button className="btn sm ghost" data-action="dismiss" disabled={busy} title="Hide it from the Inbox; nothing is undone"
-            onClick={() => void run('Dismissing…', () => inboxPost(item.id, 'dismiss'), () => `${item.name} dismissed.`)}>Dismiss</button>
+            onClick={() => void go('Dismissing…', () => inboxPost(item.id, 'dismiss'), () => `${item.name} dismissed.`)}>Dismiss</button>
         )}
         {item.status === 'dismissed' && <span className="st st-sent">Dismissed</span>}
       </div>
@@ -162,6 +170,8 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
         {dupe && <span className="ib-dupe">{dupe}</span>}
       </div>
 
+      {msg && <div className={`pop-notice ${msg.kind ?? 'ok'}`} role="status" data-testid="item-notice">{msg.text}</div>}
+
       {hand && handProblems(item).length > 0 && (
         <ul className="ib-problems">{handProblems(item).map((p, i) => <li key={i}>{p}</li>)}</ul>
       )}
@@ -172,7 +182,7 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
           <div className="ib-cands">
             {askCandidates(item).map((c) => (
               <button key={c.id} className="btn sm" data-action="choose" data-idea={c.id} disabled={busy}
-                onClick={() => void run('Asking the AI…', () => inboxPost(item.id, 'choose', { ideaId: c.id }), () => `Filed under ${c.id}.`)}>
+                onClick={() => void go('Asking the AI…', () => inboxPost(item.id, 'choose', { ideaId: c.id }), () => `Chose ${c.id}.`)}>
                 <span className="iid">{c.id}</span>{c.title}{t?.suggested === c.id && <em className="ib-guess"> · best guess</em>}
               </button>
             ))}
@@ -191,14 +201,15 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
                   <span className="ib-lbl">{r.label}</span>
                   {canUndo(r) && (
                     <button className="btn sm" data-action="undo" disabled={busy}
-                      onClick={() => void run('Undoing…', () => inboxPost(item.id, 'undo', { recordId: r.id }), () => 'Undone.')}>Undo</button>
+                      onClick={() => void go('Undoing…', () => inboxPost(item.id, 'undo', { recordId: r.id }), (r: any) => (r?.note ? `Undone. ${r.note}` : 'Undone.'))}>Undo</button>
                   )}
                 </div>
+                {r.note && <div className="ib-note">{r.note}</div>}
                 <ImportLines r={r} />
               </li>
             ))}
             {g.undone.map((r) => (
-              <li key={r.id} data-record={r.id} className="undone"><div className="ib-act"><span className="ib-lbl">{r.label}</span><span className="ib-undone">Undone</span></div></li>
+              <li key={r.id} data-record={r.id} className="undone"><div className="ib-act"><span className="ib-lbl">{r.label}</span><span className="ib-undone">Undone</span></div>{r.note && <div className="ib-note">{r.note}</div>}</li>
             ))}
           </ul>
         </section>
@@ -237,14 +248,14 @@ function InboxItem({ item, busy, dupe, ideaTitle, openIdea, run }: {
           <ul className="ib-reasons">{(item.hold?.reasons ?? []).map((x, i) => <li key={i}>{x}</li>)}</ul>
           <div className="ib-held-acts">
             <button className="btn sm" data-action="draft-held-reply" disabled={busy}
-              onClick={() => void run('Drafting…', () => inboxPost(item.id, 'draft-held-reply'), (r: any) => `${r.email?.template ?? 'PD'} drafted in the Outbox.`)}>Draft reply asking for counts</button>
+              onClick={() => void go('Drafting…', () => inboxPost(item.id, 'draft-held-reply'), (r: any) => `${r.email?.template ?? 'PD'} drafted in the Outbox.`)}>Draft reply asking for counts</button>
             {!sureDelete
               ? <button className="btn sm danger" data-action="delete" disabled={busy} onClick={() => setSureDelete(true)}>Delete</button>
               : (
                 <>
                   <span className="ib-sure">Delete the file for good?</span>
                   <button className="btn sm danger on" data-action="delete-yes" disabled={busy}
-                    onClick={() => void run('Deleting…', () => inboxPost(item.id, 'delete'), () => `${item.name} deleted.`)}>Yes, delete</button>
+                    onClick={() => void go('Deleting…', () => inboxPost(item.id, 'delete'), () => `${item.name} deleted.`)}>Yes, delete</button>
                   <button className="btn sm" data-action="delete-no" onClick={() => setSureDelete(false)}>Keep it</button>
                 </>
               )}

@@ -303,6 +303,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .g-ok{border-left-color:var(--amber);background:rgba(245,179,107,.07)}
 .g-ok .ib-g-k{color:var(--amber)}
 .g-ok li.failed .ib-lbl{color:var(--danger)}
+.ib-note{font-size:12.5px;color:var(--muted);margin:2px 0 0 25px}
 .ib-err{font-size:12.5px;color:var(--danger);margin:2px 0 0 25px}
 .g-held{border-left-color:var(--danger);background:rgba(240,140,140,.07)}
 .g-held .ib-g-k{color:var(--danger)}

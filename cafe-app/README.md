@@ -54,7 +54,7 @@ npm run cafe -- status --workspace ~/cafe-workspace     # write exports/status.c
 
 ```
 rounds/       the round's dates, links and your name
-inbox/        imported exports (inbox/held/ keeps files that need a look)
+inbox/        dropped files and exports (see Inbox: drop anything); inbox/held/ keeps files the app will not read
 ideas/        one folder per idea: the submission, its emails, its history
 cohorts/  roadshows/
 graph/        the universe: nodes.jsonl, edges.jsonl, ai-links.jsonl (AI suggestions and your Yes or No),
@@ -101,6 +101,75 @@ npm run dev:ui                                        # the UI with hot reload; 
    sent. E2 starts a five-day reply clock; use "Reply received" on the idea when they answer. Marking E3,
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
 6. **Round** (pop-out): write `status.csv` and the review pack for TTIA.
+
+## Inbox: drop anything
+
+Open **Inbox** in the title bar (it shows how many things wait on you). Drop files on it, or paste a note,
+and the app works out which idea each one belongs to and what it changes. Everything dropped is read as
+**data, never as instructions**.
+
+**What you can drop**
+
+- Café exports: `.csv` and `.xlsx`. These are imported the same way as in Import.
+- Emails: `.eml` and `.msg`.
+- Teams meeting transcripts: `.vtt`.
+- Word files: `.docx`.
+- Notes and pasted text.
+- Dropping a file anywhere on the Inbox pop-out works, not only on the dashed zone.
+
+**What is held.** PDFs and images show "can't read this yet". Lists of people (for example a tracker with
+names, phone numbers or employee ids) are held too. A held file moves to `inbox/held/`, is not read any
+further and is never copied into an idea. You can delete it, or draft a reply asking the sender for counts
+instead of names.
+
+**How an idea is matched**
+
+- A Café ID in the subject or the file name is a sure match.
+- The idea's title in the subject is a likely match.
+- An ID or title only in the body, or only the sender, is not enough: the app asks "Which idea?" and you
+  pick. Below 0.7 it always asks.
+
+**What you see for each item.** Three groups:
+
+- **Applied**: safe changes the app already made, each with an **Undo**.
+- **Needs your OK**: changes that wait for a Yes. You can apply them one at a time, tick some, or apply all.
+- **Held**: described above.
+
+If the AI can't be reached, the item says "Working by hand", explains why, and nothing is applied on its
+own. You can still choose the idea and apply changes yourself.
+
+**What the AI may propose and what code decides.** The AI can only report facts: a short summary, which
+idea it looks like, answers to the Café questions, flags, names and links. It cannot run anything. The code
+decides what is safe, what needs your OK and what is held, and it writes every file itself.
+
+**What goes in the universe**
+
+- A link between stars you already have, at 0.7 or more, is applied (and can be undone).
+- A link below 0.7 comes in dashed and unconfirmed.
+- A new star, or a change to a person's role, always waits for your Yes.
+- People who are only in an email's To or Cc line never become stars.
+
+**Undo.** Each applied change records how to put it back, and Undo replays that. It works field by field and
+refuses to undo anything you have changed since. For example, if you ticked a step on an idea an import
+created, Undo keeps that idea and says so ("CAFE-2026-002 has changed since the import; close it instead").
+If nothing could be undone, it says why.
+
+**Duplicates.** Dropping the same file again shows "Already dropped on <date>" and does nothing a second
+time.
+
+**Tests.** `CAFE_AI_FAKE=1` also makes the fake provider answer `TASK: triage` with fixed facts, so the
+Inbox can be tested without a real AI. See Test hook below.
+
+New folders in the workspace:
+
+```
+inbox/               dropped files, newest first
+inbox/held/          files the app will not read
+inbox/.items/        one small file per dropped item (what was found, what was done)
+inbox/undo.jsonl     a log of every apply and Undo
+ideas/<idea>/emails/in/   emails filed against an idea, each with a short summary beside it
+ideas/<idea>/notes/       transcripts, notes and documents filed against an idea
+```
 
 ## AI help (optional)
 
@@ -167,8 +236,8 @@ node scripts/ui-tour.mjs --workspace /tmp/cafe-tour-ws --out /tmp/cafe-tour-shot
 
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so
-a full tour takes several minutes. `--only=panels|hover|popout|popouts2|ai|drawers|empty` runs one part; `--only=ai`
-needs `CAFE_AI_FAKE=1` in the environment, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
+a full tour takes several minutes. `--only=panels|hover|popout|popouts2|ai|inbox|inboxhand|drawers|empty` runs one part; `--only=ai` and `--only=inbox`
+need `CAFE_AI_FAKE=1`; `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
 
 ## Before the first round
 

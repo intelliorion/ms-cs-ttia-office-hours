@@ -8,7 +8,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { handleRequest } = require('./lib');
 
-const DIR = path.join(os.homedir(), '.cafe-ai');
+// CAFE_AI_HELPER_DIR overrides the folder (used by the integration test so it never touches ~/.cafe-ai).
+const DIR = process.env.CAFE_AI_HELPER_DIR || path.join(os.homedir(), '.cafe-ai');
 const FILE = path.join(DIR, 'vscode-helper.json');
 
 let server = null;

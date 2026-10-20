@@ -22,3 +22,17 @@ On start the extension listens on `127.0.0.1` (random port) and writes `~/.cafe-
 ## Open question
 
 Does the firm approve using the Copilot language-model API from an extension, and sending Café submission text to the Copilot model? Until that is confirmed, do not install it on firm machines. Once installed it starts automatically whenever VS Code starts (`onStartupFinished`) and writes the token file; to stop it, disable or uninstall the extension (the file is removed when it stops). The app works without it.
+
+## Integration test (real VS Code extension host)
+
+`lib.js` has unit tests in the root suite. To run the extension itself inside a real VS Code:
+
+```
+cd cafe-app/vscode-helper && npm install && npm run test:vscode
+```
+
+This downloads a stable VS Code (about 300 MB, once) into a cache folder, never into your own VS Code, and uses throwaway user-data and extension folders. The helper file goes to a temp folder via the `CAFE_AI_HELPER_DIR` override (honoured by `extension.js` only when set), so `~/.cafe-ai` is never touched. A VS Code window may flash; xvfb is not needed on macOS. Set `CAFE_VSCODE_TEST_DIR` to move the cache.
+
+It proves: the extension activates; `vscode-helper.json` appears with `{port, token, model}` (mode 0600); `GET /health` answers (200 with a model, else 503 with a reason); a wrong token gives 403; a right token with no model gives 503; a foreign Host header gives 403; the status command runs; deactivating removes the file and stops the server.
+
+It cannot prove a real Copilot completion: the test host has no signed-in Copilot, so the model-present path (`/complete` returning text) is not exercised. Check that by hand in your own VS Code.

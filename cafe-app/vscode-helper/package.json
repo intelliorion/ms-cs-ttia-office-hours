@@ -6,13 +6,30 @@
   "publisher": "cafe-local",
   "private": true,
   "license": "UNLICENSED",
-  "engines": { "vscode": "^1.95.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
     "commands": [
-      { "command": "cafe.aiHelper.status", "title": "Creators' Café: AI helper status" }
+      {
+        "command": "cafe.aiHelper.status",
+        "title": "Creators' Café: AI helper status"
+      }
     ]
+  },
+  "scripts": {
+    "test:vscode": "vscode-test"
+  },
+  "devDependencies": {
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "mocha": "12.0.3"
   }
 }

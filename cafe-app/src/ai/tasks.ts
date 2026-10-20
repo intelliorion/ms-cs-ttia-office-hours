@@ -1,4 +1,4 @@
-import { AI_NODE_TYPES, AI_RELATIONS, type NodeType, type Relation } from '../graph/ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, APPROVED_TOOLS, type NodeType, type Relation } from '../graph/ontology';
 import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
@@ -268,4 +268,88 @@ export const triageTask: Task<Triage> = {
     ], TRIAGE_SCHEMA, triageData(input as TriageInput), 'something dropped in the Inbox');
   },
   parse: parseTriage,
+};
+
+/* ---------- Tool picker ---------- */
+
+export const FEATURE_FLAGS = ['needs-live-system', 'personal-data', 'custom-app', 'reuse-existing', 'no-build'] as const;
+export type FeatureFlag = (typeof FEATURE_FLAGS)[number];
+
+/** When to reach for each approved tool, at Café depth (Café skill, Part 3). */
+export const TOOL_GUIDE: Record<string, string> = {
+  'Microsoft Copilot': 'Ask, summarise or draft with Copilot and AI@MS agents in Microsoft 365. No build at all (Citizen-Led, no build).',
+  'Copilot Studio': 'A guided chat agent or Q&A over approved documents in SharePoint or Teams, built by a citizen builder (Citizen-Led).',
+  'Power Apps': 'A simple form, tracker or approval flow on Microsoft data such as SharePoint lists, built by a citizen builder (Citizen-Led).',
+  'Dataiku': 'Join, clean or analyse spreadsheets and extracts, with sample or aggregated data (Citizen-Led). Approved tool does not mean a live integration is allowed.',
+  'UiPath': 'Repeat the same clicks and keystrokes in desktop or web screens (Citizen-Led). A live connection to a non-Microsoft system is still a flag.',
+  'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
+};
+
+export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[] }
+export interface ToolPickInput {
+  idea: IdeaText;
+  support: string[];
+  existingFeatures?: { name: string; what?: string; tool?: string; reason?: string }[];
+}
+export interface ToolPickOutput { features: ToolPickFeature[] }
+
+export const TOOL_PICK_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['features'],
+  properties: {
+    features: {
+      type: 'array', minItems: 1, maxItems: 6,
+      items: {
+        type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 60 },
+          what: { type: 'string', maxLength: 160 },
+          tool: { type: 'string', enum: APPROVED_TOOLS },
+          reason: { type: 'string', maxLength: 160 },
+          flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
+        },
+      },
+    },
+  },
+};
+
+function trimToolPick(v: unknown): void {
+  const o = asObj(v);
+  if (!o || !Array.isArray(o.features)) return;
+  for (const f of o.features) {
+    const x = asObj(f);
+    if (x) { x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160); }
+  }
+}
+
+function toolPickData(input: ToolPickInput) {
+  return {
+    idea: ideaData(input.idea),
+    support: (Array.isArray(input.support) ? input.support : []).slice(0, 20).map((s) => cap(s, 200)),
+    ...(input.existingFeatures?.length ? {
+      existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
+        name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
+        ...(f.tool ? { tool: cap(f.tool, 40) } : {}), ...(f.reason ? { reason: cap(f.reason, 160) } : {}),
+      })),
+    } : {}),
+  };
+}
+
+export const toolPickTask: Task<ToolPickOutput> = {
+  name: 'tool-pick',
+  schema: TOOL_PICK_SCHEMA,
+  prompt(input) {
+    const data = toolPickData(input as ToolPickInput);
+    return build('tool-pick', [
+      "Suggest how to build a proof of concept for this Creators' Café idea: split it into 1 to 6 features and suggest one approved tool for each. The operator picks; you only suggest.",
+      'Use the idea title, challenge, current process and outcomes, and the support requested. Some of these may be empty; work from what is there.',
+      ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. Keep these (same names and tools) unless clearly wrong, and add only what is missing.'] : []),
+      'Approved tools (use exactly one of these labels for "tool"; anything else is not on the approved list):',
+      ...APPROVED_TOOLS.map((t) => `- ${t}: ${TOOL_GUIDE[t]}`),
+      'Capability goes up, autonomy goes down: prefer the simplest tool that can show the idea works.',
+      "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data.",
+      'Flags: "needs-live-system" when a feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "reuse-existing" when something that already exists could do it; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
+      'name: a short noun phrase, at most 60 characters. what: what the feature does, at most 160 characters. reason: why this tool, at most 160 characters. Never name people.',
+    ], TOOL_PICK_SCHEMA, data, "a Café idea and the operator's current features");
+  },
+  parse: (raw) => parseChecked<ToolPickOutput>(raw, TOOL_PICK_SCHEMA, trimToolPick),
 };

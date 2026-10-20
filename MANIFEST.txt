@@ -30,6 +30,7 @@ cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/cafecheck.ts
 cafe-app/src/design/store.ts
+cafe-app/src/design/tools.ts
 cafe-app/src/exports/status.ts
 cafe-app/src/graph/build.ts
 cafe-app/src/graph/d3-force-3d.d.ts
@@ -83,6 +84,7 @@ cafe-app/tests/checklist.test.ts
 cafe-app/tests/clock.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-store.test.ts
+cafe-app/tests/design-tools.test.ts
 cafe-app/tests/due-status.test.ts
 cafe-app/tests/e2e.test.ts
 cafe-app/tests/files.test.ts

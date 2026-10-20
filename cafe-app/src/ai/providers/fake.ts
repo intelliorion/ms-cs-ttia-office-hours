@@ -47,6 +47,15 @@ const TRIAGE = {
   },
 };
 
+/** Three tool picks for any idea, one of them a custom app (a CSIC flag). */
+const TOOL_PICK = {
+  features: [
+    { name: 'Request intake form', what: 'Collects each request in one place with the fields the team needs', tool: 'Power Apps', reason: 'A simple form on a SharePoint list, built by a citizen builder', flags: [] },
+    { name: 'Draft replies', what: 'Drafts a first reply to each request for a person to check', tool: 'Microsoft Copilot', reason: 'Copilot can draft from the request text with no build', flags: ['no-build'] },
+    { name: 'Scheduling engine', what: 'Works out a send slot for each request across time zones', tool: 'custom app', reason: 'No approved low-code tool does this scheduling logic', flags: ['custom-app'] },
+  ],
+};
+
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
 
 export function fakeProvider(): Provider {
@@ -59,6 +68,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
+      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(TOOL_PICK);
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },

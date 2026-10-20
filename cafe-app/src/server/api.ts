@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { Clock } from '../clock';
 import type { AddRoute } from './server';
 import { paths } from '../workspace/paths';
@@ -18,7 +19,9 @@ import { writeStatusCsv } from '../exports/status';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask } from '../ai/tasks';
+import { readDesign, renderDesignMd } from '../design/store';
+import { saveToolPicks, toolPickInput, mergeSuggestions } from '../design/tools';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
@@ -126,6 +129,24 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const { provider, output } = await ai.runWith(reviewSuggestTask, { idea: extractInput(idea, []).idea });
     return { ...output, provider };
   })());
+  // Design series: the tool picker. The AI only suggests; the operator's save is what counts.
+  add('GET', '/api/ideas/:id/design', async ({ params }) => {
+    const idea = await loadIdea(root, params.id);
+    const state = await readDesign(root, idea.id);
+    return { state, designMd: renderDesignMd(idea, state) };
+  });
+  add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => {
+    const idea = await loadIdea(root, params.id);
+    const state = await readDesign(root, idea.id);
+    return byHand(async () => {
+      const { provider, output } = await ai.runWith(toolPickTask, toolPickInput(idea, state));
+      return { features: mergeSuggestions(state.features, output.features), provider };
+    })();
+  });
+  add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
+    const { state, designFile } = await saveToolPicks(root, params.id, body.features, { clock, steps: await steps() });
+    return { state, designMd: await readFile(designFile, 'utf8') };
+  });
   // Inbox. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {

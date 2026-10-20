@@ -50,7 +50,7 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
       const cid = node({ id: nodeId('Capability', s), type: 'Capability', label: s });
       edge(ideaId, 'NEEDS', cid, 'Support Requested', `${src}:Support Requested`);
     }
-    const tools = (idea as Idea & { tools?: Record<string, string> }).tools ?? {};
+    const tools = idea.tools ?? {};
     for (const [feature, tool] of Object.entries(tools)) {
       const cid = node({ id: nodeId('Capability', feature), type: 'Capability', label: feature });
       const tid = node({ id: nodeId('Tool', tool), type: 'Tool', label: tool });

@@ -13,6 +13,8 @@ export type StepSource = 'operator' | 'e2' | 'ai-suggested';
 export interface DesignFeature {
   id: string;
   name: string;
+  /** One line on what the feature does. */
+  what?: string;
   tool?: string;
   reason?: string;
   pathway?: Pathway;

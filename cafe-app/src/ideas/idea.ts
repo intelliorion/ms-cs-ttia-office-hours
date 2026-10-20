@@ -59,12 +59,17 @@ export interface Idea {
   review?: ReviewRecord;
   flags: string[];
   route?: string;
+  /** feature name → approved tool, derived from approach.md (the tool picker). Replaced whole on every save. */
+  tools?: Record<string, string>;
   source?: { file: string; row: number };
   dedupe_key: string;
 }
 
 const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const obj = (v: unknown): object => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
+const toolMap = (v: unknown): Record<string, string> =>
+  Object.fromEntries(Object.entries(obj(v)).filter(([k, t]) => k.trim() && typeof t === 'string' && t.trim()));
 
 export function normalizeIdea(raw: Partial<Idea>): Idea {
   const stage = Number(raw.stage);
@@ -82,6 +87,7 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     due: raw.due ?? {},
     sent: raw.sent ?? {},
     flags: arr(raw.flags),
+    ...(raw.tools !== undefined ? { tools: toolMap(raw.tools) } : {}),
     dedupe_key: String(raw.dedupe_key ?? ''),
   };
 }

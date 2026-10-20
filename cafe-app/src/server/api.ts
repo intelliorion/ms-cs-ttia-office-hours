@@ -19,12 +19,13 @@ import { writeStatusCsv } from '../exports/status';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask, designPlanTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, toolPickInput, mergeSuggestions } from '../design/tools';
 import {
-  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError,
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
+import { designPlanInput, writePlan, readPlan, NOT_APPROVED } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
@@ -156,6 +157,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const state = await readDesign(root, idea.id);
     if (body.question !== undefined) {
       // A hand-written question, for when no AI is available.
+      if (typeof body.question !== 'string' || !body.question.trim()) throw new DesignError('Write the question first');
       const suggested = Array.isArray(body.suggested) ? body.suggested.filter((x: unknown) => typeof x === 'string') : [];
       const out = await applyDesignEvent(root, idea, { t: 'step', question: String(body.question), suggested, source: 'operator' }, clock);
       return { ...out, step: out.state.steps[out.state.steps.length - 1] };
@@ -179,7 +181,25 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     if (!Number.isInteger(i) || i < 0 || i >= step.suggested.length) throw new DesignError('Pick one of the suggested answers');
     return applyDesignEvent(root, idea, { t: 'answer', n, answer: step.suggested[i], source: 'ai-suggested' }, clock);
   });
+  // The hand path to a finished design (no AI): the operator writes the summary, as the AI's done reply would.
+  add('POST', '/api/ideas/:id/design/finish', async ({ params, body }) => {
+    const idea = await loadIdea(root, params.id);
+    const summary = typeof body.summary === 'string' ? body.summary.replace(/\s+/g, ' ').trim() : '';
+    if (!summary) throw new DesignError('Write the summary first');
+    if (summary.length > SUMMARY_MAX) throw new DesignError(`Keep the summary to ${SUMMARY_MAX} characters`);
+    return applyDesignEvent(root, idea, { t: 'done', summary }, clock);
+  });
   add('POST', '/api/ideas/:id/design/approve', async ({ params }) => approveDesign(root, params.id, clock));
+  // Design series: plan.md and the starter kits, from an approved design. The kits are templates; the app writes no code.
+  add('POST', '/api/ideas/:id/plan', async ({ params }) => {
+    const idea = await loadIdea(root, params.id);
+    const state = await readDesign(root, idea.id);
+    if (!state.approvedAt) throw new DesignError(NOT_APPROVED);
+    const { output } = await byHand(() => ai.runWith(designPlanTask, designPlanInput(idea, state)))();
+    const { files } = await writePlan(root, idea, state, output);
+    return { files };
+  });
+  add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));
   // Inbox. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {

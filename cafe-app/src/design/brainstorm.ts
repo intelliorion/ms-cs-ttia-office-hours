@@ -5,7 +5,7 @@ import { tick } from '../checklist/checklist';
 import { loadSteps } from '../rules/stages';
 import { suggestion, type Suggest } from '../ideas/suggest';
 import { draftEmail, updateDraft } from '../comms/outbox';
-import { sameQuestion } from '../inbox/actions';
+import { sameQuestion } from '../inbox/question';
 import { DESIGN_TAGS, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
@@ -23,6 +23,7 @@ export const ASKED_TEAM_ANSWER = '(not known yet; asked the team)';
 export const QUESTION_MAX = 200;
 export const SUGGESTED_MAX = 120;
 export const ANSWER_MAX = 1000;
+export const SUMMARY_MAX = 600;
 
 export type DesignEvent =
   | { t: 'step'; question: string; suggested: string[]; why?: string; tag?: DesignTag | null; source: StepSource }
@@ -73,7 +74,7 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
       break;
     }
     case 'done': {
-      const summary = line(e.summary, 600);
+      const summary = line(e.summary, SUMMARY_MAX);
       if (!summary) throw new DesignError('A finished design needs a summary');
       state.summary = summary;
       reopen();

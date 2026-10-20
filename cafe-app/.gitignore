@@ -5,3 +5,4 @@ ui/node_modules/
 
 test-data/*
 !test-data/README.md
+.acceptance-fake/

@@ -109,12 +109,18 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
     const open = s.askedTeam ? '(asked the team in an E2; waiting for the reply)' : '(not yet answered)';
     out.push(`**Q${s.n}. ${mdLine(s.question).replace(/\*/g, '')}**`, '', mdLine(s.answer) || open, '');
   }
-  out.push('## Café check', '');
+  out.push(renderCafeCheckMd(check));
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** The "## Café check" section, as design.md and plan.md both end with it (one renderer, so the copy is verbatim). */
+export function renderCafeCheckMd(check: CafeCheck): string {
+  const out: string[] = ['## Café check', ''];
   out.push('**Value words**', check.valueWords.length ? bullets(check.valueWords) : '- Clean', '');
   out.push('**Data flags**', check.dataFlags.length ? bullets(check.dataFlags) : '- Clean', '');
   out.push('**CSIC flags**', check.csicFlags.length ? bullets(check.csicFlags) : '- Clean', '');
   if (check.csicFlags.length) out.push(CSIC_NOTE, '');
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  return out.join('\n');
 }
 
 export async function writeDesignMd(root: string, idea: Idea, state: DesignState): Promise<string> {

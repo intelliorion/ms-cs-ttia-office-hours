@@ -447,3 +447,100 @@ export const designStepTask: Task<DesignStepOutput> = {
   },
   parse: parseDesignStep,
 };
+
+/* ---------- Design plan: the tasks to build an approved design ---------- */
+
+export interface DesignPlanInput {
+  idea: IdeaText;
+  /** The approved design's summary. */
+  summary: string;
+  features: { name: string; what?: string; tool?: string }[];
+  /** The answered design questions, as question and answer (who wrote them does not matter here). */
+  steps: { question: string; answer: string }[];
+  /** The embedded writing-plans skill's text (skillGuidance('writing-plans')). Guidance, not data. */
+  guidance: string;
+}
+export interface DesignPlanTask { title: string; detail: string; tool: string; done_when: string }
+export interface DesignPlanOutput { tasks: DesignPlanTask[]; risks: string[] }
+
+export const PLAN_TASKS_MIN = 3;
+export const PLAN_TASKS_MAX = 12;
+export const PLAN_RISKS_MAX = 5;
+
+export const DESIGN_PLAN_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['tasks', 'risks'],
+  properties: {
+    tasks: {
+      type: 'array', minItems: PLAN_TASKS_MIN, maxItems: PLAN_TASKS_MAX,
+      items: {
+        type: 'object', additionalProperties: false, required: ['title', 'detail', 'tool', 'done_when'],
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 80 },
+          detail: { type: 'string', maxLength: 300 },
+          tool: { type: 'string', enum: APPROVED_TOOLS },
+          done_when: { type: 'string', maxLength: 160 },
+        },
+      },
+    },
+    risks: { type: 'array', maxItems: PLAN_RISKS_MAX, items: { type: 'string', minLength: 1, maxLength: 160 } },
+  },
+};
+
+function trimDesignPlan(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  if (Array.isArray(o.tasks)) {
+    for (const t of o.tasks) {
+      const x = asObj(t);
+      if (!x) continue;
+      for (const [k, max] of [['title', 80], ['detail', 300], ['done_when', 160]] as const) {
+        if (Object.hasOwn(x, k)) x[k] = trimStrings(oneLine(x[k]), max);
+      }
+    }
+  }
+  if (Array.isArray(o.risks)) o.risks = o.risks.map((r) => trimStrings(oneLine(r), 160));
+}
+
+function parseDesignPlan(raw: string): DesignPlanOutput {
+  const t = parseChecked<DesignPlanOutput>(raw, DESIGN_PLAN_SCHEMA, trimDesignPlan);
+  return {
+    tasks: t.tasks.map((x) => ({ title: x.title.trim(), detail: x.detail.trim(), tool: x.tool, done_when: x.done_when.trim() })),
+    risks: t.risks.map((r) => r.trim()).filter(Boolean),
+  };
+}
+
+function designPlanData(input: DesignPlanInput) {
+  return {
+    idea: ideaData(input.idea),
+    summary: cap(input.summary, 600),
+    features: (Array.isArray(input.features) ? input.features : []).slice(0, 12).map((f) => ({
+      name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.tool ? { tool: cap(f.tool, 40) } : {}),
+    })),
+    steps: (Array.isArray(input.steps) ? input.steps : []).slice(0, 20).map((s) => ({
+      question: cap(s.question, 200), answer: cap(s.answer, 1000),
+    })),
+  };
+}
+
+export const designPlanTask: Task<DesignPlanOutput> = {
+  name: 'design-plan',
+  schema: DESIGN_PLAN_SCHEMA,
+  prompt(input) {
+    const i = input as DesignPlanInput;
+    return build('design-plan', [
+      "Write the build plan for an approved Creators' Café design: the tasks a citizen builder works through to build the proof of concept, grouped by the tool picked for each feature.",
+      'Follow this guidance from the writing-plans skill: small tasks, each with a clear check that it is done, in the order they should be built. It is written for software; here a task is a step in the picked tool, and you write no code.',
+      '<<<GUIDANCE',
+      String(i.guidance ?? ''),
+      'GUIDANCE>>>',
+      "Café rules: this is a plan for a proof of concept on synthetic, aggregated or sample data. Make preparing that data an early task. Never plan to use personal, client or third-party data, and never name people (use roles).",
+      'Never plan to measure value, return on investment, savings, costs, benefits or KPIs: the Café proves the idea works, not what it is worth.',
+      'A feature whose tool is "custom app" is not built in the Café: its task is a hand-off to a coding agent (Claude Code or GitHub Copilot) working from design.md and plan.md, inside a starter folder, and it needs the CSIC Repository before any build beyond a proof of concept.',
+      'A feature whose tool is "Microsoft Copilot" needs no build: its task is writing and trying the prompts.',
+      `Approved tools (use exactly one of these labels for each task's "tool", normally the tool picked for the feature it builds): ${APPROVED_TOOLS.join(', ')}.`,
+      `Reply {"tasks": [...], "risks": [...]}: ${PLAN_TASKS_MIN} to ${PLAN_TASKS_MAX} tasks, each with title (at most 80 characters), detail (what to do, at most 300), tool, and done_when (how the builder knows it is done, at most 160). risks: at most ${PLAN_RISKS_MAX} things that could stop the proof of concept, each at most 160 characters, with no value words.`,
+      '"steps" are the design questions and the answers the design settled. "summary" is the approved design.',
+    ], DESIGN_PLAN_SCHEMA, designPlanData(i), 'an approved Café design: the idea, its summary, its features and tools, and the design answers');
+  },
+  parse: parseDesignPlan,
+};

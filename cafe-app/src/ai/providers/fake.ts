@@ -79,6 +79,20 @@ const DESIGN_DONE = {
   summary: 'A proof of concept that shows the one thing agreed above, using a small synthetic sample, built by the team with the tools picked for each feature.',
 };
 
+/** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */
+const DESIGN_PLAN = {
+  tasks: [
+    { title: 'Make the synthetic sample', detail: 'Write twenty made-up requests in a spreadsheet on SharePoint, with the fields the form needs. No real names or client data.', tool: 'Power Apps', done_when: 'The sample list has twenty rows and no real data' },
+    { title: 'Build the request form', detail: 'Make a canvas app on the sample list with one screen to add a request and one to see them all.', tool: 'Power Apps', done_when: 'A request added in the app shows up in the list' },
+    { title: 'Hand the scheduling engine to a coding agent', detail: 'Give Claude Code or GitHub Copilot the instruction in the custom app kit; it works only inside that folder, from design.md and plan.md.', tool: 'custom app', done_when: 'The agent has a running proof of concept on the sample inside the kit folder' },
+    { title: 'Show it end to end', detail: 'Run the sample through the form and the scheduling proof of concept and show the team the result.', tool: 'Power Apps', done_when: 'The team has seen the one thing to show work on the sample' },
+  ],
+  risks: [
+    'The scheduling engine is a custom app, so anything beyond the proof of concept needs the CSIC Repository.',
+    'The sample may miss a kind of request the team sees often; ask the team to check it.',
+  ],
+};
+
 /** How many Q/A pairs the design-step prompt carries (its DATA block's stepsSoFar). */
 function stepsSoFar(prompt: string): number {
   const start = prompt.lastIndexOf('<<<DATA');
@@ -103,6 +117,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
+      if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(DESIGN_PLAN);
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },

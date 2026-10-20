@@ -26,6 +26,9 @@ import { displayName } from './match';
 import { SIGNATURE } from '../comms/templates';
 import { openQuestionsOf, type TriageRecord } from './triage';
 import { fillDesignAnswers } from '../design/brainstorm';
+import { sameQuestion } from './question';
+
+export { sameQuestion };
 import type { InboxItem } from './store';
 
 /**
@@ -150,25 +153,6 @@ export async function screenExport(root: string, file: string, name: string): Pr
     reasons.push(...screen(text, { fileName: name }).reasons);
   }
   return reasons;
-}
-
-const words = (s: string) => s.toLowerCase().replace(/^\s*\d{1,2}[.)]\s*/, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
-
-/**
- * Is this the same question? Forgiving of wording, strict about meaning: after lowercasing and dropping
- * punctuation and any leading number, one contains the other, or at least 60% of the shorter one's words
- * appear in the other. A shorter side of under 3 words must instead cover 60% of the longer one's words.
- */
-export function sameQuestion(a: string, b: string): boolean {
-  const x = words(a); const y = words(b);
-  if (!x.length || !y.length) return false;
-  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  const have = new Set(long);
-  const shared = short.filter((w) => have.has(w)).length;
-  // Under 3 words ("budget") the shorter one must cover 60% of the longer one, not just appear in it.
-  if (short.length < 3) return shared / long.length >= 0.6;
-  if (` ${long.join(' ')} `.includes(` ${short.join(' ')} `)) return true;
-  return shared / short.length >= 0.6;
 }
 
 /** Build the actions for a triaged item. Act only on a non-null ideaId; when asking, the only action is ask_idea. */
@@ -303,8 +287,9 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
         .map((x) => ({ question: x.question, answer: x.answer, source: item.file }));
       await saveIdea(root, { ...idea, answers: [...have, ...fresh] } as Idea);
       await history(root, a.ideaId, at, `${fresh.length} answer${fresh.length === 1 ? '' : 's'} recorded`, item.file);
-      // Design questions we asked the team in an E2 ("I don't know") are filled from the matching answers.
-      await fillDesignAnswers(root, idea, a.answers, clock);
+      // Design questions we asked the team in an E2 ("I don't know") are filled from the matching answers,
+      // against the idea as it is now saved.
+      await fillDesignAnswers(root, await loadIdea(root, a.ideaId), a.answers, clock);
       return { inverse: { t: 'unset-field', ideaId: a.ideaId, field: 'answers', entries: fresh.map((x) => ({ question: x.question, source: x.source })) } };
     }
     case 'add_flag': {

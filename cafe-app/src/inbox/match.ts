@@ -20,12 +20,23 @@ const STOP = new Set(['with', 'from', 'that', 'this', 'your', 'have', 'into', 'a
 const norm = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const hasPhrase = (hay: string, phrase: string) => phrase.length > 0 && ` ${hay} `.includes(` ${phrase} `);
 
-/** "Person 2 <person.2@example.com>" → ['person 2', 'person 2'] (display name, address local part, full address). */
+function splitAddress(s: string): { name: string; addr: string } {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(s);
+  if (m) return { name: m[1].trim(), addr: m[2].trim() };
+  return s.includes('@') ? { name: '', addr: s.trim() } : { name: s.trim(), addr: '' };
+}
+
+/** "Person 2 <person.2@example.com>" → "Person 2"; a bare address → its local part. Never an address. */
+export function displayName(s: string): string {
+  const { name, addr } = splitAddress(s);
+  return (name || addr.split('@')[0] || '').replace(/@.*/, '').trim();
+}
+
+/** "Person 2 <person.2@example.com>" → display name, full address, address local part. */
 function senderKeys(from: string | undefined): string[] {
   if (!from) return [];
-  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
-  const name = m ? m[1] : from.includes('@') ? '' : from;
-  const addr = (m ? m[2] : from.includes('@') ? from : '').trim().toLowerCase();
+  const { name, addr: rawAddr } = splitAddress(from);
+  const addr = rawAddr.toLowerCase();
   const keys = [norm(name), addr, norm(addr.split('@')[0] ?? '')];
   return [...new Set(keys.filter((k) => k.length > 1))];
 }
@@ -49,11 +60,16 @@ export function matchIdea(item: InboxItem, ideas: Idea[]): MatchResult {
   const hay = norm(`${head}\n${body}`);
   const words = new Set(hay.split(' '));
   const sender = senderKeys(meta.from);
-  const titleHits = ideas.filter((i) => norm(i.title).length >= 4 && hasPhrase(hay, norm(i.title)));
+  const headNorm = norm(head);
+  const titled = ideas.filter((i) => norm(i.title).length >= 4);
+  /** The whole title in the subject or file name: strong. Only in the body: weak (asks). */
+  const titleHits = titled.filter((i) => hasPhrase(headNorm, norm(i.title)));
+  const bodyTitleHits = titled.filter((i) => !titleHits.includes(i) && hasPhrase(hay, norm(i.title)));
   const senderHits = sender.length ? ideas.filter((i) => submitterKeys(i.people.submitter).some((k) => sender.includes(k))) : [];
   const score = (i: Idea) => {
     let s = 0;
     if (titleHits.includes(i)) s += 3;
+    if (bodyTitleHits.includes(i)) s += 2;
     if (senderHits.includes(i)) s += 3;
     if (i.function && words.has(norm(i.function))) s += 1;
     for (const w of new Set(norm(i.title).split(' '))) if (w.length >= 4 && !STOP.has(w) && words.has(w)) s += 1;
@@ -76,9 +92,11 @@ export function matchIdea(item: InboxItem, ideas: Idea[]): MatchResult {
     return none(note);
   }
 
-  // 2. An exact title, 3. the sender is the submitter of exactly one idea.
+  // 2. The whole title in the subject or file name, 3. the sender is the submitter of exactly one idea,
+  // 4. the title only in the body (0.6: a hint that asks).
   if (titleHits.length === 1) return { ideaId: titleHits[0].id, confidence: 0.9, how: 'title', candidates: [titleHits[0].id] };
   if (titleHits.length > 1) return none(undefined, titleHits.map((i) => i.id));
   if (senderHits.length === 1) return { ideaId: senderHits[0].id, confidence: 0.8, how: 'sender', candidates: [senderHits[0].id] };
-  return none();
+  if (bodyTitleHits.length === 1) return { ideaId: bodyTitleHits[0].id, confidence: 0.6, how: 'title', candidates: [...new Set([bodyTitleHits[0].id, ...candidates])].slice(0, 5) };
+  return none(undefined, bodyTitleHits.map((i) => i.id));
 }

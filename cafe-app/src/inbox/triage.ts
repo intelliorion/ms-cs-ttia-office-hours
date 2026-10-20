@@ -9,7 +9,7 @@ import type { Connector } from '../ai/connector';
 import { parseDrop } from './parse';
 import { screenDrop, knownParticipants } from './screen';
 import { getItem, updateItem, holdItem, type InboxItem } from './store';
-import { matchIdea, ASK_BELOW, type MatchResult } from './match';
+import { matchIdea, displayName, ASK_BELOW, type MatchResult } from './match';
 
 /** What triage stores on the item (item.triage). Task 3 builds actions from it. */
 export interface TriageRecord {
@@ -68,6 +68,13 @@ function combine(match: MatchResult, ai: Triage | undefined, byId: Map<string, I
   let ideaId = match.ideaId ?? null;
   let confidence = match.confidence;
   const ids = [...match.candidates];
+  if (match.how === 'chosen' && ideaId) {
+    // The operator chose: the AI can't reopen "Which idea?", only leave a note.
+    const aiId = ai?.ideaId ?? null;
+    if (ai && aiId !== ideaId) notes.push(aiId ? `The AI thinks this may be about ${aiId}, but you chose ${ideaId}` : `The AI couldn't tell which idea this is about; you chose ${ideaId}`);
+    else if (ai && ai.matchConfidence < ASK_BELOW) notes.push(`The AI was unsure this is about ${ideaId}, but you chose it`);
+    return { ideaId, confidence: 1, ask: false, candidates: [{ id: ideaId, title: byId.get(ideaId)?.title ?? '' }] };
+  }
   if (ai) {
     const aiId = ai.ideaId && byId.has(ai.ideaId) ? ai.ideaId : null;
     if (ideaId && aiId === ideaId) confidence = Math.min(confidence, ai.matchConfidence);
@@ -81,8 +88,9 @@ function combine(match: MatchResult, ai: Triage | undefined, byId: Map<string, I
       ids.unshift(aiId);
     }
   }
-  confidence = Math.round(confidence * 100) / 100;
+  // Decide on the exact value, then round down for display (0.699 asks and shows 0.69).
   const ask = !ideaId || confidence < ASK_BELOW;
+  confidence = Math.floor(confidence * 100 + 1e-9) / 100;
   if (ideaId) ids.unshift(ideaId);
   const candidates = [...new Set(ids)].filter((id) => byId.has(id)).slice(0, 5).map((id) => ({ id, title: byId.get(id)!.title }));
   return { ideaId: ask ? null : ideaId, confidence, ask, ...(ask && ideaId ? { suggested: ideaId } : {}), candidates };
@@ -132,12 +140,13 @@ export async function triageItem(
   // 4. The AI: facts only, checked against the schema.
   const idea = match.ideaId ? byId.get(match.ideaId) : undefined;
   const meta = parsed.meta;
-  const peoplePresent = [...new Set([...(meta.to ?? []), ...(meta.cc ?? []), ...(meta.speakers ?? [])])];
+  // Display names only: addresses never go to the AI.
+  const peoplePresent = [...new Set([...(meta.to ?? []), ...(meta.cc ?? []), ...(meta.speakers ?? [])].map(displayName).filter(Boolean))];
   const input: TriageInput = {
     item: {
       type: parsed.type, text: parsed.text,
       ...(meta.subject ? { subject: meta.subject } : {}),
-      ...(meta.from ? { from: meta.from } : {}),
+      ...(meta.from && displayName(meta.from) ? { from: displayName(meta.from) } : {}),
       ...(meta.quoted ? { quoted: meta.quoted } : {}),
       ...(peoplePresent.length ? { peoplePresent } : {}),
     },

@@ -6,7 +6,7 @@ import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea, loadIdea, ideaDir, listIdeas } from '../src/ideas/store';
 import { fixedClock } from '../src/clock';
 import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
-import { matchIdea } from '../src/inbox/match';
+import { matchIdea, displayName } from '../src/inbox/match';
 import { triageItem, openQuestionsOf, type TriageRecord } from '../src/inbox/triage';
 import { triageTask, TRIAGE_SCHEMA, type Triage } from '../src/ai/tasks';
 import { createConnector, type Provider } from '../src/ai/connector';
@@ -82,6 +82,23 @@ describe('matchIdea', () => {
   it('an exact title matches at 0.9', () => {
     const m = matchIdea(item({ meta: { subject: 'Catalogue tagging: a sample' } }), IDEAS);
     expect(m).toMatchObject({ ideaId: 'CAFE-2026-002', confidence: 0.9, how: 'title' });
+  });
+
+  it('a whole title in the file name is 0.9; a title only in the body is 0.6, which asks', () => {
+    expect(matchIdea(item({ name: 'catalogue-tagging-notes.txt', text: 'notes' }), IDEAS))
+      .toMatchObject({ ideaId: 'CAFE-2026-002', confidence: 0.9, how: 'title' });
+    const body = matchIdea(item({ meta: { subject: 'hello' }, text: 'Some thoughts on Vendor onboarding for next week.' }), IDEAS);
+    expect(body).toMatchObject({ ideaId: 'CAFE-2026-003', confidence: 0.6, how: 'title' });
+    expect(body.candidates[0]).toBe('CAFE-2026-003');
+    // part of a title in the subject is not a whole-title match
+    expect(matchIdea(item({ meta: { subject: 'Catalogue ideas' } }), IDEAS).how).toBe('none');
+  });
+
+  it('displayName strips addresses', () => {
+    expect(displayName('Person 3 <person.3@example.com>')).toBe('Person 3');
+    expect(displayName('"Doe, Jane" <jane@example.com>')).toBe('Doe, Jane');
+    expect(displayName('jane.doe@example.com')).toBe('jane.doe');
+    expect(displayName('Person 9')).toBe('Person 9');
   });
 
   it('a sender who is the submitter of exactly one idea matches at 0.8 (name or address)', () => {
@@ -246,6 +263,53 @@ describe('triageItem', () => {
     const t = (await triageItem(root, dropped.id, connector)).triage as TriageRecord;
     expect(t.confidence).toBe(0.4);
     expect(t.ask).toBe(true);
+  });
+
+  it('rounding never hides an ask: deterministic 1.0 + AI 0.699 asks', async () => {
+    const root = await workspace();
+    const { connector } = recorder(JSON.stringify({ ...GOOD, matchConfidence: 0.699 }));
+    const dropped = await saveDrop(root, 'note', 'CAFE-2026-001: forty a week', clock);
+    const t = (await triageItem(root, dropped.id, connector)).triage as TriageRecord;
+    expect(t.ask).toBe(true);
+    expect(t.ideaId).toBeNull();
+    expect(t.suggested).toBe('CAFE-2026-001');
+    expect(t.confidence).toBeLessThan(0.7);
+  });
+
+  it("the operator's chosen idea sticks: AI disagreement is a note, not another ask", async () => {
+    const root = await workspace();
+    const { connector } = recorder(JSON.stringify({ ...GOOD, ideaId: 'CAFE-2026-003', matchConfidence: 0.3 }));
+    const dropped = await saveDrop(root, 'note', 'Re CAFE-2026-099: some numbers', clock);
+    expect(((await triageItem(root, dropped.id, connector)).triage as TriageRecord).ask).toBe(true);
+    const t = (await triageItem(root, dropped.id, connector, { ideaId: 'CAFE-2026-002' })).triage as TriageRecord;
+    expect(t).toMatchObject({ ask: false, ideaId: 'CAFE-2026-002', confidence: 1 });
+    expect(t.match.how).toBe('chosen');
+    expect(t.suggested).toBeUndefined();
+    expect(t.notes.join(' ')).toMatch(/CAFE-2026-003, but you chose CAFE-2026-002/);
+  });
+
+  it('people present and the sender go to the AI as display names, never addresses', async () => {
+    const root = await workspace();
+    const { calls, connector } = recorder(JSON.stringify(GOOD));
+    const eml = [
+      'From: Person 2 <person.2@example.com>',
+      'To: Person 3 <person.3@example.com>, team-box@example.com',
+      'Cc: "Doe, Jane" <jane.doe@example.com>',
+      'Subject: CAFE-2026-001 numbers',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'About forty a week.',
+      '',
+    ].join('\r\n');
+    const dropped = await saveDrop(root, 'numbers.eml', new TextEncoder().encode(eml), clock);
+    await triageItem(root, dropped.id, connector);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toContain('@');
+    const data = calls[0].slice(calls[0].indexOf('<<<DATA'));
+    expect(data).toContain('"Person 3"');
+    expect(data).toContain('"team-box"');
+    expect(data).toContain('"Doe, Jane"');
+    expect(data).toContain('"from": "Person 2"');
   });
 
   it('injection in the body has no out-of-schema effect; the idea is unchanged', async () => {

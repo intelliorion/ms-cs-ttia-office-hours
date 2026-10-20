@@ -23,6 +23,7 @@ import { planAiLinks } from '../ai/apply';
 import type { ExtractOutput } from '../ai/tasks';
 import { screen } from './screen';
 import { displayName } from './match';
+import { SIGNATURE } from '../comms/templates';
 import { openQuestionsOf, type TriageRecord } from './triage';
 import type { InboxItem } from './store';
 
@@ -212,10 +213,17 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
 }
 
 /** From the operator (settings.operatorName) → out; anyone else → in. */
-async function directionOf(root: string, item: InboxItem): Promise<'in' | 'out'> {
+export async function directionOf(root: string, item: InboxItem): Promise<'in' | 'out'> {
   const me = key((await loadSettings(root)).operatorName ?? '');
-  const from = key(displayName(item.meta?.from ?? ''));
-  return me && from && from === me ? 'out' : 'in';
+  const rawFrom = item.meta?.from ?? '';
+  const from = key(displayName(rawFrom));
+  if (me && from && from === me) return 'out';
+  const plain = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’‘`]/g, "'");
+  if (/creators'? ?cafe|cafe@/.test(plain(rawFrom))) return 'out';
+  // Our signature counts only in the new text: a submitter may quote it below their reply
+  const sig = plain(SIGNATURE).trim().replace(/^.*\n/s, '').replace(/\s+/g, ' ');
+  const own = plain(item.text ?? '').replace(/\s+/g, ' ');
+  return own.includes(sig) ? 'out' : 'in';
 }
 
 /** People named in the item (To, Cc, From, speakers) and on the idea never become nodes: links touching them are dropped. */

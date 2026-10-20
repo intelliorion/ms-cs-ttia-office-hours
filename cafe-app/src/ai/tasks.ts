@@ -1,13 +1,15 @@
 import { AI_NODE_TYPES, AI_RELATIONS, type NodeType, type Relation } from '../graph/ontology';
 import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
-import { AiError, parseChecked, type JsonSchema } from './schema';
+import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
 
 export interface Task<T> {
   name: string;
   prompt(input: unknown): string;
   schema: JsonSchema;
   parse(raw: string): T;
+  /** Per-task time limit; the connector default (90 s) applies when absent. */
+  timeoutMs?: number;
 }
 
 export interface IdeaText { id: string; title: string; challenge?: string; current_process?: string; outcomes?: string[] }
@@ -21,6 +23,16 @@ export interface ExtractOutput {
 }
 export interface ReviewSuggestInput { idea: IdeaText }
 export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string }
+
+const asObj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
+
+/** Trims free-text fields of an extract-shaped value in place; structural fields are never touched. */
+function trimExtract(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  if (Array.isArray(o.nodes)) for (const n of o.nodes) { const x = asObj(n); if (x) x.label = trimStrings(x.label, 60); }
+  if (Array.isArray(o.links)) for (const l of o.links) { const x = asObj(l); if (x) { x.description = trimStrings(x.description, 160); } }
+}
 
 const LABEL: JsonSchema = { type: 'string', minLength: 1, maxLength: 60 };
 
@@ -96,7 +108,7 @@ export const extractTask: Task<ExtractOutput> = {
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
     ], EXTRACT_SCHEMA, { idea: ideaData(idea), existing });
   },
-  parse: (raw) => parseChecked<ExtractOutput>(raw, EXTRACT_SCHEMA),
+  parse: (raw) => parseChecked<ExtractOutput>(raw, EXTRACT_SCHEMA, trimExtract),
 };
 
 export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
@@ -112,7 +124,7 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'Give a plain-English reason of at most 300 characters. Do not estimate value or return on investment.',
     ], REVIEW_SCHEMA, { idea: ideaData(idea) });
   },
-  parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA),
+  parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => { const o = asObj(v); if (o) o.reason = trimStrings(o.reason, 300); }),
 };
 
 export const PING_SCHEMA: JsonSchema = {
@@ -190,8 +202,20 @@ export const TRIAGE_SCHEMA: JsonSchema = {
 
 const nullableString = (v: unknown, max: number) => v === null || (typeof v === 'string' && v.length <= max);
 
+function trimTriage(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  o.summary = trimStrings(o.summary, 160);
+  const f = asObj(o.facts);
+  if (!f) return;
+  if (Array.isArray(f.answers)) for (const a of f.answers) { const x = asObj(a); if (x) { x.question = trimStrings(x.question, 120); x.answer = trimStrings(x.answer, 300); } }
+  if (Array.isArray(f.newFlags)) f.newFlags = f.newFlags.map((s) => trimStrings(s, 80));
+  if (Object.hasOwn(f, "builderNamed")) f.builderNamed = trimStrings(f.builderNamed, 60);
+  trimExtract(f.graph);
+}
+
 function parseTriage(raw: string): Triage {
-  const t = parseChecked<Triage>(raw, TRIAGE_SCHEMA);
+  const t = parseChecked<Triage>(raw, TRIAGE_SCHEMA, trimTriage);
   const errs: string[] = [];
   if (!nullableString(t.ideaId, 13)) errs.push('$.ideaId should be a string or null');
   if (Object.hasOwn(t.facts, 'builderNamed') && !nullableString(t.facts.builderNamed, 80)) errs.push('$.facts.builderNamed should be a string or null');
@@ -225,6 +249,7 @@ function triageData(input: TriageInput) {
 
 export const triageTask: Task<Triage> = {
   name: 'triage',
+  timeoutMs: 120_000,
   schema: TRIAGE_SCHEMA,
   prompt(input) {
     return build('triage', [

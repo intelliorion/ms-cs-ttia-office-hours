@@ -115,7 +115,9 @@ export function screen(text: string, meta: ScreenMeta = {}): ScreenResult {
   const fileNames = [meta.fileName ?? '', ...(meta.attachments ?? [])];
   if (fileNames.some((n) => TRACKER_FILE.test(n))) {
     const names = lines.map((l) => (cellsOf(l)?.cells[0] ?? l).trim()).filter((c) => PERSON_NAME.test(c) && !known.has(norm(c)));
-    if (names.length >= 10) reasons.push(`Looks like a tracker with ${names.length} names in it`);
+    // The table count covers names the strict pattern misses (lowercase particles, initials), so the number is the largest honest count
+    const count = Math.max(names.length, table?.rows ?? 0);
+    if (count >= 10) reasons.push(`Looks like a tracker with ${count} names in it`);
   }
 
   return { hold: reasons.length > 0, reasons };

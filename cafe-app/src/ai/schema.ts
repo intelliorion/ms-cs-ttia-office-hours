@@ -93,11 +93,18 @@ export function firstJsonObject(text: string): unknown {
 }
 
 /** Extracts the first JSON object and checks it, or throws AiError('invalid output: …'). */
-export function parseChecked<T>(raw: string, schema: JsonSchema): T {
+export function parseChecked<T>(raw: string, schema: JsonSchema, trim?: (value: unknown) => void): T {
   if (raw.length > MAX_RAW) throw new AiError(`invalid output: the reply is longer than ${MAX_RAW / 1024} KB`);
   const value = firstJsonObject(raw);
   if (value === undefined) throw new AiError('invalid output: no JSON object in the reply');
+  trim?.(value);
   const errs = validate(schema, value);
   if (errs.length) throw new AiError(`invalid output: ${errs.slice(0, 3).join('; ')}`);
   return value as T;
+}
+
+/** A string longer than max is cut at max with an ellipsis (total length max); anything else is returned unchanged. */
+export function trimStrings<V>(v: V, max: number): V {
+  if (typeof v !== 'string' || v.length <= max) return v;
+  return (v.slice(0, max - 1).trimEnd() + '…') as unknown as V;
 }

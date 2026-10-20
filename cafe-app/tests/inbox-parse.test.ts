@@ -175,6 +175,12 @@ describe('screen', () => {
     );
   });
 
+  it('the tracker count is the number of names found, for 15 rows', () => {
+    const csv = ['Name,Employee ID', ...Array.from({ length: 15 }, (_, i) => `Person ${i + 40},AB${12000 + i}`)].join('\n');
+    const r = screenDrop('team tracker.csv', parseDrop('team tracker.csv', new TextEncoder().encode(csv)), []);
+    expect(r.reasons).toContain('Looks like a tracker with 15 names in it');
+  });
+
   it('passes a normal reply from known participants, and a transcript', async () => {
     const p = parseDrop('reply.eml', await bytes('reply.eml'));
     expect(screenDrop('reply.eml', p, ['Person 2', 'Person 3'])).toEqual({ hold: false, reasons: [] });

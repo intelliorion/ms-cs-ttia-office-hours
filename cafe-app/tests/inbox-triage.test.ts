@@ -384,3 +384,32 @@ describe('triageItem', () => {
     expect(t.aiError).toMatch(/boom/);
   });
 });
+
+describe('triage reply trimming and timeout', () => {
+  const reply = (over: Record<string, unknown>) => JSON.stringify({ ...GOOD, ...over });
+  it('trims over-long free text to its cap with an ellipsis', () => {
+    const t = triageTask.parse(reply({ summary: 'a'.repeat(200) }));
+    expect(t.summary).toHaveLength(160);
+    expect(t.summary.endsWith('…')).toBe(true);
+    const f = triageTask.parse(reply({ facts: { ...GOOD.facts, builderNamed: 'b'.repeat(90), newFlags: ['f'.repeat(100)], answers: [{ question: 'q'.repeat(150), answer: 'a'.repeat(400) }] } }));
+    expect(f.facts.builderNamed).toHaveLength(60);
+    expect(f.facts.newFlags![0]).toHaveLength(80);
+    expect(f.facts.answers![0].question).toHaveLength(120);
+    expect(f.facts.answers![0].answer).toHaveLength(300);
+  });
+  it('structural fields stay strict', () => {
+    expect(() => triageTask.parse(reply({ kind: 'bogus' }))).toThrow(/invalid output/);
+    expect(() => triageTask.parse(reply({ matchConfidence: 2 }))).toThrow(/invalid output/);
+  });
+  it('the triage task has a 120 s timeout, the others keep 90 s', async () => {
+    expect(triageTask.timeoutMs).toBe(120_000);
+    const { extractTask, reviewSuggestTask } = await import('../src/ai/tasks');
+    expect(extractTask.timeoutMs).toBeUndefined();
+    expect(reviewSuggestTask.timeoutMs).toBeUndefined();
+    const seen: number[] = [];
+    const p: Provider = { id: 'claude', label: 'x', available: async () => true, complete: async (_p, o) => { seen.push(o.timeoutMs); return JSON.stringify(GOOD); } } as Provider;
+    const c = createConnector({ providers: [p], settings: DEFAULT_SETTINGS });
+    await c.runWith(triageTask, { item: { type: 'note', text: 't' }, candidates: [] });
+    expect(seen[0]).toBe(120_000);
+  });
+});

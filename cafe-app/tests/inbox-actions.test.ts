@@ -10,7 +10,7 @@ import { DEFAULT_SETTINGS } from '../src/round/round';
 import type { Triage } from '../src/ai/tasks';
 import { appendAiLink, rebuildGraph, readAiLinks, setAiLinkStatus } from '../src/graph/store';
 import { setStage } from '../src/ideas/stage';
-import { kindOf, sameQuestion, type Action, type ActionRecord } from '../src/inbox/actions';
+import { kindOf, sameQuestion, directionOf, type Action, type ActionRecord } from '../src/inbox/actions';
 import { processDrop, applyRecords, undoRecord } from '../src/inbox/flow';
 import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
 import { saveSettings } from '../src/round/store';

@@ -32,6 +32,8 @@ export interface Connector {
 }
 
 export const DEFAULT_TIMEOUT_MS = 90_000;
+/** The triage reads long emails and can take Claude Code more than 90 s. */
+export const TRIAGE_TIMEOUT_MS = 120_000;
 export const NO_AI_LABEL = 'No AI: working by hand';
 const CHOICE_LABELS: Record<AiChoice, string> = {
   auto: 'Automatic', claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', none: 'No AI: work by hand',
@@ -57,6 +59,7 @@ export function createConnector(opts: {
   timeoutMs?: number;
 }): Connector {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const ceiling = opts.timeoutMs ?? TRIAGE_TIMEOUT_MS;
   const settings = async () => (typeof opts.settings === 'function' ? opts.settings() : opts.settings);
 
   async function pick(): Promise<Provider | null> {
@@ -70,7 +73,7 @@ export function createConnector(opts: {
   async function runWith<T>(task: Task<T>, input: unknown, run: { timeoutMs?: number } = {}): Promise<{ provider: ProviderId; label: string; output: T }> {
     const p = await pick();
     if (!p) throw new AiError('No AI available');
-    const ms = Math.min(run.timeoutMs ?? timeoutMs, timeoutMs);
+    const ms = Math.min(run.timeoutMs ?? task.timeoutMs ?? timeoutMs, ceiling);
     const raw = await withTimeout(p.complete(task.prompt(input), { timeoutMs: ms }), ms, p.label);
     if (typeof raw !== 'string') throw new AiError('invalid output: the reply was not text');
     return { provider: p.id, label: p.label, output: task.parse(raw) };

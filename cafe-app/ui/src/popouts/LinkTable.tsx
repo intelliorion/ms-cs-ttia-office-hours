@@ -17,7 +17,7 @@ export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: 
             <div className="lk-main">
               <span className="rel">{r.out ? `${r.rel} →` : `← ${r.rel}`}</span>
               <span className="dot" style={{ background: colour }} aria-hidden="true" />
-              <span className="other" title={r.other.type}>{r.other.label}</span>
+              <span className="other" title={`${r.other.label} (${r.other.type})`}>{r.other.label}</span>
               <span className={`conf${r.confirmed ? '' : ' low'}`}>{confidenceText(r.confidence)}</span>
             </div>
             <div className="lk-sub">

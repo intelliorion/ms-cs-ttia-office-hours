@@ -38,7 +38,7 @@ export function IdeasList() {
           return (
             <li key={i.id} className={selectedId === id ? 'sel' : ''} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
               onClick={() => { select(id); openPopout({ kind: 'idea', id: i.id }); }}>
-              <div className="r1"><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
+              <div className="r1" title={i.title}><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
               <div className="r2">
                 <span className="fr">{[i.function, i.region].filter(Boolean).join(' · ') || '—'}</span>
                 <span className="stg" style={{ ['--c' as string]: STAGE_RING[key] }}>{i.closed ? 'Closed' : state.stageNames[i.stage]}</span>

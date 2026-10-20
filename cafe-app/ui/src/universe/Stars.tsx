@@ -158,7 +158,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, onSe
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
             <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId ? ' hot' : ''}`}>
-              <div className="l1">{d.label}</div>
+              <div className="l1" title={d.label}>{d.label}</div>
               {d.type === 'Idea' && <div className="l2">{d.attrs?.closed ? `Closed · ${d.attrs.closed}` : String(d.attrs?.stageLabel ?? '')}</div>}
             </div>
           </Html>

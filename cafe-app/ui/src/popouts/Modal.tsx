@@ -34,7 +34,7 @@ export function Modal({ title, label, actions, onClose, children, width = 1100, 
       <div ref={box} className={`panel modal ${className}`} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}
         style={{ width, height }}>
         <div className="modal-head">
-          <div className="modal-title">{title}</div>
+          <div className="modal-title" title={typeof title === 'string' ? title : undefined}>{title}</div>
           {actions && <div className="modal-actions">{actions}</div>}
           <button className="x" aria-label="Close" data-action="close" onClick={onClose}>✕</button>
         </div>

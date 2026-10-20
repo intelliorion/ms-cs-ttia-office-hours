@@ -4,7 +4,6 @@ import { STAGE_RING } from '../universe/graphView';
 import { useChart, AXIS, GRID } from './useChart';
 
 const STAGE_COLOURS = ['1', '2', '3', '4', 'closed'].map((k) => STAGE_RING[k]);
-const short = (s: string, n = 26) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 function Chart({ option, height }: { option: Record<string, unknown>; height: number }) {
   const ref = useChart(option);
@@ -32,7 +31,7 @@ function HBars({ rows, colour, height }: { rows: [string, number][]; colour: str
     grid: { left: 8, right: 30, top: 4, bottom: 4, containLabel: true },
     tooltip: { trigger: 'axis', axisPointer: { type: 'none' } },
     xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: GRID } }, axisLabel: { color: AXIS, fontSize: 11 } },
-    yAxis: { type: 'category', data: top.map(([n]) => short(n)), axisLine: { lineStyle: { color: GRID } }, axisTick: { show: false }, axisLabel: { color: AXIS, fontSize: 12 } },
+    yAxis: { type: 'category', data: top.map(([n]) => n), axisLine: { lineStyle: { color: GRID } }, axisTick: { show: false }, axisLabel: { color: AXIS, fontSize: 12, width: 150, overflow: 'break', lineHeight: 14, interval: 0 } },
     series: [{ type: 'bar', barWidth: 14, data: top.map(([, c]) => c), itemStyle: { color: colour, borderRadius: [0, 3, 3, 0] }, label: { show: true, position: 'right', color: '#e7d8b1', fontSize: 12 } }],
   }), [top, colour]);
   return rows.length ? <Chart option={option} height={height} /> : <div className="nodata" style={{ height }}>Nothing yet</div>;
@@ -41,13 +40,13 @@ function HBars({ rows, colour, height }: { rows: [string, number][]; colour: str
 export function SupportChart() {
   const state = useStore((s) => s.state);
   const rows = useMemo(() => (state ? supportCounts(state) : []), [state]);
-  return <HBars rows={rows} colour="#e7d8b1" height={Math.max(90, rows.slice(0, 6).length * 30 + 20)} />;
+  return <HBars rows={rows} colour="#e7d8b1" height={Math.max(90, rows.slice(0, 6).length * 34 + 20)} />;
 }
 
 export function FunctionChart() {
   const state = useStore((s) => s.state);
   const rows = useMemo(() => (state ? functionRegion(state) : []), [state]);
-  return <HBars rows={rows} colour="#7dd3cf" height={Math.max(90, rows.slice(0, 6).length * 30 + 20)} />;
+  return <HBars rows={rows} colour="#7dd3cf" height={Math.max(90, rows.slice(0, 6).length * 34 + 20)} />;
 }
 
 export function Waiting() {
@@ -67,7 +66,7 @@ export function Waiting() {
           const i = byId.get(id);
           return (
             <li key={id} onClick={() => open(id)} onMouseEnter={() => useStore.getState().hover(`idea:${id}`)} onMouseLeave={() => useStore.getState().hover(null)}>
-              <span className="iid">{id.replace('CAFE-', '')}</span><span className="ttl">{i?.title}</span>
+              <span className="iid">{id.replace('CAFE-', '')}</span><span className="ttl" title={i?.title}>{i?.title}</span>
               <span className="why">{i?.overdue?.[0]?.text}</span>
             </li>
           );

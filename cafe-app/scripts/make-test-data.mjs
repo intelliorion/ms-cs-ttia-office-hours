@@ -49,7 +49,7 @@ const ROWS = [
   ['Meeting notes to actions', `${who(10)} (CS)`, 'BSI', 'AMER', 'Individual', '',
     'Actions agreed in meetings are lost because nobody writes them up the same day.',
     ms('Save time', 'Improve visibility'), 'Someone types up notes afterwards and emails the actions to each owner.',
-    ms('Prompt Coaching', 'Collab…'), 'Yes'],
+    ms('Prompt Coaching', 'Collaboration Tooling Guidance'), 'Yes'],
   ['Travel policy assistant', `${who(11)} (CS)`, 'Workplace', 'APAC', 'Individual', '',
     'Travellers keep asking the same questions about what the travel policy allows.',
     ms('Save time', 'Improve experience'), 'The travel desk answers each question by email and links to the policy PDF.',
@@ -256,7 +256,7 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 
 | File | What it is | What to expect |
 |---|---|---|
-| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. Row 7 has no title, so the import reports it. Row 5 has a cut-off value ("Collab…"). Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
+| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. Row 7 has no title, so the import reports it. Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
 | 02-reply-with-id.eml | ${who(2)} answers our three questions; subject has CAFE-2026-002 | Sure match to Desk booking assistant. Our quoted E2 is split off below "-----Original Message-----". |
 | 03-reply-no-id.eml | Reply whose subject is only the idea title | Likely match to Desk booking assistant (title in subject). |
 | 04-sender-only.eml | ${who(5)} writes "Quick update" | No ID or title, so a sender match (submitter, 0.8) or a question to you. |

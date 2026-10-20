@@ -195,6 +195,7 @@ copilot-studio-github-agent/upload/README.md
 docs/superpowers/plans/2026-10-19-cafe-app-core.md
 docs/superpowers/plans/2026-10-19-cafe-inbox.md
 docs/superpowers/plans/2026-10-19-cafe-universe-ui.md
+docs/superpowers/plans/2026-10-20-cafe-design-series.md
 docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 scripts/build-github-agent.sh

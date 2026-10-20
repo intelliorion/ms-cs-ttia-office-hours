@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard]  (ai and inbox need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard|design]  (ai, inbox and design need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -316,6 +316,79 @@ async function inboxHandShots(p, restart) {
   await post('/api/ai/provider', { provider: 'auto' });
 }
 
+// The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the brainstorm one question at a time
+// (a suggested answer, "I don't know" to the E2, a typed answer), done, the Café check, Approve with the CSIC
+// suggestion, then plan.md and the kits. Needs CAFE_AI_FAKE=1.
+async function designShots(p) {
+  const assert = (ok, msg) => { if (!ok) throw new Error(`design: ${msg}`); };
+  const D = '[data-testid="idea-details"]';
+  const notice = (text) => p.waitForSelector(`${D} .pop-notice:has-text("${text}")`, { timeout: 90000 });
+  const into = async (sel) => { await p.locator(sel).first().evaluate((el) => el.scrollIntoView({ block: 'start' })); await sleep(400); };
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
+  await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
+  await sleep(2500);
+  // Tool picker: the AI fills three rows as suggestions; one is a custom app with the CSIC note.
+  await p.click(`${D} [data-action="tools-suggest"]`);
+  await p.waitForSelector(`${D} .tp-row.suggested`, { timeout: 90000 });
+  assert((await p.locator(`${D} .tp-row.suggested`).count()) === 3, 'expected three suggested rows');
+  assert((await p.locator(`${D} [data-testid="csic-note"]`).count()) === 1, 'no CSIC note on the custom-app row');
+  await into(`${D} [data-testid="tool-picker"]`);
+  await shot(p, '40-toolpicker.png');
+  await p.click(`${D} [data-action="tools-save"]`);
+  await notice('Saved 3 features');
+  await p.waitForSelector(`${D} .tp-row.suggested`, { state: 'detached', timeout: 10000 }); // saved: no longer suggestions
+  const graph = await (await fetch(`${base}/api/graph`)).json();
+  const built = (graph.edges ?? graph.links ?? []).filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes('CAFE-2026-002:approach.md'));
+  assert(built.length >= 1 && built.every((e) => e.confirmed !== false), 'the picks made no confirmed (solid) Capability → Tool links');
+  console.log('  BUILT_WITH links from the picks:', built.length);
+  // Brainstorm: the first question, with its why and suggested answers.
+  await p.click(`${D} [data-action="next-question"]`);
+  await p.waitForSelector(`${D} .ds-step[data-step="1"]`, { timeout: 90000 });
+  await into(`${D} [data-testid="design"]`);
+  await shot(p, '41-design-step.png');
+  await p.locator(`${D} .ds-step[data-step="1"] [data-action="pick-suggested"]`).first().click();
+  await notice('Answer to question 1 saved.');
+  await p.click(`${D} [data-action="next-question"]`);
+  await p.waitForSelector(`${D} .ds-step[data-step="2"]`, { timeout: 90000 });
+  await p.click(`${D} .ds-step[data-step="2"] [data-action="idk"]`);
+  await p.waitForSelector(`${D} .ds-step[data-step="2"] [data-testid="asked-team"]`);
+  const outbox = (await (await fetch(`${base}/api/state`)).json()).outbox.filter((m) => m.idea === 'CAFE-2026-002' && m.template === 'E2' && m.status === 'draft');
+  assert(outbox.length === 1, 'no E2 draft after "I don\'t know"');
+  await into(`${D} .ds-step[data-step="2"]`);
+  await p.locator(`${D} .ds-step[data-step="1"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await sleep(300);
+  await shot(p, '42-design-idk.png');
+  await p.click(`${D} .ds-step[data-step="2"] [data-action="open-outbox"]`);
+  await p.waitForSelector('[data-group]');
+  await p.keyboard.press('Escape');
+  await p.waitForSelector(D);
+  // The third question by hand-typed answer, then the AI says done.
+  await p.click(`${D} [data-action="next-question"]`);
+  await p.waitForSelector(`${D} .ds-step[data-step="3"]`, { timeout: 90000 });
+  await p.fill(`${D} .ds-step[data-step="3"] textarea`, 'A citizen builder in the desk team, with a synthetic sample of twenty requests.');
+  await p.click(`${D} .ds-step[data-step="3"] [data-action="save-answer"]`);
+  await notice('Answer to question 3 saved.');
+  await p.click(`${D} [data-action="next-question"]`);
+  await p.waitForSelector(`${D} [data-testid="design-complete"]`, { timeout: 90000 });
+  // Approve: the custom-app pick is a CSIC flag, so the notice says so and the CSIC move is offered (Yes/No).
+  await p.click(`${D} [data-action="approve-design"]`);
+  await p.waitForSelector(`${D} [data-testid="suggest"]`);
+  assert((await p.textContent(`${D} [data-testid="suggest"]`)).includes('CSIC'), 'no CSIC suggestion after approve');
+  await into(`${D} [data-testid="design-complete"]`);
+  await shot(p, '43-cafe-check.png');
+  await p.click(`${D} [data-action="suggest-no"]`);
+  // Plan and kits.
+  await p.click(`${D} [data-action="write-plan"]`);
+  await p.waitForSelector(`${D} .pk-files li`, { timeout: 90000 });
+  assert(await p.isVisible(`${D} [data-action="copy-instruction"]`), 'no Copy build instruction for the custom-app kit');
+  await p.click(`${D} [data-action="toggle-plan-md"]`);
+  await into(`${D} [data-testid="plan-kits"]`);
+  await shot(p, '44-plan-kits.png');
+  const stage = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.id === 'CAFE-2026-002');
+  assert(!stage.closed, 'the idea was closed without a click on Yes');
+}
+
 // Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.
 async function ideaCardShots(p) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`ideacard: ${msg}`); };
@@ -512,6 +585,14 @@ async function main() {
       await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
       await sleep(3500);
       await shot(p, '19-focus.png');
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'design') {
+      if (process.env.CAFE_AI_FAKE !== '1') throw new Error('--only=design needs CAFE_AI_FAKE=1');
+      await designShots(p);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;

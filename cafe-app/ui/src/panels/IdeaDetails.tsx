@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store';
-import { copyText, getHistory, ideaPost, post } from '../api';
+import { copyText, getHistory, ideaGet, ideaPost, post } from '../api';
 import { extractNotice, NO_AI_TIP, providerName, type ReviewSuggestion } from '../popouts/aiUi';
 import { LinkTable } from '../popouts/LinkTable';
 import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel, ideaLinks, type HistoryEntry } from '../popouts/ideaHelpers';
 import { Details, Emails, History, Review, StageMenu } from '../popouts/IdeaSections';
+import { ToolPickerSection } from './ToolPickerSection';
+import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
 
 /**
  * One idea, in the left panel in place of the list: Back, its ID and stage, then (one column) the suggestion strip,
- * Review, Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
+ * Review, Tool picker, Design, Plan and kits, Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
   const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
@@ -21,8 +23,23 @@ export function IdeaDetails({ id }: { id: string }) {
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const backBtn = useRef<HTMLButtonElement>(null);
+  /** The design series: design.yaml (+ live design.md) and plan.md + kit files, read when the idea opens and after each change. */
+  const [design, setDesign] = useState<DesignView | null>(null);
+  const [plan, setPlan] = useState<PlanView | null>(null);
+  /** Which design section is waiting on the AI ('tools', 'design', 'plan'); null for the Review and Graph AI calls. */
+  const [aiFor, setAiFor] = useState<string | null>(null);
+  const idRef = useRef(id);
+  idRef.current = id;
 
   const loadHistory = useCallback(() => getHistory(id).then(setHistory, () => setHistory(null)), [id]);
+  const loadDesign = useCallback(async () => {
+    const [d, p] = await Promise.all([ideaGet(id, 'design').catch(() => null), ideaGet(id, 'plan').catch(() => null)]);
+    if (idRef.current !== id) return; // another idea opened meanwhile
+    setDesign(d); setPlan(p);
+  }, [id]);
+  useEffect(() => {
+    setDesign(null); setPlan(null); void loadDesign();
+  }, [loadDesign]);
   useEffect(() => {
     setNotice(null); setFallback(null); setAiReview(null); void loadHistory();
     scroller.current?.scrollTo({ top: 0 });
@@ -56,6 +73,26 @@ export function IdeaDetails({ id }: { id: string }) {
     catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
     await Promise.all([refresh(), loadHistory()]);
     setAiBusy(false);
+  };
+  /** One design-series call: busy (or the AI wait) while it runs, a notice, the CSIC suggestion, then everything re-read. */
+  const designCall: DesignCall = async (fn, o) => {
+    if (busy || aiBusy || (o.ai && noAi)) return null;
+    if (o.ai) { setAiBusy(true); setAiFor(o.ai); } else setBusy(true);
+    setNotice(null);
+    let out = null;
+    try {
+      const r: any = await fn();
+      out = r;
+      if (r?.state && typeof r.designMd === 'string' && idRef.current === id) setDesign({ state: r.state, designMd: r.designMd });
+      const t = o.ok(r);
+      setNotice(t ? { text: t, kind: 'ok' } : null);
+      if (r?.suggest) setSuggest({ id, ...r.suggest });
+    } catch (e) {
+      setNotice({ text: (e as Error).message, kind: 'error' });
+    }
+    await Promise.all([refresh(), loadHistory(), loadDesign()]);
+    if (o.ai) { setAiBusy(false); setAiFor(null); } else setBusy(false);
+    return out;
   };
   const grow = () => runAi('/api/ai/extract', (r) => setNotice({ text: extractNotice(r), kind: 'ok' }));
   const suggestReview = () => runAi('/api/ai/review-suggest', (r) => {
@@ -129,11 +166,17 @@ export function IdeaDetails({ id }: { id: string }) {
           onClearAi={() => setAiReview(null)} aiBar={(
             <div className="ai-row">
               <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy || Boolean(idea.closed)} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
-                {aiBusy ? 'Working…' : 'Suggest a review'}</button>
+                {aiBusy && !aiFor ? 'Working…' : 'Suggest a review'}</button>
             </div>
           )}
           onSave={(body) => act(() => ideaPost(id, 'review', body), (r: any) =>
             [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
+        <ToolPickerSection key={`tools-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'tools')} aiWorking={aiFor === 'tools'}
+          noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />
+        <DesignSection key={`design-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'design')} aiWorking={aiFor === 'design'}
+          noAi={noAi} call={designCall} onOutbox={() => openPopout({ kind: 'outbox' })} />
+        <PlanSection key={`plan-${id}`} idea={idea} design={design} plan={plan} busy={busy || (aiBusy && aiFor !== 'plan')} aiWorking={aiFor === 'plan'}
+          noAi={noAi} call={designCall} />
         <section className="sec">
           <h3>Stage</h3>
           <StageMenu state={state} value={stageValue} busy={busy} onPick={setStage} />
@@ -154,8 +197,8 @@ export function IdeaDetails({ id }: { id: string }) {
           <h3>Graph <span className="sec-n">{links.length} links</span></h3>
           <div className="ai-row">
             <button className="btn" data-action="ai-grow" disabled={noAi || aiBusy || busy} title={noAi ? NO_AI_TIP : undefined} onClick={() => void grow()}>
-              {aiBusy ? 'Working…' : 'Grow the universe from this idea'}</button>
-            {aiBusy && <span className="ai-busy" role="status">Asking the AI, this can take a minute…</span>}
+              {aiBusy && !aiFor ? 'Working…' : 'Grow the universe from this idea'}</button>
+            {aiBusy && !aiFor && <span className="ai-busy" role="status">Asking the AI, this can take a minute…</span>}
           </div>
           <LinkTable rows={links} busy={busy} compact
             onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), () => 'Link confirmed.')}

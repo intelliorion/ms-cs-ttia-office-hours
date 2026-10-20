@@ -2,26 +2,37 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { getAiStatus, post } from '../api';
 import { Modal } from './Modal';
-import { chipText } from './aiUi';
+import { chipText, nextProviderChoice } from './aiUi';
 
 const OPTIONS: [string, string][] = [
   ['auto', 'Auto'], ['claude', 'Claude Code'], ['copilot', 'Copilot CLI'], ['vscode', 'VS Code with Copilot'], ['none', 'None'],
 ];
 
 export function AiPopout() {
-  const { state, ai, refreshAi, closePopout } = useStore();
+  const { state, ai, refreshAi, refresh, closePopout } = useStore();
   const [choice, setChoice] = useState<string>(state?.settings?.ai?.provider ?? 'auto');
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { void refreshAi(); }, [refreshAi]);
+  // Refresh on open so the saved setting is current, and follow it whenever it changes.
+  useEffect(() => { void refreshAi(); void refresh(); }, [refreshAi, refresh]);
+  const saved: string = state?.settings?.ai?.provider ?? 'auto';
+  useEffect(() => { setChoice(saved); }, [saved]);
 
   const byId = Object.fromEntries((ai?.choices ?? []).map((c) => [c.id, c]));
   const note = (id: string) => byId[id]?.note ?? (id === 'copilot' ? ai?.note : undefined);
 
   const pick = async (id: string) => {
-    setChoice(id); setBusy(true); setMsg(null);
-    try { await post('/api/ai/provider', { provider: id }); await refreshAi(); setMsg({ text: 'Saved.', kind: 'ok' }); }
-    catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
+    const prev = choice;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await post('/api/ai/provider', { provider: id });
+      setChoice(nextProviderChoice(prev, r?.choice ?? id, true));
+      await Promise.all([refreshAi(), refresh()]);
+      setMsg({ text: 'Saved.', kind: 'ok' });
+    } catch (e) {
+      setChoice(nextProviderChoice(prev, id, false));
+      setMsg({ text: (e as Error).message, kind: 'error' });
+    }
     setBusy(false);
   };
   const test = async () => {

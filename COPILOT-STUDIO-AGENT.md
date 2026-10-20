@@ -5,7 +5,7 @@ asks, ready to copy. Values in code blocks are exact. Values marked
 _your choice_ are yours to set. The step-by-step walkthrough is in
 `copilot-studio-github-agent/SETUP.md`; this page is the field sheet.
 
-Run `bash scripts/build.sh` first so the zips are current.
+Run `bash scripts/build-github-agent.sh` first: the three zips are not stored in the repo, so this builds them into `copilot-studio-github-agent/upload/`.
 
 ---
 

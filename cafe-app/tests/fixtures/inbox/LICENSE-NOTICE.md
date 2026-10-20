@@ -1,1 +1,1 @@
-- `outlook-sample.msg` is `test/attachmentFiles.msg` from https://github.com/HiraokaHyperTools/msgreader (copyright its authors), used unmodified under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+- `outlook-sample.msg.b64` is the base64 text of `test/attachmentFiles.msg` from https://github.com/HiraokaHyperTools/msgreader (copyright its authors), used unmodified under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).

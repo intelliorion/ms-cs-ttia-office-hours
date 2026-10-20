@@ -10,7 +10,7 @@ is in [`COPILOT-STUDIO-AGENT.md`](COPILOT-STUDIO-AGENT.md).
 
 | where | how | see |
 |---|---|---|
-| Copilot Studio, GitHub Copilot harness (Build tab with a **Skills** panel) | upload three skill zips | [`copilot-studio-github-agent/SETUP.md`](copilot-studio-github-agent/SETUP.md) |
+| Copilot Studio, GitHub Copilot harness (Build tab with a **Skills** panel) | build, then upload three skill zips | [`copilot-studio-github-agent/SETUP.md`](copilot-studio-github-agent/SETUP.md) |
 | Claude Code | `bash scripts/install-local.sh --claude` | skills appear next session |
 | GitHub Copilot in VS Code (agent mode) and Copilot CLI | `bash scripts/install-local.sh --copilot` | reads `~/.copilot/skills` and `~/.agents/skills` |
 
@@ -106,7 +106,7 @@ skills/                                   source of truth — edit these
   ms-cs-ttia-csic-repository/references/    ttia-team.md · documents.md (Word layout) · value-story-chat.md (chat layout)
   ms-cs-ttia-value-story/SKILL.md           value story: what an initiative in service actually delivered
 copilot-studio-github-agent/              package 1 — built from skills/
-  SETUP.md · agent-instructions.md · upload/*.zip
+  SETUP.md · agent-instructions.md · upload/ (the three zips are built locally, not committed: `bash scripts/build-github-agent.sh`)
 scripts/build.sh                          validate and rebuild the package
 scripts/install-local.sh                  install skills for Claude Code / VS Code Copilot / Copilot CLI
 tests/preview-scenarios.md                scenarios to pass before publishing

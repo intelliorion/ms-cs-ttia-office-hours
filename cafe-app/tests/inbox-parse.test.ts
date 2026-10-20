@@ -119,7 +119,7 @@ describe('parseDrop', () => {
   });
 
   it('reads a REAL Outlook .msg file (msgreader test fixture, Apache-2.0)', async () => {
-    const p = parseDrop('outlook-sample.msg', await bytes('outlook-sample.msg'));
+    const p = parseDrop('outlook-sample.msg', new Uint8Array(Buffer.from(await readFile(FIX('outlook-sample.msg.b64'), 'utf8'), 'base64')));
     expect(p.type).toBe('email');
     expect(p.problems).toBeUndefined();
     expect(p.text.trim().length).toBeGreaterThan(0);

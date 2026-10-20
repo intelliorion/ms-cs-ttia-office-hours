@@ -9,6 +9,8 @@ No Skills panel? The agent was created on the standard engine, which this packag
 
 ## What is in this package
 
+The three zips are not committed to the repo. First run `bash scripts/build-github-agent.sh` to build them into `upload/`.
+
 | file | goes where in Copilot Studio |
 |---|---|
 | `agent-instructions.md` | Build → Instructions (about 4,800 of 8,000 characters) |

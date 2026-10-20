@@ -1,6 +1,6 @@
 // Writes cafe-app/test-data/: realistic but entirely synthetic files to drop into the Inbox.
 // Run: npm run test-data   (deterministic: same output every run)
-import { mkdir, writeFile, rm, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
@@ -247,7 +247,8 @@ await put('11-held-tracker.csv', ['Name,Employee ID,Phone,Client',
 }
 
 // A real Outlook .msg (msgreader test fixture, Apache-2.0; see tests/fixtures/inbox/LICENSE-NOTICE.md)
-await copyFile(fileURLToPath(new URL('../tests/fixtures/inbox/outlook-sample.msg', import.meta.url)), path.join(OUT, '13-outlook.msg'));
+const msgB64 = await readFile(fileURLToPath(new URL('../tests/fixtures/inbox/outlook-sample.msg.b64', import.meta.url)), 'utf8');
+await writeFile(path.join(OUT, '13-outlook.msg'), Buffer.from(msgB64, 'base64'));
 
 // ---------- README ----------
 await put('README.md', `# Test data for the Inbox

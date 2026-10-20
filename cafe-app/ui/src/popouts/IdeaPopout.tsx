@@ -5,7 +5,7 @@ import { shortDate } from '../panels/filterIdeas';
 import { Modal } from './Modal';
 import { LinkTable } from './LinkTable';
 import {
-  DECISION_EMAIL, IDEA_TEMPLATES, reviewKey, shouldResetReview, TEMPLATE_TITLES, clipText, emailAction, emailStatus, historyLine, ideaLinks, type HistoryEntry,
+  APPROVED_NOTICE, DECISION_EMAIL, IDEA_TEMPLATES, approveAndCopy, reviewKey, shouldResetReview, TEMPLATE_TITLES, clipText, emailAction, emailStatus, historyLine, ideaLinks, type HistoryEntry,
 } from './ideaHelpers';
 
 const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', member: 'Member' };
@@ -127,16 +127,10 @@ export function IdeaPopout({ id }: { id: string }) {
             onSetFirst={() => openPopout({ kind: 'round' })}
             onApprove={(key) => act(async () => {
               setFallback(null);
-              try {
-                const r = await post('/api/outbox/approve', { key });
-                const text = clipText(r);
-                if (!(await copyText(text))) setFallback(text);
-                return r;
-              } catch (e) {
-                if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Round to fill them in.`);
-                throw e;
-              }
-            }, (r: any) => `${r.template} approved and copied. Paste it into Outlook, send it, then mark it as sent.`)}
+              const r = await approveAndCopy(key);
+              setFallback(r.fallback);
+              return r.item;
+            }, (r: any) => APPROVED_NOTICE(r.template))}
             onCopy={async (m) => { const text = clipText(m.view); if (await copyText(text)) setNotice({ text: `${m.template} copied again.`, kind: 'ok' }); else setFallback(text); }}
             onSent={(key) => act(() => post('/api/outbox/sent', { key }), (r: any) => `${r.template} marked sent.`)} />
           <section className="sec">

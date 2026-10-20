@@ -1,0 +1,55 @@
+{
+  "deadline": {
+    "emails": [
+      "E0",
+      "E0B"
+    ]
+  },
+  "reviewBy": {
+    "emails": [
+      "E1"
+    ]
+  },
+  "seriesStart": {
+    "emails": [],
+    "hint": "Used for session dates later"
+  },
+  "roadshow": {
+    "emails": [],
+    "hint": "Used for the roadshow later"
+  },
+  "formLink": {
+    "emails": [
+      "E0",
+      "E0B"
+    ]
+  },
+  "csicLink": {
+    "emails": [
+      "E5",
+      "E9",
+      "E11"
+    ]
+  },
+  "teamsLink": {
+    "emails": [
+      "E7",
+      "E10",
+      "RS",
+      "SR"
+    ]
+  },
+  "distList": {
+    "emails": [
+      "E0",
+      "E0B"
+    ]
+  },
+  "deckTemplate": {
+    "emails": [],
+    "hint": "Used for the roadshow deck later"
+  },
+  "operatorName": {
+    "emails": "all"
+  }
+}

@@ -141,7 +141,7 @@ async function popouts2Shots(p, gl, errors, restart) {
   await post('/api/outbox/sent', { key: e2.key });
   const e1 = await post(`/api/ideas/${b}/draft`, { template: 'E1' });
   await post('/api/outbox/approve', { key: e1.key });
-  await post(`/api/ideas/${c}/draft`, { template: 'E3' }); // blocked: the series date is not set
+  await post(`/api/ideas/${c}/draft`, { template: 'E3' }); // a second draft, waiting to be approved
   await post(`/api/ideas/${b}/draft`, { template: 'E2' });
   await post('/api/round/draft', { template: 'E0' });
   await p.reload({ waitUntil: 'networkidle' });

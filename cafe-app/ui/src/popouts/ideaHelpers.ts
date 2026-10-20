@@ -1,6 +1,7 @@
 // Pure helpers for the idea pop-out and the star card. No React here, so they test in node.
 import { NODE_LABELS, type GEdge, type GNode } from '../../../src/graph/ontology';
 import { shortDate } from '../panels/filterIdeas';
+import { ApiError, copyText, post } from '../api';
 
 /** Emails the operator can draft for one idea. */
 export const IDEA_TEMPLATES = ['E1', 'E2', 'E2R', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'PD'];
@@ -37,6 +38,27 @@ export const emailStatus = (status: string) =>
 
 /** What goes on the clipboard when an email is approved. */
 export const clipText = (m: { subject: string; body: string }) => `Subject: ${m.subject}\n\n${m.body}`;
+
+export const APPROVED_NOTICE = (template: string) => `${template} approved and copied. Paste it into Outlook, send it, then mark it as sent.`;
+
+/**
+ * Approves one Outbox item and puts "Subject: ...\n\n<body>" on the clipboard.
+ * Returns the approved item; `fallback` is the text to show selected when the browser refused to copy.
+ * Missing settings become "Set first: ..." so the operator knows to open Round.
+ */
+export async function approveAndCopy(
+  key: string,
+  api: { post: typeof post; copyText: typeof copyText } = { post, copyText },
+): Promise<{ item: any; fallback: string | null }> {
+  try {
+    const item = await api.post('/api/outbox/approve', { key });
+    const text = clipText(item);
+    return { item, fallback: (await api.copyText(text)) ? null : text };
+  } catch (e) {
+    if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Round to fill them in.`);
+    throw e;
+  }
+}
 
 export interface HistoryEntry { at: string; action: string; by?: string; step?: string; detail?: string; source?: string }
 

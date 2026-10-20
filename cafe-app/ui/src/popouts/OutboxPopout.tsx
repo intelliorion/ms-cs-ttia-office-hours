@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { useStore } from '../state/store';
-import { ApiError, copyText, post } from '../api';
+import { copyText, post } from '../api';
 import { Modal } from './Modal';
-import { TEMPLATE_TITLES, clipText, emailAction, emailStatus } from './ideaHelpers';
+import { APPROVED_NOTICE, TEMPLATE_TITLES, approveAndCopy, clipText, emailAction, emailStatus } from './ideaHelpers';
 import { groupOutbox } from './titleHelpers';
 
 const GROUPS = [['draft', 'Drafts'], ['approved', 'Approved, waiting to be sent'], ['sent', 'Sent']] as const;
@@ -30,16 +30,10 @@ export function OutboxPopout() {
   };
   const approve = (key: string) => act(async () => {
     setFallback(null);
-    try {
-      const r = await post('/api/outbox/approve', { key });
-      const text = clipText(r);
-      if (!(await copyText(text))) setFallback(text);
-      return r;
-    } catch (e) {
-      if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Round to fill them in.`);
-      throw e;
-    }
-  }, (r: any) => `${r.template} approved and copied. Paste it into Outlook, send it, then mark it as sent.`);
+    const r = await approveAndCopy(key);
+    setFallback(r.fallback);
+    return r.item;
+  }, (r: any) => APPROVED_NOTICE(r.template));
 
   const unsent = g.draft.length + g.approved.length;
   return (

@@ -1,4 +1,5 @@
 // Pure helpers for the title-bar pop-outs. No React here, so they test in node.
+import UNBLOCK from './unblock.json';
 
 export interface ImportReport {
   created: { id: string; title: string }[];
@@ -25,23 +26,12 @@ export function importReportLines(r: ImportReport): ReportLine[] {
   return lines;
 }
 
-/** Which emails each Round field unblocks. Operator name is on every email. */
-const UNBLOCKS: Record<string, string[]> = {
-  deadline: ['E0', 'E0B'],
-  reviewBy: ['E1'],
-  seriesStart: ['E3', 'E7'],
-  roadshow: ['E10'],
-  formLink: ['E0', 'E0B'],
-  csicLink: ['E5', 'E9', 'E11'],
-  teamsLink: ['E7', 'E10'],
-  distList: ['E0', 'E0B'],
-};
-
-/** Wording for what a field unblocks, e.g. "Needed for E0, E0B"; empty when nothing depends on it. */
+/** Which emails each field is needed for, and a hint for fields no email uses yet. Table lives in unblock.json; a server test checks it against the templates. */
 export function roundFieldsUnblock(field: string): string {
-  if (field === 'operatorName') return 'Needed for every email';
-  const t = UNBLOCKS[field];
-  return t ? `Needed for ${t.join(', ')}` : '';
+  const u = (UNBLOCK as Record<string, { emails: string[] | 'all'; hint?: string }>)[field];
+  if (!u) return '';
+  if (u.emails === 'all') return 'Needed for every email';
+  return u.emails.length ? `Needed for ${u.emails.join(', ')}` : u.hint ?? '';
 }
 
 /** Outbox items grouped for the pop-out, newest first inside each group. */

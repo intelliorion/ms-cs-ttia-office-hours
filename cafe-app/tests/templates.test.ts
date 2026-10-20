@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { loadTemplatesFrom, render, SIGNATURE } from '../src/comms/templates';
 import { BUNDLED_TEMPLATES } from '../src/workspace/paths';
 import { normalizeIdea } from '../src/ideas/idea';
-import { DEFAULT_SETTINGS } from '../src/round/round';
+import { DEFAULT_SETTINGS, TOKENS } from '../src/round/round';
+import unblock from '../ui/src/popouts/unblock.json';
 
 const idea = normalizeIdea({
   id: 'CAFE-2026-001', slug: 'email-scheduler', title: 'Email scheduler', round: 'ROUND-2026-Q4',
@@ -61,5 +62,24 @@ describe('templates', () => {
   it('counts the content placeholders left for Outlook', async () => {
     const { E2 } = await loadTemplatesFrom(BUNDLED_TEMPLATES);
     expect(render(E2, { idea, round, settings }).contentPlaceholders).toHaveLength(4);
+  });
+});
+
+describe('what each Round field is needed for', () => {
+  it('matches the templates that really contain each token', async () => {
+    const t = await loadTemplatesFrom(BUNDLED_TEMPLATES);
+    const ids = Object.keys(t).sort();
+    const table = unblock as Record<string, { emails: string[] | 'all' }>;
+    const used = new Map<string, string[]>();
+    for (const [token, def] of Object.entries(TOKENS)) {
+      const has = ids.filter((id) => `${t[id].to === 'list' ? '[DISTRIBUTION LIST]' : ''}\n${t[id].subject}\n${t[id].body}${SIGNATURE}`.includes(token));
+      used.set(def.key, has);
+    }
+    for (const [field, row] of Object.entries(table)) {
+      const found = used.get(field) ?? [];
+      expect(row.emails === 'all' ? ids : [...row.emails].sort(), field).toEqual(found);
+    }
+    // Every field that some template uses is in the table.
+    for (const [key, has] of used) if (has.length) expect(table[key], key).toBeDefined();
   });
 });

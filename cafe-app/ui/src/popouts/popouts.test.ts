@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { ApiError } from '../api';
+import { approveAndCopy } from './ideaHelpers';
 import { importReportLines, roundFieldsUnblock, groupOutbox, baseName, unsentCount } from './titleHelpers';
 
 describe('importReportLines', () => {
@@ -28,12 +30,13 @@ describe('roundFieldsUnblock', () => {
   it('maps each field to the emails it unblocks', () => {
     expect(roundFieldsUnblock('deadline')).toBe('Needed for E0, E0B');
     expect(roundFieldsUnblock('reviewBy')).toBe('Needed for E1');
-    expect(roundFieldsUnblock('seriesStart')).toBe('Needed for E3, E7');
-    expect(roundFieldsUnblock('roadshow')).toBe('Needed for E10');
+    expect(roundFieldsUnblock('seriesStart')).toBe('Used for session dates later');
+    expect(roundFieldsUnblock('roadshow')).toBe('Used for the roadshow later');
     expect(roundFieldsUnblock('formLink')).toBe('Needed for E0, E0B');
     expect(roundFieldsUnblock('csicLink')).toBe('Needed for E5, E9, E11');
-    expect(roundFieldsUnblock('teamsLink')).toBe('Needed for E7, E10');
+    expect(roundFieldsUnblock('teamsLink')).toBe('Needed for E7, E10, RS, SR');
     expect(roundFieldsUnblock('distList')).toBe('Needed for E0, E0B');
+    expect(roundFieldsUnblock('deckTemplate')).toBe('Used for the roadshow deck later');
     expect(roundFieldsUnblock('operatorName')).toBe('Needed for every email');
     expect(roundFieldsUnblock('open')).toBe('');
   });
@@ -59,5 +62,23 @@ describe('small helpers', () => {
   it('counts unsent emails', () => {
     expect(unsentCount([{ status: 'draft' }, { status: 'approved' }, { status: 'sent' }])).toBe(2);
     expect(unsentCount(undefined)).toBe(0);
+  });
+});
+
+describe('approveAndCopy', () => {
+  const item = { template: 'E1', subject: 'Hi', body: 'Body' };
+  it('copies Subject and body, and offers no fallback', async () => {
+    let copied = '';
+    const r = await approveAndCopy('k', { post: async () => item, copyText: async (t: string) => { copied = t; return true; } } as any);
+    expect(copied).toBe('Subject: Hi\n\nBody');
+    expect(r.fallback).toBeNull();
+  });
+  it('returns the text as a fallback when the browser refuses', async () => {
+    const r = await approveAndCopy('k', { post: async () => item, copyText: async () => false } as any);
+    expect(r.fallback).toBe('Subject: Hi\n\nBody');
+  });
+  it('turns missing settings into Set first', async () => {
+    await expect(approveAndCopy('k', { post: async () => { throw new ApiError('x', ['Teams link']); }, copyText: async () => true } as any))
+      .rejects.toThrow('Set first: Teams link. Open Round to fill them in.');
   });
 });

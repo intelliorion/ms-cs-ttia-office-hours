@@ -1,6 +1,6 @@
 // Writes cafe-app/test-data/: realistic but entirely synthetic files to drop into the Inbox.
 // Run: npm run test-data   (deterministic: same output every run)
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
@@ -246,6 +246,9 @@ await put('11-held-tracker.csv', ['Name,Employee ID,Phone,Client',
   await put('12-cannot-read.pdf', pdf);
 }
 
+// A real Outlook .msg (msgreader test fixture, Apache-2.0; see tests/fixtures/inbox/LICENSE-NOTICE.md)
+await copyFile(fileURLToPath(new URL('../tests/fixtures/inbox/outlook-sample.msg', import.meta.url)), path.join(OUT, '13-outlook.msg'));
+
 // ---------- README ----------
 await put('README.md', `# Test data for the Inbox
 
@@ -268,5 +271,6 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 | 10-note.txt | Pasted-style note with no Café ID | Asks which idea it belongs to. |
 | 11-held-tracker.csv | Name, Employee ID, Phone, Client for 15 people | HELD, not imported as ideas. |
 | 12-cannot-read.pdf | One-page valid PDF | HELD: "can't read this yet". |
+| 13-outlook.msg | A real Outlook .msg (Apache-2.0 sample, 3 image attachments) | Read as an email; expect it to ask which idea, since it has no Café ID. |
 `);
 console.log(`Wrote test data to ${OUT}`);

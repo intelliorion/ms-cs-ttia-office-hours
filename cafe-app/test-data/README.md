@@ -19,3 +19,4 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 | 10-note.txt | Pasted-style note with no Café ID | Asks which idea it belongs to. |
 | 11-held-tracker.csv | Name, Employee ID, Phone, Client for 15 people | HELD, not imported as ideas. |
 | 12-cannot-read.pdf | One-page valid PDF | HELD: "can't read this yet". |
+| 13-outlook.msg | A real Outlook .msg (Apache-2.0 sample, 3 image attachments) | Read as an email; expect it to ask which idea, since it has no Café ID. |

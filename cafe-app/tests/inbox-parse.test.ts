@@ -118,6 +118,18 @@ describe('parseDrop', () => {
     expect(p.meta.attachments).toEqual(['minutes.docx']);
   });
 
+  it('reads a REAL Outlook .msg file (msgreader test fixture, Apache-2.0)', async () => {
+    const p = parseDrop('outlook-sample.msg', await bytes('outlook-sample.msg'));
+    expect(p.type).toBe('email');
+    expect(p.problems).toBeUndefined();
+    expect(p.text.trim().length).toBeGreaterThan(0);
+    expect(p.text).toBe('attachmentFiles');
+    expect(p.meta.subject).toBe('attachmentFiles');
+    expect(p.meta.from).toBe('hmailuser <hmailuser@hmailserver.test>');
+    expect(p.meta.attachments).toEqual(['jpg.jpg', 'png.png', 'tif.tif']);
+    expect(screenDrop('outlook-sample.msg', p, []).hold).toBe(false);
+  });
+
   it('reports a .msg it cannot open instead of throwing', () => {
     const p = parseDrop('broken.msg', strToU8('not an outlook file'));
     expect(p.type).toBe('email');

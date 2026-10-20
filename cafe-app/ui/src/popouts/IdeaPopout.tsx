@@ -5,7 +5,7 @@ import { shortDate } from '../panels/filterIdeas';
 import { Modal } from './Modal';
 import { LinkTable } from './LinkTable';
 import {
-  DECISION_EMAIL, IDEA_TEMPLATES, TEMPLATE_TITLES, clipText, emailAction, emailStatus, historyLine, ideaLinks, type HistoryEntry,
+  DECISION_EMAIL, IDEA_TEMPLATES, reviewKey, shouldResetReview, TEMPLATE_TITLES, clipText, emailAction, emailStatus, historyLine, ideaLinks, type HistoryEntry,
 } from './ideaHelpers';
 
 const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', member: 'Member' };
@@ -49,10 +49,13 @@ export function IdeaPopout({ id }: { id: string }) {
 
   const where = (t: { stage?: number; closeAs?: string }) =>
     t.closeAs ? `Closed: ${state.closures[t.closeAs]}` : `Moved to ${state.stageNames[t.stage!]}`;
-  const setStage = (t: { stage?: number; closeAs?: string }) => {
-    setSuggest(null);
-    void act(() => ideaPost(id, 'stage', t.closeAs ? { closeAs: t.closeAs } : { stage: t.stage }), () => `${where(t)}.`);
-  };
+  // The suggestion goes away only once the move is saved; on failure it stays so the operator can try again.
+  const setStage = (t: { stage?: number; closeAs?: string }) =>
+    void act(async () => {
+      const r = await ideaPost(id, 'stage', t.closeAs ? { closeAs: t.closeAs } : { stage: t.stage });
+      setSuggest(null);
+      return r;
+    }, () => `${where(t)}.`);
   const stageValue = idea.closed ? `close:${idea.closed.as}` : `stage:${idea.stage}`;
   const mine = suggest && suggest.id === id ? suggest : null;
 
@@ -112,10 +115,10 @@ export function IdeaPopout({ id }: { id: string }) {
       )}
       <div className="pop-grid">
         <div className="pop-col">
-          <Details idea={idea} />
           <Review idea={idea} state={state} busy={busy}
             onSave={(body) => act(() => ideaPost(id, 'review', body), (r: any) =>
               [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
+          <Details idea={idea} />
         </div>
         <div className="pop-col">
           <Emails idea={idea} outbox={state.outbox ?? []} busy={busy}
@@ -196,11 +199,16 @@ function Review({ idea, state, busy, onSave }: { idea: any; state: any; busy: bo
   const [criteria, setCriteria] = useState<Record<string, boolean>>({});
   const [decision, setDecision] = useState('');
   const [reason, setReason] = useState('');
+  // Reset the form only for another idea or a newly saved review; a refresh after any other action keeps what was typed.
+  const key = reviewKey(idea);
+  const lastKey = useRef<string | null>(null);
   useEffect(() => {
+    if (!shouldResetReview(lastKey.current, key)) return;
+    lastKey.current = key;
     setCriteria({ ...(idea.review?.criteria ?? {}) });
     setDecision(idea.review?.decision ?? '');
     setReason(idea.review?.reason ?? '');
-  }, [idea.id, idea.review]);
+  }, [key, idea.review]);
   const closed = Boolean(idea.closed);
   return (
     <section className="sec">

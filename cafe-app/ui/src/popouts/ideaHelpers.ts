@@ -98,3 +98,8 @@ export const confidenceText = (c: number) => `${Math.round(c * 100)}%`;
 
 /** The idea id behind a star, or null for any other star. */
 export const cafeIdOf = (nodeId: string | null | undefined) => (nodeId?.startsWith('idea:') ? nodeId.slice(5) : null);
+
+/** Identity of the saved review a form was filled from: the idea and when its review was saved. */
+export const reviewKey = (idea: { id: string; review?: { at?: string } | null }) => `${idea.id}|${idea.review?.at ?? ''}`;
+/** The review form resets only when its idea or the saved review changes, never on a plain refresh. */
+export const shouldResetReview = (prevKey: string | null, nextKey: string) => prevKey !== nextKey;

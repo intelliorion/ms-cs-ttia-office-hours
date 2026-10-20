@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emailAction, historyLine, ideaLinks, nodeLinks, clipText, cafeIdOf } from './ideaHelpers';
+import { emailAction, historyLine, ideaLinks, nodeLinks, clipText, cafeIdOf, reviewKey, shouldResetReview } from './ideaHelpers';
 
 describe('emailAction', () => {
   it('offers approve and copy on a draft with nothing missing', () => {
@@ -81,5 +81,21 @@ describe('small helpers', () => {
     expect(cafeIdOf('idea:CAFE-2026-002')).toBe('CAFE-2026-002');
     expect(cafeIdOf('team:gss')).toBeNull();
     expect(cafeIdOf(null)).toBeNull();
+  });
+});
+
+describe('shouldResetReview', () => {
+  const a = { id: 'CAFE-2026-002', review: { at: '2026-10-19', reason: 'x' } };
+  it('resets on first fill, another idea or a newly saved review', () => {
+    expect(shouldResetReview(null, reviewKey(a))).toBe(true);
+    expect(shouldResetReview(reviewKey(a), reviewKey({ ...a, id: 'CAFE-2026-003' }))).toBe(true);
+    expect(shouldResetReview(reviewKey({ id: a.id }), reviewKey(a))).toBe(true);
+    expect(shouldResetReview(reviewKey(a), reviewKey({ ...a, review: { at: '2026-10-20' } }))).toBe(true);
+  });
+  it('keeps what was typed when a refresh brings a new object for the same review', () => {
+    const refreshed = JSON.parse(JSON.stringify(a));
+    expect(refreshed.review).not.toBe(a.review);
+    expect(shouldResetReview(reviewKey(a), reviewKey(refreshed))).toBe(false);
+    expect(shouldResetReview(reviewKey({ id: a.id }), reviewKey({ id: a.id, review: null }))).toBe(false);
   });
 });

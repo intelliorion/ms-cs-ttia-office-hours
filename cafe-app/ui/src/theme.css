@@ -76,7 +76,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 /* Pop-outs: the same glass as the panels, a little denser so text reads over the universe. */
 .modal-back{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:30}
 .modal{display:flex;flex-direction:column;box-sizing:border-box;background:rgba(30,40,40,.82);backdrop-filter:blur(14px);border-color:rgba(160,190,185,.42);box-shadow:0 0 0 1px rgba(0,0,0,.3) inset,0 30px 80px rgba(0,0,0,.55);outline:none;color:var(--text)}
-.modal-head{display:flex;align-items:flex-start;gap:18px;padding:18px 20px 14px 24px;border-bottom:1px solid rgba(160,190,185,.2)}
+.modal-head{flex:none;display:flex;align-items:flex-start;gap:18px;padding:18px 20px 14px 24px;border-bottom:1px solid rgba(160,190,185,.2)}
 .modal-title{flex:1;min-width:0}
 .modal .modal-title h2{padding:0;font-size:28px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .modal-actions{display:flex;align-items:center;gap:10px;padding-top:6px}
@@ -91,7 +91,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .modal select:focus,.modal textarea:focus{border-color:var(--teal)}
 .modal select option,.modal select optgroup{background:#151c1c;color:var(--text)}
 .stage-menu select{font-size:15px;padding:8px 12px;border-color:rgba(125,211,207,.55);min-width:230px}
-.pop-strip{display:flex;flex-direction:column;gap:8px;padding:12px 24px 0}
+.pop-strip{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 24px 10px;border-bottom:1px solid rgba(160,190,185,.16);max-height:220px;overflow-y:auto}
 .suggest-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid rgba(245,179,107,.55);border-left:3px solid var(--amber);border-radius:4px;background:rgba(245,179,107,.1)}
 .sg-k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--amber)}
 .sg-t{flex:1;color:#fff;font-size:16px;font-weight:600}
@@ -100,7 +100,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .copy-fallback{font-size:13px;color:var(--amber)}
 .copy-fallback textarea{width:100%;box-sizing:border-box;margin-top:6px;font-family:var(--mono);font-size:12px}
 .pop-strip .late{margin:0}
-.pop-grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;gap:0}
+.pop-grid{flex:1 1 0;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr);gap:0;overflow:hidden}
 .pop-col{overflow-y:auto;min-height:0;padding:6px 24px 20px}
 .pop-col+.pop-col{border-left:1px solid rgba(160,190,185,.16)}
 .pop-col::-webkit-scrollbar{width:6px}

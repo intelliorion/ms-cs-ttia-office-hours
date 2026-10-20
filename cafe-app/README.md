@@ -243,6 +243,70 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 for the screenshot tour and tests. It cannot be picked in the chip, and only the exact value `1` turns it on.
 Do not set it for real rounds.
 
+## Design series: tool picker, brainstorm, plan and kits
+
+An idea's details (the left panel) carry three more sections, after Review and before Stage. They are meant
+for an idea in Café Work. They take the idea from "which tool for which part" to a plan a builder can start from. The AI suggests;
+nothing is saved until you press a button, and you can do everything except plan.md by hand.
+
+**What you see**
+
+1. **Tool picker.** One row per feature: a name, one line on what it does, and a tool from the approved list
+   (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** adds
+   suggested rows (marked as suggestions) and keeps yours; **Add feature** adds an empty row. Each row shows
+   its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any other tool is
+   Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the picks and links each
+   feature to its tool in the universe. A tool that is not on the approved list is refused.
+2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
+   input it needs, who builds it, and so on. Each question comes with a reason and suggested answers. Pick
+   one, type your own, or press **I don't know → ask the team**: the question goes into the idea's E2 draft
+   in the Outbox, and when the team's reply comes in through the Inbox, it fills the answer. The live
+   design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
+   flags, each "Clean" or listed.
+3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
+   example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
+   It never closes the idea on its own. Changing the picks or the design afterwards un-approves it, and it
+   needs approving again.
+4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks grouped by tool, risks, the same
+   Café check) and a starter kit for each picked tool. For a custom app, **Copy build instruction** copies a
+   ready-made instruction for Claude Code or GitHub Copilot. Running it again rewrites only the files the app
+   made and keeps any you added.
+
+**The files it writes** (under `ideas/<id>/`):
+
+```
+approach.md            the features and the tool picked for each, with its pathway
+design.yaml            the design's state: features, questions and answers, summary, approval date
+design.md              the design, readable, ending with the Café check
+plan.md                the plan: the one thing to show, tasks by tool, risks, the Café check
+kit/<tool>/...         a starter kit per picked tool, all Markdown: topics, screens, a flow, a process,
+                       prompts, or for a custom app README.md and BUILD-WITH-AGENT.md
+```
+
+A plan task whose tool no feature picked is listed under "Not picked" in plan.md, with no kit. If the plan's
+own words mention value (ROI, savings, costs and so on), plan.md lists them under the Café check as "Value
+words in the plan".
+
+**With no AI.** Add the features and pick their tools by hand, write questions and their suggested answers
+by hand (**Add a question by hand**), answer them, then **Finish by hand** with a short summary, and
+approve. plan.md and the kits need an AI.
+
+**The embedded skills.** `skills/` holds the "brainstorming" and "writing-plans" skills from the Superpowers
+project, copied under the MIT licence (`skills/LICENSE-superpowers.md`). The app only sends them as guidance
+text inside the brainstorm and plan prompts. It never executes them.
+
+**The rules**
+
+- No value is measured in the Café: no ROI, savings, costs or KPIs. The Café check flags them; a proof of
+  concept shows one thing works, on synthetic, aggregated or sample data.
+- A custom app is TTIA-Led, so an idea with one needs the CSIC Repository before any build beyond a proof
+  of concept. The same goes for a live connection to a non-Microsoft system or personal, client or
+  third-party data.
+- The app writes no application code. The kits are outlines, checklists and, for a custom app, an
+  instruction for a coding agent that works only inside the kit folder.
+- The stage never moves on its own. Saving the picks, answering the must-show and smallest-input questions
+  and approving the design tick their steps in the background (s3e, s3c, s3d, s3f).
+
 ## Tests
 
 ```bash
@@ -257,7 +321,10 @@ server (a free port, never 4100) and a fresh workspace, sends an E2 for CAFE-202
 action, undoes one Safe one and confirms one link, and prints file → expected → actual → PASS/FAIL (non-zero exit on a
 FAIL). It runs with `--fake`: a scripted, deterministic triage (which obeys the injection in 05, to show the code holds
 it). `npx tsx scripts/acceptance.mjs --real-ai` uses this machine's AI instead (about 8 calls, a few minutes) and checks
-tiers and kinds, not wording. Add `--workspace DIR` to choose the scratch folder.
+tiers and kinds, not wording. Add `--workspace DIR` to choose the scratch folder. With `--fake` it then runs a design
+pass on CAFE-2026-005: suggest and save the tool picks (approach.md, the links in the universe), three brainstorm
+questions with the second answered "I don't know" (an E2 draft with that question), finish and approve (s3f ticked, the
+CSIC suggestion for the custom app), and write the plan (plan.md and the custom app kit).
 
 **Scale test of the universe.** `npm run scale -- --out /tmp/cafe-scale` generates a 60-idea export and 150 synthetic
 AI links (`--links 300` for about 300 stars), imports them into a fresh workspace, times `GET /api/graph`, and in

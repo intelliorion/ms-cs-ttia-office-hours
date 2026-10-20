@@ -12,6 +12,8 @@
 // 05-injection.eml, where it deliberately obeys the injected text (stage Launch, a budget flag) to prove the
 // code, not the AI, decides what is Safe. Every other task goes to the built-in fake.
 // --real-ai: asserts tiers and kinds, never AI wording; 120 s per drop.
+// After the drop-through, --fake also runs a design pass on one idea: tool picker → three brainstorm steps
+// (the second answered "I don't know", which drafts an E2) → approve → plan.md and the starter kits.
 // Run it with tsx (npm run acceptance), since it imports the app's TypeScript.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -297,7 +299,71 @@ async function run() {
 
   const view = await api('GET', '/api/inbox');
   check('(inbox)', 'no problems listed', JSON.stringify(view.counts), !view.problems.length);
+  // The design pass asserts the fake's scripted replies, so it runs with --fake only.
+  if (!REAL) await designPass();
   console.log(`AI calls: ${calls.n} (${calls.tasks.join(', ')})`);
+}
+
+/* ---------- design series: tool picker, brainstorm, approve, plan and kits (--fake) ---------- */
+
+const exists = (file) => fs.access(file).then(() => true, () => false);
+
+async function designPass() {
+  const ID = 'CAFE-2026-005';
+  const idea = await ideaOf(ID);
+  if (!idea) { check('(design) idea', `${ID} exists`, 'not found', false); return; }
+  const dir = path.join(workspace, 'ideas', (await fs.readdir(path.join(workspace, 'ideas'))).find((x) => x.startsWith(ID)));
+  const u = (r) => `/api/ideas/${ID}/${r}`;
+
+  // Tool picker: the AI suggests, the operator saves the picks.
+  const sug = await api('POST', u('tools/suggest'));
+  const saved = await api('POST', u('tools'), { features: sug.features.map(({ name, what, tool, reason, flags }) => ({ name, what, tool, reason, flags })) });
+  const built = (await graph()).edges.filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes(`${ID}:approach.md`));
+  const approach = await exists(path.join(dir, 'approach.md'));
+  check('(design) tool picks', '3 suggested, saved; approach.md; BUILT_WITH links',
+    `${sug.features.length} suggested, ${saved.state.features.length} saved, approach.md ${approach}, ${built.length} BUILT_WITH`,
+    sug.features.length === 3 && saved.state.features.length === 3 && saved.state.features.some((f) => f.tool === 'custom app')
+      && approach && built.length >= 1 && (await ideaOf(ID)).checklist?.s3e?.done);
+
+  // Brainstorm: three questions, one at a time; the second is "I don't know", which goes into an E2 draft.
+  const s1 = await api('POST', u('design/step'), {});
+  await api('POST', u('design/answer'), { n: s1.step.n, suggestedIndex: 0 });
+  const s2 = await api('POST', u('design/step'), {});
+  const idk = await api('POST', u('design/answer'), { n: s2.step.n, idk: true });
+  const e2 = (await state()).outbox.find((m) => m.idea === ID && m.template === 'E2' && m.status === 'draft');
+  const s3 = await api('POST', u('design/step'), {});
+  await api('POST', u('design/answer'), { n: s3.step.n, answer: 'A citizen builder in the team' });
+  const open2 = s3.state.steps.find((s) => s.n === s2.step.n);
+  check('(design) brainstorm', '3 steps; step 2 "I don\'t know" → E2 draft with the question, step stays open',
+    `${s3.state.steps.length} steps, emailKey ${idk.emailKey ?? '-'}, E2 ${e2 ? e2.status : 'none'}, has question ${!!e2?.body.includes(s2.step.question)}`,
+    s3.state.steps.length === 3 && !!idk.emailKey && e2?.key === idk.emailKey && e2.body.includes(s2.step.question)
+      && open2?.askedTeam && !open2.answer);
+
+  // Next question until the AI says done (the fake does after three).
+  let st = s3; let guard = 0;
+  while (!st.state.summary && guard++ < 5) st = await api('POST', u('design/step'), {});
+  const designMd = await fs.readFile(path.join(dir, 'design.md'), 'utf8').catch(() => '');
+  check('(design) done', 'summary set; design.yaml and design.md end with the Café check',
+    `summary ${st.state.summary ? 'set' : 'missing'}, design.yaml ${await exists(path.join(dir, 'design.yaml'))}, Café check last ${designMd.lastIndexOf('## ') === designMd.indexOf('## Café check')}`,
+    !!st.state.summary && await exists(path.join(dir, 'design.yaml')) && designMd.includes('## Café check')
+      && designMd.lastIndexOf('## ') === designMd.indexOf('## Café check'));
+
+  // Approve: s3f ticked; the custom app is a CSIC flag, so it suggests closing as Routed to CSIC (never automatic).
+  const ok = await api('POST', u('design/approve'));
+  const after = await ideaOf(ID);
+  check('(design) approve', 's3f ticked; suggest closeAs csic; stage and closure unchanged',
+    `${ok.state.status}, s3f ${!!after.checklist?.s3f?.done}, suggest ${ok.suggest?.closeAs ?? '-'}, stage ${idea.stage}→${after.stage}`,
+    ok.state.status === 'approved' && after.checklist?.s3f?.done && ok.suggest?.closeAs === 'csic'
+      && after.stage === idea.stage && JSON.stringify(after.closed) === JSON.stringify(idea.closed));
+
+  // Plan and kits: every fake task's tool was picked, so no Not picked heading.
+  const plan = await api('POST', u('plan'));
+  const planMd = await fs.readFile(path.join(dir, 'plan.md'), 'utf8').catch(() => '');
+  const agent = await fs.readFile(path.join(dir, 'kit', 'custom-app', 'BUILD-WITH-AGENT.md'), 'utf8').catch(() => '');
+  check('(design) plan and kits', 'plan.md, kit/custom-app/BUILD-WITH-AGENT.md; no Not picked',
+    `${plan.files.length} files, plan.md ${!!planMd}, agent kit ${!!agent}, Not picked ${planMd.includes('### Not picked')}`,
+    plan.files.includes('plan.md') && plan.files.includes('kit/custom-app/BUILD-WITH-AGENT.md') && !!planMd && /```text\n/.test(agent)
+      && planMd.includes('## Café check') && !planMd.includes('### Not picked'));
 }
 
 function print() {

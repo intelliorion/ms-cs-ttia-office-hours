@@ -17,7 +17,7 @@ export interface Settings {
   distList?: string;
   deckTemplate?: string;
   capacity: { ideasPerRound: number; sessionsPerWeek: number };
-  /** Which coding tool lends the app an LLM. 'auto' tries Claude Code, Copilot CLI, then VS Code. */
+  /** Which coding tool lends the app an LLM. 'auto' tries Claude Code, then VS Code; Copilot CLI is used only when pinned. */
   ai?: { provider?: AiChoice };
 }
 

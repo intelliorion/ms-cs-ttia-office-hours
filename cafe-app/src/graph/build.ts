@@ -73,7 +73,8 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
     if ((toKnown ? nodes.get(l.to)!.type : toNew!.type) !== pair[1]) continue;
     if (fromNew && !fromKnown) node(fromNew);
     if (toNew && !toKnown) node(toNew);
-    const confirmed = l.status === 'confirmed' || l.confidence >= CONFIRMED_AT;
+    // A link that brings new nodes is a suggestion until the operator says yes, whatever its confidence.
+    const confirmed = l.status === 'confirmed' || (l.confidence >= CONFIRMED_AT && !(l.newNodes?.length));
     edge(l.from, l.rel, l.to, l.description, l.source, l.confidence, confirmed);
   }
 

@@ -6,8 +6,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { createConnector, defaultProviders, type Provider } from '../src/ai/connector';
 import { extractTask, reviewSuggestTask } from '../src/ai/tasks';
-import { validate } from '../src/ai/schema';
+import { validate, parseChecked, firstJsonObject } from '../src/ai/schema';
 import { vscodeProvider } from '../src/ai/providers/vscode';
+import { copilotProvider } from '../src/ai/providers/copilot';
 import { DEFAULT_SETTINGS, type Settings } from '../src/round/round';
 import { saveIdea } from '../src/ideas/store';
 import { startServer, sampleIdea } from './helpers';
@@ -52,6 +53,36 @@ describe('schema validator', () => {
     expect(validate(s, { a: 'x', l: ['no'] }).length).toBe(1);
     expect(validate(s, { a: 'x', extra: 1 }).length).toBe(1);
     expect(validate(s, []).length).toBe(1);
+  });
+
+  it('inherited names and __proto__ do not slip past additionalProperties: false', () => {
+    const probe = '{"nodes":[{"type":"Tool","label":"x","toString":"<img src=x>"}],"links":[],"constructor":{"a":1}}';
+    expect(() => extractTask.parse(probe)).toThrow(/invalid output/);
+    expect(() => extractTask.parse('{"nodes":[],"links":[],"evil":1}')).toThrow(/invalid output/);
+    expect(() => extractTask.parse('{"nodes":[],"links":[],"__proto__":{"x":1}}')).toThrow(/invalid output/);
+    expect(() => extractTask.parse('{"nodes":[{"type":"Tool","label":"x","hasOwnProperty":1}],"links":[]}')).toThrow(/invalid output/);
+    expect(extractTask.parse('{"nodes":[],"links":[]}')).toEqual({ nodes: [], links: [] });
+  });
+
+  it('truncates AI-chosen key names in errors', () => {
+    const long = 'k'.repeat(500);
+    try { extractTask.parse(`{"nodes":[],"links":[],"${long}":1}`); throw new Error('no throw'); }
+    catch (e) { expect((e as Error).message).toMatch(/invalid output/); expect((e as Error).message.length).toBeLessThan(200); }
+  });
+
+  it('caps the reply size and scans in linear time', () => {
+    const big = `${' '.repeat(70 * 1024)}{"nodes":[],"links":[]}`;
+    let t0 = Date.now();
+    expect(() => parseChecked(big, extractTask.schema)).toThrow(/invalid output: .*longer than 64 KB/);
+    expect(Date.now() - t0).toBeLessThan(200);
+    t0 = Date.now();
+    expect(firstJsonObject('{'.repeat(20000))).toBeUndefined();
+    expect(() => parseChecked('{'.repeat(20000), extractTask.schema)).toThrow(/invalid output/);
+    expect(Date.now() - t0).toBeLessThan(200);
+    t0 = Date.now();
+    expect(firstJsonObject('{x}'.repeat(15000) + '{"a":1}')).toEqual({ a: 1 });
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(firstJsonObject('Here: {not json} and {"a":"}{"}')).toEqual({ a: '}{' });
   });
 });
 
@@ -127,6 +158,18 @@ describe('AI connector', () => {
     expect((await c.run(extractTask, INPUT)).nodes).toHaveLength(2);
   });
 
+  it("Copilot CLI is never chosen by 'auto', only when pinned, and carries a sandbox note", async () => {
+    const cop: Provider = { ...copilotProvider(), available: async () => true, complete: async () => JSON.stringify(VALID) };
+    const auto = connector([cop]);
+    expect((await auto.status()).provider).toBeNull();
+    await expect(auto.run(extractTask, INPUT)).rejects.toThrow(/No AI available/);
+    expect((await auto.choices()).find((c) => c.id === 'copilot')).toMatchObject({ available: true, note: 'Sandbox not yet verified on this machine' });
+    expect((await auto.choices()).find((c) => c.id === 'auto')?.available).toBe(false);
+    const pinned = connector([cop], { ...DEFAULT_SETTINGS, ai: { provider: 'copilot' } });
+    expect(await pinned.status()).toEqual({ provider: 'copilot', label: 'Copilot CLI', note: 'Sandbox not yet verified on this machine' });
+    expect((await pinned.run(extractTask, INPUT)).nodes).toHaveLength(2);
+  });
+
   it('review suggestion is schema checked', async () => {
     const good = { criteria: { feasible: true, builder: false, data: true, theme: true, reuse: false }, decision: 'ask', reason: 'Builder not named' };
     expect(await connector([fake(JSON.stringify(good))]).run(reviewSuggestTask, { idea: INPUT.idea })).toEqual(good);
@@ -157,11 +200,13 @@ describe('CAFE_AI_FAKE test hook', () => {
 describe('VS Code helper provider', () => {
   it('sends the token and is unavailable without the helper file', async () => {
     const seen: (string | undefined)[] = [];
+    let health: object = { ok: true, model: 'gpt' };
+    let reply = '{"a":1}';
     const helper = http.createServer((req, res) => {
       seen.push(req.headers['x-cafe-token'] as string | undefined);
       if (req.headers['x-cafe-token'] !== 'secret-token-123456') { res.writeHead(401); res.end(); return; }
-      if (req.url === '/health') { res.writeHead(200); res.end('{"ok":true}'); return; }
-      res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ text: '{"a":1}' }));
+      if (req.url === '/health') { res.writeHead(200); res.end(JSON.stringify(health)); return; }
+      res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ text: reply }));
     });
     await new Promise<void>((r) => helper.listen(0, '127.0.0.1', r));
     try {
@@ -173,6 +218,10 @@ describe('VS Code helper provider', () => {
       expect(await p.available()).toBe(true);
       expect(await p.complete('hi', { timeoutMs: 2000 })).toBe('{"a":1}');
       expect(seen.every((t) => t === 'secret-token-123456')).toBe(true);
+      health = { ok: false, reason: 'no language model available' };
+      expect(await p.available()).toBe(false);
+      reply = 'x'.repeat(300 * 1024);
+      await expect(p.complete('hi', { timeoutMs: 2000 })).rejects.toThrow(/more than 256 KB/);
       await writeFile(file, JSON.stringify({ port: (helper.address() as AddressInfo).port, token: 'wrong-token-1234567' }));
       expect(await vscodeProvider({ configPath: file }).available()).toBe(false);
     } finally {
@@ -199,7 +248,9 @@ describe('/api/ai routes', () => {
     const body = await r.json() as any;
     expect(r.status).toBe(200);
     expect(body.added).toBe(2);
-    expect(body.unconfirmed).toBe(1);
+    // Every end is new, so nothing is confirmed until the operator says yes, even at 0.9.
+    expect(body.unconfirmed).toBe(body.added);
+    expect(body.suggestions.newNodes.map((n: any) => n.id).sort()).toEqual(['capability:document-parsing', 'system:shared-mailbox']);
     expect(body.links.every((e: any) => e.source === 'ai:claude:challenge')).toBe(true);
     const g = await (await fetch(`${s.base}/api/graph`)).json() as any;
     expect(g.unconfirmed).toBeGreaterThanOrEqual(1);
@@ -215,6 +266,9 @@ describe('/api/ai routes', () => {
     const s = await startServer();
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
     await saveIdea(s.root, sampleIdea());
+    const st0 = await (await fetch(`${s.base}/api/ai/status`)).json() as any;
+    expect(st0.provider).not.toBe('copilot');
+    expect(st0.choices.find((c: any) => c.id === 'copilot').note).toBe('Sandbox not yet verified on this machine');
     const bad = await post(s.base, '/api/ai/provider', { provider: 'fake' });
     expect(bad.status).toBe(400);
     expect((await post(s.base, '/api/ai/provider', { provider: 'none' })).status).toBe(200);
@@ -241,7 +295,8 @@ describe('/api/ai routes', () => {
     expect(await (await fetch(`${s.base}/api/ai/status`)).json()).toMatchObject({ provider: 'fake', label: 'Fake (test)' });
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
     expect(ex.added).toBe(3);
-    expect(ex.unconfirmed).toBeGreaterThanOrEqual(1);
+    expect(ex.unconfirmed).toBe(3);
+    expect(ex.suggestions.newNodes).toHaveLength(3);
     const sug = await (await post(s.base, '/api/ai/review-suggest', { id: 'CAFE-2026-001' })).json() as any;
     expect(Object.keys(sug.criteria)).toHaveLength(5);
   });

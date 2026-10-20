@@ -16,12 +16,16 @@ export interface Provider {
   label: string;
   available(): Promise<boolean>;
   complete(prompt: string, opts: { timeoutMs: number }): Promise<string>;
+  /** Used only when the settings pin it, never by 'auto'. */
+  pinOnly?: boolean;
+  /** Shown next to the provider in the status, e.g. a caution. */
+  note?: string;
 }
 
-export interface AiStatus { provider: ProviderId | null; label: string }
+export interface AiStatus { provider: ProviderId | null; label: string; note?: string }
 export interface Connector {
   status(): Promise<AiStatus>;
-  choices(): Promise<{ id: AiChoice; label: string; available: boolean }[]>;
+  choices(): Promise<{ id: AiChoice; label: string; available: boolean; note?: string }[]>;
   run<T>(task: Task<T>, input: unknown): Promise<T>;
   /** Like run, but also says which provider answered. */
   runWith<T>(task: Task<T>, input: unknown): Promise<{ provider: ProviderId; output: T }>;
@@ -33,7 +37,7 @@ const CHOICE_LABELS: Record<AiChoice, string> = {
   auto: 'Automatic', claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', none: 'No AI: work by hand',
 };
 
-/** Claude Code, Copilot CLI, then the VS Code helper. The fake comes first only when CAFE_AI_FAKE=1. */
+/** Claude Code, Copilot CLI (pinned only), then the VS Code helper. The fake comes first only when CAFE_AI_FAKE=1. */
 export function defaultProviders(env: NodeJS.ProcessEnv = process.env): Provider[] {
   const real = [claudeProvider(), copilotProvider(), vscodeProvider()];
   return env.CAFE_AI_FAKE === '1' ? [fakeProvider(), ...real] : real;
@@ -58,7 +62,7 @@ export function createConnector(opts: {
   async function pick(): Promise<Provider | null> {
     const choice = (await settings()).ai?.provider ?? 'auto';
     if (choice === 'none') return null;
-    const candidates = choice === 'auto' ? opts.providers : opts.providers.filter((p) => p.id === choice);
+    const candidates = choice === 'auto' ? opts.providers.filter((p) => !p.pinOnly) : opts.providers.filter((p) => p.id === choice);
     for (const p of candidates) if (await isAvailable(p)) return p;
     return null;
   }
@@ -74,12 +78,16 @@ export function createConnector(opts: {
   return {
     async status() {
       const p = await pick();
-      return p ? { provider: p.id, label: p.label } : { provider: null, label: NO_AI_LABEL };
+      return p ? { provider: p.id, label: p.label, ...(p.note ? { note: p.note } : {}) } : { provider: null, label: NO_AI_LABEL };
     },
     async choices() {
-      const avail = await Promise.all(opts.providers.map(async (p) => [p.id, await isAvailable(p)] as const));
-      const has = (id: string) => avail.some(([pid, ok]) => pid === id && ok);
-      return AI_CHOICES.map((id) => ({ id, label: CHOICE_LABELS[id], available: id === 'none' || (id === 'auto' ? avail.some(([, ok]) => ok) : has(id)) }));
+      const avail = await Promise.all(opts.providers.map(async (p) => ({ p, ok: await isAvailable(p) })));
+      return AI_CHOICES.map((id) => {
+        const hit = avail.find(({ p, ok }) => p.id === id && ok);
+        const note = opts.providers.find((p) => p.id === id)?.note;
+        const available = id === 'none' || (id === 'auto' ? avail.some(({ p, ok }) => ok && !p.pinOnly) : !!hit);
+        return { id, label: CHOICE_LABELS[id], available, ...(note ? { note } : {}) };
+      });
     },
     run: async <T>(task: Task<T>, input: unknown) => (await runWith(task, input)).output,
     runWith,

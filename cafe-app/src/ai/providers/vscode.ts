@@ -4,7 +4,23 @@ import path from 'node:path';
 import type { Provider } from '../connector';
 import { AiError } from '../schema';
 
+export const MAX_REPLY = 256 * 1024;
 export const HELPER_FILE = path.join(os.homedir(), '.cafe-ai', 'vscode-helper.json');
+
+/** Reads the response body as text, giving up (and cancelling) past `max` bytes. */
+async function readCapped(res: Response, max: number): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = []; let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel().catch(() => undefined); throw new AiError(`the VS Code helper replied with more than ${Math.round(max / 1024)} KB`); }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 interface HelperConfig { port: number; token: string; model?: string }
 
@@ -28,7 +44,10 @@ export function vscodeProvider({ configPath = HELPER_FILE }: { configPath?: stri
       if (!cfg) return false;
       try {
         const res = await fetch(`http://127.0.0.1:${cfg.port}/health`, { headers: { 'x-cafe-token': cfg.token }, signal: AbortSignal.timeout(1500) });
-        return res.ok;
+        if (!res.ok) return false;
+        // The helper answers 200 { ok: false, reason } when VS Code has no language model.
+        const body = JSON.parse(await readCapped(res, 4096)) as { ok?: unknown };
+        return body?.ok === true;
       } catch { return false; }
     },
     async complete(prompt, { timeoutMs }) {
@@ -46,7 +65,9 @@ export function vscodeProvider({ configPath = HELPER_FILE }: { configPath?: stri
         throw new AiError(`the VS Code helper did not answer: ${(e as Error).message}`);
       }
       if (!res.ok) throw new AiError(`the VS Code helper said ${res.status}`);
-      const body = (await res.json().catch(() => null)) as { text?: unknown } | null;
+      const raw = await readCapped(res, MAX_REPLY);
+      let body: { text?: unknown } | null = null;
+      try { body = JSON.parse(raw) as { text?: unknown } | null; } catch { /* handled below */ }
       if (typeof body?.text !== 'string') throw new AiError('the VS Code helper sent no text');
       return body.text;
     },

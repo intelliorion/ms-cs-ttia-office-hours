@@ -16,6 +16,10 @@ export interface JsonSchema {
 
 export class AiError extends Error {}
 
+export const MAX_RAW = 64 * 1024;
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const shortKey = (k: string) => (k.length > 60 ? `${k.slice(0, 60)}…` : k);
+
 const kind = (v: unknown): string => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
 
 /** Returns a list of problems; an empty list means the value matches. */
@@ -44,28 +48,32 @@ export function validate(schema: JsonSchema, value: unknown, at = '$'): string[]
   }
   if (kind(value) === 'object') {
     const obj = value as Record<string, unknown>;
-    for (const k of schema.required ?? []) if (!(k in obj)) errs.push(`${at}.${k} is missing`);
-    for (const [k, v] of Object.entries(obj)) {
-      const sub = schema.properties?.[k];
-      if (sub) errs.push(...validate(sub, v, `${at}.${k}`));
-      else if (schema.additionalProperties === false) errs.push(`${at}.${k} is not allowed`);
+    for (const k of schema.required ?? []) if (!Object.hasOwn(obj, k)) errs.push(`${at}.${k} is missing`);
+    for (const k of Object.keys(obj)) {
+      if (FORBIDDEN_KEYS.has(k)) { errs.push(`${at}.${shortKey(k)} is not allowed`); continue; }
+      const props = schema.properties;
+      if (props && Object.hasOwn(props, k)) errs.push(...validate(props[k], obj[k], `${at}.${k}`));
+      else if (schema.additionalProperties === false) errs.push(`${at}.${shortKey(k)} is not allowed`);
     }
   }
   return errs;
 }
 
-/** The first balanced {...} in the text that parses as JSON, or undefined. */
+/**
+ * The first top-level balanced {...} in the text that parses as JSON, or undefined.
+ * One pass, O(n): strings are tracked only inside braces; when a top-level object
+ * closes and does not parse, scanning carries on after it, never from the start.
+ */
 export function firstJsonObject(text: string): unknown {
-  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
-    let depth = 0; let inStr = false; let esc = false;
-    for (let i = start; i < text.length; i++) {
-      const c = text[i];
-      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
-      if (c === '"') inStr = true;
-      else if (c === '{') depth++;
-      else if (c === '}' && --depth === 0) {
-        try { return JSON.parse(text.slice(start, i + 1)); } catch { break; }
-      }
+  let depth = 0; let start = -1; let inStr = false; let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (depth === 0) { if (c === '{') { depth = 1; start = i; } continue; }
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) {
+      try { return JSON.parse(text.slice(start, i + 1)); } catch { /* not JSON: keep scanning after it */ }
     }
   }
   return undefined;
@@ -73,6 +81,7 @@ export function firstJsonObject(text: string): unknown {
 
 /** Extracts the first JSON object and checks it, or throws AiError('invalid output: …'). */
 export function parseChecked<T>(raw: string, schema: JsonSchema): T {
+  if (raw.length > MAX_RAW) throw new AiError(`invalid output: the reply is longer than ${MAX_RAW / 1024} KB`);
   const value = firstJsonObject(raw);
   if (value === undefined) throw new AiError('invalid output: no JSON object in the reply');
   const errs = validate(schema, value);

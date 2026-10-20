@@ -102,6 +102,19 @@ describe('hardening', () => {
   });
 });
 
+describe('AI links that bring new nodes', () => {
+  it('stay unconfirmed whatever the confidence until the operator confirms them', () => {
+    const idea = sampleIdea();
+    const link = {
+      from: 'idea:CAFE-2026-001', to: 'capability:document-parsing', rel: 'NEEDS' as const, description: 'd', source: 'ai:fake:challenge', confidence: 0.9,
+      status: 'pending' as const, newNodes: [{ id: 'capability:document-parsing', type: 'Capability' as const, label: 'Document parsing' }],
+    };
+    const find = (g: ReturnType<typeof buildGraph>) => g.edges.find((e) => e.to === 'capability:document-parsing')!;
+    expect(find(buildGraph([idea], [link])).confirmed).toBe(false);
+    expect(find(buildGraph([idea], [{ ...link, status: 'confirmed' }])).confirmed).toBe(true);
+  });
+});
+
 describe('store and layout', () => {
   it('rebuilds from the folders, caches a stable layout, and confirms a link', async () => {
     const root = await tmpWorkspace();

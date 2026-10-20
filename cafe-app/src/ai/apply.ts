@@ -20,6 +20,14 @@ export function toAiLinks(
   ideaId: string, out: ExtractOutput,
   graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
 ): AiLink[] {
+  return planAiLinks(ideaId, out, graph, previous, provider).links;
+}
+
+/** The pending links plus the new nodes they would bring, which the operator must accept first. */
+export function planAiLinks(
+  ideaId: string, out: ExtractOutput,
+  graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
+): { links: AiLink[]; newNodes: GNode[] } {
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
@@ -53,5 +61,7 @@ export function toAiLinks(
       ...(newNodes.length ? { newNodes } : {}),
     });
   }
-  return links;
+  const newNodes = new Map<string, GNode>();
+  for (const l of links) for (const n of l.newNodes ?? []) newNodes.set(n.id, n);
+  return { links, newNodes: [...newNodes.values()] };
 }

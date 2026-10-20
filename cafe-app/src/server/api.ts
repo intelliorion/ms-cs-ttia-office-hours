@@ -19,7 +19,7 @@ import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../gra
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask } from '../ai/tasks';
-import { extractInput, toAiLinks } from '../ai/apply';
+import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
@@ -97,12 +97,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const idea = await loadIdea(root, String(body.id));
     const before = await rebuildGraph(root);
     const { provider, output } = await ai.runWith(extractTask, extractInput(idea, before.nodes));
-    const links = toAiLinks(idea.id, output, before, await readAiLinks(root), provider);
+    const { links, newNodes } = planAiLinks(idea.id, output, before, await readAiLinks(root), provider);
     for (const l of links) await appendAiLink(root, l);
     const after = await rebuildGraph(root);
     const ids = new Set(links.map((l) => edgeId(l.from, l.rel, l.to)));
     const added = after.edges.filter((e) => ids.has(e.id));
-    return { added: added.length, unconfirmed: added.filter((e) => !e.confirmed).length, links: added };
+    return { added: added.length, unconfirmed: added.filter((e) => !e.confirmed).length, links: added, suggestions: { newNodes } };
   })());
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(async () => {
     const idea = await loadIdea(root, String(body.id));

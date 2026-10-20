@@ -6,7 +6,7 @@ import { onPath, runCli } from './cli';
  * `--tools ""` disables every built-in tool (no shell, file or web access),
  * `--strict-mcp-config` with no --mcp-config loads no MCP servers,
  * `--no-session-persistence` keeps the submission text out of saved sessions.
- * The prompt goes on stdin, never on the command line.
+ * The prompt goes on stdin, never on the command line. cwd is a fresh empty temp folder.
  */
 export const CLAUDE_ARGS = ['-p', '--output-format', 'text', '--tools', '', '--max-turns', '1', '--strict-mcp-config', '--no-session-persistence'];
 

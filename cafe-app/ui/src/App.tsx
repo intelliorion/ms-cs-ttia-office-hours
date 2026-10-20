@@ -14,26 +14,27 @@ import { OutboxPopout } from './popouts/OutboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { NodeCard } from './popouts/NodeCard';
 import { focusLabel, focusKeyApplies } from './state/store';
-import { cafeIdOf } from './popouts/ideaHelpers';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView } = useStore();
-  // An idea star opens its pop-out; any other star shows its card.
-  const onSelect = useCallback((id: string | null) => {
-    select(id);
-    const cafe = cafeIdOf(id);
-    if (cafe) openPopout({ kind: 'idea', id: cafe });
-  }, [select, openPopout]);
-  const cardFor = selectedId && !cafeIdOf(selectedId) && !popout && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
+  // Any star, an idea included, is only selected; its card offers "Open idea" for the pop-out.
+  const onSelect = select;
+  const cardFor = selectedId && !popout && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, click: onSelect, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout };
+      window.__cafe = { select, click: onSelect, openIdea: (id: string) => { select(`idea:${id}`); openPopout({ kind: 'idea', id }); }, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout };
     }
   }, [select, onSelect, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout]);
+  useEffect(() => {
+    if (!cardFor || popout) return;
+    const on = (e: KeyboardEvent) => { if (e.key === 'Escape') select(null); };
+    document.addEventListener('keydown', on);
+    return () => document.removeEventListener('keydown', on);
+  }, [cardFor, popout, select]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => { if (focusKeyApplies(e, !!popout)) { e.preventDefault(); toggleFocus(); } };
     document.addEventListener('keydown', on);

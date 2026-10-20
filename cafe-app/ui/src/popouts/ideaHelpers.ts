@@ -1,6 +1,7 @@
 // Pure helpers for the idea pop-out and the star card. No React here, so they test in node.
 import { NODE_LABELS, type GEdge, type GNode } from '../../../src/graph/ontology';
-import { shortDate } from '../panels/filterIdeas';
+import { shortDate, emailChips, stageKey } from '../panels/filterIdeas';
+import { STAGE_RING, ringColour } from '../universe/graphView';
 import { ApiError, copyText, post } from '../api';
 
 /** Emails the operator can draft for one idea. */
@@ -125,3 +126,22 @@ export const cafeIdOf = (nodeId: string | null | undefined) => (nodeId?.startsWi
 export const reviewKey = (idea: { id: string; review?: { at?: string } | null }) => `${idea.id}|${idea.review?.at ?? ''}`;
 /** The review form resets only when its idea or the saved review changes, never on a plain refresh. */
 export const shouldResetReview = (prevKey: string | null, nextKey: string) => prevKey !== nextKey;
+
+export interface IdeaCardModel { id: string; title: string; stageLabel: string; stageColour: string; where: string; emails: string[]; late: string | null; linkCount: number }
+
+/** What the floating card for a selected idea star shows. */
+export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[] } | null | undefined, outbox: any[] = []): IdeaCardModel {
+  const node: any = graph?.nodes.find((n) => n.id === `idea:${idea.id}`);
+  const stageLabel = idea.closed ? `Closed · ${idea.closed}` : String(node?.attrs?.stageLabel ?? '');
+  const stageColour = idea.closed ? STAGE_RING.closed : node ? ringColour(node as any) : STAGE_RING[stageKey(idea)] ?? STAGE_RING[1];
+  const nodeId = `idea:${idea.id}`;
+  return {
+    id: idea.id,
+    title: idea.title ?? '',
+    stageLabel, stageColour,
+    where: [idea.function, idea.region].filter(Boolean).join(' · ') || '—',
+    emails: emailChips(idea, outbox),
+    late: !idea.closed && idea.overdue?.[0]?.text ? String(idea.overdue[0].text) : null,
+    linkCount: (graph?.edges ?? []).filter((e) => e.from === nodeId || e.to === nodeId).length,
+  };
+}

@@ -178,6 +178,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .nc-type{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .nc-sub{font-size:13px;color:var(--muted);margin-top:2px}
 .nodecard .pop-notice{margin:8px 16px 0}
+.ideacard .nc-type{text-transform:none;letter-spacing:0}
+.ic-body{padding:10px 16px 14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.ic-body .r3{display:flex;flex-wrap:wrap;gap:6px}
 .nc-body{overflow-y:auto;padding:4px 16px 12px;min-height:0}
 .nodecard .x{width:30px;height:30px;font-size:13px}
 

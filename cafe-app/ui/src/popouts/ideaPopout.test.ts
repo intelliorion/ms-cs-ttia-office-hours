@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emailAction, historyLine, ideaLinks, nodeLinks, clipText, cafeIdOf, reviewKey, shouldResetReview } from './ideaHelpers';
+import { emailAction, historyLine, ideaLinks, nodeLinks, clipText, cafeIdOf, reviewKey, shouldResetReview, ideaCardModel } from './ideaHelpers';
 
 describe('emailAction', () => {
   it('offers approve and copy on a draft with nothing missing', () => {
@@ -97,5 +97,20 @@ describe('shouldResetReview', () => {
     expect(refreshed.review).not.toBe(a.review);
     expect(shouldResetReview(reviewKey(a), reviewKey(refreshed))).toBe(false);
     expect(shouldResetReview(reviewKey({ id: a.id }), reviewKey({ id: a.id, review: null }))).toBe(false);
+  });
+});
+
+describe('ideaCardModel', () => {
+  const graph = { nodes: [{ id: 'idea:CAFE-1', type: 'Idea', label: 'x', attrs: { stage: 2, stageLabel: 'Triage' } }], edges: [
+    { from: 'idea:CAFE-1', to: 'team:a', rel: 'X' }, { from: 'tool:b', to: 'idea:CAFE-1', rel: 'Y' }, { from: 'tool:b', to: 'team:a', rel: 'Z' }] } as any;
+  const idea = { id: 'CAFE-1', title: 'Mail bot', function: 'BSI', region: 'AMER', stage: 2, sent: { E1: '2026-10-19' }, overdue: [{ text: 'E2 reply is 8 days late' }] };
+  it('summarises an open idea', () => {
+    const m = ideaCardModel(idea, graph, [{ idea: 'CAFE-1', template: 'E5', status: 'draft' }]);
+    expect(m).toEqual({ id: 'CAFE-1', title: 'Mail bot', stageLabel: 'Triage', stageColour: '#f5b36b', where: 'BSI · AMER',
+      emails: ['E1 ✓ 19 Oct', 'E5 draft'], late: 'E2 reply is 8 days late', linkCount: 2 });
+  });
+  it('closed ideas are never late', () => {
+    const m = ideaCardModel({ ...idea, closed: 'csic' }, graph);
+    expect(m.late).toBeNull(); expect(m.stageLabel).toBe('Closed · csic'); expect(m.stageColour).toBe('#5c6b6a');
   });
 });

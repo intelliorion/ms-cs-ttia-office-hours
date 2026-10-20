@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty|focus]  (ai needs CAFE_AI_FAKE=1;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout|popouts2|ai|drawers|empty|focus|ideacard]  (ai needs CAFE_AI_FAKE=1;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -74,7 +74,7 @@ async function seedAiLinks() {
 
 // The idea pop-out, a review's suggestion inside it, and the card for a star that is not an idea.
 async function popoutShots(p) {
-  await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002')); // as a click on the star
+  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002')); // the card's Open idea
   await p.waitForSelector('.idea-pop');
   await sleep(3500);
   await shot(p, '06-popout.png');
@@ -182,7 +182,7 @@ async function aiShots(p) {
   await sleep(300);
   await shot(p, '16-ai-test.png');
   await p.keyboard.press('Escape');
-  await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002'));
+  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector('.idea-pop');
   await sleep(3000);
   await p.click('.idea-pop [data-action="ai-grow"]');
@@ -201,6 +201,51 @@ async function aiShots(p) {
   await p.waitForSelector('.idea-pop .pop-notice:has-text("Link removed.")');
   await p.waitForSelector('.idea-pop li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]', { state: 'detached' });
   await p.keyboard.press('Escape');
+}
+
+// Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.
+async function ideaCardShots(p) {
+  const assert = (ok, msg) => { if (!ok) throw new Error(`ideacard: ${msg}`); };
+  // Real pointer click on the star: the label wrapper's translate3d marks it; click 20px to its left.
+  await p.evaluate(() => window.__cafe.hover('idea:CAFE-2026-002'));
+  await sleep(1200);
+  const spot = await p.evaluate(() => {
+    for (const l of document.querySelectorAll('.star-label')) {
+      if (!l.textContent.includes('CAFE-2026-002') && !l.closest('div[style*="translate3d"]')) continue;
+      const w = l.closest('div[style*="translate3d"]'); if (!w) continue;
+      const r = l.getBoundingClientRect();
+      if (l.classList.contains('hot')) return { x: r.left, y: r.top + r.height / 2, left: l.classList.contains('left') };
+    }
+    return null;
+  });
+  assert(spot, 'no hot label found for the pointer click');
+  await p.evaluate(() => window.__cafe.hover(null));
+  const x = spot.left ? spot.x + 20 + 0 : spot.x - 20;
+  console.log('  pointer click at', Math.round(x), Math.round(spot.y));
+  await p.mouse.click(x, spot.y);
+  await sleep(1500);
+  const pointerCard = await p.locator('[data-testid="ideacard"]').count();
+  const pointerDialog = await p.locator('[role="dialog"]').count();
+  console.log(`  pointer click: card=${pointerCard} dialog=${pointerDialog}`);
+  assert(pointerDialog === 0, 'a star click opened a dialog');
+  assert(pointerCard === 1, 'a star click did not show the idea card');
+  await p.keyboard.press('Escape');
+  await sleep(300);
+  assert((await p.locator('[data-testid="ideacard"]').count()) === 0, 'Esc did not close the card');
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await sleep(1500);
+  await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
+  await p.waitForSelector('[data-testid="ideacard"]');
+  await sleep(3500);
+  assert((await p.locator('[role="dialog"]').count()) === 0, 'selecting opened a dialog');
+  await shot(p, '20-idea-card.png');
+  await p.click('[data-testid="ideacard"] [data-action="open-idea"]');
+  await p.waitForSelector('[role="dialog"]');
+  await sleep(2500);
+  await shot(p, '21-idea-card-open.png');
+  await p.keyboard.press('Escape');
+  await p.waitForSelector('[role="dialog"]', { state: 'detached' });
+  await p.evaluate(() => window.__cafe.select(null));
 }
 
 // Below 1000px wide: the side panels become drawers behind two edge tabs.
@@ -332,6 +377,13 @@ async function main() {
       await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
       await sleep(3500);
       await shot(p, '19-focus.png');
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'ideacard') {
+      await ideaCardShots(p);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;

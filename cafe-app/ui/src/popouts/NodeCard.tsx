@@ -3,16 +3,38 @@ import { useStore } from '../state/store';
 import { post } from '../api';
 import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
-import { nodeLinks } from './ideaHelpers';
+import { nodeLinks, ideaCardModel, cafeIdOf } from './ideaHelpers';
 import { LinkTable } from './LinkTable';
 
 /** Small floating card for any star that is not an idea: its links and where each came from. */
 export function NodeCard({ nodeId }: { nodeId: string }) {
-  const { graph, select, refresh } = useStore();
+  const { graph, select, refresh, state, openPopout } = useStore();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const node = graph?.nodes.find((n: any) => n.id === nodeId);
   if (!node) return null;
+  const cafe = cafeIdOf(nodeId);
+  const idea = cafe ? (state?.ideas ?? []).find((i: any) => i.id === cafe) : null;
+  if (idea) {
+    const m = ideaCardModel(idea, graph, state?.outbox ?? []);
+    return (
+      <section className="panel nodecard ideacard abs" role="region" aria-label={`${m.id}: ${m.title}`} data-testid="ideacard">
+        <div className="nc-head">
+          <div>
+            <div className="nc-type"><span className="iid">{m.id}</span><span className="stg" style={{ ['--c' as string]: m.stageColour }}>{m.stageLabel}</span></div>
+            <h2>{m.title}</h2>
+            <div className="nc-sub">{m.where} · {m.linkCount} link{m.linkCount === 1 ? '' : 's'}</div>
+          </div>
+          <button className="x" aria-label="Close" onClick={() => select(null)}>✕</button>
+        </div>
+        <div className="ic-body">
+          {m.emails.length > 0 && <div className="r3">{m.emails.map((e) => <span key={e} className={`mail${e.includes('✓') ? ' done' : ''}`}>{e}</span>)}</div>}
+          {m.late && <div className="late">{m.late}</div>}
+          <button className="pill" data-action="open-idea" onClick={() => openPopout({ kind: 'idea', id: m.id })}>Open idea</button>
+        </div>
+      </section>
+    );
+  }
   const rows = nodeLinks(graph, nodeId);
   const unconfirmed = rows.filter((r) => !r.confirmed).length;
   const act = async (what: 'confirm' | 'remove', edgeId: string) => {

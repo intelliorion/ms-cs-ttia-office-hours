@@ -25,6 +25,7 @@ panels, large white titles and pill buttons at the bottom.
   "Charts" on the right; close with the X or Esc. The universe stays behind them.
 - **Bottom centre.** Reset view, Labels and Focus.
 - **Focus.** The Focus button (or the F key) hides every panel and drawer so only the universe shows; clicks still work. Click again (Show panels) to bring them back.
+- **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button opens the pop-out. Clicking an idea in the Ideas list opens the pop-out directly.
 - **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
   and the AI chip (which shows who is answering).
 

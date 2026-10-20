@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   confidenceWord, groupActions, itemHeadline, canUndo, applyableIds, inboxCount, askCandidates, isAsking, dayOf,
-  duplicateNotice, handProblems, needsHand, typeWord, type ActionRecord, type InboxItemView,
+  duplicateNotice, handProblems, needsHand, typeWord, filenameHeader, tooLargeNotice, MAX_DROP_BYTES, type ActionRecord, type InboxItemView,
 } from './inboxHelpers';
 
 const rec = (id: string, t: string, status: ActionRecord['status'], extra: Partial<ActionRecord> = {}): ActionRecord =>
@@ -99,5 +99,23 @@ describe('the rest of the inbox helpers', () => {
     expect(handProblems(hand)).toEqual(['No AI is set up', 'Attachment not read']);
     expect(needsHand({ ...hand, status: 'held' })).toBe(false);
     expect(needsHand(base)).toBe(false);
+  });
+});
+
+describe('filenameHeader (final review 1)', () => {
+  it('encodes any name so it fits in a Latin-1 header, and the server can decode it back', () => {
+    const name = 'RE Café – update ’24 ✓.eml';
+    const h = filenameHeader(name);
+    expect(/^[\x20-\x7e]*$/.test(h)).toBe(true);
+    expect(() => new Headers({ 'x-filename': h })).not.toThrow();
+    expect(decodeURIComponent(h)).toBe(name);
+  });
+});
+
+describe('tooLargeNotice (final review 5)', () => {
+  it('refuses a file over 20 MB before it is sent, in plain words', () => {
+    expect(MAX_DROP_BYTES).toBe(20 * 1024 * 1024);
+    expect(tooLargeNotice({ name: 'big.xlsx', size: MAX_DROP_BYTES + 1 })).toBe('big.xlsx is too large to drop (over 20 MB). Save a smaller copy and drop that.');
+    expect(tooLargeNotice({ name: 'ok.eml', size: MAX_DROP_BYTES })).toBeNull();
   });
 });

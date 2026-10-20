@@ -207,13 +207,24 @@ async function aiShots(p) {
 async function inboxShots(p) {
   const fx = path.join(APP, 'tests/fixtures/inbox');
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  // The E2 with the two questions goes out first: answers are saved on their own only against questions we sent.
+  const e2 = await post('/api/ideas/CAFE-2026-001/draft', { template: 'E2' });
+  await post('/api/outbox/update', { key: e2.key, body: 'Hi,\n\nTwo quick questions before review:\n1. How many requests a week?\n2. Who does it today?\n\nThanks' });
+  await post('/api/outbox/approve', { key: e2.key });
+  await post('/api/outbox/sent', { key: e2.key });
   await p.click('.titlebar [data-action="inbox"]');
   await p.waitForSelector('[data-testid="inbox-drop"]');
-  await p.setInputFiles('[data-testid="inbox-file"]', path.join(fx, 'reply.eml'));
+  // A name with an accent and an en dash: it must reach the server intact.
+  const named = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'cafe-tour-')), 'RE Café – update.eml');
+  await fs.copyFile(path.join(fx, 'reply.eml'), named);
+  await p.setInputFiles('[data-testid="inbox-file"]', named);
   await p.waitForSelector('.ib-item [data-group="applied"]', { timeout: 120000 });
   await p.waitForSelector('.ib-item [data-group="ok"]');
   await sleep(1200);
   await shot(p, '22-inbox-drop.png');
+  const dropped = (await (await fetch(`${base}/api/inbox`)).json()).items.find((i) => i.type === 'email');
+  if (dropped?.name !== 'RE Café – update.eml') throw new Error(`inbox: the file name arrived as ${dropped?.name}`);
+  console.log('  dropped as:', dropped.name, '|', dropped.actions.map((r) => `${r.label} [${r.kind}/${r.status}]`).join(' | '));
   const hist = await (await fetch(`${base}/api/ideas/CAFE-2026-001/history`)).json();
   if (!hist.some((h) => h.action === 'inbox')) throw new Error('inbox: no Inbox line in the idea history');
   console.log('  history:', hist.filter((h) => h.action === 'inbox').map((h) => h.detail).join(' | '));

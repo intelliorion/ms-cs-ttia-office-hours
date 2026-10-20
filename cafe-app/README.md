@@ -141,7 +141,11 @@ own. You can still choose the idea and apply changes yourself.
 
 **What the AI may propose and what code decides.** The AI can only report facts: a short summary, which
 idea it looks like, answers to the Café questions, flags, names and links. It cannot run anything. The code
-decides what is safe, what needs your OK and what is held, and it writes every file itself.
+decides what is safe, what needs your OK and what is held, and it writes every file itself. The AI's word
+alone is never enough for a safe change: an answer is saved on its own only when it answers a question we
+sent in the E2; a reply is marked received only when an E2 or E2R was sent; attendance is logged only when
+the E3 invitation was sent. Anything else waits for your Yes (for example "question not one we sent").
+An email from you (the name in Settings) is filed as sent, anything else as received.
 
 **What goes in the universe**
 
@@ -150,13 +154,18 @@ decides what is safe, what needs your OK and what is held, and it writes every f
 - A new star, or a change to a person's role, always waits for your Yes.
 - People who are only in an email's To or Cc line never become stars.
 
-**Undo.** Each applied change records how to put it back, and Undo replays that. It works field by field and
-refuses to undo anything you have changed since. For example, if you ticked a step on an idea an import
-created, Undo keeps that idea and says so ("CAFE-2026-002 has changed since the import; close it instead").
-If nothing could be undone, it says why.
+**Undo.** Each applied change records how to put it back, and Undo replays that, field by field. For the
+stage, the builder, ticks, links in the universe and ideas an import created, Undo first checks whether
+you have changed them since, and keeps your change if so. For example, if you ticked a step on an idea an
+import created, Undo keeps that idea and says so ("CAFE-2026-002 has changed since the import; close it
+instead"). Filed copies, flags and saved answers are removed as they were recorded. If nothing could be
+undone, it says why.
 
 **Duplicates.** Dropping the same file again shows "Already dropped on <date>" and does nothing a second
-time.
+time. If the first drop was never sorted (the app stopped part way), dropping it again sorts it now.
+
+**File names and size.** Any file name works, accents and dashes included. Files over 20 MB are refused
+before they are sent.
 
 **Tests.** `CAFE_AI_FAKE=1` also makes the fake provider answer `TASK: triage` with fixed facts, so the
 Inbox can be tested without a real AI. See Test hook below.

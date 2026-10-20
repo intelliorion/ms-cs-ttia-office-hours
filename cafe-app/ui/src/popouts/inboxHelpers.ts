@@ -127,3 +127,13 @@ export function handProblems(item: Pick<InboxItemView, 'triage' | 'problems'>): 
 /** Needs a hand: no AI answer, or the app could not sort it. */
 export const needsHand = (item: Pick<InboxItemView, 'triage' | 'problems' | 'status'>) =>
   item.status !== 'held' && (!!item.triage?.needsHand || (!item.triage && (item.problems?.length ?? 0) > 0));
+
+/** HTTP headers carry Latin-1 only, so the file name goes up percent-encoded; the server decodes it. */
+export const filenameHeader = (name: string) => encodeURIComponent(name);
+
+/** The server's limit for one request. */
+export const MAX_DROP_BYTES = 20 * 1024 * 1024;
+
+/** Said instead of sending a file the server would refuse; null when it's small enough. */
+export const tooLargeNotice = (file: { name: string; size: number }) =>
+  file.size > MAX_DROP_BYTES ? `${file.name} is too large to drop (over 20 MB). Save a smaller copy and drop that.` : null;

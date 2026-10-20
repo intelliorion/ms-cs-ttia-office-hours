@@ -1,3 +1,5 @@
+import { filenameHeader } from './popouts/inboxHelpers';
+
 export class ApiError extends Error {
   missing?: string[];
   constructor(message: string, missing?: string[]) { super(message); this.missing = missing; }
@@ -27,7 +29,7 @@ export const getAiStatus = () => fetch('/api/ai/status').then((r) => handle<any>
 export const getInbox = () => fetch('/api/inbox').then((r) => handle<any>(r));
 /** A dropped file goes up as its own bytes; the server keeps it as dropped. */
 export const inboxDropFile = (file: File) =>
-  fetch('/api/inbox/drop', { method: 'POST', headers: { 'x-filename': file.name, 'content-type': 'application/octet-stream' }, body: file }).then((r) => handle<any>(r));
+  fetch('/api/inbox/drop', { method: 'POST', headers: { 'x-filename': filenameHeader(file.name), 'content-type': 'application/octet-stream' }, body: file }).then((r) => handle<any>(r));
 export const inboxDropText = (text: string, name?: string) => post('/api/inbox/drop', name ? { text, name } : { text });
 export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismiss' | 'delete' | 'draft-held-reply', body: unknown = {}) =>
   post(`/api/inbox/${encodeURIComponent(id)}/${what}`, body);

@@ -5,7 +5,7 @@ import { Modal } from './Modal';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
   applyableIds, askCandidates, canUndo, confidenceWord, dayOf, duplicateNotice, groupActions, handProblems, isAsking, itemHeadline,
-  needsHand, typeWord, type ActionRecord, type InboxItemView,
+  needsHand, tooLargeNotice, typeWord, type ActionRecord, type InboxItemView,
 } from './inboxHelpers';
 
 const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇' };
@@ -75,7 +75,11 @@ export function InboxPopout() {
     return () => { window.removeEventListener('dragover', stop); window.removeEventListener('drop', stop); window.removeEventListener('dragleave', leave); };
   }, []);
   const dropFiles = async (files: FileList | File[] | null | undefined) => {
-    for (const f of [...(files ?? [])]) await dropping(() => inboxDropFile(f));
+    for (const f of [...(files ?? [])]) {
+      const big = tooLargeNotice(f);
+      if (big) { setNotice({ text: big, kind: 'error' }); continue; }
+      await dropping(() => inboxDropFile(f));
+    }
     if (input.current) input.current.value = '';
   };
   const addNote = async () => {

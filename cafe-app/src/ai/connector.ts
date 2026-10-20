@@ -28,7 +28,7 @@ export interface Connector {
   choices(): Promise<{ id: AiChoice; label: string; available: boolean; note?: string }[]>;
   run<T>(task: Task<T>, input: unknown): Promise<T>;
   /** Like run, but also says which provider answered. */
-  runWith<T>(task: Task<T>, input: unknown): Promise<{ provider: ProviderId; output: T }>;
+  runWith<T>(task: Task<T>, input: unknown, opts?: { timeoutMs?: number }): Promise<{ provider: ProviderId; label: string; output: T }>;
 }
 
 export const DEFAULT_TIMEOUT_MS = 90_000;
@@ -67,12 +67,13 @@ export function createConnector(opts: {
     return null;
   }
 
-  async function runWith<T>(task: Task<T>, input: unknown): Promise<{ provider: ProviderId; output: T }> {
+  async function runWith<T>(task: Task<T>, input: unknown, run: { timeoutMs?: number } = {}): Promise<{ provider: ProviderId; label: string; output: T }> {
     const p = await pick();
     if (!p) throw new AiError('No AI available');
-    const raw = await withTimeout(p.complete(task.prompt(input), { timeoutMs }), timeoutMs, p.label);
+    const ms = Math.min(run.timeoutMs ?? timeoutMs, timeoutMs);
+    const raw = await withTimeout(p.complete(task.prompt(input), { timeoutMs: ms }), ms, p.label);
     if (typeof raw !== 'string') throw new AiError('invalid output: the reply was not text');
-    return { provider: p.id, output: task.parse(raw) };
+    return { provider: p.id, label: p.label, output: task.parse(raw) };
   }
 
   return {

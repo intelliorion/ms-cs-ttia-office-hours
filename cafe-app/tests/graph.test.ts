@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { buildGraph, nodeId } from '../src/graph/build';
 import { ALLOWED, NODE_COLOURS } from '../src/graph/ontology';
 import { layoutFor } from '../src/graph/layout';
-import { rebuildGraph, appendAiLink, setAiLinkStatus } from '../src/graph/store';
+import { rebuildGraph, appendAiLink, setAiLinkStatus, readAiLinks } from '../src/graph/store';
 import { tmpWorkspace, sampleIdea, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 const rfx = sampleIdea({
@@ -138,5 +138,37 @@ describe('store and layout', () => {
     await setAiLinkStatus(root, edge.id, 'removed');
     expect((await rebuildGraph(root)).edges.some((e) => e.id === edge.id)).toBe(false);
     expect(await readFile(path.join(root, 'graph', 'nodes.jsonl'), 'utf8')).toContain('"idea:CAFE-2026-001"');
+  });
+
+  it('an unreadable layout.json is treated as empty and rewritten', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, { clock: fixedClock('2026-10-19'), steps });
+    const g = await rebuildGraph(root);
+    await mkdir(path.join(root, 'graph'), { recursive: true });
+    await writeFile(path.join(root, 'graph', 'layout.json'), '{"idea:CAFE-2026-001": [1, 2', 'utf8');
+    const l = await layoutFor(root, g);
+    expect(Object.keys(l)).toHaveLength(g.nodes.length);
+    expect(JSON.parse(await readFile(path.join(root, 'graph', 'layout.json'), 'utf8'))).toEqual(l);
+  });
+
+  it('a garbage line in ai-links.jsonl is skipped and listed as a problem; writes keep it', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, { clock: fixedClock('2026-10-19'), steps });
+    const link = { from: 'idea:CAFE-2026-002', to: 'capability:ticketing-and-status', rel: 'NEEDS' as const, description: 'd', source: 'ai:challenge', confidence: 0.6, status: 'pending' as const, newNodes: [{ id: 'capability:ticketing-and-status', type: 'Capability' as const, label: 'Ticketing and status' }] };
+    await appendAiLink(root, link);
+    const file = path.join(root, 'graph', 'ai-links.jsonl');
+    await writeFile(file, `${await readFile(file, 'utf8')}{"from": "torn\n`, 'utf8');
+    const read = await readAiLinks(root);
+    expect(read.links).toHaveLength(1);
+    expect(read.problems).toEqual([{ line: 2, message: expect.any(String) }]);
+    const g = await rebuildGraph(root);
+    expect(g.problems).toHaveLength(1);
+    expect(g.edges.some((e) => e.to === 'capability:ticketing-and-status')).toBe(true);
+    await appendAiLink(root, { ...link, to: 'capability:other', newNodes: [{ id: 'capability:other', type: 'Capability', label: 'Other' }] });
+    await setAiLinkStatus(root, 'idea:CAFE-2026-002|NEEDS|capability:ticketing-and-status', 'confirmed');
+    const after = await readAiLinks(root);
+    expect(after.links.map((l) => l.status)).toEqual(['confirmed', 'pending']);
+    expect(after.problems).toHaveLength(1);
+    expect(await readFile(file, 'utf8')).toContain('{"from": "torn');
   });
 });

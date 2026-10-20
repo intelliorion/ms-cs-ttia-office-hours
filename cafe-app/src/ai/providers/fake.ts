@@ -34,6 +34,7 @@ export function fakeProvider(): Provider {
       if (!enabled()) throw new Error('The fake AI is off');
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
+      if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },
   };

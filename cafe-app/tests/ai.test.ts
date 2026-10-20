@@ -295,6 +295,42 @@ describe('/api/ai routes', () => {
     expect(three.suggestions.newNodes).toEqual([]);
   });
 
+  it('a 0.9 link between stars you already have is added confirmed, and can still be removed', async () => {
+    const reply = JSON.stringify({
+      nodes: [{ type: 'Capability', label: 'Document parsing' }],
+      links: [{ from: 'idea', to: 'Document parsing', rel: 'NEEDS', description: 'Reads requests', confidence: 0.9 }],
+    });
+    const c = createConnector({ providers: [fake(reply)], settings: DEFAULT_SETTINGS });
+    const s = await startServer('2026-10-19', { connector: c });
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
+    await saveIdea(s.root, sampleIdea({ support: ['Document parsing'] }));
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
+    const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
+    expect(ex).toMatchObject({ added: 1, unconfirmed: 0 });
+    const id = 'idea:CAFE-2026-002|NEEDS|capability:document-parsing';
+    const g1 = await (await fetch(`${s.base}/api/graph`)).json() as any;
+    expect(g1.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true, source: 'ai:claude:challenge' });
+    expect((await post(s.base, '/api/graph/remove', { edgeId: id })).status).toBe(200);
+    const g2 = await (await fetch(`${s.base}/api/graph`)).json() as any;
+    expect(g2.edges.some((e: any) => e.id === id)).toBe(false);
+  });
+
+  it('Test runs a tiny ping through the provider and says how long it took', async () => {
+    const c = createConnector({ providers: [fake((p) => (p.startsWith('TASK: ping') ? 'Sure: {"ok":true}' : '{}'))], settings: DEFAULT_SETTINGS });
+    const s = await startServer('2026-10-19', { connector: c });
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
+    const r = await (await post(s.base, '/api/ai/test', {})).json() as any;
+    expect(r).toMatchObject({ ok: true, provider: 'claude', label: 'Fake Claude' });
+    expect(typeof r.ms).toBe('number');
+    const bad = createConnector({ providers: [fake('{"ok":false}')], settings: DEFAULT_SETTINGS });
+    const s2 = await startServer('2026-10-19', { connector: bad });
+    try {
+      const r2 = await post(s2.base, '/api/ai/test', {});
+      expect(r2.status).toBe(400);
+      expect((await r2.json() as any).error).toMatch(/invalid output/);
+    } finally { s2.server.closeAllConnections(); await new Promise((res) => s2.server.close(() => res(null))); }
+  });
+
   it('errors say "Working by hand" and settings can switch the AI off', async () => {
     const s = await startServer();
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
@@ -332,5 +368,6 @@ describe('/api/ai routes', () => {
     expect(ex.suggestions.newNodes).toHaveLength(3);
     const sug = await (await post(s.base, '/api/ai/review-suggest', { id: 'CAFE-2026-001' })).json() as any;
     expect(Object.keys(sug.criteria)).toHaveLength(5);
+    expect(await (await post(s.base, '/api/ai/test', {})).json()).toMatchObject({ ok: true, provider: 'fake' });
   });
 });

@@ -43,9 +43,20 @@ export function computeLayout(nodes: GNode[], edges: GEdge[], pinned: Layout): L
 }
 const round = (v: number) => Math.round((Number.isFinite(v) ? v : 0) * 100) / 100;
 
+/** The cached layout, or {} when it is missing or unreadable (it is only a cache; a fresh one is computed and saved). */
+function readLayout(text: string | undefined): Layout {
+  if (!text) return {};
+  try {
+    const v = JSON.parse(text) as unknown;
+    if (v && typeof v === 'object' && !Array.isArray(v)) return v as Layout;
+  } catch { /* fall through */ }
+  console.warn('graph/layout.json could not be read; laying the universe out afresh');
+  return {};
+}
+
 export async function layoutFor(root: string, graph: { nodes: GNode[]; edges: GEdge[] }): Promise<Layout> {
   const fileName = path.join(paths(root).graph, 'layout.json');
-  const cached = (JSON.parse((await readText(fileName)) ?? '{}') as Layout);
+  const cached = readLayout(await readText(fileName));
   const ids = new Set(graph.nodes.map((n) => n.id));
   const pinned: Layout = Object.fromEntries(Object.entries(cached).filter(([id]) => ids.has(id)));
   const allPinned = graph.nodes.every((n) => pinned[n.id]);

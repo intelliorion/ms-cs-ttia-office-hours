@@ -18,7 +18,7 @@ import { writeStatusCsv } from '../exports/status';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask } from '../ai/tasks';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { edgeId } from '../graph/ontology';
 
@@ -93,11 +93,16 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const settings = await saveAiProvider(root, body.provider);
     return { ...(await ai.status()), choice: settings.ai?.provider };
   });
+  add('POST', '/api/ai/test', async () => byHand(async () => {
+    const t0 = Date.now();
+    const { provider, label } = await ai.runWith(pingTask, {}, { timeoutMs: 30_000 });
+    return { ok: true, provider, label, ms: Date.now() - t0 };
+  })());
   add('POST', '/api/ai/extract', async ({ body }) => byHand(async () => {
     const idea = await loadIdea(root, String(body.id));
     const before = await rebuildGraph(root);
     const { provider, output } = await ai.runWith(extractTask, extractInput(idea, before.nodes));
-    const { links, newNodes } = planAiLinks(idea.id, output, before, await readAiLinks(root), provider);
+    const { links, newNodes } = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider);
     for (const l of links) await appendAiLink(root, l);
     const after = await rebuildGraph(root);
     const ids = new Set(links.map((l) => edgeId(l.from, l.rel, l.to)));

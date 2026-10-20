@@ -113,3 +113,15 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
   },
   parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA),
 };
+
+export const PING_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['ok'], properties: { ok: { type: 'boolean', enum: [true] } },
+};
+
+/** The AI pop-out's Test: a tiny round trip that proves the provider answers and the reply is checked. */
+export const pingTask: Task<{ ok: true }> = {
+  name: 'ping',
+  schema: PING_SCHEMA,
+  prompt: () => ['TASK: ping', 'You have no tools. Do not ask questions.', 'Reply with exactly {"ok":true}'].join('\n'),
+  parse: (raw) => parseChecked<{ ok: true }>(raw, PING_SCHEMA),
+};

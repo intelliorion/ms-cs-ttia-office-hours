@@ -1,0 +1,169 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react';
+
+// The api module, mocked: every call is recorded; each test says what the design routes answer.
+const api = vi.hoisted(() => ({
+  designPost: vi.fn(),
+  ideaGet: vi.fn(),
+  ideaPost: vi.fn(),
+  getHistory: vi.fn(async () => []),
+  post: vi.fn(async () => ({})),
+  copyText: vi.fn(async () => true),
+}));
+vi.mock('../api', () => api);
+
+import { useStore } from '../state/store';
+import { IdeaDetails } from './IdeaDetails';
+import { ToolPickerSection } from './ToolPickerSection';
+import type { DesignCall } from './DesignSection';
+
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom has no scrolling.
+if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
+
+const ID = 'CAFE-2026-001';
+const IDEA = { id: ID, title: 'Desk request sorter', slug: 'desk-request-sorter', stage: 3, outcomes: [], support: [], people: { team: [] }, flags: [], overdue: [] };
+const STATE = {
+  ideas: [IDEA], outbox: [], criteria: [], decisions: {}, steps: [],
+  stageNames: { 1: 'Submit', 2: 'Review', 3: 'Design series' }, closures: { csic: 'Routed to CSIC' },
+};
+const CHECK = { valueWords: [], dataFlags: [], csicFlags: ['custom app'], ok: false };
+const designState = (extra: any = {}) => ({
+  version: 1, status: 'designing', cafeCheck: CHECK,
+  features: [{ id: 'request-form', name: 'Request form', what: 'Collects requests', tool: 'Power Apps', reason: 'A simple form', pathway: 'Assisted Citizen', flags: [] }],
+  steps: [
+    { n: 1, question: 'What must it show?', suggested: ['Sorting', 'Drafting'], source: 'ai-suggested', why: 'One thing well.' },
+    { n: 2, question: 'Smallest input?', suggested: [], source: 'operator', askedTeam: { emailKey: 'k1' } },
+  ],
+  ...extra,
+});
+
+let el: HTMLDivElement;
+let root: Root;
+const flush = async () => { for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); }); };
+const click = async (sel: string) => {
+  const b = el.querySelector(sel) as HTMLButtonElement | null;
+  if (!b) throw new Error(`no ${sel}`);
+  await act(async () => { b.click(); });
+};
+
+beforeEach(() => {
+  el = document.createElement('div');
+  document.body.appendChild(el);
+  root = createRoot(el);
+  for (const f of Object.values(api)) f.mockClear();
+  api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState(), designMd: '# Design' } : { files: [] }));
+  useStore.setState({
+    state: STATE, graph: { nodes: [], edges: [] }, ai: { provider: 'fake', label: 'Fake (test)' },
+    notice: null, suggest: null, refresh: async () => {},
+  });
+});
+afterEach(() => { act(() => root.unmount()); el.remove(); });
+
+describe('ToolPickerSection', () => {
+  it('Save posts only name, what, tool, reason and flags (no id or pathway)', async () => {
+    api.designPost.mockImplementation(async (_id: string, what: string) => {
+      if (what === 'tools/suggest') {
+        return { provider: 'fake', features: [
+          designState().features[0],
+          { name: 'Scheduler', what: 'Picks a slot', tool: 'custom app', reason: 'No low-code tool', flags: [] },
+        ] };
+      }
+      return { state: designState(), designMd: '' };
+    });
+    const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
+    await act(async () => root.render(
+      <ToolPickerSection idea={IDEA} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} aiName={() => 'Fake'} call={call} />,
+    ));
+    await click('[data-action="tools-suggest"]');
+    await flush();
+    expect(el.querySelectorAll('.tp-row.suggested')).toHaveLength(1);
+    await click('[data-action="tools-save"]');
+    await flush();
+    const saved = api.designPost.mock.calls.find((c) => c[1] === 'tools');
+    expect(saved).toBeTruthy();
+    expect(saved![0]).toBe(ID);
+    expect(saved![2]).toEqual({ features: [
+      { name: 'Request form', what: 'Collects requests', tool: 'Power Apps', reason: 'A simple form', flags: [] },
+      { name: 'Scheduler', what: 'Picks a slot', tool: 'custom app', reason: 'No low-code tool', flags: ['custom-app'] },
+    ] });
+  });
+});
+
+describe('IdeaDetails design sections', () => {
+  // Buttons that only show or open something (design.md, the Outbox) stay usable; everything that changes data waits.
+  const actionButtons = () => [...el.querySelectorAll('[data-testid="tool-picker"] button, [data-testid="design"] button')]
+    .filter((b) => !/^(toggle-|open-outbox)/.test(b.getAttribute('data-action') ?? '')) as HTMLButtonElement[];
+
+  it('while a call is in flight every action button in Tool picker and Design is disabled', async () => {
+    let finish!: (v: unknown) => void;
+    api.designPost.mockImplementation(() => new Promise((r) => { finish = r; }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="design"] .ds-step')).toBeTruthy();
+    expect(actionButtons().some((b) => !b.disabled)).toBe(true);
+    // A plain (non-AI) call: pick a suggested answer.
+    await click('.ds-step[data-step="1"] [data-action="pick-suggested"]');
+    const stuck = actionButtons();
+    expect(stuck.length).toBeGreaterThan(5);
+    expect(stuck.filter((b) => !b.disabled).map((b) => b.getAttribute('data-action') ?? b.textContent)).toEqual([]);
+    // A second click in the same moment is ignored.
+    await click('.ds-step[data-step="1"] [data-action="pick-suggested"]');
+    expect(api.designPost).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ state: designState(), designMd: '' }); });
+    await flush();
+    // An AI call: Suggest with AI.
+    await click('[data-action="tools-suggest"]');
+    expect(actionButtons().filter((b) => !b.disabled)).toEqual([]);
+    expect(el.querySelector('[data-testid="tool-picker"] .ai-busy')?.textContent).toContain('Asking the AI');
+    await act(async () => { finish({ provider: 'fake', features: [] }); });
+    await flush();
+  });
+
+  it('Approve shows the notice and the CSIC Yes/No; Yes moves the stage with closeAs csic', async () => {
+    const done = designState({ summary: 'A small proof of concept on synthetic data.' });
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: done, designMd: '' } : { files: [] }));
+    api.designPost.mockImplementation(async () => ({
+      state: { ...done, status: 'approved', approvedAt: '2026-10-20' }, designMd: '',
+      notice: 'Design approved. This idea has a CSIC feature.', suggest: { closeAs: 'csic', label: 'Close it as Routed to CSIC?' },
+    }));
+    api.ideaPost.mockImplementation(async () => ({}));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="approve-design"]');
+    await flush();
+    expect(api.designPost).toHaveBeenCalledWith(ID, 'design/approve');
+    expect(el.querySelector('.pop-notice')?.textContent).toBe('Design approved. This idea has a CSIC feature.');
+    expect(el.querySelector('[data-testid="suggest"]')?.textContent).toContain('Close it as Routed to CSIC?');
+    expect(api.ideaPost).not.toHaveBeenCalled();
+    await click('[data-action="suggest-yes"]');
+    await flush();
+    expect(api.ideaPost).toHaveBeenCalledWith(ID, 'stage', { closeAs: 'csic' });
+  });
+
+  it('No dismisses the suggestion without moving the stage', async () => {
+    const done = designState({ summary: 'S' });
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: done, designMd: '' } : { files: [] }));
+    api.designPost.mockImplementation(async () => ({ state: { ...done, approvedAt: '2026-10-20' }, designMd: '', notice: 'Design approved.', suggest: { closeAs: 'csic', label: 'Close it as Routed to CSIC?' } }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="approve-design"]');
+    await flush();
+    await click('[data-action="suggest-no"]');
+    expect(el.querySelector('[data-testid="suggest"]')).toBeNull();
+    expect(api.ideaPost).not.toHaveBeenCalled();
+  });
+
+  it('a failed re-read keeps the design on screen', async () => {
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    api.ideaGet.mockImplementation(async () => { throw new Error('offline'); });
+    api.designPost.mockImplementation(async () => { throw new Error('Pick one of the suggested answers'); });
+    await click('.ds-step[data-step="1"] [data-action="pick-suggested"]');
+    await flush();
+    expect(el.querySelector('.pop-notice.error')?.textContent).toBe('Pick one of the suggested answers');
+    expect(el.querySelector('[data-testid="design"] .ds-step')).toBeTruthy();
+    expect(el.querySelector('[data-testid="design"]')?.textContent).not.toContain('Loading');
+  });
+});

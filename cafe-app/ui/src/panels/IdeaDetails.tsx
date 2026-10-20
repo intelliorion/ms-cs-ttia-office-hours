@@ -29,13 +29,16 @@ export function IdeaDetails({ id }: { id: string }) {
   /** Which design section is waiting on the AI ('tools', 'design', 'plan'); null for the Review and Graph AI calls. */
   const [aiFor, setAiFor] = useState<string | null>(null);
   const idRef = useRef(id);
+  const inFlight = useRef(false);
   idRef.current = id;
 
   const loadHistory = useCallback(() => getHistory(id).then(setHistory, () => setHistory(null)), [id]);
   const loadDesign = useCallback(async () => {
     const [d, p] = await Promise.all([ideaGet(id, 'design').catch(() => null), ideaGet(id, 'plan').catch(() => null)]);
     if (idRef.current !== id) return; // another idea opened meanwhile
-    setDesign(d); setPlan(p);
+    // A failed re-read keeps what is already shown.
+    if (d) setDesign(d);
+    if (p) setPlan(p);
   }, [id]);
   useEffect(() => {
     setDesign(null); setPlan(null); void loadDesign();
@@ -76,7 +79,9 @@ export function IdeaDetails({ id }: { id: string }) {
   };
   /** One design-series call: busy (or the AI wait) while it runs, a notice, the CSIC suggestion, then everything re-read. */
   const designCall: DesignCall = async (fn, o) => {
-    if (busy || aiBusy || (o.ai && noAi)) return null;
+    // A ref, not only state: two clicks in one frame must not both get through.
+    if (inFlight.current || busy || aiBusy || (o.ai && noAi)) return null;
+    inFlight.current = true;
     if (o.ai) { setAiBusy(true); setAiFor(o.ai); } else setBusy(true);
     setNotice(null);
     let out = null;
@@ -85,13 +90,17 @@ export function IdeaDetails({ id }: { id: string }) {
       out = r;
       if (r?.state && typeof r.designMd === 'string' && idRef.current === id) setDesign({ state: r.state, designMd: r.designMd });
       const t = o.ok(r);
-      setNotice(t ? { text: t, kind: 'ok' } : null);
-      if (r?.suggest) setSuggest({ id, ...r.suggest });
+      if (idRef.current === id) {
+        setNotice(t ? { text: t, kind: 'ok' } : null);
+        if (r?.suggest) setSuggest({ id, ...r.suggest });
+      }
     } catch (e) {
-      setNotice({ text: (e as Error).message, kind: 'error' });
+      if (idRef.current === id) setNotice({ text: (e as Error).message, kind: 'error' });
     }
-    await Promise.all([refresh(), loadHistory(), loadDesign()]);
-    if (o.ai) { setAiBusy(false); setAiFor(null); } else setBusy(false);
+    try { await Promise.all([refresh(), loadHistory(), loadDesign()]); } finally {
+      inFlight.current = false;
+      if (o.ai) { setAiBusy(false); setAiFor(null); } else setBusy(false);
+    }
     return out;
   };
   const grow = () => runAi('/api/ai/extract', (r) => setNotice({ text: extractNotice(r), kind: 'ok' }));

@@ -23,7 +23,7 @@ import { planAiLinks } from '../ai/apply';
 import type { ExtractOutput } from '../ai/tasks';
 import { screen } from './screen';
 import { displayName } from './match';
-import type { TriageRecord } from './triage';
+import { openQuestionsOf, type TriageRecord } from './triage';
 import type { InboxItem } from './store';
 
 /**
@@ -35,8 +35,9 @@ import type { InboxItem } from './store';
 export type Action =
   | { t: 'file_email'; ideaId: string; direction: 'in' | 'out' }
   | { t: 'reply_received'; ideaId: string }
-  | { t: 'record_answers'; ideaId: string; answers: { question: string; answer: string }[] }
-  | { t: 'log_step'; ideaId: string; step: string; source: string }
+  /** why: set by code when the AI's facts alone aren't enough (e.g. a question we never sent); it then waits for a Yes. */
+  | { t: 'record_answers'; ideaId: string; answers: { question: string; answer: string }[]; why?: string }
+  | { t: 'log_step'; ideaId: string; step: string; source: string; why?: string }
   | { t: 'add_flag'; ideaId: string; text: string }
   | { t: 'name_builder'; ideaId: string; name: string }
   | { t: 'suggest_stage'; ideaId: string; stage?: StageNo; closeAs?: Closure }
@@ -86,6 +87,7 @@ export const SAFE_STEPS = ['s2d', 's3a', 's4b', 's4d'];
 /** Code decides the kind; nothing the AI wrote changes it. */
 export function kindOf(action: Action, ctx: { needsHand?: boolean } = {}): Kind {
   if (ctx.needsHand) return 'ok';
+  if ('why' in action && action.why) return 'ok';
   switch (action.t) {
     case 'file_email': case 'reply_received': case 'record_answers': case 'import_export':
       return 'safe';
@@ -110,8 +112,8 @@ export function labelOf(a: Action): string {
   switch (a.t) {
     case 'file_email': return `File it in ${a.ideaId}`;
     case 'reply_received': return `Mark the reply as received on ${a.ideaId}`;
-    case 'record_answers': return `Save ${a.answers.length} answer${a.answers.length === 1 ? '' : 's'} on ${a.ideaId}`;
-    case 'log_step': return `Log "${STEP_WORDS[a.step] ?? a.step}" on ${a.ideaId}`;
+    case 'record_answers': return `Save ${a.answers.length} answer${a.answers.length === 1 ? '' : 's'} on ${a.ideaId}${a.why ? ` (${a.why})` : ''}`;
+    case 'log_step': return `Log "${STEP_WORDS[a.step] ?? a.step}" on ${a.ideaId}${a.why ? ` (${a.why})` : ''}`;
     case 'add_flag': return `Add a flag on ${a.ideaId}: ${a.text}`;
     case 'name_builder': return `Name ${a.name} as the builder of ${a.ideaId}`;
     case 'suggest_stage': return a.closeAs ? `Close ${a.ideaId} (${a.closeAs})` : `Move ${a.ideaId} to stage ${a.stage}`;
@@ -148,6 +150,22 @@ export async function screenExport(root: string, file: string, name: string): Pr
   return reasons;
 }
 
+const words = (s: string) => s.toLowerCase().replace(/^\s*\d{1,2}[.)]\s*/, '').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+
+/**
+ * Is this the same question? Forgiving of wording, strict about meaning: after lowercasing and dropping
+ * punctuation and any leading number, one contains the other, or at least 60% of the shorter one's words
+ * appear in the other.
+ */
+export function sameQuestion(a: string, b: string): boolean {
+  const x = words(a); const y = words(b);
+  if (!x.length || !y.length) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (` ${long.join(' ')} `.includes(` ${short.join(' ')} `)) return true;
+  const have = new Set(long);
+  return short.filter((w) => have.has(w)).length / short.length >= 0.6;
+}
+
 /** Build the actions for a triaged item. Act only on a non-null ideaId; when asking, the only action is ask_idea. */
 export async function planActions(root: string, item: InboxItem): Promise<{ actions: Action[]; hold?: string[] }> {
   const tr = item.triage as TriageRecord | undefined;
@@ -159,13 +177,25 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   if (tr.ask || !tr.ideaId) return { actions: [{ t: 'ask_idea', candidates: tr.candidates }] };
   const ideaId = tr.ideaId;
   const idea = await loadIdea(root, ideaId);
-  const actions: Action[] = [{ t: 'file_email', ideaId, direction: 'in' }];
+  const actions: Action[] = [{ t: 'file_email', ideaId, direction: await directionOf(root, item) }];
   const facts = tr.ai?.facts;
   if (!facts) return { actions };
 
-  if (facts.answers?.length) actions.push({ t: 'record_answers', ideaId, answers: facts.answers.map(({ question, answer }) => ({ question, answer })) });
-  if (facts.replyReceived === true && !idea.checklist.s2d?.done) actions.push({ t: 'reply_received', ideaId });
-  if (facts.attendanceConfirmed === true && !idea.checklist.s3a?.done) actions.push({ t: 'log_step', ideaId, step: 's3a', source: item.file });
+  // The AI's facts alone never make a Safe write: an answer is Safe only against a question we sent,
+  // a reply only when we asked (E2 or E2R sent), attendance only when we invited (E3 sent).
+  if (facts.answers?.length) {
+    const asked = await openQuestionsOf(root, ideaId);
+    const all = facts.answers.map(({ question, answer }) => ({ question, answer }));
+    const ours = all.filter((x) => asked.some((q) => sameQuestion(x.question, q)));
+    const other = all.filter((x) => !ours.includes(x));
+    if (ours.length) actions.push({ t: 'record_answers', ideaId, answers: ours });
+    if (other.length) actions.push({ t: 'record_answers', ideaId, answers: other, why: 'question not one we sent' });
+  }
+  const asked = !!(idea.sent?.E2 || idea.sent?.E2R);
+  if (facts.replyReceived === true && asked && !idea.checklist.s2d?.done) actions.push({ t: 'reply_received', ideaId });
+  if (facts.attendanceConfirmed === true && !idea.checklist.s3a?.done) {
+    actions.push({ t: 'log_step', ideaId, step: 's3a', source: item.file, ...(idea.sent?.E3 ? {} : { why: 'no invitation was sent' }) });
+  }
   for (const text of facts.newFlags ?? []) if (!idea.flags.includes(text)) actions.push({ t: 'add_flag', ideaId, text });
   const builder = typeof facts.builderNamed === 'string' ? facts.builderNamed.trim() : '';
   if (builder && builder !== (idea.people as { builder?: string }).builder) actions.push({ t: 'name_builder', ideaId, name: builder });
@@ -176,6 +206,13 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   if (safe.length) actions.push({ t: 'graph_links', ideaId, links: safe });
   if (ok.length) actions.push({ t: 'graph_links', ideaId, links: ok });
   return { actions };
+}
+
+/** From the operator (settings.operatorName) → out; anyone else → in. */
+async function directionOf(root: string, item: InboxItem): Promise<'in' | 'out'> {
+  const me = key((await loadSettings(root)).operatorName ?? '');
+  const from = key(displayName(item.meta?.from ?? ''));
+  return me && from && from === me ? 'out' : 'in';
 }
 
 /** People named in the item (To, Cc, From, speakers) and on the idea never become nodes: links touching them are dropped. */

@@ -256,6 +256,19 @@ describe('triageItem', () => {
     expect((await listIdeas(root)).ideas).toHaveLength(3);
   });
 
+  it('when only the AI names an idea, confidence is capped at 0.69 and it asks (final review 8)', async () => {
+    const root = await workspace();
+    const { connector } = recorder(JSON.stringify({ ...GOOD, ideaId: 'CAFE-2026-002', matchConfidence: 0.98 }));
+    const dropped = await saveDrop(root, 'note', 'A quick update on our numbers for the week.', clock);
+    const t = (await triageItem(root, dropped.id, connector)).triage as TriageRecord;
+    expect(t.match.ideaId).toBeUndefined();
+    expect(t.confidence).toBe(0.69);
+    expect(t.ask).toBe(true);
+    expect(t.ideaId).toBeNull();
+    expect(t.suggested).toBe('CAFE-2026-002');
+    expect(t.candidates[0].id).toBe('CAFE-2026-002');
+  });
+
   it('the AI may lower confidence below 0.7, which makes it ask', async () => {
     const root = await workspace();
     const { connector } = recorder(JSON.stringify({ ...GOOD, matchConfidence: 0.4 }));

@@ -116,12 +116,17 @@ export async function triageItem(
     screened.hold = true;
     screened.reasons.push("Looks like a tracker and this kind of file can't be checked yet, so it's held for you to check by hand");
   }
-  if (screened.hold) return holdItem(root, id, screened.reasons);
+  if (screened.hold) return holdItem(root, id, screened.reasons, parsed.meta);
 
   const at = new Date().toISOString();
   const { ideas } = await listIdeas(root);
   const byId = new Map(ideas.map((i) => [i.id, i]));
   const fresh: InboxItem = { ...item, type: parsed.type, text: parsed.text, meta: parsed.meta };
+  // The screen passed: only now are the text and what was read from it stored.
+  const read: Partial<InboxItem> = {
+    type: parsed.type, text: parsed.text, meta: parsed.meta,
+    ...(parsed.problems?.length ? { problems: [...new Set([...(item.problems ?? []), ...parsed.problems])] } : {}),
+  };
 
   // 2. Exports never go to the AI: Task 3 imports them.
   if (parsed.type === 'export') {
@@ -129,7 +134,7 @@ export async function triageItem(
       at, match: { confidence: 0, how: 'none', candidates: [] }, ideaId: null, confidence: 0, ask: false,
       candidates: [], notes: ['A list export: import it to add or update ideas'], export: true,
     };
-    return updateItem(root, id, { type: 'export', status: 'triaged', triage });
+    return updateItem(root, id, { ...read, type: 'export', status: 'triaged', triage });
   }
 
   // 3. Deterministic match (or the operator's choice).
@@ -177,5 +182,5 @@ export async function triageItem(
     ...(ai ? { ai, provider } : { needsHand: true as const }),
     ...(aiError ? { aiError } : {}),
   };
-  return updateItem(root, id, { status: 'triaged', triage });
+  return updateItem(root, id, { ...read, status: 'triaged', triage });
 }

@@ -219,7 +219,8 @@ describe('inbox store', () => {
     expect(item.file).toBe('inbox/2026-10-20-reply.eml');
     expect(item).toMatchObject({ name: 'reply.eml', type: 'email', status: 'new' });
     expect(item.hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(item.text).toContain('About 40 a week');
+    expect(item.text).toBeUndefined(); // stored only after the screen (triage)
+    expect(item.meta).toBeUndefined();
     expect(item.duplicate).toBeUndefined();
     expect(await readFile(path.join(root, item.file))).toEqual(Buffer.from(await bytes('reply.eml')));
     const sidecar = JSON.parse(await readFile(path.join(itemsDir(root), `${item.id}.json`), 'utf8'));
@@ -236,7 +237,8 @@ describe('inbox store', () => {
     const item = await saveDrop(root, 'Pasted note', 'Person 2 called about CAFE-2026-001.', clock);
     expect(item.type).toBe('note');
     expect(item.file).toBe('inbox/2026-10-20-pasted-note.txt');
-    expect(item.text).toBe('Person 2 called about CAFE-2026-001.');
+    expect(item.text).toBeUndefined();
+    expect(await readFile(path.join(root, item.file), 'utf8')).toBe('Person 2 called about CAFE-2026-001.');
   });
 
   it('recognises the same content dropped twice', async () => {
@@ -295,14 +297,14 @@ describe('fix round 1', () => {
   it('a held email keeps only the subject and the sender display name', async () => {
     const root = await tmpWorkspace();
     const item = await saveDrop(root, 'reply.eml', await bytes('reply.eml'), clock);
-    await holdItem(root, item.id, ['Has 5 personal email addresses']);
+    await holdItem(root, item.id, ['Has 5 personal email addresses'], parseDrop('reply.eml', await bytes('reply.eml')).meta);
     const sidecar = await readFile(path.join(itemsDir(root), `${item.id}.json`), 'utf8');
     expect(sidecar).not.toContain('@');
     expect(sidecar).not.toContain('Person 3');
     expect(JSON.parse(sidecar).meta).toEqual({ subject: 'RE: CAFE-2026-001 Email scheduler: two quick questions', from: 'Person 2' });
 
     const t = await saveDrop(root, 'transcript.vtt', await bytes('transcript.vtt'), clock);
-    await holdItem(root, t.id, ['x']);
+    await holdItem(root, t.id, ['x'], parseDrop('transcript.vtt', await bytes('transcript.vtt')).meta);
     const tSidecar = await readFile(path.join(itemsDir(root), `${t.id}.json`), 'utf8');
     expect(tSidecar).not.toMatch(/Person [239]/);
   });

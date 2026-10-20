@@ -5,7 +5,7 @@ import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { slugify } from '../ideas/store';
 import { systemClock, type Clock } from '../clock';
-import { parseDrop, type InboxMeta, type InboxType } from './parse';
+import { typeOfName, type InboxMeta, type InboxType } from './parse';
 
 export type InboxStatus = 'new' | 'triaged' | 'applied' | 'held' | 'dismissed';
 
@@ -74,18 +74,15 @@ export async function saveDrop(root: string, name: string, data: Uint8Array | st
   const stored = await freeName(inbox, base, ext);
   await writeFileAtomic(path.join(inbox, stored), bytes);
 
-  const parsed = parseDrop(fileName, bytes);
+  // Only what identifies the file: its text and meta are written by triage once the screen has passed.
   const item: InboxItem = {
     id: `in-${hash.slice(0, 12)}`,
     file: `inbox/${stored}`,
     name,
-    type: parsed.type,
+    type: typeOfName(fileName),
     hash,
     receivedAt: `${clock()}T${new Date().toISOString().slice(11)}`, // the clock's date, the real time of day
     status: 'new',
-    text: parsed.text,
-    meta: parsed.meta,
-    ...(parsed.problems?.length ? { problems: parsed.problems } : {}),
   };
   await writeItem(root, item);
   return item;
@@ -127,7 +124,7 @@ export async function updateItem(root: string, id: string, patch: Partial<InboxI
  * read from it, and move the file to inbox/held/. The cleared sidecar is written first, so a crash
  * mid-way never leaves personal data in it; calling again finishes the move and changes nothing else.
  */
-export async function holdItem(root: string, id: string, reasons: string[]): Promise<InboxItem> {
+export async function holdItem(root: string, id: string, reasons: string[], read?: InboxMeta): Promise<InboxItem> {
   const item = await getItem(root, id);
   if (!item) throw new Error(`No inbox item ${id}`);
   let file = item.file;
@@ -139,9 +136,10 @@ export async function holdItem(root: string, id: string, reasons: string[]): Pro
     heldFrom = file;
     file = `inbox/held/${await freeName(held, path.basename(file, ext), ext)}`;
   }
-  const from = item.meta?.from?.replace(/<[^>]*>/g, '').replace(/^"|"$/g, '').trim();
+  const seen = item.meta ?? read;
+  const from = seen?.from?.replace(/<[^>]*>/g, '').replace(/^"|"$/g, '').trim();
   const meta = {
-    ...(item.meta?.subject ? { subject: item.meta.subject } : {}),
+    ...(seen?.subject ? { subject: seen.subject } : {}),
     ...(from && !from.includes('@') ? { from } : {}),
   };
   const next: InboxItem = {

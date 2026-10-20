@@ -32,6 +32,17 @@ export interface ParsedDrop {
 const ext = (name: string) => (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
 const nl = (s: string) => s.replace(/\r\n?/g, '\n');
 
+/** The type from the file name alone, without reading it (triage reads it after the screen). */
+export function typeOfName(name: string): InboxType {
+  const e = ext(name);
+  if (e === 'eml' || e === 'msg') return 'email';
+  if (e === 'vtt') return 'transcript';
+  if (e === 'txt' || e === 'md') return 'note';
+  if (e === 'docx') return 'document';
+  if (e === 'csv' || e === 'xlsx') return 'export';
+  return 'unknown';
+}
+
 export function parseDrop(name: string, bytes: Uint8Array): ParsedDrop {
   switch (ext(name)) {
     case 'eml':

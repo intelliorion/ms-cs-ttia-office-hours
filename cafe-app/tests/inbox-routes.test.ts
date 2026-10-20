@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { readFile, readdir, access } from 'node:fs/promises';
+import { readFile, readdir, access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
@@ -34,6 +34,15 @@ function triageConnector(reply: Triage | (() => never)) {
     complete: async () => (typeof reply === 'function' ? reply() : JSON.stringify(reply)),
   };
   return createConnector({ providers: [provider], settings: DEFAULT_SETTINGS });
+}
+
+/** Marks the E2 for an idea as sent with these questions: answers to them may be saved without a Yes. */
+async function sentE2(root: string, id: string, questions: string[]) {
+  const idea = (await listIdeas(root)).ideas.find((i) => i.id === id)!;
+  await saveIdea(root, { ...idea, sent: { ...idea.sent, E2: '2026-10-20' } });
+  const dir = path.join(root, 'ideas', (await ideaFolders(root)).find((f) => f.startsWith(id))!, 'emails');
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${id}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n`);
 }
 
 const ideaFolders = async (root: string) => (await readdir(path.join(root, 'ideas'))).sort();
@@ -97,6 +106,7 @@ describe('/api/inbox: emails and notes', () => {
   it('a reply with the fake AI: Safe applied, counts, apply and undo of the new-star links via /api/graph', async () => {
     const s = await server();
     await s.drop('export.csv', await readFile(FIXTURE));
+    await sentE2(s.root, 'CAFE-2026-001', ['How many requests a week?', 'Who does it today?']);
     const { item } = await s.drop('reply.eml', await readFile(FIX('reply.eml')));
     expect(item.triage.ideaId).toBe('CAFE-2026-001');
     const by = (t: string) => item.actions.find((r: any) => r.action.t === t);
@@ -194,6 +204,26 @@ describe('/api/inbox: emails and notes', () => {
     const { item } = await json(await s.post('/api/inbox/drop', { text: 'Nothing much.' }));
     const d = await json(await s.post(`/api/inbox/${item.id}/dismiss`));
     expect(d.item.status).toBe('dismissed');
+  });
+});
+
+describe('/api/inbox: file names (final review 1)', () => {
+  it('a file name with non-Latin-1 characters arrives intact when the UI encodes it', async () => {
+    const s = await server();
+    const name = 'RE Café – update ’24 ✓.eml';
+    const r = await fetch(`${s.base}/api/inbox/drop`, { method: 'POST', headers: { 'x-filename': encodeURIComponent(name), 'content-type': 'application/octet-stream' }, body: await readFile(FIX('reply.eml')) });
+    expect(r.status).toBe(200);
+    const { item } = await json(r);
+    expect(item.name).toBe(name);
+    expect(item.file).toMatch(/^inbox\/2026-10-20-[^/]+\.eml$/);
+  });
+
+  it('a raw name that is not valid percent-encoding is kept as given, and paths are stripped', async () => {
+    const s = await server();
+    const { item } = await s.drop('100%-done.txt', Buffer.from('Nothing much.'));
+    expect(item.name).toBe('100%-done.txt');
+    const { item: other } = await s.drop(encodeURIComponent('../../evil.txt'), Buffer.from('Other.'));
+    expect(other.name).toBe('evil.txt');
   });
 });
 

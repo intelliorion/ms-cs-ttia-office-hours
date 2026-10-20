@@ -119,7 +119,11 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {
     if (headers['x-filename'] !== undefined) {
-      const name = path.basename(String(headers['x-filename']));
+      // The UI sends the name percent-encoded (headers are Latin-1 only); a raw name that isn't valid encoding is kept as given.
+      const sent = String(headers['x-filename']);
+      let decoded = sent;
+      try { decoded = decodeURIComponent(sent); } catch { /* not encoded */ }
+      const name = path.basename(decoded.replace(/\\/g, '/'));
       if (!name) throw new Error('The file needs a name');
       if (!raw.length) throw new Error('Nothing was dropped');
       return processDrop(root, name, new Uint8Array(raw), ai, clock);

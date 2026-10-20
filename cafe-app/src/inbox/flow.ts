@@ -81,13 +81,20 @@ export async function processItem(
   return save(root, item, records);
 }
 
-/** Store a drop; a repeat (same bytes) returns the first item and does nothing else. */
+/**
+ * Store a drop; a repeat (same bytes) returns the first item and does nothing else, unless that item
+ * never got past "new" (sorting was interrupted): then it is sorted now. The answer is the item as the
+ * Inbox shows it (a preview, never the full text or the quoted thread).
+ */
 export async function processDrop(
   root: string, name: string, data: Uint8Array | string, connector: Connector | null | undefined, clock: Clock,
-): Promise<{ item: InboxItem; duplicate?: true }> {
+): Promise<{ item: InboxItem & { preview?: string }; duplicate?: true }> {
   const saved = await saveDrop(root, name, data, clock);
-  if (saved.duplicate) return { item: saved, duplicate: true };
-  return { item: await processItem(root, saved.id, connector, clock) };
+  if (saved.duplicate && saved.status !== 'new') {
+    const { duplicate: _d, ...item } = saved;
+    return { item: viewOf(item), duplicate: true };
+  }
+  return { item: viewOf(await processItem(root, saved.id, connector, clock)) };
 }
 
 export async function applyRecords(root: string, id: string, actionIds: string[], clock: Clock): Promise<InboxItem> {
@@ -185,9 +192,11 @@ export async function inboxView(root: string): Promise<InboxView> {
     else if (i.status === 'held') counts.held++;
     else if (i.status === 'applied') counts.applied++;
   }
-  const items = all.map(({ text, meta, ...rest }) => {
-    const { quoted: _q, ...m } = meta ?? {};
-    return { ...rest, ...(meta ? { meta: m } : {}), ...(text ? { preview: text.slice(0, 400) } : {}) };
-  });
-  return { items, counts, problems };
+  return { items: all.map(viewOf), counts, problems };
+}
+
+/** An item without its full text (a short preview instead) or the quoted thread. */
+export function viewOf({ text, meta, ...rest }: InboxItem): InboxItem & { preview?: string } {
+  const { quoted: _q, ...m } = meta ?? {};
+  return { ...rest, ...(meta ? { meta: m } : {}), ...(text ? { preview: text.slice(0, 400) } : {}) };
 }

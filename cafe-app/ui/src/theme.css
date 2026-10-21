@@ -523,7 +523,8 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ib-step{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;text-align:center}
 .ib-step .dot{width:12px;height:12px;box-sizing:border-box;border-radius:50%;border:1.5px solid rgba(160,190,185,.35);background:#0e1313;display:block}
 .ib-step.st-ok .dot{background:var(--teal);border-color:var(--teal);box-shadow:0 0 8px rgba(125,211,207,.6)}
-.ib-step.st-run .dot{background:var(--teal);border-color:var(--teal);animation:halo-breathe 1.2s ease-in-out infinite;box-shadow:0 0 0 6px rgba(125,211,207,.18),0 0 14px var(--teal)}
+.ib-step.st-run .dot{background:var(--teal);border-color:var(--teal);opacity:1;animation:ib-run-dot 1.2s ease-in-out infinite alternate;box-shadow:0 0 0 4px rgba(125,211,207,.15),0 0 10px var(--teal)}
+@keyframes ib-run-dot{from{box-shadow:0 0 0 4px rgba(125,211,207,.15),0 0 10px var(--teal)}to{box-shadow:0 0 0 9px rgba(125,211,207,.05),0 0 18px var(--teal)}}
 .ib-step.st-skip .dot{border-color:rgba(160,190,185,.3);border-style:dashed}
 .ib-step.st-you .dot{background:var(--amber);border-color:var(--amber);box-shadow:0 0 10px rgba(245,179,107,.7)}
 .ib-step.st-bad .dot{background:var(--danger);border-color:var(--danger)}
@@ -548,6 +549,8 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .g-needs .ib-g-k{color:var(--amber)}
 .ib-rule{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);margin-right:8px}
 .ib-why{font-size:13px;color:var(--muted);margin:2px 0 6px}
+.ib-existing{font-size:12.5px;color:var(--muted);margin:-2px 0 6px}
+.ib-existing b{font-weight:600;color:var(--cream)}
 .ib-choices{display:flex;gap:8px;flex-wrap:wrap}
 .ib-again{display:flex;justify-content:flex-end;margin-top:10px}
 .ib-chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -576,6 +579,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 [data-quality="lite"] .ib-well{animation:none;background:#0e1313;border-color:var(--panel-border);box-shadow:none}
 [data-quality="lite"] .ib-well.over{background:#141c1c;border-color:var(--amber)}
 [data-quality="lite"] .ib-progress,[data-quality="lite"] .ib-step.st-run .dot{animation:none;box-shadow:none}
+[data-quality="lite"] .ib-step.st-run .dot{box-shadow:0 0 0 4px rgba(125,211,207,.15)}
 [data-quality="lite"] .ib-progress{background:var(--teal);opacity:.6}
 [data-quality="lite"] .ib-step.st-ok .dot,[data-quality="lite"] .ib-step.st-you .dot{box-shadow:none}
 [data-quality="lite"] .ib-paste textarea,[data-quality="lite"] .ib-understood summary::before{transition:none}

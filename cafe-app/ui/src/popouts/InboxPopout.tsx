@@ -32,10 +32,10 @@ export function InboxPopout() {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const dropPoll = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     setNotice(null); void refreshInbox();
-    return () => { timers.current.forEach(clearTimeout); };
+    return () => { if (dropPoll.current) clearInterval(dropPoll.current); };
   }, [setNotice, refreshInbox]);
 
   // Live steps: read the Inbox every second while any step runs; when the run ends, read the universe once.
@@ -50,8 +50,8 @@ export function InboxPopout() {
 
   const items: InboxItemView[] = inbox?.items ?? [];
   const flight = items.filter(inFlight).sort((a, b) => (b.receivedAt ?? '').localeCompare(a.receivedAt ?? ''));
-  const days = groupByDay(filterItems(items, chip, q));
   const ideaTitle = (id: string) => state?.ideas?.find((i: any) => i.id === id)?.title ?? '';
+  const days = groupByDay(filterItems(items, chip, q, ideaTitle));
   const counts = {
     processed: items.filter((i) => !isRunning(i)).length,
     you: items.filter(needsYou).length,
@@ -72,16 +72,16 @@ export function InboxPopout() {
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
 
-  /** One drop. The Inbox is read again shortly after the request goes, so the card shows its steps while the server runs them. */
+  /** One drop. The Inbox is read every 400 ms until the request comes back, so the card shows its steps while the server runs them. */
   const dropping = async (name: string, fn: () => Promise<any>): Promise<DropOutcome | null> => {
     if (going.current) return null;
     going.current = true;
     setBusy('Reading…');
     let out: DropOutcome;
+    if (dropPoll.current) clearInterval(dropPoll.current);
+    dropPoll.current = setInterval(() => { void refreshInbox(); }, 400);
     try {
-      const p = fn();
-      timers.current.push(setTimeout(() => void refreshInbox(), 300));
-      const res = await p;
+      const res = await fn();
       if (res?.duplicate && res.item) {
         setDupes((d) => ({ ...d, [res.item.id]: duplicateNotice(res.item) }));
         out = { kind: 'duplicate', name: res.item.name, text: duplicateNotice(res.item) };
@@ -89,6 +89,7 @@ export function InboxPopout() {
       // Show what happened: a finished item has no card in flight, so open its history row.
       if (res?.item?.id && !inFlight(res.item)) setOpen(res.item.id);
     } catch (e) { out = { kind: 'failed', name, text: (e as Error).message }; }
+    finally { if (dropPoll.current) { clearInterval(dropPoll.current); dropPoll.current = null; } }
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
     return out;
   };

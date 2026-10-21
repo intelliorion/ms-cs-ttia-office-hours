@@ -5,6 +5,7 @@ import { act } from 'react';
 vi.mock('../api', () => ({ inboxPost: vi.fn(async () => ({})) }));
 import { inboxPost } from '../api';
 import { InboxCard, type Run } from './InboxCard';
+import { useStore } from '../state/store';
 import type { InboxItemView, Step } from './inboxHelpers';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -66,5 +67,16 @@ describe('InboxCard', () => {
     expect([...el.querySelectorAll('.ib-understood li')].map((l) => l.textContent)).toEqual(['Two builders now', 'The region']);
     await click(el.querySelector('[data-action="run-again"]'));
     expect(inboxPost).toHaveBeenCalledWith('ib1', 'process');
+  });
+
+  it('a near-duplicate names the existing star, from the graph or else from its id', () => {
+    const held = (existing: string): InboxItemView => base({
+      steps: [s('check', 'needs-you')],
+      actions: [{ id: 'a2', action: { t: 'graph_links' }, kind: 'ok', status: 'pending', label: 'Add star Slot finder', held: { rule: 'near-duplicate-star', existing, why: 'Looks the same' } }],
+    });
+    useStore.setState({ graph: { nodes: [{ id: 'capability:slot-finding', type: 'Capability', label: 'Slot finding' }], edges: [] } as any });
+    expect(mount(held('capability:slot-finding')).querySelector('[data-testid="existing-star"]')?.textContent).toBe('Existing star: Slot finding');
+    expect(mount(held('capability:room-booking')).querySelector('[data-testid="existing-star"]')?.textContent).toBe('Existing star: room booking');
+    useStore.setState({ graph: null });
   });
 });

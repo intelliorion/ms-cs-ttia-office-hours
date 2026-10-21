@@ -140,7 +140,7 @@ describe('dropSummary: one notice for a multi-file drop', () => {
   });
 });
 
-import { shouldPoll, groupByDay, filterItems, resultLine, heldChoices } from './inboxHelpers';
+import { shouldPoll, groupByDay, filterItems, resultLine, heldChoices, timeOf } from './inboxHelpers';
 
 describe('agentic inbox helpers', () => {
   const step = (id: string, status: string) => ({ id, status, at: '2026-10-21T10:00:00Z', detail: id });
@@ -150,8 +150,12 @@ describe('agentic inbox helpers', () => {
     expect(shouldPoll(null)).toBe(false);
   });
   it('groupByDay labels today and yesterday, then dates, newest first', () => {
-    const g = groupByDay([{ receivedAt: '2026-10-21T09:00:00Z' }, { receivedAt: '2026-10-20T09:00:00Z' }, { receivedAt: '2026-10-01T09:00:00Z' }] as any, new Date('2026-10-21T12:00:00Z'));
+    // Local constructors: the day boundaries are the operator's, whatever the zone the test runs in.
+    const local = (d: number, h: number) => new Date(2026, 9, d, h, 30).toISOString();
+    const g = groupByDay([{ receivedAt: local(1, 9) }, { receivedAt: local(21, 0) }, { receivedAt: local(20, 23) }, { receivedAt: local(21, 9) }] as any, new Date(2026, 9, 21, 12));
     expect(g.map((x) => x.label)).toEqual(['Today', 'Yesterday', '1 Oct 2026']);
+    expect(g[0].items.length).toBe(2);
+    expect(timeOf(local(21, 9))).toBe('09:30');
   });
   it('filterItems by chip and by text over name and idea', () => {
     const items = [
@@ -162,6 +166,9 @@ describe('agentic inbox helpers', () => {
     expect(filterItems(items, 'needs-you', '').map((i: any) => i.name)).toEqual(['reply2.eml']);
     expect(filterItems(items, 'held', '').map((i: any) => i.name)).toEqual(['people.csv']);
     expect(filterItems(items, 'all', '001').map((i: any) => i.name)).toEqual(['reply.eml']);
+    const titles = (id: string) => (id === 'CAFE-2026-001' ? 'Faster onboarding' : '');
+    expect(filterItems(items, 'all', 'onboarding', titles).map((i: any) => i.name)).toEqual(['reply.eml']);
+    expect(filterItems(items, 'all', 'onboarding').map((i: any) => i.name)).toEqual([]);
   });
   it('resultLine is the check detail, else the hold reason, else the last step detail', () => {
     expect(resultLine({ steps: [step('check', 'done')] } as any)).toBe('check');

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 
 vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), inboxPost: vi.fn(async () => ({})), inboxDropFile: vi.fn(), inboxDropText: vi.fn() }));
+import { inboxDropText } from '../api';
 import { useStore } from '../state/store';
 import { InboxPopout } from './InboxPopout';
 import type { InboxItemView } from './inboxHelpers';
@@ -58,6 +59,29 @@ describe('InboxPopout', () => {
     // Chips filter the history.
     act(() => (el.querySelector('[data-chip="held"]') as HTMLButtonElement).click());
     expect([...el.querySelectorAll('.ib-row')].map((r) => r.getAttribute('data-row'))).toEqual(['ib3']);
+    act(() => root.unmount());
+    el.remove();
+  });
+
+  it('reads the Inbox every 400 ms while a drop is on its way, and stops when it comes back', async () => {
+    useStore.setState({ inbox: view([]) });
+    vi.mocked(inboxDropText).mockImplementation(() => new Promise((ok) => setTimeout(() => ok({ item: { id: 'ib9', name: 'Your note' } }), 1000)));
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = createRoot(el);
+    act(() => root.render(<InboxPopout />));
+    const ta = el.querySelector('[data-testid="inbox-paste"]') as HTMLTextAreaElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, 'A quick note');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const before = refreshInbox.mock.calls.length;
+    act(() => (el.querySelector('[data-action="add-note"]') as HTMLButtonElement).click());
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(refreshInbox.mock.calls.length - before).toBeGreaterThanOrEqual(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    const after = refreshInbox.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(refreshInbox.mock.calls.length).toBe(after);
     act(() => root.unmount());
     el.remove();
   });

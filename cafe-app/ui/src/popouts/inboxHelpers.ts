@@ -113,13 +113,23 @@ export const isAsking = (item: Pick<InboxItemView, 'status' | 'triage' | 'action
   item.status !== 'held' && item.status !== 'dismissed'
   && (!!item.triage?.ask || (item.actions ?? []).some((r) => r.action?.t === 'ask_idea' && r.status === 'pending'));
 
-/** A day in plain form, e.g. 20 Oct 2026. Unknown dates come back as given. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** A stamp with a time is read in local time; a bare date (2026-10-20) is taken as written. Null when it is neither. */
+const localDate = (iso: string): Date | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(iso)) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+/** The local calendar day of a date, as a sortable key. */
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+/** A day in plain form (local time), e.g. 20 Oct 2026. Unknown dates come back as given. */
 export function dayOf(iso: string | undefined): string {
   if (!iso) return '';
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  if (!m) return iso;
-  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1];
-  return mon ? `${Number(m[3])} ${mon} ${m[1]}` : iso;
+  const d = localDate(iso);
+  return d ? `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : iso;
 }
 
 /** What to say when the same file is dropped again. */
@@ -206,7 +216,8 @@ export const CHIPS: { id: Chip; label: string }[] = [
   { id: 'done', label: 'Done' }, { id: 'failed', label: 'Failed' }, { id: 'dismissed', label: 'Dismissed' },
 ];
 
-export function filterItems(items: InboxItemView[], chip: Chip, q: string): InboxItemView[] {
+/** The history filter: a chip, then a search over the file name, the idea's id and title, and the headline. */
+export function filterItems(items: InboxItemView[], chip: Chip, q: string, ideaTitle?: (id: string) => string): InboxItemView[] {
   const byChip = items.filter((i) => chip === 'all' ? true
     : chip === 'needs-you' ? needsYou(i)
     : chip === 'held' ? i.status === 'held'
@@ -214,16 +225,23 @@ export function filterItems(items: InboxItemView[], chip: Chip, q: string): Inbo
     : chip === 'failed' ? hasFailed(i)
     : i.status === 'dismissed');
   const k = q.trim().toLowerCase();
-  return k ? byChip.filter((i) => `${i.name} ${i.triage?.ideaId ?? ''} ${itemHeadline(i)}`.toLowerCase().includes(k)) : byChip;
+  const title = (i: InboxItemView) => (i.triage?.ideaId && ideaTitle ? ideaTitle(i.triage.ideaId) : '');
+  return k ? byChip.filter((i) => `${i.name} ${i.triage?.ideaId ?? ''} ${title(i)} ${itemHeadline(i)}`.toLowerCase().includes(k)) : byChip;
 }
 
 /** Items newest first, grouped by day: Today, Yesterday, then dates. */
 export function groupByDay(items: InboxItemView[], now = new Date()): { label: string; items: InboxItemView[] }[] {
-  const day = (d: Date) => d.toISOString().slice(0, 10);
-  const today = day(now); const yesterday = day(new Date(now.getTime() - 86_400_000));
-  const label = (iso: string) => { const d = iso.slice(0, 10); return d === today ? 'Today' : d === yesterday ? 'Yesterday' : dayOf(iso) || 'Undated'; };
+  const today = dayKey(now);
+  const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  const label = (iso: string) => {
+    const d = localDate(iso);
+    if (!d) return iso || 'Undated';
+    const k = dayKey(d);
+    return k === today ? 'Today' : k === yesterday ? 'Yesterday' : dayOf(iso);
+  };
+  const at = (i: InboxItemView) => localDate(i.receivedAt ?? '')?.getTime() ?? 0;
   const out: { label: string; items: InboxItemView[] }[] = [];
-  for (const i of [...items].sort((a, b) => (b.receivedAt ?? '').localeCompare(a.receivedAt ?? ''))) {
+  for (const i of [...items].sort((a, b) => at(b) - at(a))) {
     const l = label(i.receivedAt ?? '');
     const g = out.at(-1); if (g && g.label === l) g.items.push(i); else out.push({ label: l, items: [i] });
   }
@@ -252,8 +270,12 @@ export function statusWord(i: InboxItemView): { word: string; tone: 'run' | 'you
 export const byYou = (i: Pick<InboxItemView, 'actions'>) =>
   (i.actions ?? []).some((a) => (a.kind === 'ok' && a.status === 'applied') || a.status === 'undone');
 
-/** A time of day from an ISO stamp, e.g. 09:41 (UTC, as stored). */
-export const timeOf = (iso: string | undefined) => (/T(\d{2}:\d{2})/.exec(iso ?? '')?.[1] ?? '');
+/** A time of day in local time, e.g. 09:41; empty for a bare date or anything unreadable. */
+export const timeOf = (iso: string | undefined) => {
+  if (!iso || !/T/.test(iso)) return '';
+  const d = localDate(iso);
+  return d ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+};
 
 export interface HeldChoice { label: string; kind: 'apply' | 'drop'; resolve?: 'use-existing' | 'take-file' }
 /** The choices offered for a held proposal, per conflict rule. */

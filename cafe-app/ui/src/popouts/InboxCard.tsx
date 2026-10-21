@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { inboxPost } from '../api';
+import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
   STEP_ORDER, STEP_WORDS, RULE_WORDS, stepGlyph, heldChoices, groupActions, applyableIds, canUndo, askCandidates, isAsking, typeWord, dayOf,
@@ -9,6 +10,14 @@ import {
 export const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇' };
 export type Note = { text: string; kind?: 'ok' | 'error' };
 export type Run = <T>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null, say?: (n: Note | null) => void) => Promise<void>;
+
+/** The label of the star a held proposal looks like: from the graph, else the id's slug ("capability:slot-finding" → "slot finding"). */
+export function starLabel(nodes: { id: string; label?: string }[] | undefined, id: string): string {
+  const n = nodes?.find((x) => x.id === id);
+  if (n?.label) return n.label;
+  const slug = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
+  return slug.replace(/[-_]+/g, ' ');
+}
 
 const secs = (ms: number | undefined) => (ms ? `${(ms / 1000).toFixed(1)} s` : '');
 
@@ -20,6 +29,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
   item: InboxItemView; busy: boolean; ideaTitle: (id: string) => string; openIdea: (id: string) => void; run: Run; expanded?: boolean; dupe?: string;
 }) {
   const [msg, setMsg] = useState<Note | null>(null);
+  const nodes = useStore((s) => s.graph?.nodes) as { id: string; label?: string }[] | undefined;
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [sureDelete, setSureDelete] = useState(false);
   const go = <T,>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null) => run(label, fn, ok, setMsg);
@@ -110,6 +120,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
               <li key={r.id} data-record={r.id} data-testid="held" data-rule={r.held!.rule}>
                 <div className="ib-act"><span className="ib-rule">{RULE_WORDS[r.held!.rule] ?? 'Check'}</span><span className="ib-lbl">{r.label}</span></div>
                 <div className="ib-why">{r.held!.why}</div>
+                {r.held!.existing && <div className="ib-existing" data-testid="existing-star">Existing star: <b>{starLabel(nodes, r.held!.existing)}</b></div>}
                 <div className="ib-choices">
                   {heldChoices(r.held!).map((c) => (
                     <button key={c.label} className={`btn sm${c.kind === 'apply' ? ' primary' : ''}`} data-action={c.kind === 'apply' ? 'apply' : 'drop-action'}

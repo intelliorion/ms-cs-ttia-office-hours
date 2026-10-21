@@ -20,7 +20,7 @@ export function TitleBar() {
   };
   return (
     <header className="titlebar">
-      <div><span className="name">Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
+      <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
         <button className={`pill${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>Inbox ({waiting})</button>
         <button className="pill" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import</button>

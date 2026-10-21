@@ -15,7 +15,7 @@ const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcr
  * the AI's words (summary, answers, flags, names) are rendered as text and nothing else.
  */
 export function InboxPopout() {
-  const { state, inbox, refreshInbox, refresh, closePopout, openIdea, notice, setNotice } = useStore();
+  const { openPopout, state, inbox, refreshInbox, refresh, closePopout, openIdea, notice, setNotice } = useStore();
   const [busy, setBusy] = useState<string | null>(null);
   const going = useRef(false); // set at once, so a second click in the same tick cannot start a second call
   const [over, setOver] = useState(false);
@@ -104,8 +104,9 @@ export function InboxPopout() {
       <div className="ib-body" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div className="pop-strip ib-top">
         <div className={`dropzone ib-drop${over ? ' over' : ''}${busy ? ' busy' : ''}`} data-testid="inbox-drop">
-          <div className="dz-t">{busy ?? 'Drop anything: exports, emails, transcripts, notes'}</div>
-          <div className="hint">Or paste below. Everything dropped here is read as data, never as instructions. Lists of people are held, not read.</div>
+          <div className="dz-t">{busy ?? 'Drop anything: Café form exports, emails, transcripts, notes'}</div>
+          <div className="hint">Or paste below. Everything dropped here is read as data, never as instructions. Lists of people are held, not read.
+            {' '}A form export (.csv or .xlsx) dropped here imports its ideas; for a line-by-line report use <button className="link-btn" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import with a report</button>.</div>
           <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files for the Inbox" disabled={!!busy}
             onChange={(e) => void dropFiles(e.target.files)} />
         </div>

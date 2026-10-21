@@ -22,8 +22,8 @@ export function TitleBar() {
     <header className="titlebar">
       <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
-        <button className={`pill${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>Inbox ({waiting})</button>
-        <button className="pill" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import</button>
+        <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: Café form exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>
+          <span className="ib-icon" aria-hidden="true">⤓</span>Inbox{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Round</button>
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>
         <button className="pill" data-action="review-pack" onClick={() => void write('/api/review-pack')}>Review pack</button>

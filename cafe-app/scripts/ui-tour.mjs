@@ -164,7 +164,10 @@ const click = (p, sel) => p.click(sel);
 // Import, Round, Outbox from the title bar, then a late reply (the app clock moved 8 days on).
 async function popouts2Shots(p, gl, errors, restart) {
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
-  await click(p, '.titlebar [data-action="import"]');
+  // Import lives inside the Inbox now: open the Inbox, then "Import with a report".
+  await click(p, '.titlebar [data-action="inbox"]');
+  await p.waitForSelector('[data-testid="inbox-drop"]');
+  await click(p, '[data-testid="inbox-drop"] [data-action="import"]');
   await p.waitForSelector('[data-testid="dropzone"]');
   const csv = path.join(workspace, 'second-export.csv');
   await fs.writeFile(csv, SECOND_EXPORT);

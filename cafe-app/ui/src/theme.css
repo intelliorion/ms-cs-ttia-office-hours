@@ -488,3 +488,12 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 [data-quality="lite"] .stage-star .core,[data-quality="lite"] .beam,[data-quality="lite"] .beam-dot,[data-quality="lite"] .kpi b{filter:none;box-shadow:none;text-shadow:none;animation:none}
 [data-quality="lite"] .stage-star .halo{animation:none;opacity:.12}
 [data-quality="lite"] .stage-star .core,[data-quality="lite"] .beam{transition:none}
+
+/* The Inbox is the one way in, so it stands out from the other title-bar pills. */
+.pill.inbox{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,rgba(125,211,207,.95),rgba(96,178,174,.95));border-color:transparent;color:#07201f;font-weight:700;box-shadow:0 0 18px rgba(125,211,207,.35)}
+.pill.inbox:hover{box-shadow:0 0 26px rgba(125,211,207,.55)}
+.pill.inbox .ib-icon{font-size:17px;line-height:1}
+.pill.inbox .ib-badge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#07201f;color:var(--teal);font-family:var(--mono);font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+.pill.inbox.waiting{animation:inbox-glow 2.6s ease-in-out infinite}
+@keyframes inbox-glow{0%,100%{box-shadow:0 0 14px rgba(125,211,207,.3)}50%{box-shadow:0 0 30px rgba(245,179,107,.55)}}
+[data-quality="lite"] .pill.inbox{animation:none;box-shadow:none}

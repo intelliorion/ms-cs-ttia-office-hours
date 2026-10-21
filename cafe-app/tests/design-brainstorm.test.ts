@@ -8,7 +8,7 @@ import { applyDesignEvent, askTeam, addQuestion } from '../src/design/brainstorm
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
-import { designStepTask, type Triage } from '../src/ai/tasks';
+import { designStepTask, type Understanding } from '../src/ai/tasks';
 import { processDrop } from '../src/inbox/flow';
 import { fixedClock } from '../src/clock';
 
@@ -253,8 +253,8 @@ describe('the Inbox fills a question asked in an E2', () => {
     const file = path.join(root, ...emailKey.split('/'));
     await writeFile(file, (await readFile(file, 'utf8')).replace('status: draft', 'status: sent\nsentAt: 2026-10-20'));
 
-    const triage: Triage = {
-      summary: 'Person 2 answers the question.', kind: 'reply', ideaId: ID, matchConfidence: 0.95,
+    const triage: Understanding = {
+      what: 'Person 2 answers the question.', understood: ['Person 2 answers the question.'], uncertain: [], kind: 'reply', ideaId: ID, matchConfidence: 0.95,
       facts: { answers: [{ question: 'What must the proof of concept show?', answer: 'That requests get a slot the same day.' }], replyReceived: true, graph: { nodes: [], links: [] } },
     };
     const provider: Provider = { id: 'claude', label: 'Test AI', available: async () => true, complete: async () => JSON.stringify(triage) };

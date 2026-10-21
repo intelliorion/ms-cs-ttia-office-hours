@@ -9,7 +9,7 @@ import { normalizeIdea } from '../src/ideas/idea';
 import { createConnector, type Connector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
-import type { Triage } from '../src/ai/tasks';
+import type { Understanding } from '../src/ai/tasks';
 
 const FIX = (name: string) => fileURLToPath(new URL(`./fixtures/inbox/${name}`, import.meta.url));
 const json = (r: Response) => r.json() as Promise<any>;
@@ -28,7 +28,7 @@ async function server(connector?: Connector) {
   return { ...s, post, drop, inbox };
 }
 
-function triageConnector(reply: Triage | (() => never)) {
+function triageConnector(reply: Understanding | (() => never)) {
   const provider: Provider = {
     id: 'claude', label: 'Test AI', available: async () => true,
     complete: async () => (typeof reply === 'function' ? reply() : JSON.stringify(reply)),
@@ -131,7 +131,7 @@ describe('/api/inbox: emails and notes', () => {
 
   it('a link at 0.7 or above between known stars is Safe, shows in /api/graph, and Undo removes it', async () => {
     const s = await server(triageConnector({
-      summary: 'Invoices need design guidance.', kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      what: 'Invoices need design guidance.', understood: ['Invoices need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
       facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Asked for guidance', confidence: 0.8 }] } },
     }));
     await s.drop('export.csv', await readFile(FIXTURE));
@@ -148,7 +148,7 @@ describe('/api/inbox: emails and notes', () => {
 
   it('a link below 0.7 between existing stars is applied at once, unconfirmed (dashed); Undo removes it', async () => {
     const s = await server(triageConnector({
-      summary: 'Invoices may need design guidance.', kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      what: 'Invoices may need design guidance.', understood: ['Invoices may need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
       facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
     }));
     await s.drop('export.csv', await readFile(FIXTURE));

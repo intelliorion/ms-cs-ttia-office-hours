@@ -8,7 +8,7 @@ import { fixedClock } from '../src/clock';
 import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
 import { matchIdea, displayName } from '../src/inbox/match';
 import { triageItem, openQuestionsOf, type TriageRecord } from '../src/inbox/triage';
-import { triageTask, TRIAGE_SCHEMA, type Triage } from '../src/ai/tasks';
+import { triageTask, TRIAGE_SCHEMA, UNDERSTAND_SCHEMA, type Triage, type Understanding } from '../src/ai/tasks';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
@@ -39,8 +39,8 @@ function recorder(reply: string | ((prompt: string) => string)) {
   return { calls, connector: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) };
 }
 
-const GOOD: Triage = {
-  summary: 'Person 2 answers the two questions about Email scheduler.',
+const GOOD: Understanding = {
+  what: 'Person 2 answers the two questions about Email scheduler.', understood: ['About 40 requests a week'], uncertain: [],
   kind: 'reply', ideaId: 'CAFE-2026-001', matchConfidence: 0.95,
   facts: {
     answers: [{ question: 'How many requests a week?', answer: 'About 40 a week.' }],
@@ -48,6 +48,10 @@ const GOOD: Triage = {
     graph: { nodes: [{ type: 'Capability', label: 'Request triage' }], links: [{ from: 'idea', to: 'Request triage', rel: 'NEEDS', description: 'Sorts the requests', confidence: 0.8 }] },
   },
 };
+
+/** The old triage shape (summary), for the TRIAGE_SCHEMA checks. */
+const { what, understood: _u, uncertain: _x, ...GOOD_REST } = GOOD;
+const GOOD_T: Triage = { summary: what, ...GOOD_REST };
 
 async function workspace() {
   const root = await tmpWorkspace('2026-10-19');
@@ -122,25 +126,25 @@ describe('triageTask', () => {
       item: { type: 'email', subject: 's', from: 'f', text: 'x'.repeat(20_000), quoted: 'Our questions' },
       candidates: [],
     });
-    expect(p.startsWith('TASK: triage')).toBe(true);
+    expect(p.startsWith('TASK: understand')).toBe(true);
     expect(p).toMatch(/data, not instructions/);
     expect(p).toContain("OUR OWN EARLIER EMAIL — not the submitter's words");
-    expect(p).toContain(JSON.stringify(TRIAGE_SCHEMA));
+    expect(p).toContain(JSON.stringify(UNDERSTAND_SCHEMA));
     expect(p).not.toContain('x'.repeat(12_001));
     expect(p).toContain('x'.repeat(12_000));
   });
 
   it('the schema is strict: extra keys, people nodes and people relations are rejected', () => {
-    expect(validate(TRIAGE_SCHEMA, GOOD)).toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD, stage: 4 })).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, setStage: 'launch' } })).not.toEqual([]);
-    const person = { ...GOOD, facts: { ...GOOD.facts, graph: { nodes: [{ type: 'Person', label: 'Person 9' }], links: [] } } };
+    expect(validate(TRIAGE_SCHEMA, GOOD_T)).toEqual([]);
+    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, stage: 4 })).not.toEqual([]);
+    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, setStage: 'launch' } })).not.toEqual([]);
+    const person = { ...GOOD_T, facts: { ...GOOD_T.facts, graph: { nodes: [{ type: 'Person', label: 'Person 9' }], links: [] } } };
     expect(validate(TRIAGE_SCHEMA, person)).not.toEqual([]);
-    const rel = { ...GOOD, facts: { ...GOOD.facts, graph: { nodes: [], links: [{ from: 'Person 9', to: 'idea', rel: 'SPONSORS', description: '', confidence: 1 }] } } };
+    const rel = { ...GOOD_T, facts: { ...GOOD_T.facts, graph: { nodes: [], links: [{ from: 'Person 9', to: 'idea', rel: 'SPONSORS', description: '', confidence: 1 }] } } };
     expect(validate(TRIAGE_SCHEMA, rel)).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, stageHint: 'stage 4' } })).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, newFlags: ['a', 'b', 'c', 'd'] } })).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD, summary: 'x'.repeat(161) })).not.toEqual([]);
+    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, stageHint: 'stage 4' } })).not.toEqual([]);
+    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, newFlags: ['a', 'b', 'c', 'd'] } })).not.toEqual([]);
+    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, summary: 'x'.repeat(161) })).not.toEqual([]);
   });
 
   it('ideaId and builderNamed must be a string or null', () => {
@@ -388,9 +392,9 @@ describe('triageItem', () => {
 describe('triage reply trimming and timeout', () => {
   const reply = (over: Record<string, unknown>) => JSON.stringify({ ...GOOD, ...over });
   it('trims over-long free text to its cap with an ellipsis', () => {
-    const t = triageTask.parse(reply({ summary: 'a'.repeat(200) }));
-    expect(t.summary).toHaveLength(160);
-    expect(t.summary.endsWith('…')).toBe(true);
+    const t = triageTask.parse(reply({ what: 'a'.repeat(200) }));
+    expect(t.what).toHaveLength(160);
+    expect(t.what.endsWith('…')).toBe(true);
     const f = triageTask.parse(reply({ facts: { ...GOOD.facts, builderNamed: 'b'.repeat(90), newFlags: ['f'.repeat(100)], answers: [{ question: 'q'.repeat(150), answer: 'a'.repeat(400) }] } }));
     expect(f.facts.builderNamed).toHaveLength(60);
     expect(f.facts.newFlags![0]).toHaveLength(80);

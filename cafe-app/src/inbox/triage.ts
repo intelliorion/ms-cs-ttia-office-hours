@@ -4,7 +4,8 @@ import YAML from 'yaml';
 import { listIdeas, ideaDir } from '../ideas/store';
 import type { Idea } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { triageTask, type Triage, type TriageInput } from '../ai/tasks';
+import { understandTask, type Understanding, type TriageInput } from '../ai/tasks';
+import { rebuildGraph } from '../graph/store';
 import type { Connector } from '../ai/connector';
 import { parseDrop } from './parse';
 import { screenDrop, knownParticipants } from './screen';
@@ -28,7 +29,7 @@ export interface TriageRecord {
   /** A list export: no AI; Task 3 offers the import. */
   export?: true;
   /** The AI's checked output (facts only). */
-  ai?: Triage;
+  ai?: Understanding;
   provider?: string;
   /** No AI, or the AI failed or answered out of schema: the operator does it by hand. */
   needsHand?: true;
@@ -64,7 +65,7 @@ export async function openQuestionsOf(root: string, ideaId: string): Promise<str
 const stageOf = (i: Idea) => (i.closed ? `Closed (${i.closed.as})` : STAGE_NAMES[i.stage]);
 
 /** Combine the deterministic match with the AI's view. The AI may lower confidence, never raise it. */
-function combine(match: MatchResult, ai: Triage | undefined, byId: Map<string, Idea>, notes: string[]) {
+function combine(match: MatchResult, ai: Understanding | undefined, byId: Map<string, Idea>, notes: string[]) {
   let ideaId = match.ideaId ?? null;
   let confidence = match.confidence;
   const ids = [...match.candidates];
@@ -164,12 +165,22 @@ export async function triageItem(
     } : {}),
     candidates: match.candidates.filter((c) => c !== idea?.id).map((c) => ({ id: c, title: byId.get(c)?.title ?? '' })),
   };
+  // What the universe already holds (the matched idea's own stars first) and what the team already answered.
+  if (connector) {
+    const g = await rebuildGraph(root).catch(() => ({ nodes: [], edges: [] }));
+    const near = new Set<string>();
+    if (idea) for (const e of g.edges) { if (e.from === idea.id) near.add(e.to); else if (e.to === idea.id) near.add(e.from); }
+    const stars = g.nodes.filter((n) => n.type !== 'Idea' && n.type !== 'Person');
+    input.knownStars = [...stars.filter((n) => near.has(n.id)), ...stars.filter((n) => !near.has(n.id))]
+      .slice(0, 60).map((n) => ({ type: n.type, label: n.label.slice(0, 60) }));
+    input.teamAnswers = ((idea as (Idea & { answers?: { question: string; answer: string }[] }) | undefined)?.answers ?? []).slice(0, 12);
+  }
 
-  let ai: Triage | undefined; let provider: string | undefined; let aiError: string | undefined;
+  let ai: Understanding | undefined; let provider: string | undefined; let aiError: string | undefined;
   const status = connector ? await connector.status().catch(() => ({ provider: null })) : { provider: null };
   if (connector && status.provider) {
     try {
-      const out = await connector.runWith(triageTask, input);
+      const out = await connector.runWith(understandTask, input);
       ai = out.output; provider = out.label;
     } catch (e) {
       aiError = (e as Error).message || 'The AI call failed';

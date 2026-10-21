@@ -26,12 +26,7 @@ const REVIEW = {
 };
 
 /** Fits tests/fixtures/inbox/reply.eml: Person 2 answering the two E2 questions on CAFE-2026-001. */
-const TRIAGE = {
-  summary: 'Person 2 answers our two questions about the email scheduler: about 40 requests a week, triaged by hand.',
-  kind: 'reply',
-  ideaId: 'CAFE-2026-001',
-  matchConfidence: 0.95,
-  facts: {
+const REPLY_FACTS = {
     answers: [
       { question: 'How many requests a week?', answer: 'About 40 a week, mostly from the EMEA desk, peaking at month end.' },
       { question: 'Who does it today?', answer: 'Two people triage them by hand in a shared mailbox, about half a day each week.' },
@@ -44,8 +39,38 @@ const TRIAGE = {
       nodes: [{ type: 'PainPoint', label: 'Manual request triage' }, { type: 'System', label: 'Shared mailbox' }],
       links: [{ from: 'idea', to: 'Manual request triage', rel: 'REPLACES', description: 'Requests are triaged by hand today', confidence: 0.8 }],
     },
-  },
+  };
+const UNDERSTAND_REPLY = {
+  what: 'A reply from the team answering our two questions about the email scheduler',
+  understood: ['About 40 requests a week, mostly from one desk, peaking at month end', 'Two people triage them by hand in a shared mailbox today'],
+  kind: 'reply', ideaId: 'CAFE-2026-001', matchConfidence: 0.95, facts: REPLY_FACTS,
+  uncertain: ['Whether the month-end peak needs a different flow'],
 };
+const UNDERSTAND_CONFLICT = {
+  what: 'A reply naming a different builder and describing slot finding',
+  understood: ['The team wants a different person to build it', 'Finding a free slot across time zones is the hard part'],
+  kind: 'reply', ideaId: 'CAFE-2026-001', matchConfidence: 0.9,
+  facts: {
+    answers: [], replyReceived: true, builderNamed: 'Person 9', newFlags: [], stageHint: null,
+    graph: { nodes: [{ type: 'Capability', label: 'Slot findings' }], links: [{ from: 'idea', to: 'Slot findings', rel: 'NEEDS', description: 'Needs to find a slot', confidence: 0.85 }] },
+  },
+  uncertain: [],
+};
+const UNDERSTAND_TRANSCRIPT = {
+  what: 'A session transcript: the team attended and walked through the current process',
+  understood: ['The team attended the session', 'Requests are re-keyed into a tracker by hand'],
+  kind: 'transcript', ideaId: 'CAFE-2026-001', matchConfidence: 0.8,
+  facts: {
+    answers: [], replyReceived: false, builderNamed: null, attendanceConfirmed: true, newFlags: [], stageHint: null,
+    graph: { nodes: [{ type: 'PainPoint', label: 'Re-keying into a tracker' }], links: [{ from: 'idea', to: 'Re-keying into a tracker', rel: 'REPLACES', description: 'Removes the re-keying', confidence: 0.75 }] },
+  },
+  uncertain: [],
+};
+function understandFor(prompt: string) {
+  if (/second builder/i.test(prompt)) return UNDERSTAND_CONFLICT;
+  if (/"type":"transcript"|-->/.test(prompt)) return UNDERSTAND_TRANSCRIPT;
+  return UNDERSTAND_REPLY;
+}
 
 /** Three tool picks for any idea, one of them a custom app (a CSIC flag). */
 /** One pick with the context it rests on; when the data carries no challenge text and no team answers yet, the questions instead. */
@@ -136,7 +161,7 @@ export function fakeProvider(): Provider {
       if (!enabled()) throw new Error('The fake AI is off');
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
-      if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
+      if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));

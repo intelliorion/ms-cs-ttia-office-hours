@@ -13,7 +13,7 @@ import { cafeCheck, valueWordsIn } from '../src/design/cafecheck';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
-import { designPlanTask, type DesignPlanOutput, type Triage } from '../src/ai/tasks';
+import { designPlanTask, type DesignPlanOutput, type Understanding } from '../src/ai/tasks';
 import { APPROVED_TOOLS } from '../src/graph/ontology';
 import { processDrop, applyRecords } from '../src/inbox/flow';
 import { fixedClock } from '../src/clock';
@@ -275,8 +275,8 @@ describe('Task 3 carry-overs', () => {
     const { emailKey } = await askTeam(root, idea, 1, clock);
     const file = path.join(root, ...emailKey.split('/'));
     await writeFile(file, (await readFile(file, 'utf8')).replace('status: draft', 'status: sent\nsentAt: 2026-10-20'));
-    const triage: Triage = {
-      summary: 'Person 2 answers something else.', kind: 'reply', ideaId: ID, matchConfidence: 0.95,
+    const triage: Understanding = {
+      what: 'Person 2 answers something else.', understood: ['Person 2 answers something else.'], uncertain: [], kind: 'reply', ideaId: ID, matchConfidence: 0.95,
       facts: { answers: [{ question: 'Which office handles the most requests?', answer: 'The EMEA desk.' }], replyReceived: true, graph: { nodes: [], links: [] } },
     };
     const provider: Provider = { id: 'claude', label: 'Test AI', available: async () => true, complete: async () => JSON.stringify(triage) };

@@ -15,11 +15,13 @@ panels, large white titles and pill buttons at the bottom.
 
 - **The universe (centre).** The knowledge graph as a 3D star map. Each idea is a star; teams, people,
   pain points, capabilities, tools and systems orbit the ideas they relate to. Click a star to fly to it and
-  see its card; hover to light up its links. Links below 0.7 confidence are dashed and marked unconfirmed.
+  see its card; hover to light up its links. A dashed link is one the AI found that waits on you (see the graph rule
+  below); every other link is solid.
   If the browser has no WebGL it falls back to a flat 2D map.
 - **Left: ideas.** The list of ideas, with a coloured ring for the stage. Click one and the universe flies to
   its star (its links lit, the rest dimmed) while the left panel switches to that idea's details, in one column:
-  any suggested move (Yes/No), Review, Stage, Emails, Graph links (Confirm/Remove, Grow the universe), Details
+  any suggested move (Yes/No), Review, Stage, Emails, Graph links (Remove, Grow the universe; **Add it anyway** only on
+  a link a conflict rule held), Details
   and History. **← Back** (or Esc) returns to the list where you left it (same search, filters and scroll); the
   star stays selected. Opening an idea turns Focus off so the panel shows.
 - **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
@@ -108,8 +110,8 @@ npm run dev:ui                                        # the UI with hot reload; 
 4. **Review** (in the idea's details, left panel): tick the five criteria, pick a decision, give a reason. Saving drafts
    the decision email and suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
-   once you close it as CSIC. Links the idea has in the universe are listed here too, with Confirm and
-   Remove.
+   once you close it as CSIC. Links the idea has in the universe are listed here too: any AI link can be
+   removed, and a link a conflict rule held says "Waiting on you" with **Add it anyway**.
 5. **Emails** (in the idea's details) and **Outbox** (pop-out): approve and copy, send from Outlook, mark as
    sent. E2 starts a five-day reply clock; use "Reply received" on the idea when they answer. Marking E3,
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
@@ -129,7 +131,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 - Word files: `.docx`.
 - Notes and pasted text.
 - Dropping a file anywhere on the Inbox pop-out works, not only on the dashed zone.
-- Want something to try? `test-data/` holds 12 synthetic files (exports, emails, a transcript, a Word file, a held tracker, a PDF) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
+- Want something to try? `test-data/` holds synthetic files (exports, emails, a transcript, a Word file, a held tracker, a PDF, and a reply that clashes with what the app holds) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
 
 **What is held.** PDFs and images show "can't read this yet". Lists of people (for example a tracker with
 names, phone numbers or employee ids) are held too. A held file moves to `inbox/held/`, is not read any
@@ -144,29 +146,65 @@ instead of names.
 - The title only in the body is unsure (0.6), so the app asks "Which idea?" and you pick.
 - Anything below 0.7 asks. The AI can lower a confidence, and so make the app ask, but it never raises one.
 
-**What you see for each item.** Three groups:
+**What happens to each file: eight steps.** Every drop runs the same eight steps, and the Inbox shows them as
+dots on the file's card while it runs (a pulsing dot is the step in progress). Each step is recorded with what it
+found, so you can look back later.
 
-- **Applied**: safe changes the app already made, each with an **Undo**.
-- **Needs your OK**: changes that wait for a Yes. You can apply them one at a time, tick some, or apply all.
-- **Held**: described above.
+| Step | What it does |
+|---|---|
+| Receive | Stores the file. The same file twice is noticed here and nothing else runs. |
+| Read | Reads the text out of the email, transcript, Word file, note or export. |
+| Screen | Checks for lists of people and files it can't read. A hit stops here and the file is held. |
+| Match | Works out which idea it belongs to (see above). If it can't tell, it asks "Which idea?". |
+| Understand | Asks the AI what the file says: answers, a builder, attendance, flags, stars and links. Exports skip it. |
+| Update context | Files it against the idea and saves what is safe: answers, reply received, attendance, flags. |
+| Build the graph | Adds the AI's stars and links to the universe. |
+| Check | Done, or says how many things wait on you and why. |
+
+Each dot is lit when done, a dashed ring when skipped (for example an export skips Understand), an empty ring when
+not reached yet, amber when it needs you, and red when it failed. A failed step stops the run, says "do it by hand", and nothing is half-applied; **Run again**
+on the card repeats steps 4 to 8, and what was already applied stays applied and is not done twice.
+
+**The graph rule.** What the AI finds goes into the universe at once, confirmed, new stars included; there is no
+Confirm step. The only links that wait are the ones a conflict rule below holds. You can remove any AI link later
+from the idea's details. A held link from **Grow the universe** shows dashed, with "Waiting on you" and **Add it
+anyway**; a held link from the Inbox waits on the file's card instead.
+
+**What waits for you: the conflict rules.** Code, not the AI, decides. Only the item that clashes waits; the rest
+of the same file is applied.
+
+| Rule | When it holds something | Your choices |
+|---|---|---|
+| Contradiction | The file names a different builder from the one the idea has, or points the idea at an earlier stage or at closing it | Keep the form's value / Take the file's value |
+| Looks the same | A new star looks like one already in the universe ("Slot findings" next to "Slot finding") | Use the existing star / Keep both / No |
+| A person | A new star is a person. People come from the form only, never from text | Yes / No |
+| Not sure | The AI was less than 50% sure of a link | Yes / No |
+| Two ideas | The file could belong to two ideas and the AI picked a different one from the match | Yes / No |
+| Duplicate idea | A new idea has the same title as one you have | Yes / No |
+| Screened | The screen flagged something but still let the file through | Yes / No |
+
+**Needs you.** A held item shows under **Needs you** on the file's card, with the rule, the reason in one line, the
+star it looks like (when there is one) and the choices above. Saying no keeps a note on the file ("Dropped by you")
+and changes nothing. Some changes are never held but still wait for an OK on their own, such as a builder named for
+the first time or an answer to a question we didn't send; they sit under **Needs your OK** with **Apply**. What
+was applied sits under **Applied**, each with **Undo**.
+
+**History.** Below the cards in flight, the Inbox keeps every file it has seen, newest first, grouped by day.
+The chips filter it: **All**, **Needs you**, **Held**, **Done**, **Failed**, **Dismissed**, and the search box finds
+a file by its name, its idea's ID or the idea's title. Click a row to open its card again.
 
 If the AI can't be reached, the item says "Working by hand", explains why, and nothing is applied on its
 own. You can still choose the idea and apply changes yourself.
 
-**What the AI may propose and what code decides.** The AI can only report facts: a short summary, which
-idea it looks like, answers to the Café questions, flags, names and links. It cannot run anything. The code
-decides what is safe, what needs your OK and what is held, and it writes every file itself. The AI's word
-alone is never enough for a safe change: an answer is saved on its own only when it answers a question we
-sent in the E2; a reply is marked received only when an E2 or E2R was sent; attendance is logged only when
-the E3 invitation was sent. Anything else waits for your Yes (for example "question not one we sent").
-An email from you (the name in Settings) is filed as sent and nothing else is proposed from it; anything else is filed as received.
-
-**What goes in the universe**
-
-- A link between stars you already have, at 0.7 or more, is applied (and can be undone).
-- A link below 0.7 comes in dashed and unconfirmed.
-- A new star, or a change to a person's role, always waits for your Yes.
-- People who are only in an email's To or Cc line never become stars.
+**What the AI may propose and what code decides.** The AI can only report facts: what the file is, what it
+understood and what it is not sure about, which idea it looks like, answers to the Café questions, flags, names
+and links. It cannot run anything. The code decides what is safe, what needs your OK and what is held, and it
+writes every file itself. The AI's word alone is never enough for a safe change: an answer is saved on its own
+only when it answers a question we sent in the E2; a reply is marked received only when an E2 or E2R was sent;
+attendance is logged only when the E3 invitation was sent. Anything else waits for your Yes (for example
+"question not one we sent"). An email from you (the name in Settings) is filed as sent and nothing else is
+proposed from it; anything else is filed as received. People who are only in an email's To or Cc line never
+become stars.
 
 **Undo.** Each applied change records how to put it back, and Undo replays that, field by field. For the
 stage, the builder, ticks, links in the universe and ideas an import created, Undo first checks whether
@@ -175,14 +213,15 @@ import created, Undo keeps that idea and says so ("CAFE-2026-002 has changed sin
 instead"). Filed copies, flags and saved answers are removed as they were recorded. If nothing could be
 undone, it says why.
 
-**Duplicates.** Dropping the same file again shows "Already dropped on <date>" and does nothing a second
-time. If the first drop was never sorted (the app stopped part way), dropping it again sorts it now.
+**Duplicates.** Dropping the same file again records one step, Receive ("Same file as …"), and does nothing a
+second time. If the first drop was never sorted (the app stopped part way), dropping it again sorts it now.
 
 **File names and size.** Any file name works, accents and dashes included. Files over 20 MB are refused
 before they are sent.
 
-**Tests.** `CAFE_AI_FAKE=1` also makes the fake provider answer `TASK: triage` with fixed facts, so the
-Inbox can be tested without a real AI. See Test hook below.
+**Tests.** `CAFE_AI_FAKE=1` also makes the fake provider answer `TASK: understand` with fixed facts (a reply, a
+transcript, or, for text that mentions "a second builder", a reply that clashes), so the Inbox can be tested without
+a real AI. See Test hook below.
 
 New folders in the workspace:
 
@@ -235,11 +274,11 @@ The VS Code helper is a small extension in `vscode-helper/`; see
   leave the app, each capped in length. No names, email addresses or ids.
 - The answer is **checked against a schema** before anything is used. Anything else is thrown away and the
   app says it is working by hand.
-- **High-confidence links between stars you already have are added at once; anything that would add a new
-  star waits for your Yes; you can remove any AI link from the idea's details.** A link below 0.7 comes in as
-  pending (dashed, unconfirmed) until you confirm it. **New stars always need a Yes**, whatever the AI's
-  confidence. After "Grow the universe" the app says how many links were added and how many wait for you.
-  A link you removed is not proposed again.
+- **What the AI finds is added at once, confirmed, new stars included; only a link a conflict rule holds waits
+  for you; you can remove any AI link from the idea's details.** The rules are in the Inbox section above (a star
+  that looks like one you have, a person, a link the AI was less than 50% sure of). A held link shows dashed with
+  "Waiting on you" and **Add it anyway**. After "Grow the universe" the app says how many links were added and how
+  many wait for you. A link you removed is not proposed again.
 - If `graph/ai-links.jsonl` has a line the app cannot read, that line is skipped (and kept in the file), the
   rest of the universe still shows, and `GET /api/graph` lists it under `problems`. A broken
   `graph/layout.json` is only a cache: the app lays the universe out afresh.
@@ -249,7 +288,8 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 
 `CAFE_AI_FAKE=1 npm run cafe -- start ...` adds a fake provider that returns fixed answers. It exists only
 for the screenshot tour and tests. It cannot be picked in the chip, and only the exact value `1` turns it on.
-Do not set it for real rounds.
+Do not set it for real rounds. `CAFE_AI_FAKE_DELAY=<ms>` (with the fake only) makes every fake answer wait that long
+first, so the tour can catch a step while it runs.
 
 ## What the idea panel shows, by stage
 
@@ -343,13 +383,17 @@ node scripts/ui-tour.mjs --workspace /tmp/cafe-tour-ws --out /tmp/cafe-tour-shot
 
 **Acceptance run of the Inbox.** `npm run acceptance` drops the whole `test-data/` kit (01 to 12) through the API on its own
 server (a free port, never 4100) and a fresh workspace, sends an E2 for CAFE-2026-002 first, then applies one Needs-OK
-action, undoes one Safe one and confirms one link, and prints file → expected → actual → PASS/FAIL (non-zero exit on a
+action, undoes one Safe one and checks that no AI link waits in the universe, and prints file → expected → actual → PASS/FAIL (non-zero exit on a
 FAIL). It runs with `--fake`: a scripted, deterministic triage (which obeys the injection in 05, to show the code holds
 it). `npx tsx scripts/acceptance.mjs --real-ai` uses this machine's AI instead (about 8 calls, a few minutes) and checks
 tiers and kinds, not wording. Add `--workspace DIR` to choose the scratch folder. With `--fake` it then runs a design
 pass on CAFE-2026-005: suggest and save the tool picks (approach.md, the links in the universe), three brainstorm
 questions with the second answered "I don't know" (an E2 draft with that question), finish and approve (s3f ticked, the
-CSIC suggestion for the custom app), and write the plan (plan.md and the custom app kit).
+CSIC suggestion for the custom app), and write the plan (plan.md and the custom app kit). Last, an agentic pass on a second
+fresh workspace (`<workspace>-agentic`): 02 runs all eight steps to "Done" with its AI links confirmed; 13 (the
+conflicting reply) holds the second builder and the "Slot findings" star (a "Slot finding" star is seeded first) and is
+then settled; 08 builds one pain-point star; 07 is only filed; 11 stops at the screen; and 02 dropped again records
+only Receive.
 
 **Scale test of the universe.** `npm run scale -- --out /tmp/cafe-scale` generates a 60-idea export and 150 synthetic
 AI links (`--links 300` for about 300 stars), imports them into a fresh workspace, times `GET /api/graph`, and in
@@ -358,8 +402,9 @@ the fly-to lands, and saves `scale-universe.png` and `scale-report.json`. Nothin
 
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so
-a full tour takes several minutes. `--only=panels|hover|panel|popouts2|ai|inbox|inboxhand|drawers|focus|ideacard|empty` runs one part (`panel`, also `popout`, clicks a list item and checks the idea opens in the left panel with no dialog, Back, and the star card's Open idea); `--only=ai` and `--only=inbox`
-need `CAFE_AI_FAKE=1`; `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
+a full tour takes several minutes. `--only=panels|hover|panel|popouts2|ai|inbox|inboxhand|agentic|drawers|focus|ideacard|empty` runs one part (`panel`, also `popout`, clicks a list item and checks the idea opens in the left panel with no dialog, Back, and the star card's Open idea); `--only=ai`, `--only=inbox` and `--only=agentic`
+need `CAFE_AI_FAKE=1` (`agentic` also needs `npm run test-data`: it drops 02 and 13 from the kit with the fake slowed to
+2.5 s, and saves 60 to 64: the drop well, a card running, Needs you, the history, and the idea's links); `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
 
 ## Before the first round
 

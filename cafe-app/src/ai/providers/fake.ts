@@ -159,6 +159,9 @@ export function fakeProvider(): Provider {
     available: async () => enabled(),
     async complete(prompt) {
       if (!enabled()) throw new Error('The fake AI is off');
+      // The tour's hook: CAFE_AI_FAKE_DELAY=<ms> makes every answer slow enough to see a step running.
+      const delay = Number(process.env.CAFE_AI_FAKE_DELAY);
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));

@@ -14,6 +14,8 @@
 // --real-ai: asserts tiers and kinds, never AI wording; 120 s per drop.
 // After the drop-through, --fake also runs a design pass on one idea: tool picker (one pick) → three brainstorm steps
 // (the second answered "I don't know", which drafts an E2) → approve → plan.md and the starter kits.
+// Then, --fake only, an agentic pass on a second fresh workspace (<workspace>-agentic): the eight recorded steps,
+// AI links confirmed on arrival, the conflicting reply (13) held under Needs you and resolved, the screen hold, a duplicate.
 // Run it with tsx (npm run acceptance), since it imports the app's TypeScript.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -41,6 +43,9 @@ if (REAL) delete process.env.CAFE_AI_FAKE; else process.env.CAFE_AI_FAKE = '1';
 const calls = { n: 0, tasks: [] };
 const counted = (p) => ({ ...p, async complete(prompt, opts) { calls.n++; calls.tasks.push(prompt.slice(6, prompt.indexOf('\n'))); return p.complete(prompt, opts); } });
 
+/** Set during agenticPass: the stand-in also answers the conflicting reply and brings graph facts. */
+let AGENTIC = false;
+
 /** Deterministic triage from the DATA block only (see the header). */
 function scriptedTriage(prompt) {
   const data = JSON.parse(prompt.slice(prompt.indexOf('<<<DATA') + 7, prompt.indexOf('DATA>>>')));
@@ -60,6 +65,43 @@ function scriptedTriage(prompt) {
       { from: 'idea', to: 'Desk availability lookup', rel: 'NEEDS', description: 'Shows which desks are free', confidence: 0.9 },
       { from: 'Desk availability lookup', to: 'Service Catalogue', rel: 'USES_DATA', description: 'Reads the desk inventory', confidence: 0.6 },
     );
+  }
+  if (AGENTIC) {
+    // The agentic pass: a "Builder: Name" line names a builder; the conflicting reply, the transcript and the
+    // answered reply each bring the graph facts a careful AI would (shapes as in the built-in fake).
+    const named = /^\s*Builder:\s*([A-Z][\p{L}'-]+ [A-Z][\p{L}'-]+)\s*$/mu.exec(text)?.[1];
+    if (/second builder/i.test(text)) {
+      return JSON.stringify({
+        what: 'A reply naming a different builder and describing slot finding',
+        understood: ['The team wants a different person to build it', 'Finding a free slot across time zones is the hard part'],
+        uncertain: [], kind: 'reply', ideaId, matchConfidence: 0.9,
+        facts: {
+          answers: [], replyReceived: true, builderNamed: /second builder now:\s*(.+?) will\b/i.exec(text)?.[1] ?? 'Person 9', newFlags: [], stageHint: null,
+          graph: { nodes: [{ type: 'Capability', label: 'Slot findings' }], links: [{ from: 'idea', to: 'Slot findings', rel: 'NEEDS', description: 'Needs to find a slot', confidence: 0.85 }] },
+        },
+      });
+    }
+    graph.nodes = []; graph.links = [];
+    if (item.type === 'transcript') {
+      graph.nodes.push({ type: 'PainPoint', label: 'Desks checked by hand in a spreadsheet' });
+      graph.links.push({ from: 'idea', to: 'Desks checked by hand in a spreadsheet', rel: 'REPLACES', description: 'Removes the hand check of free desks', confidence: 0.75 });
+    } else if (answers.length && /shared spreadsheet/i.test(text)) {
+      graph.nodes.push({ type: 'PainPoint', label: 'Emailing the floor team for desks' });
+      graph.links.push({ from: 'idea', to: 'Emailing the floor team for desks', rel: 'REPLACES', description: 'People email the floor team to find a free desk', confidence: 0.8 });
+    }
+    return JSON.stringify({
+      what: `${item.type} about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160),
+      understood: [`The ${item.type} is about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160)],
+      uncertain: [], kind: item.type === 'transcript' ? 'transcript' : answers.length ? 'reply' : 'update',
+      ideaId, matchConfidence: idea ? 0.95 : 0.5,
+      facts: {
+        ...(ours ? {} : { answers }),
+        replyReceived: !ours && answers.length > 0 && idea?.waitingReply === true,
+        builderNamed: ours ? null : named ?? builder,
+        ...(item.type === 'transcript' ? { attendanceConfirmed: true } : {}),
+        newFlags: [], stageHint: null, graph,
+      },
+    });
   }
   return JSON.stringify({
     what: `${item.type} about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160),
@@ -100,11 +142,12 @@ async function api(method, url, body, headers = {}) {
     return json;
   } finally { clearTimeout(timer); }
 }
-const drop = async (name) => {
+const dropBytes = async (name, bytes) => {
   const before = calls.n; const t0 = Date.now();
-  const out = await api('POST', '/api/inbox/drop', new Uint8Array(await fs.readFile(path.join(KIT, name))), { 'x-filename': encodeURIComponent(name) });
+  const out = await api('POST', '/api/inbox/drop', bytes, { 'x-filename': encodeURIComponent(name) });
   return { ...out, aiCalls: calls.n - before, ms: Date.now() - t0 };
 };
+const drop = async (name) => dropBytes(name, new Uint8Array(await fs.readFile(path.join(KIT, name))));
 const state = () => api('GET', '/api/state');
 const ideaOf = async (id) => (await state()).ideas.find((i) => i.id === id);
 const graph = () => api('GET', '/api/graph');
@@ -123,26 +166,36 @@ const show = (item) => {
 const only = (item, kinds) => acts(item).every((r) => kinds.includes(r.action.t));
 const safeApplied = (item, t) => acts(item).some((r) => r.action.t === t && r.kind === 'safe' && r.status === 'applied');
 
+/** The app on a free port (never 4100), in this process, on `ws`; sets `base`. */
+async function startServer(ws, clock) {
+  const providers = (REAL ? defaultProviders() : [scriptedFake()]).map(counted);
+  const connector = createConnector({ providers, settings: () => loadSettings(ws) });
+  const server = createApp({ root: ws, clock, connector });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  if (port === 4100) throw new Error('Never port 4100');
+  base = `http://localhost:${port}`;
+  return server;
+}
+const stopServer = async (server) => { server.closeAllConnections?.(); await new Promise((r) => server.close(r)); };
+
 async function main() {
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   const clock = fixedClock('2026-10-20');
   await initWorkspace(workspace, clock);
-  const providers = (REAL ? defaultProviders() : [scriptedFake()]).map(counted);
-  const connector = createConnector({ providers, settings: () => loadSettings(workspace) });
-  const server = createApp({ root: workspace, clock, connector });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const port = server.address().port;
-  if (port === 4100) throw new Error('Never port 4100');
-  base = `http://localhost:${port}`;
+  const server = await startServer(workspace, clock);
   console.log(`Acceptance (${REAL ? 'real AI' : 'fake'}) on ${base}, workspace ${workspace}`);
   try {
     await run();
   } catch (e) {
     check('(run)', 'no crash', String(e.stack ?? e).slice(0, 300), false);
   } finally {
-    server.closeAllConnections?.();
-    await new Promise((r) => server.close(r));
+    await stopServer(server);
+  }
+  // The agentic pass asserts the scripted replies, so it runs with --fake only, on its own fresh workspace.
+  if (!REAL) {
+    try { await agenticPass(clock); } catch (e) { check('(agentic run)', 'no crash', String(e.stack ?? e).slice(0, 300), false); }
   }
   print();
 }
@@ -287,10 +340,11 @@ async function run() {
     check('(undo Safe)', 'Undo 02 answers: answers removed', `${st}; answers ${n0}→${n1}`, st === 'undone' && n1 === n0 - ans.action.answers.length);
   }
 
-  // Confirm one unconfirmed link in the universe.
+  // The graph rule: AI links arrive confirmed, so nothing waits in the universe; if anything does, it can be added.
   const g = await graph();
   const pending = g.edges.find((e) => !e.confirmed);
-  if (!pending) check('(confirm link)', 'one unconfirmed link confirmed', 'no unconfirmed link in the universe', false);
+  const aiEdges = g.edges.filter((e) => String(e.source ?? '').startsWith('ai'));
+  if (!pending) check('(graph rule)', 'AI links confirmed on arrival; none waiting', `${aiEdges.length} AI links, unconfirmed ${g.unconfirmed ?? 0}`, aiEdges.length > 0 && !(g.unconfirmed ?? 0));
   else {
     await api('POST', '/api/graph/confirm', { edgeId: pending.id });
     const g2 = await graph();
@@ -366,6 +420,119 @@ async function designPass() {
     `${plan.files.length} files, plan.md ${!!planMd}, agent kit ${!!agent}, Not picked ${planMd.includes('### Not picked')}`,
     plan.files.includes('plan.md') && plan.files.includes('kit/custom-app/BUILD-WITH-AGENT.md') && !!planMd && /```text\n/.test(agent)
       && planMd.includes('## Café check') && !planMd.includes('### Not picked'));
+}
+
+/* ---------- agentic Inbox: eight steps, conflicts held, history (--fake) ---------- */
+
+async function agenticPass(clock) {
+  const ws = `${workspace}-agentic`;
+  await fs.rm(ws, { recursive: true, force: true });
+  await fs.mkdir(ws, { recursive: true });
+  await initWorkspace(ws, clock);
+  AGENTIC = true;
+  const server = await startServer(ws, clock);
+  console.log(`Agentic pass on ${base}, workspace ${ws}`);
+  const A = (name) => `(agentic) ${name}`;
+  const stepsOf = (item) => Object.fromEntries((item.steps ?? []).map((s) => [s.id, s]));
+  const stepLine = (item) => (item.steps ?? []).map((s) => `${s.id}:${s.status}`).join(' ');
+  try {
+    await api('POST', '/api/round', { reviewBy: '2026-11-13', deadline: '2026-10-30' });
+    await api('POST', '/api/settings', { operatorName: 'Café operator', formLink: 'https://forms.example.com/cafe' });
+    await drop('01-submissions.xlsx');
+    // The E2 the kit's reply answers, as in the main pass.
+    const e2 = await api('POST', '/api/ideas/CAFE-2026-002/draft', { template: 'E2' });
+    await api('POST', '/api/outbox/update', { key: e2.key, body: e2.body
+      .replace(/\[QUESTION 1[^\]]*\]/, 'Who would use it day to day: which team or role?')
+      .replace(/\[QUESTION 2[^\]]*\]/, 'What does it replace today?')
+      .replace(/\[QUESTION 3[^\]]*\]/, 'Who in your team would build the proof of concept?') });
+    await api('POST', '/api/outbox/approve', { key: e2.key });
+    await api('POST', '/api/outbox/sent', { key: e2.key });
+    // Builders the operator already OK'd: a note per idea, its "Name … as the builder" applied by hand.
+    for (const [id, name] of [['CAFE-2026-002', 'Rhys Llewellyn'], ['CAFE-2026-001', 'Avery Chen']]) {
+      const d = await dropBytes(`${id}-builder.txt`, new TextEncoder().encode(`${id}\n\nBuilder: ${name}\n`));
+      const r = acts(d.item).find((x) => x.action.t === 'name_builder' && x.status === 'pending');
+      if (r) await api('POST', `/api/inbox/${d.item.id}/apply`, { actionIds: [r.id] });
+    }
+    const seeded = await Promise.all(['CAFE-2026-001', 'CAFE-2026-002'].map(async (id) => (await ideaOf(id)).people?.builder));
+    check(A('(seed builders)'), 'builders on 001 and 002, applied by the operator', seeded.join(', '), seeded[0] === 'Avery Chen' && seeded[1] === 'Rhys Llewellyn');
+
+    // 02: a clean reply, every step done, AI links confirmed.
+    let d = await drop('02-reply-with-id.eml');
+    let st = stepsOf(d.item);
+    const g2 = await graph();
+    const ai2 = g2.edges.filter((e) => String(e.source ?? '').startsWith('ai'));
+    check(A('02-reply-with-id.eml'), 'eight steps done, check "Done", every ai: link confirmed',
+      `${stepLine(d.item)} | check "${st.check?.detail}" | ai links ${ai2.filter((e) => e.confirmed).length}/${ai2.length} confirmed`,
+      (d.item.steps ?? []).length === 8 && (d.item.steps ?? []).every((s) => s.status === 'done') && st.check?.detail === 'Done'
+        && ai2.length > 0 && ai2.every((e) => e.confirmed));
+
+    // 13: the conflicting reply. Seed "Slot finding" (a tool pick on 001) so the near-duplicate rule has a twin.
+    await api('POST', '/api/ideas/CAFE-2026-001/tools', { features: [{ name: 'Slot finding', what: 'Finds a free review slot across time zones', tool: 'Power Apps', reason: 'A simple scheduling form', flags: [], context: [] }] });
+    const twin = (await graph()).nodes.find((n) => n.type === 'Capability' && /^slot finding$/i.test(n.label));
+    d = await drop('13-conflicting-reply.eml');
+    st = stepsOf(d.item);
+    const held = acts(d.item).filter((r) => r.status === 'pending' && r.held);
+    const rules = held.map((r) => r.held.rule).sort();
+    const filed = safeApplied(d.item, 'file_email');
+    if (twin) {
+      check(A('13-conflicting-reply.eml'), 'check needs-you; held: contradicts-fact + near-duplicate-star (twin "Slot finding" seeded); filed',
+        `check ${st.check?.status}; held ${rules.join(', ')}; existing ${held.find((r) => r.held.rule === 'near-duplicate-star')?.held.existing ?? '-'}; filed ${filed}`,
+        st.check?.status === 'needs-you' && rules.includes('contradicts-fact') && rules.includes('near-duplicate-star')
+          && held.find((r) => r.held.rule === 'near-duplicate-star')?.held.existing === twin.id && filed);
+    } else {
+      const star = (await graph()).nodes.find((n) => /^slot findings$/i.test(n.label));
+      check(A('13-conflicting-reply.eml'), 'check needs-you; held: contradicts-fact; no twin, so "Slot findings" added confirmed',
+        `check ${st.check?.status}; held ${rules.join(', ')}; new star ${!!star}`, st.check?.status === 'needs-you' && rules.includes('contradicts-fact') && !!star);
+    }
+    console.log(`  13: ${twin ? `near-duplicate asserted (twin ${twin.id})` : 'no twin: new star asserted'}`);
+    // Resolve both: keep the form's builder, put the link onto the existing star.
+    const nd = held.find((r) => r.held.rule === 'near-duplicate-star');
+    const cf = held.find((r) => r.held.rule === 'contradicts-fact');
+    if (nd && cf) {
+      await api('POST', `/api/inbox/${d.item.id}/dismiss-action`, { actionId: cf.id });
+      const out = await api('POST', `/api/inbox/${d.item.id}/apply`, { actionIds: [nd.id], resolve: { [nd.id]: 'use-existing' } });
+      const g13 = await graph();
+      // The tool pick already links 001 to the twin, so the AI link lands on that same (confirmed) edge.
+      const onTwin = g13.edges.find((e) => e.to === twin.id && e.from === 'idea:CAFE-2026-001' && e.rel === 'NEEDS');
+      const stored = (await fs.readFile(path.join(ws, 'graph', 'ai-links.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l))
+        .find((l) => l.to === twin.id && String(l.source).includes('13-conflicting-reply'));
+      check(A('13 resolved'), "keep the form's builder; link onto the existing star, confirmed; no new star",
+        `builder ${(await ideaOf('CAFE-2026-001')).people?.builder}; AI link ${stored?.status ?? 'none'}; edge ${onTwin ? (onTwin.confirmed ? 'confirmed' : 'waiting') : 'none'}; Slot findings star ${g13.nodes.some((n) => /^slot findings$/i.test(n.label))}; status ${out.item.status}`,
+        (await ideaOf('CAFE-2026-001')).people?.builder === 'Avery Chen' && onTwin?.confirmed === true && stored?.status === 'confirmed'
+          && !g13.nodes.some((n) => /^slot findings$/i.test(n.label)) && out.item.status === 'applied');
+    }
+
+    // 08: the transcript: one PainPoint star in the graph step; s3a ticked (E3 sent) or waiting for an OK (none sent).
+    d = await drop('08-transcript.vtt');
+    st = stepsOf(d.item);
+    const s3a = acts(d.item).find((r) => r.action.t === 'log_step' && r.action.step === 's3a');
+    const s3aState = s3a ? (s3a.kind === 'safe' && s3a.status === 'applied' ? 'ticked' : s3a.kind === 'ok' && s3a.status === 'pending' ? 'waits for an OK' : `${s3a.kind}/${s3a.status}`) : 'none';
+    const e3 = !!(await ideaOf('CAFE-2026-002')).sent?.E3;
+    check(A('08-transcript.vtt'), 'graph done with one new PainPoint star; s3a ticked if E3 sent, else waits for an OK',
+      `graph ${st.graph?.status} "${st.graph?.detail}"; s3a ${s3aState} (E3 ${e3 ? 'sent' : 'not sent'}); check ${st.check?.status}`,
+      st.graph?.status === 'done' && /1 new star \(PainPoint: /.test(st.graph.detail ?? '') && (e3 ? s3aState === 'ticked' : s3aState === 'waits for an OK'));
+
+    // 07: our own E3: understood, filed out, nothing else.
+    d = await drop('07-our-own-sent.eml');
+    st = stepsOf(d.item);
+    check(A('07-our-own-sent.eml'), 'understand done; context skipped or filing only',
+      `understand ${st.understand?.status}; context ${st.context?.status} "${st.context?.detail}"`,
+      st.understand?.status === 'done' && (st.context?.status === 'skipped' || st.context?.detail === 'Email filed') && only(d.item, ['file_email']));
+
+    // 11: held at the screen.
+    d = await drop('11-held-tracker.csv');
+    st = stepsOf(d.item);
+    check(A('11-held-tracker.csv'), 'screen needs-you, the rest skipped, held', `${stepLine(d.item)}; ${d.item.status}`,
+      st.screen?.status === 'needs-you' && d.item.status === 'held' && ['match', 'understand', 'context', 'graph', 'check'].every((k) => st[k]?.status === 'skipped'));
+
+    // 02 again: the same file: one receive step, nothing else.
+    d = await drop('02-reply-with-id.eml');
+    check(A('02 again'), 'duplicate: true, steps = [receive]', `duplicate ${!!d.duplicate}; ${stepLine(d.item)} "${d.item.steps?.[0]?.detail}"`,
+      d.duplicate === true && d.item.steps?.length === 1 && d.item.steps[0].id === 'receive');
+  } finally {
+    AGENTIC = false;
+    await stopServer(server);
+  }
 }
 
 function print() {

@@ -2,7 +2,7 @@
 // Screenshot tour of the Café page. Starts its own server on a scratch workspace,
 // imports sample ideas through the API, and saves screenshots. Never touches port 4100.
 //
-//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|drawers|empty|focus|ideacard|design|quality]  (ai, inbox and design need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
+//   node scripts/ui-tour.mjs --workspace <scratch dir> --out <shots dir> [--port 4103] [--extra extra.csv ...] [--only=panels|hover|popout(=panel)|popouts2|ai|inbox|inboxhand|agentic|drawers|empty|focus|ideacard|design|quality]  (ai, inbox, agentic and design need CAFE_AI_FAKE=1; inboxhand restarts the server without it;
 //   a full tour includes the AI shots when CAFE_AI_FAKE=1 is set)
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -258,7 +258,7 @@ async function aiShots(p) {
   await p.click('[data-testid="idea-details"] [data-action="back"]');
 }
 
-// The Inbox: a reply sorted by the fake AI (Applied + Needs your OK), a held list of people, and a note with no Café ID.
+// The Inbox: a reply sorted by the fake AI (everything Applied, nothing waiting), a held list of people, and a note with no Café ID.
 async function inboxShots(p) {
   const fx = path.join(APP, 'tests/fixtures/inbox');
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
@@ -274,7 +274,8 @@ async function inboxShots(p) {
   await fs.copyFile(path.join(fx, 'reply.eml'), named);
   await p.setInputFiles('[data-testid="inbox-file"]', named);
   await p.waitForSelector('.ib-item [data-group="applied"]', { timeout: 120000 });
-  await p.waitForSelector('.ib-item [data-group="ok"]');
+  // AI links apply on arrival now, so a clean reply has nothing left for an OK.
+  if (await p.locator('.ib-item [data-group="ok"]').count()) throw new Error('inbox: a clean reply still shows Needs your OK');
   await sleep(1200);
   await shot(p, '22-inbox-drop.png');
   const dropped = (await (await fetch(`${base}/api/inbox`)).json()).items.find((i) => i.type === 'email');
@@ -335,6 +336,63 @@ async function inboxHandShots(p, restart) {
   await shot(p, '26-inbox-undo-partial.png');
   await p.keyboard.press('Escape');
   await post('/api/ai/provider', { provider: 'auto' });
+}
+
+// The agentic Inbox with the fake AI slowed to 2.5 s an answer (CAFE_AI_FAKE_DELAY, so a running step can be seen):
+// the drop well, a card mid-run, the kit's conflicting reply held under Needs you (a "Slot finding" star is seeded
+// first, so "Slot findings" looks the same), the full history, then the idea's links after the held one is settled.
+async function agenticShots(p, restart) {
+  const assert = (ok, msg) => { if (!ok) throw new Error(`agentic: ${msg}`); };
+  const kit = path.join(APP, 'test-data');
+  for (const f of ['02-reply-with-id.eml', '13-conflicting-reply.eml']) {
+    await fs.access(path.join(kit, f)).catch(() => { throw new Error(`agentic: test-data/${f} is missing; run npm run test-data first`); });
+  }
+  await restart({ CAFE_AI_FAKE_DELAY: '2500' });
+  await post('/api/ideas/CAFE-2026-001/tools', { features: [{ name: 'Slot finding', what: 'Finds a free review slot across time zones', tool: 'Power Apps', reason: 'A simple scheduling form', flags: [], context: [] }] });
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(2500);
+  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  await p.click('.titlebar [data-action="inbox"]');
+  await p.waitForSelector('[data-testid="inbox-drop"]');
+  await sleep(800);
+  await shot(p, '60-drop-well.png');
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(kit, '02-reply-with-id.eml'));
+  await p.waitForSelector('.ib-card .ib-step.st-run', { timeout: 20000 });
+  await sleep(300);
+  await shot(p, '61-card-running.png');
+  await p.waitForSelector('.ib-card .ib-step.st-run', { state: 'detached', timeout: 60000 });
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(kit, '13-conflicting-reply.eml'));
+  await p.waitForSelector('[data-testid="held"]', { timeout: 60000 });
+  await sleep(1200);
+  const rules = await p.locator('[data-testid="held"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-rule')));
+  console.log('  held:', rules.join(', '));
+  assert(rules.includes('near-duplicate-star'), 'the conflicting reply did not hold "Slot findings" as looking like "Slot finding"');
+  await p.locator('[data-testid="held"]').first().scrollIntoViewIfNeeded();
+  await shot(p, '62-needs-you.png');
+  await p.click('.ib-chips .chip[data-chip="all"]');
+  await sleep(500);
+  const rows = p.locator('.ib-history [data-row]');
+  assert((await rows.count()) >= 2, 'the history lists fewer than two files');
+  await rows.last().scrollIntoViewIfNeeded();
+  await sleep(500);
+  await shot(p, '63-history.png');
+  // Settle the held star with Keep both: the file's "Slot findings" star is added and its AI link applies confirmed.
+  // (The acceptance run checks the other choice, Use the existing star.)
+  await p.locator('[data-testid="held"][data-rule="near-duplicate-star"] [data-resolve="take-file"]').first().click();
+  await p.waitForSelector('[data-testid="held"][data-rule="near-duplicate-star"]', { state: 'detached', timeout: 30000 });
+  await p.keyboard.press('Escape');
+  const D = '[data-testid="idea-details"]';
+  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-001'));
+  await p.waitForSelector(D);
+  await sleep(3000);
+  await p.locator(`${D} [data-action="ai-grow"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await sleep(500);
+  const waiting = await p.locator(`${D} ul.links .tag:has-text("Waiting on you")`).count();
+  const aiRows = await p.locator(`${D} ul.links [data-action="remove-link"]`).count();
+  console.log(`  idea links: ${waiting} waiting on you, ${aiRows} AI links with Remove`);
+  await shot(p, '64-link-waiting.png');
+  await p.click(`${D} [data-action="back"]`);
 }
 
 // The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the brainstorm one question at a time
@@ -666,6 +724,14 @@ async function main() {
     }
     if (only === 'inbox') {
       await inboxShots(p);
+      await gl.close();
+      console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
+      process.exitCode = errors.length ? 1 : 0;
+      return;
+    }
+    if (only === 'agentic') {
+      if (process.env.CAFE_AI_FAKE !== '1') throw new Error('--only=agentic needs CAFE_AI_FAKE=1');
+      await agenticShots(p, restart);
       await gl.close();
       console.log(errors.length ? `Console errors:\n  ${errors.join('\n  ')}` : 'No console errors.');
       process.exitCode = errors.length ? 1 : 0;

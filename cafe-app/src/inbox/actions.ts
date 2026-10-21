@@ -83,6 +83,8 @@ export interface ActionRecord {
   inverse?: Inverse;
   /** Set when the conflict rules held this back: which rule and why, in plain English. */
   held?: { rule: string; why: string; existing?: string };
+  /** Set when the operator resolved a held record (e.g. onto an existing star): the action as it was proposed. */
+  resolvedFrom?: Action;
   /** What an import did (created, duplicates, errors, flags). */
   result?: unknown;
   error?: string;

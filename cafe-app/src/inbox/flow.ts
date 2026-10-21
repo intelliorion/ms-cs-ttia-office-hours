@@ -15,7 +15,7 @@ import { matchIdea, displayName, ASK_BELOW } from './match';
 import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, type Action, type ActionRecord } from './actions';
 import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus } from './steps';
 import { checkProposals, type ConflictContext } from './conflicts';
-import { appendHistory } from '../workspace/files';
+import { appendHistory, readHistory } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import { readDesign } from '../design/store';
 import { rebuildGraph } from '../graph/store';
@@ -121,7 +121,8 @@ export async function processItem(
   }
   const fail = async (after: StepId, msg: string) => {
     await skipRest(root, id, after, 'after a failure');
-    return updateItem(root, id, { status: 'triaged', problems: [...((await load(root, id)).problems ?? []), msg] });
+    const had = (await load(root, id)).problems ?? [];
+    return updateItem(root, id, { status: 'triaged', problems: had.includes(msg) ? had : [...had, msg] });
   };
 
   // 2 read, 3 screen (not recorded again on a re-run from match)
@@ -163,7 +164,8 @@ export async function processItem(
   if (tr.aiError) return fail('understand', `The AI couldn't help (${tr.aiError}), so do this one by hand`);
   if (tr.ask) {
     await markStep(root, id, { id: 'match', status: 'needs-you', detail: `Could be ${tr.candidates.slice(0, 2).map((c) => c.id).join(' or ') || 'any idea'}: pick one` });
-    await skipRest(root, id, 'match', 'waiting for your pick');
+    // The AI did run: understand keeps its record; only what follows waits for the pick.
+    await skipRest(root, id, 'understand', 'waiting for your pick');
   }
 
   // plan → conflicts → 6 context, 7 graph, 8 check
@@ -178,7 +180,8 @@ export async function processItem(
   const ctx = await conflictContext(root, triaged, tr, m, rs.screened.reasons);
   const { apply, hold } = checkProposals(ctx, plan.actions);
   const kept = recordsOf(triaged).filter((r) => r.status !== 'pending' && r.action.t !== 'ask_idea');
-  const seen = new Set(kept.map((r) => JSON.stringify(r.action)));
+  // Kept records (applied, undone, dropped by you) are not proposed again, nor is what a resolve rewrote.
+  const seen = new Set(kept.flatMap((r) => [JSON.stringify(r.action), ...(r.resolvedFrom ? [JSON.stringify(r.resolvedFrom)] : [])]));
   let n = kept.reduce((mx, r) => Math.max(mx, Number(r.id.slice(1)) || 0), 0);
   const needsHand = !!tr.needsHand;
   const fresh: ActionRecord[] = [
@@ -205,7 +208,11 @@ export async function processItem(
     detail: w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waiting[0].label}` : 'Done',
   });
   if (tr.ai?.understood?.length && tr.ideaId) {
-    await appendHistory(await ideaDir(root, tr.ideaId), { at: clock(), action: 'inbox', by: 'app', detail: `Understood: ${tr.ai.understood.join(' · ')}`, source: triaged.file });
+    // Once per file and understanding: a re-run that understood the same thing adds no second line.
+    const dir = await ideaDir(root, tr.ideaId);
+    const detail = `Understood: ${tr.ai.understood.join(' · ')}`;
+    const last = (await readHistory(dir)).filter((h) => h.source === triaged.file && String(h.detail ?? '').startsWith('Understood: ')).at(-1);
+    if (last?.detail !== detail) await appendHistory(dir, { at: clock(), action: 'inbox', by: 'app', detail, source: triaged.file });
   }
   return save(root, triaged, records);
 }
@@ -252,7 +259,8 @@ function resolved(r: ActionRecord, how: Resolve | undefined): ActionRecord {
     return { ...l, status: 'confirmed' as const };
   });
   const action = { ...r.action, links };
-  return { ...r, action, label: labelOf(action) };
+  // What was proposed stays on the record, so a re-run doesn't propose it again.
+  return { ...r, action, label: labelOf(action), resolvedFrom: r.resolvedFrom ?? r.action };
 }
 
 export async function applyRecords(

@@ -7,7 +7,8 @@ import { fakeProvider } from '../src/ai/providers/fake';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import { readAiLinks, appendAiLink } from '../src/graph/store';
-import { saveIdea, loadIdea } from '../src/ideas/store';
+import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
+import { readHistory } from '../src/workspace/files';
 
 const ID = 'CAFE-2026-001';
 const reply = `From: team@example.test\nSubject: Re: ${ID} Email scheduler\n\nAbout 40 a week. Two people triage by hand.\n`;
@@ -18,6 +19,8 @@ let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; vi.unstubAllEnvs(); });
 
 /** The brief's startServer(today, { ai }) adapted: the server takes a connector; the fake answers only with CAFE_AI_FAKE=1. */
+const emailsDir = async (root: string) => path.join(await ideaDir(root, ID), 'emails');
+
 async function start(provider: Provider = fakeProvider(), opts: { builder?: string } = {}) {
   vi.stubEnv('CAFE_AI_FAKE', '1');
   const s = await startServer('2026-10-21', { connector: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) });
@@ -65,6 +68,18 @@ describe('the pipeline', () => {
     expect(statuses(item).slice(4)).toEqual(['understand:failed', 'context:skipped', 'graph:skipped', 'check:skipped']);
     expect(item.steps[4].detail).toMatch(/rate limited/);
     expect(item.problems.join(' ')).toMatch(/by hand/);
+    expect(item.actions ?? []).toEqual([]);
+    expect((await readAiLinks(s.root)).links.filter((l) => l.source.includes(item.file))).toEqual([]);
+    expect(await readdir(await emailsDir(s.root))).toEqual(['001-E2.md']);
+  });
+  it('a drop that asks Which idea?: match needs you, understand keeps its record, the rest is skipped', async () => {
+    const s = await start();
+    // No Café ID and no title: only the AI names the idea, and its guess alone is never sure enough.
+    const { item } = await (await s.drop('thoughts.txt', 'Some thoughts about requests arriving by email.')).json();
+    expect(item.triage.ask).toBe(true);
+    expect(statuses(item).slice(3)).toEqual(['match:needs-you', 'understand:done', 'context:skipped', 'graph:skipped', 'check:skipped']);
+    expect(item.steps[4].ms).toBeGreaterThanOrEqual(0);
+    expect(item.steps[4].detail).not.toMatch(/waiting/);
   });
   it('held at the screen: steps stop at screen with needs-you', async () => {
     const s = await start();
@@ -105,6 +120,13 @@ describe('the pipeline', () => {
     const links = (await readAiLinks(s.root)).links.filter((l) => l.source.includes('reply2'));
     expect(links.some((l) => l.to === 'capability:slot-finding' && l.status === 'confirmed')).toBe(true);
     expect(links.some((l) => l.to === 'capability:slot-findings')).toBe(false);
+    // Run again (after saying no to the second builder): the resolved star is not proposed again.
+    const builder = item.actions.find((a: any) => a.held?.rule === 'contradicts-fact');
+    await s.post(`/api/inbox/${item.id}/dismiss-action`, { actionId: builder.id });
+    const again = await (await s.post(`/api/inbox/${item.id}/process`, {})).json();
+    expect(again.item.actions.filter((a: any) => a.status === 'pending')).toEqual([]);
+    expect(again.item.actions.filter((a: any) => a.held?.rule === 'near-duplicate-star')).toHaveLength(1);
+    expect(again.item.steps.at(-1)).toMatchObject({ id: 'check', status: 'done' });
   });
   it('apply refuses an unknown resolve', async () => {
     const s = await start(fakeProvider(), { builder: 'Person 3' });
@@ -121,5 +143,11 @@ describe('the pipeline', () => {
     const r = await (await s.post(`/api/inbox/${item.id}/dismiss-action`, { actionId: h.id })).json();
     expect(r.item.actions.find((a: any) => a.id === h.id)).toMatchObject({ status: 'undone', note: 'Dropped by you' });
     expect((await loadIdea(s.root, ID)).people).toMatchObject({ builder: 'Person 3' });
+    // Run again: what you dropped is not proposed again, and the history says it understood the file once.
+    const again = await (await s.post(`/api/inbox/${item.id}/process`, {})).json();
+    expect(again.item.actions.filter((a: any) => a.held?.rule === 'contradicts-fact')).toEqual([expect.objectContaining({ status: 'undone', note: 'Dropped by you' })]);
+    expect(again.item.steps.at(-1)).toMatchObject({ id: 'check', status: 'done' });
+    const understood = (await readHistory(await ideaDir(s.root, ID))).filter((h) => h.detail?.startsWith('Understood: '));
+    expect(understood).toHaveLength(1);
   });
 });

@@ -133,12 +133,15 @@ cafe-app/ui/src/panels/DesignSection.tsx
 cafe-app/ui/src/panels/IdeaDetails.tsx
 cafe-app/ui/src/panels/IdeasList.tsx
 cafe-app/ui/src/panels/IdeasPane.tsx
+cafe-app/ui/src/panels/StageSummaries.tsx
 cafe-app/ui/src/panels/ToolPickerSection.tsx
 cafe-app/ui/src/panels/designHelpers.test.ts
 cafe-app/ui/src/panels/designHelpers.ts
 cafe-app/ui/src/panels/designSections.test.tsx
 cafe-app/ui/src/panels/filterIdeas.ts
 cafe-app/ui/src/panels/ideasList.test.ts
+cafe-app/ui/src/panels/stageGate.test.ts
+cafe-app/ui/src/panels/stageGate.ts
 cafe-app/ui/src/panels/useChart.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
 cafe-app/ui/src/popouts/IdeaSections.tsx
@@ -186,8 +189,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-BjOxLp3G.js
-cafe-app/web/assets/index-Cn19CobF.css
+cafe-app/web/assets/index-BT4VhyqG.css
+cafe-app/web/assets/index-xVrL7v9t.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

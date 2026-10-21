@@ -31,7 +31,13 @@ export const LOW_CONFIDENCE = 0.5;
 export const NEAR_DUPLICATE = 0.8;
 const STOP = new Set(['the', 'a', 'an', 'of', 'for', 'to', 'in', 'on', 'and', 'or', 'by', 'with', 'into', 's']);
 
-const singular = (w: string) => (w.length > 3 && w.endsWith('es') && !w.endsWith('ses') ? w.slice(0, -2) : w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
+const singular = (w: string): string => {
+  if (w.length <= 3) return w;
+  if (w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (/(ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0, -2);
+  if (/(ss|us|is)$/.test(w)) return w;
+  return w.endsWith('s') ? w.slice(0, -1) : w;
+};
 
 export function normaliseLabel(s: string): string {
   return s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -42,7 +48,7 @@ export function wordOverlap(a: string, b: string): number {
   const x = new Set(normaliseLabel(a).split(' ').filter(Boolean)); const y = new Set(normaliseLabel(b).split(' ').filter(Boolean));
   if (!x.size || !y.size) return 0;
   let n = 0; for (const w of x) if (y.has(w)) n++;
-  return n / Math.min(x.size, y.size);
+  return n / Math.max(x.size, y.size);
 }
 
 export function isPersonLabel(label: string, ctx: ConflictContext): boolean {
@@ -70,7 +76,7 @@ function checkLink(l: AiLink, ctx: ConflictContext): Omit<Held, 'action'> | null
 
 function stageBack(idea: Idea, a: Extract<Action, { t: 'suggest_stage' }>): boolean {
   if (a.closeAs) return true;
-  return a.stage !== undefined && a.stage <= idea.stage;
+  return a.stage !== undefined && a.stage < idea.stage;
 }
 
 export function checkProposals(ctx: ConflictContext, actions: Action[]): { apply: Action[]; hold: Held[] } {

@@ -24,9 +24,16 @@ describe('normaliseLabel and wordOverlap', () => {
   it('lower-cases, strips punctuation and stop words, singularises', () => {
     expect(normaliseLabel('The Shared Mailboxes!')).toBe('shared mailbox');
     expect(normaliseLabel('Slot-finding')).toBe('slot finding');
+    expect(normaliseLabel('Slot templates')).toBe(normaliseLabel('Slot template'));
+    expect(normaliseLabel('Processes')).toBe(normaliseLabel('Process'));
+    expect(normaliseLabel('Queries')).toBe(normaliseLabel('Query'));
+    expect(normaliseLabel('Status')).toBe('status');
+    expect(normaliseLabel('Analysis')).toBe('analysis');
   });
   it('overlap is the share of words in common over the shorter label', () => {
-    expect(wordOverlap('Request intake form', 'Request intake')).toBe(1);
+    expect(wordOverlap('Request intake form', 'Request intake')).toBeCloseTo(2 / 3);
+    expect(wordOverlap('Approval', 'Approval workflow')).toBe(0.5);
+    expect(wordOverlap('Slot findings', 'Slot finding')).toBe(1);
     expect(wordOverlap('Manual request triage', 'Request sorting by hand')).toBeCloseTo(1 / 3);
   });
 });
@@ -73,8 +80,9 @@ describe('checkProposals', () => {
     const back: Action = { t: 'suggest_stage', ideaId: 'CAFE-2026-001', stage: 2 };
     const close: Action = { t: 'suggest_stage', ideaId: 'CAFE-2026-001', closeAs: 'csic' };
     const fwd: Action = { t: 'suggest_stage', ideaId: 'CAFE-2026-001', stage: 4 };
-    const r = checkProposals(c, [back, close, fwd]);
-    expect(r.apply).toEqual([fwd]);
+    const same: Action = { t: 'suggest_stage', ideaId: 'CAFE-2026-001', stage: 3 };
+    const r = checkProposals(c, [back, close, same, fwd]);
+    expect(r.apply).toEqual([same, fwd]);
     expect(r.hold.map((h) => h.rule)).toEqual(['contradicts-fact', 'contradicts-fact']);
   });
   it('two-ideas: holds everything but the filing when the match is split', () => {

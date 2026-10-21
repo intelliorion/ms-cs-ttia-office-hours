@@ -13,13 +13,13 @@ describe('chipText', () => {
 });
 
 describe('extractNotice', () => {
-  it('counts links and lists new stars', () => {
-    expect(extractNotice({ added: 3, unconfirmed: 1, suggestions: { newNodes: [{ label: 'A' }, { label: 'B' }] } }))
-      .toBe('Added 3 links, 1 to confirm. New stars to confirm: A, B.');
+  it('counts links added and the ones waiting on you', () => {
+    expect(extractNotice({ added: 3, held: [{}], suggestions: { newNodes: [{ label: 'A' }, { label: 'B' }] } }))
+      .toBe('3 links added to the universe, 1 waiting on you.');
   });
   it('handles one link and none', () => {
-    expect(extractNotice({ added: 1, unconfirmed: 0, suggestions: { newNodes: [] } })).toBe('Added 1 link, 0 to confirm.');
-    expect(extractNotice({ added: 0, unconfirmed: 0 })).toMatch(/nothing new/);
+    expect(extractNotice({ added: 1, held: [], suggestions: { newNodes: [] } })).toBe('1 link added to the universe.');
+    expect(extractNotice({ added: 0, held: [] })).toMatch(/nothing new/);
   });
 });
 

@@ -83,6 +83,15 @@ const link = (over: Partial<AiLink> = {}): AiLink => ({
   from: 'idea:CAFE-2026-001', to: 'capability:document-reading', rel: 'NEEDS', description: '', source: 'x', confidence: 0.8, status: 'pending', ...over,
 });
 
+describe('graph rule', () => {
+  it('graph_links is Safe even with new stars, and a held record carries its rule', () => {
+    const a: Action = { t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ to: 'capability:x', confidence: 0.9, status: 'confirmed', newNodes: [{ id: 'capability:x', type: 'Capability', label: 'X' }] })] };
+    expect(kindOf(a)).toBe('safe');
+    const rec: ActionRecord = { id: 'a1', action: a, kind: 'ok', status: 'pending', label: 'x', held: { rule: 'low-confidence', why: 'The AI was not sure (42%)' } };
+    expect(rec.held!.rule).toBe('low-confidence');
+  });
+});
+
 describe('kindOf: code decides the kind', () => {
   const table: [Action, 'safe' | 'ok'][] = [
     [{ t: 'file_email', ideaId: 'CAFE-2026-001', direction: 'in' }, 'safe'],
@@ -102,8 +111,8 @@ describe('kindOf: code decides the kind', () => {
     [{ t: 'ask_idea', candidates: [] }, 'ok'],
     [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link()] }, 'safe'],
     [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ confidence: 0.5 })] }, 'safe'],
-    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ newNodes: [{ id: 'capability:document-reading', type: 'Capability', label: 'Document reading' }] })] }, 'ok'],
-    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [] }, 'ok'],
+    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [link({ newNodes: [{ id: 'capability:document-reading', type: 'Capability', label: 'Document reading' }] })] }, 'safe'],
+    [{ t: 'graph_links', ideaId: 'CAFE-2026-001', links: [] }, 'safe'],
   ];
   it.each(table)('%j is %s', (action, kind) => { expect(kindOf(action)).toBe(kind); });
 
@@ -119,7 +128,7 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
     const kinds = Object.fromEntries((item.actions as ActionRecord[]).map((r) => [`${r.action.t}:${r.kind}`, r.status]));
     expect(kinds).toMatchObject({
       'file_email:safe': 'applied', 'reply_received:safe': 'applied', 'record_answers:safe': 'applied', 'log_step:safe': 'applied',
-      'graph_links:safe': 'applied', 'graph_links:ok': 'pending',
+      'graph_links:safe': 'applied',
       'name_builder:ok': 'pending', 'suggest_stage:ok': 'pending', 'add_flag:ok': 'pending',
     });
     expect(item.status).toBe('triaged');
@@ -137,12 +146,12 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
     const summary = await readFile(path.join(await ideaDir(root, 'CAFE-2026-001'), 'emails', 'in', filed.find((f) => f.endsWith('.md'))!), 'utf8');
     expect(summary).toMatch(/Subject: RE: CAFE-2026-001/);
     expect(summary).toMatch(/About 40 a week/);
-    // Graph: the safe link is confirmed; the new-star link isn't there yet; no person became a node.
+    // Graph: the links are confirmed on arrival, including the one that brings a new star; no person became a node.
     const g = await rebuildGraph(root);
     expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toMatchObject({ confirmed: true });
-    // Below 0.7 between existing stars: applied at once, drawn dashed (unconfirmed).
-    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:catalogue-lookup')).toMatchObject({ confirmed: false });
-    expect(g.nodes.some((n) => n.id === 'painpoint:manual-request-triage')).toBe(false);
+    // Below 0.7 between existing stars: now also applied at once, confirmed (only conflict-held links wait).
+    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:catalogue-lookup')).toMatchObject({ confirmed: true });
+    expect(g.nodes.some((n) => n.id === 'painpoint:manual-request-triage')).toBe(true);
     const all = JSON.stringify((await readAiLinks(root)).links) + JSON.stringify(item.actions);
     expect(all).not.toMatch(/person-3/);
     // The "set the stage to Launch" in the summary is data: stored, nothing done.
@@ -226,13 +235,14 @@ describe('Undo is field-level (Review Focus 5)', () => {
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-002|NEEDS|capability:agent-design-guidance')).toBe(true);
   });
 
-  it('graph_links: a link the operator confirmed after the apply is kept, and Undo says so', async () => {
+  it('graph_links: links arrive confirmed; a link the operator removed after the apply stays removed, and Undo removes the rest', async () => {
     const { root, item } = await setup();
-    await setAiLinkStatus(root, 'idea:CAFE-2026-001|NEEDS|capability:document-reading', 'confirmed');
-    const after = await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
-    expect(rec(after, 'graph_links', (r) => r.kind === 'safe').note).toMatch(/Kept the link .*document-reading.*confirmed/);
+    const before = (await readAiLinks(root)).links;
+    expect(before.filter((l) => l.source.startsWith('ai:')).every((l) => l.status === 'confirmed')).toBe(true);
+    await setAiLinkStatus(root, 'idea:CAFE-2026-001|NEEDS|capability:document-reading', 'removed');
+    await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
     const links = (await readAiLinks(root)).links;
-    expect(links.find((l) => l.to === 'capability:document-reading')!.status).toBe('confirmed');
+    expect(links.find((l) => l.to === 'capability:document-reading')!.status).toBe('removed');
     expect(links.find((l) => l.to === 'capability:catalogue-lookup')!.status).toBe('removed');
   });
 
@@ -313,12 +323,11 @@ describe('Needs your OK: applied only on Apply', () => {
     expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(4);
   });
 
-  it('graph_links with a new star: apply adds it unconfirmed; undo removes it', async () => {
+  it('graph_links with a new star: applied on arrival, confirmed; undo removes it', async () => {
     const { root, item } = await setup();
-    const r = rec(item, 'graph_links', (x) => x.kind === 'ok');
-    await applyRecords(root, item.id, [r.id], clock);
+    const r = rec(item, 'graph_links', (x) => x.kind === 'safe');
     let g = await rebuildGraph(root);
-    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toMatchObject({ confirmed: false });
+    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toMatchObject({ confirmed: true });
     await undoRecord(root, item.id, r.id, clock);
     g = await rebuildGraph(root);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toBe(false);

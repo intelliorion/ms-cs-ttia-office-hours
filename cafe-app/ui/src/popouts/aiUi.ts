@@ -21,12 +21,11 @@ export const providerName = (id: string | undefined, s?: AiStatus | null): strin
   (id && NAMES[id]) || (id && s?.provider === id ? s.label : '') || id || 'the AI';
 
 /** The notice after "Grow the universe". */
-export function extractNotice(r: { added?: number; unconfirmed?: number; suggestions?: { newNodes?: { label: string }[] } }): string {
+export function extractNotice(r: { added?: number; held?: unknown[]; suggestions?: { newNodes?: { label: string }[] } }): string {
   const added = r.added ?? 0;
-  const un = r.unconfirmed ?? 0;
-  const head = added === 0 ? 'Added 0 links: nothing new to add.' : `Added ${added} link${added === 1 ? '' : 's'}, ${un} to confirm.`;
-  const stars = (r.suggestions?.newNodes ?? []).map((n) => n.label).filter(Boolean);
-  return stars.length ? `${head} New stars to confirm: ${stars.join(', ')}.` : head;
+  const held = r.held?.length ?? 0;
+  if (added === 0 && held === 0) return 'Added 0 links: nothing new to add.';
+  return `${added} link${added === 1 ? '' : 's'} added to the universe${held ? `, ${held} waiting on you` : ''}.`;
 }
 
 /** The review form with the AI's suggestion laid over it. Only known criteria and a non-empty decision or reason are taken. */

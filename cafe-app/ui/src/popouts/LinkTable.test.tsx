@@ -30,4 +30,19 @@ describe('LinkTable', () => {
     expect(removed).toEqual(['ai-confirmed']);
     expect(el.querySelector('li[data-edge="ai-confirmed"] .tag')).toBeNull();
   });
+
+  it('a confirmed AI link has Remove only; a waiting link says "Waiting on you" and offers "Add it anyway"', () => {
+    const el = document.createElement('div');
+    act(() => createRoot(el).render(
+      <LinkTable busy={false} onConfirm={() => {}} onRemove={() => {}} rows={[
+        row('ai-ok', 'ai:fake:x', true),
+        row('ai-wait', 'ai:fake:x', false),
+      ]} />,
+    ));
+    expect(el.querySelector('li[data-edge="ai-ok"] [data-action="confirm-link"]')).toBeNull();
+    expect(el.querySelector('li[data-edge="ai-ok"] [data-action="remove-link"]')).not.toBeNull();
+    const c = el.querySelector('li[data-edge="ai-wait"] [data-action="confirm-link"]');
+    expect(c?.textContent).toBe('Add it anyway');
+    expect(el.querySelector('li[data-edge="ai-wait"] .tag')?.textContent).toBe('Waiting on you');
+  });
 });

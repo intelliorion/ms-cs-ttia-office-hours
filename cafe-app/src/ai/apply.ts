@@ -27,6 +27,7 @@ export function toAiLinks(
 export function planAiLinks(
   ideaId: string, out: ExtractOutput,
   graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
+  opts: { status?: AiLink['status'] } = {},
 ): { links: AiLink[]; newNodes: GNode[] } {
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
@@ -71,7 +72,7 @@ export function planAiLinks(
     const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
     links.push({
       from: from.id, to: to.id, rel: l.rel, description: unapproved ? `${l.description}${NOT_APPROVED_NOTE}` : l.description, confidence: l.confidence,
-      source: `ai:${provider}:challenge`, status: 'pending',
+      source: `ai:${provider}:challenge`, status: opts.status ?? 'pending',
       ...(newNodes.length ? { newNodes } : {}),
     });
   }

@@ -81,6 +81,8 @@ export interface ActionRecord {
   /** Plain English, set by Undo when part of it was kept (e.g. "CAFE-2026-002 has changed since the import; close it instead"). */
   note?: string;
   inverse?: Inverse;
+  /** Set when the conflict rules held this back: which rule and why, in plain English. */
+  held?: { rule: string; why: string; existing?: string };
   /** What an import did (created, duplicates, errors, flags). */
   result?: unknown;
   error?: string;
@@ -99,8 +101,7 @@ export function kindOf(action: Action, ctx: { needsHand?: boolean } = {}): Kind 
     case 'log_step':
       return SAFE_STEPS.includes(action.step) ? 'safe' : 'ok';
     case 'graph_links':
-      // Links between stars that already exist are Safe; below 0.7 they stay unconfirmed (drawn dashed).
-      return action.links.length > 0 && action.links.every((l) => !l.newNodes?.length) ? 'safe' : 'ok';
+      return 'safe';
     default:
       return 'ok';
   }
@@ -193,9 +194,8 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   const target = facts.stageHint ? STAGE_HINT[facts.stageHint] : undefined;
   if (target && changes(idea, target)) actions.push({ t: 'suggest_stage', ideaId, ...target });
 
-  const { safe, ok } = await planGraph(root, item, idea, facts.graph, tr.provider ?? 'ai');
-  if (safe.length) actions.push({ t: 'graph_links', ideaId, links: safe });
-  if (ok.length) actions.push({ t: 'graph_links', ideaId, links: ok });
+  const { links } = await planGraph(root, item, idea, facts.graph, tr.provider ?? 'ai');
+  if (links.length) actions.push({ t: 'graph_links', ideaId, links });
   return { actions };
 }
 
@@ -215,7 +215,7 @@ export async function directionOf(root: string, item: InboxItem): Promise<'in' |
 
 /** People named in the item (To, Cc, From, speakers) and on the idea never become nodes: links touching them are dropped. */
 async function planGraph(root: string, item: InboxItem, idea: Idea, out: ExtractOutput | undefined, provider: string) {
-  if (!out) return { safe: [], ok: [] };
+  if (!out) return { links: [] as AiLink[] };
   const m = item.meta ?? {};
   const people = new Set([...(m.to ?? []), ...(m.cc ?? []), ...(m.speakers ?? []), ...(m.from ? [m.from] : [])]
     .map(displayName).concat(idea.people.submitter ?? '', ...idea.people.team.map((p) => p.name)).map(key).filter(Boolean));
@@ -226,12 +226,9 @@ async function planGraph(root: string, item: InboxItem, idea: Idea, out: Extract
   };
   const { ideas } = await listIdeas(root);
   const previous = (await readAiLinks(root)).links;
-  const { links } = planAiLinks(idea.id, filtered, buildGraph(ideas, previous), previous, provider);
+  const { links } = planAiLinks(idea.id, filtered, buildGraph(ideas, previous), previous, provider, { status: 'confirmed' });
   const sourced = links.map((l) => ({ ...l, source: `ai:${provider}:${item.file}` }));
-  return {
-    safe: sourced.filter((l) => !l.newNodes?.length),
-    ok: sourced.filter((l) => l.newNodes?.length),
-  };
+  return { links: sourced };
 }
 
 async function freeBase(dir: string, base: string, exts: string[]): Promise<string> {

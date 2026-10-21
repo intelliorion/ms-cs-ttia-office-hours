@@ -114,16 +114,14 @@ describe('/api/inbox: emails and notes', () => {
     expect(by('reply_received')).toMatchObject({ kind: 'safe', status: 'applied' });
     expect(by('record_answers')).toMatchObject({ kind: 'safe', status: 'applied' });
     const g = by('graph_links');
-    expect(g).toMatchObject({ kind: 'ok', status: 'pending' });
+    expect(g).toMatchObject({ kind: 'safe', status: 'applied' });
 
     const list = await s.inbox();
     expect(list.items[0].id).toBe(item.id);
-    expect(list.counts).toEqual({ new: 0, ok: 1, held: 0, applied: 1 });
+    expect(list.counts).toEqual({ new: 0, ok: 0, held: 0, applied: 2 });
 
-    const applied = await json(await s.post(`/api/inbox/${item.id}/apply`, { actionIds: [g.id] }));
-    expect(applied.item.status).toBe('applied');
     let graph = await json(await fetch(`${s.base}/api/graph`));
-    expect(graph.edges.find((e: any) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toMatchObject({ confirmed: false });
+    expect(graph.edges.find((e: any) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toMatchObject({ confirmed: true });
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
     graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.some((e: any) => e.id === 'idea:CAFE-2026-001|REPLACES|painpoint:manual-request-triage')).toBe(false);
@@ -146,7 +144,7 @@ describe('/api/inbox: emails and notes', () => {
     expect(graph.edges.some((e: any) => e.id === id)).toBe(false);
   });
 
-  it('a link below 0.7 between existing stars is applied at once, unconfirmed (dashed); Undo removes it', async () => {
+  it('a link below 0.7 between existing stars is applied at once, confirmed; Undo removes it', async () => {
     const s = await server(triageConnector({
       what: 'Invoices may need design guidance.', understood: ['Invoices may need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
       facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
@@ -157,7 +155,7 @@ describe('/api/inbox: emails and notes', () => {
     expect(g).toMatchObject({ kind: 'safe', status: 'applied', inverse: { t: 'remove-ai-links' } });
     const id = 'idea:CAFE-2026-003|NEEDS|capability:agent-design-guidance';
     let graph = await json(await fetch(`${s.base}/api/graph`));
-    expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: false });
+    expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true });
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
     graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.some((e: any) => e.id === id)).toBe(false);

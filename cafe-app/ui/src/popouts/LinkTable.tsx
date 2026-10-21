@@ -25,8 +25,8 @@ export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: 
               <span className="src" title={r.edge.description || r.source}>{r.source}</span>
               {(!r.confirmed || r.source.startsWith('ai:')) && (
                 <span className="lk-acts">
-                  {!r.confirmed && <span className="tag">Unconfirmed</span>}
-                  {!r.confirmed && <button className="btn sm primary" disabled={busy} data-action="confirm-link" onClick={() => onConfirm(r.edge.id)}>Confirm</button>}
+                  {!r.confirmed && <span className="tag">Waiting on you</span>}
+                  {!r.confirmed && <button className="btn sm primary" disabled={busy} data-action="confirm-link" onClick={() => onConfirm(r.edge.id)}>Add it anyway</button>}
                   <button className="btn sm" disabled={busy} data-action="remove-link" onClick={() => onRemove(r.edge.id)}>Remove</button>
                 </span>
               )}

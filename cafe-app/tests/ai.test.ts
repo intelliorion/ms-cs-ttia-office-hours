@@ -255,7 +255,7 @@ describe('/api/ai routes', () => {
   const post = (base: string, url: string, body: unknown) =>
     fetch(`${base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-  it('extract appends pending AI links and the graph shows them unconfirmed', async () => {
+  it('extract applies AI links confirmed and the graph shows them confirmed', async () => {
     const c = createConnector({ providers: [fake(JSON.stringify(VALID))], settings: DEFAULT_SETTINGS });
     const s = await startServer('2026-10-19', { connector: c });
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
@@ -267,12 +267,13 @@ describe('/api/ai routes', () => {
     const body = await r.json() as any;
     expect(r.status).toBe(200);
     expect(body.added).toBe(2);
-    // Every end is new, so nothing is confirmed until the operator says yes, even at 0.9.
-    expect(body.unconfirmed).toBe(body.added);
+    // Every end is new, but AI links now arrive confirmed; nothing was held.
+    expect(body.held).toEqual([]);
+    expect(body.links.every((e: any) => e.confirmed)).toBe(true);
     expect(body.suggestions.newNodes.map((n: any) => n.id).sort()).toEqual(['capability:document-parsing', 'system:shared-mailbox']);
     expect(body.links.every((e: any) => e.source === 'ai:claude:challenge')).toBe(true);
     const g = await (await fetch(`${s.base}/api/graph`)).json() as any;
-    expect(g.unconfirmed).toBeGreaterThanOrEqual(1);
+    expect(g.unconfirmed).toBe(0);
     expect(g.edges.some((e: any) => e.from === 'idea:CAFE-2026-001' && e.to === 'capability:document-parsing' && e.rel === 'NEEDS')).toBe(true);
     expect(g.nodes.some((n: any) => n.id === 'system:shared-mailbox')).toBe(true);
     const again = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
@@ -281,7 +282,7 @@ describe('/api/ai routes', () => {
     expect(sug.error).toMatch(/^Working by hand: .*invalid output/);
   });
 
-  it('a node that exists only through a pending AI link is still new for the next extract', async () => {
+  it('a node that arrived through a confirmed AI link is known to the next extract', async () => {
     const reply = JSON.stringify({
       nodes: [{ type: 'Capability', label: 'Ticketing and status' }],
       links: [{ from: 'idea', to: 'Ticketing and status', rel: 'NEEDS', description: 'Tracks requests', confidence: 0.9 }],
@@ -292,15 +293,15 @@ describe('/api/ai routes', () => {
     await saveIdea(s.root, sampleIdea({ challenge: 'One' }));
     await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
     const one = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
-    expect(one).toMatchObject({ added: 1, unconfirmed: 1 });
+    expect(one).toMatchObject({ added: 1, held: [] });
+    expect(one.suggestions.newNodes.map((n: any) => n.id)).toEqual(['capability:ticketing-and-status']);
     const two = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
-    expect(two).toMatchObject({ added: 1, unconfirmed: 1 });
-    expect(two.suggestions.newNodes.map((n: any) => n.id)).toEqual(['capability:ticketing-and-status']);
-    // Once the operator confirms the first link, the node is known and a third idea's 0.9 link is confirmed.
-    await post(s.base, '/api/graph/confirm', { edgeId: 'idea:CAFE-2026-001|NEEDS|capability:ticketing-and-status' });
+    expect(two).toMatchObject({ added: 1, held: [] });
+    // The first link arrived confirmed, so its node is already known to the second extract.
+    expect(two.suggestions.newNodes).toEqual([]);
     await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-003', slug: 'three', title: 'Three', challenge: 'Three', dedupe_key: 'three' }));
     const three = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-003' })).json() as any;
-    expect(three).toMatchObject({ added: 1, unconfirmed: 0 });
+    expect(three).toMatchObject({ added: 1, held: [] });
     expect(three.suggestions.newNodes).toEqual([]);
   });
 
@@ -315,7 +316,7 @@ describe('/api/ai routes', () => {
     await saveIdea(s.root, sampleIdea({ support: ['Document parsing'] }));
     await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
-    expect(ex).toMatchObject({ added: 1, unconfirmed: 0 });
+    expect(ex).toMatchObject({ added: 1, held: [] });
     const id = 'idea:CAFE-2026-002|NEEDS|capability:document-parsing';
     const g1 = await (await fetch(`${s.base}/api/graph`)).json() as any;
     expect(g1.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true, source: 'ai:claude:challenge' });
@@ -372,7 +373,7 @@ describe('/api/ai routes', () => {
     expect(await (await fetch(`${s.base}/api/ai/status`)).json()).toMatchObject({ provider: 'fake', label: 'Fake (test)' });
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
     expect(ex.added).toBe(4);
-    expect(ex.unconfirmed).toBe(4);
+    expect(ex.held).toEqual([]);
     expect(ex.suggestions.newNodes).toHaveLength(4);
     expect(ex.suggestions.newNodes.find((n: any) => n.label === "Microsoft Planner")?.attrs).toEqual({ approved: false });
     const sug = await (await post(s.base, '/api/ai/review-suggest', { id: 'CAFE-2026-001' })).json() as any;

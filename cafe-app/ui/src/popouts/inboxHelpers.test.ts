@@ -55,7 +55,7 @@ const base: InboxItemView = { id: 'in-000000000001', file: 'inbox/x.eml', name: 
 
 describe('itemHeadline', () => {
   it('uses the AI summary first, on one line, as plain text', () => {
-    const h = itemHeadline({ ...base, meta: { subject: 'RE: hi' }, triage: { ideaId: null, confidence: 0.9, ask: false, candidates: [], notes: [], ai: { summary: 'Person 2\nanswers <b>two</b> questions' } } });
+    const h = itemHeadline({ ...base, meta: { subject: 'RE: hi' }, triage: { ideaId: null, confidence: 0.9, ask: false, candidates: [], notes: [], ai: { what: 'Person 2\nanswers <b>two</b> questions' } } });
     expect(h).toBe('Person 2 answers <b>two</b> questions');
   });
   it('falls back to the subject, then the text, then the file name', () => {
@@ -68,7 +68,7 @@ describe('itemHeadline', () => {
     expect(itemHeadline({ ...base, status: 'held', name: 'tracker.csv' })).toBe('tracker.csv is held');
   });
   it('cuts a long summary', () => {
-    const h = itemHeadline({ ...base, triage: { ideaId: null, confidence: 0, ask: false, candidates: [], notes: [], ai: { summary: 'x'.repeat(300) } } });
+    const h = itemHeadline({ ...base, triage: { ideaId: null, confidence: 0, ask: false, candidates: [], notes: [], ai: { what: 'x'.repeat(300) } } });
     expect(h.length).toBe(160);
     expect(h.endsWith('…')).toBe(true);
   });

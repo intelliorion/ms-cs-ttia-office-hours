@@ -8,6 +8,7 @@ import { fixedClock } from '../src/clock';
 import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
 import { matchIdea, displayName } from '../src/inbox/match';
 import { triageItem, openQuestionsOf, type TriageRecord } from '../src/inbox/triage';
+import { appendAiLink } from '../src/graph/store';
 import { triageTask, TRIAGE_SCHEMA, UNDERSTAND_SCHEMA, type Triage, type Understanding } from '../src/ai/tasks';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
@@ -135,16 +136,33 @@ describe('triageTask', () => {
   });
 
   it('the schema is strict: extra keys, people nodes and people relations are rejected', () => {
+    expect(validate(UNDERSTAND_SCHEMA, GOOD)).toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, stage: 4 })).not.toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, what: 'x'.repeat(161) })).not.toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, understood: [] })).not.toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, setStage: 'launch' } })).not.toEqual([]);
+    const person = { ...GOOD, facts: { ...GOOD.facts, graph: { nodes: [{ type: 'Person', label: 'Person 9' }], links: [] } } };
+    expect(validate(UNDERSTAND_SCHEMA, person)).not.toEqual([]);
+    const rel = { ...GOOD, facts: { ...GOOD.facts, graph: { nodes: [], links: [{ from: 'Person 9', to: 'idea', rel: 'SPONSORS', description: '', confidence: 1 }] } } };
+    expect(validate(UNDERSTAND_SCHEMA, rel)).not.toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, stageHint: 'stage 4' } })).not.toEqual([]);
+    expect(validate(UNDERSTAND_SCHEMA, { ...GOOD, facts: { ...GOOD.facts, newFlags: ['a', 'b', 'c', 'd'] } })).not.toEqual([]);
+    // The old triage shape still validates against TRIAGE_SCHEMA.
     expect(validate(TRIAGE_SCHEMA, GOOD_T)).toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, stage: 4 })).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, setStage: 'launch' } })).not.toEqual([]);
-    const person = { ...GOOD_T, facts: { ...GOOD_T.facts, graph: { nodes: [{ type: 'Person', label: 'Person 9' }], links: [] } } };
-    expect(validate(TRIAGE_SCHEMA, person)).not.toEqual([]);
-    const rel = { ...GOOD_T, facts: { ...GOOD_T.facts, graph: { nodes: [], links: [{ from: 'Person 9', to: 'idea', rel: 'SPONSORS', description: '', confidence: 1 }] } } };
-    expect(validate(TRIAGE_SCHEMA, rel)).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, stageHint: 'stage 4' } })).not.toEqual([]);
-    expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, facts: { ...GOOD_T.facts, newFlags: ['a', 'b', 'c', 'd'] } })).not.toEqual([]);
     expect(validate(TRIAGE_SCHEMA, { ...GOOD_T, summary: 'x'.repeat(161) })).not.toEqual([]);
+  });
+
+  it('knownStars lists the matched idea\'s own stars first (graph node ids are idea:<ID>)', async () => {
+    const root = await workspace();
+    const link = (idea: string, label: string) => ({ from: `idea:${idea}`, to: `capability:${label.toLowerCase()}`, rel: 'NEEDS' as const, description: 'x', source: 'test', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: `capability:${label.toLowerCase()}`, type: 'Capability' as const, label }] });
+    await appendAiLink(root, link('CAFE-2026-002', 'Beta star'));
+    await appendAiLink(root, link('CAFE-2026-001', 'Alpha star'));
+    const { calls, connector } = recorder(JSON.stringify(GOOD));
+    const dropped = await saveDrop(root, 'reply.txt', 'CAFE-2026-001 About 40 a week', clock);
+    await triageItem(root, dropped.id, connector);
+    const p = calls[0];
+    expect(p).toContain('Alpha star');
+    expect(p.indexOf('Alpha star')).toBeLessThan(p.indexOf('Beta star'));
   });
 
   it('ideaId and builderNamed must be a string or null', () => {

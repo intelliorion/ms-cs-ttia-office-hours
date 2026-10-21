@@ -31,7 +31,7 @@ export interface InboxItemView {
   triage?: {
     ideaId: string | null; confidence: number; ask: boolean; suggested?: string;
     candidates: { id: string; title: string }[]; notes: string[]; export?: true; needsHand?: true; aiError?: string;
-    ai?: { summary?: string; kind?: string };
+    ai?: { what?: string; summary?: string; kind?: string };
     match?: { how?: string };
   };
   actions?: ActionRecord[];
@@ -83,7 +83,7 @@ const oneLine = (s: unknown, max = 160) => {
 /** The item's one-line headline: the AI's summary, else the subject, else the start of the text, else the file name. */
 export function itemHeadline(item: Pick<InboxItemView, 'name' | 'meta' | 'preview' | 'triage' | 'status' | 'type'>): string {
   if (item.status === 'held') return `${item.name} is held`;
-  const summary = oneLine(item.triage?.ai?.summary);
+  const summary = oneLine(item.triage?.ai?.what ?? item.triage?.ai?.summary);
   if (summary) return summary;
   const subject = oneLine(item.meta?.subject);
   if (subject) return subject;

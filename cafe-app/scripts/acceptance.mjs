@@ -62,7 +62,9 @@ function scriptedTriage(prompt) {
     );
   }
   return JSON.stringify({
-    summary: `${item.type} about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160),
+    what: `${item.type} about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160),
+    understood: [`The ${item.type} is about ${idea?.title ?? 'an unknown idea'}`.slice(0, 160)],
+    uncertain: [],
     kind: item.type === 'transcript' ? 'transcript' : answers.length ? 'reply' : 'update',
     ideaId, matchConfidence: idea ? 0.95 : 0.5,
     facts: {
@@ -77,7 +79,7 @@ function scriptedTriage(prompt) {
 }
 function scriptedFake() {
   const base = fakeProvider();
-  return { ...base, async complete(prompt, opts) { return prompt.startsWith('TASK: triage') ? scriptedTriage(prompt) : base.complete(prompt, opts); } };
+  return { ...base, async complete(prompt, opts) { return (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) ? scriptedTriage(prompt) : base.complete(prompt, opts); } };
 }
 
 /* ---------- server and API ---------- */

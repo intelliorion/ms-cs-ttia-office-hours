@@ -6,6 +6,7 @@ import type { Idea } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
 import { understandTask, type Understanding, type TriageInput } from '../ai/tasks';
 import { rebuildGraph } from '../graph/store';
+import { nodeId } from '../graph/ontology';
 import type { Connector } from '../ai/connector';
 import { parseDrop } from './parse';
 import { screenDrop, knownParticipants } from './screen';
@@ -169,7 +170,8 @@ export async function triageItem(
   if (connector) {
     const g = await rebuildGraph(root).catch(() => ({ nodes: [], edges: [] }));
     const near = new Set<string>();
-    if (idea) for (const e of g.edges) { if (e.from === idea.id) near.add(e.to); else if (e.to === idea.id) near.add(e.from); }
+    const me = idea ? nodeId('Idea', idea.id) : '';
+    if (idea) for (const e of g.edges) { if (e.from === me) near.add(e.to); else if (e.to === me) near.add(e.from); }
     const stars = g.nodes.filter((n) => n.type !== 'Idea' && n.type !== 'Person');
     input.knownStars = [...stars.filter((n) => near.has(n.id)), ...stars.filter((n) => !near.has(n.id))]
       .slice(0, 60).map((n) => ({ type: n.type, label: n.label.slice(0, 60) }));

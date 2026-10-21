@@ -285,46 +285,56 @@ export const TOOL_GUIDE: Record<string, string> = {
   'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
 };
 
-export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[] }
+export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[]; context: string[] }
 export interface ToolPickInput {
   idea: IdeaText;
   support: string[];
+  /** Whether the form names a builder (the pathway depends on it). */
+  builderNamed?: boolean;
   existingFeatures?: { name: string; what?: string; tool?: string; reason?: string }[];
+  /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
+  guidance?: string;
 }
-export interface ToolPickOutput { features: ToolPickFeature[] }
+/** Exactly one of: the one pick, or the questions the AI needs answered before it can pick. */
+export interface ToolPickOutput { pick?: ToolPickFeature; questions?: string[] }
 
 export const TOOL_PICK_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['features'],
+  type: 'object', additionalProperties: false,
   properties: {
-    features: {
-      type: 'array', minItems: 1, maxItems: 6,
-      items: {
-        type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags'],
-        properties: {
-          name: { type: 'string', minLength: 1, maxLength: 60 },
-          what: { type: 'string', maxLength: 160 },
-          tool: { type: 'string', enum: APPROVED_TOOLS },
-          reason: { type: 'string', maxLength: 160 },
-          flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
-        },
+    pick: {
+      type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags', 'context'],
+      properties: {
+        name: { type: 'string', minLength: 1, maxLength: 60 },
+        what: { type: 'string', maxLength: 160 },
+        tool: { type: 'string', enum: APPROVED_TOOLS },
+        reason: { type: 'string', maxLength: 160 },
+        flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
+        context: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 160 } },
       },
     },
+    questions: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 1, maxLength: 200 } },
   },
 };
 
 function trimToolPick(v: unknown): void {
   const o = asObj(v);
-  if (!o || !Array.isArray(o.features)) return;
-  for (const f of o.features) {
-    const x = asObj(f);
-    if (x) { x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160); }
+  if (!o) return;
+  const x = asObj(o.pick);
+  if (x) {
+    x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160);
+    if (Array.isArray(x.context)) x.context = x.context.map((c) => trimStrings(c, 160));
   }
+  if (Array.isArray(o.questions)) o.questions = o.questions.map((q) => trimStrings(q, 200));
+  // The one-of rule, which the schema cannot say: exactly one of pick or questions.
+  const has = (k: string) => o[k] !== undefined && o[k] !== null && !(Array.isArray(o[k]) && o[k].length === 0);
+  if (has('pick') === has('questions')) throw new AiError('invalid output: give either "pick" or "questions", not both and not neither');
 }
 
 function toolPickData(input: ToolPickInput) {
   return {
     idea: ideaData(input.idea),
     support: (Array.isArray(input.support) ? input.support : []).slice(0, 20).map((s) => cap(s, 200)),
+    builderNamed: Boolean(input.builderNamed),
     ...(input.existingFeatures?.length ? {
       existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
         name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
@@ -338,17 +348,22 @@ export const toolPickTask: Task<ToolPickOutput> = {
   name: 'tool-pick',
   schema: TOOL_PICK_SCHEMA,
   prompt(input) {
-    const data = toolPickData(input as ToolPickInput);
+    const inp = input as ToolPickInput;
+    const data = toolPickData(inp);
     return build('tool-pick', [
-      "Suggest how to build a proof of concept for this Creators' Café idea: split it into 1 to 6 features and suggest one approved tool for each. The operator picks; you only suggest.",
-      'Use the idea title, challenge, current process and outcomes, and the support requested. Some of these may be empty; work from what is there.',
-      ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. Keep these (same names and tools) unless clearly wrong, and add only what is missing.'] : []),
+      "Pick the one approved tool to build a proof of concept of this Creators' Café idea, or say what you need to know first. The operator decides; you only suggest, and the operator can change the tool.",
+      'First judge whether the form says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty.',
+      'If enough is known, return "pick": exactly one feature, the whole proof of concept, with the one tool for it. Do not split the idea into several features.',
+      'If not enough is known, return "questions": every question you would need answered, all at once (2 to 8), each one short and answerable by the team in a sentence. The questions go to the team in one email; you will be asked again when the answers are in. Do not also return a pick.',
+      ...(inp.guidance ? ['Guidance from the brainstorming skill on telling a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
+      ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. If one has a tool, keep it unless clearly wrong, and return it as the pick.'] : []),
       'Approved tools (use exactly one of these labels for "tool"; anything else is not on the approved list):',
       ...APPROVED_TOOLS.map((t) => `- ${t}: ${TOOL_GUIDE[t]}`),
       'Capability goes up, autonomy goes down: prefer the simplest tool that can show the idea works.',
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data.",
-      'Flags: "needs-live-system" when a feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "reuse-existing" when something that already exists could do it; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
-      'name: a short noun phrase, at most 60 characters. what: what the feature does, at most 160 characters. reason: why this tool, at most 160 characters. Never name people.',
+      'Flags: "needs-live-system" when it needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "reuse-existing" when something that already exists could do it; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
+      '"context": 1 to 6 short lines listing the facts from the form you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
+      'name: a short noun phrase, at most 60 characters. what: what it does, at most 160 characters. reason: why this tool, at most 160 characters. Never name people.',
     ], TOOL_PICK_SCHEMA, data, "a Café idea and the operator's current features");
   },
   parse: (raw) => parseChecked<ToolPickOutput>(raw, TOOL_PICK_SCHEMA, trimToolPick),

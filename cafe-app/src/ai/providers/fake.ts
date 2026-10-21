@@ -48,11 +48,25 @@ const TRIAGE = {
 };
 
 /** Three tool picks for any idea, one of them a custom app (a CSIC flag). */
+/** One pick with the context it rests on; when the prompt's data carries no challenge text, the questions instead. */
 const TOOL_PICK = {
-  features: [
-    { name: 'Request intake form', what: 'Collects each request in one place with the fields the team needs', tool: 'Power Apps', reason: 'A simple form on a SharePoint list, built by a citizen builder', flags: [] },
-    { name: 'Draft replies', what: 'Drafts a first reply to each request for a person to check', tool: 'Microsoft Copilot', reason: 'Copilot can draft from the request text with no build', flags: ['no-build'] },
-    { name: 'Scheduling engine', what: 'Works out a send slot for each request across time zones', tool: 'custom app', reason: 'No approved low-code tool does this scheduling logic', flags: ['custom-app'] },
+  pick: {
+    name: 'Request intake and scheduling', what: 'Takes each request in one place and works out a send slot across time zones', tool: 'custom app',
+    reason: 'No approved low-code tool does the scheduling logic; the form part alone would not show the idea', flags: ['custom-app'],
+    context: [
+      'The challenge describes requests arriving by email and a slot worked out across time zones',
+      'Support requested includes Agent Design Guidance, so an agent-shaped build is expected',
+      'builderNamed is true, so a Citizen-Led pathway would be possible for a simpler tool',
+      'The scheduling logic needs code, which no approved low-code tool provides → custom app, TTIA-Led, CSIC flag',
+    ],
+  },
+};
+const TOOL_QUESTIONS = {
+  questions: [
+    'What does a request look like when it arrives: an email, a form, a chat message?',
+    'What must the proof of concept show working on a sample: the intake, the sorting, or the scheduling?',
+    'Is any live non-Microsoft system involved, or can a published extract in SharePoint stand in?',
+    'Who on the team would build it and attend the sessions?',
   ],
 };
 
@@ -82,16 +96,24 @@ const DESIGN_DONE = {
 /** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */
 const DESIGN_PLAN = {
   tasks: [
-    { title: 'Make the synthetic sample', detail: 'Write twenty made-up requests in a spreadsheet on SharePoint, with the fields the form needs. No real names or client data.', tool: 'Power Apps', done_when: 'The sample list has twenty rows and no real data' },
+    { title: 'Make the synthetic sample', detail: 'Write twenty made-up requests in a spreadsheet on SharePoint, with the fields the intake needs. No real names or client data.', tool: 'Power Apps', done_when: 'The sample list has twenty rows and no real data' },
     { title: 'Build the request form', detail: 'Make a canvas app on the sample list with one screen to add a request and one to see them all.', tool: 'Power Apps', done_when: 'A request added in the app shows up in the list' },
-    { title: 'Hand the scheduling engine to a coding agent', detail: 'Give Claude Code or GitHub Copilot the instruction in the custom app kit; it works only inside that folder, from design.md and plan.md.', tool: 'custom app', done_when: 'The agent has a running proof of concept on the sample inside the kit folder' },
-    { title: 'Show it end to end', detail: 'Run the sample through the form and the scheduling proof of concept and show the team the result.', tool: 'Power Apps', done_when: 'The team has seen the one thing to show work on the sample' },
+    { title: 'Hand the intake and scheduling to a coding agent', detail: 'Give Claude Code or GitHub Copilot the instruction in the custom app kit; it works only inside that folder, from design.md and plan.md.', tool: 'custom app', done_when: 'The agent has a running proof of concept on the sample inside the kit folder' },
+    { title: 'Show it end to end', detail: 'Run the sample through the proof of concept and show the team the result.', tool: 'custom app', done_when: 'The team has seen the one thing to show work on the sample' },
   ],
   risks: [
     'The scheduling engine is a custom app, so anything beyond the proof of concept needs the CSIC Repository.',
     'The sample may miss a kind of request the team sees often; ask the team to check it.',
   ],
 };
+
+/** The scripted plan, with every task on a tool the prompt's features actually picked (so no task lands under Not picked). */
+function planForPicks(prompt: string) {
+  const picked = [...prompt.matchAll(/"tool"\s*:\s*"([^"]+)"/g)].map((m) => m[1]);
+  if (!picked.length) return DESIGN_PLAN;
+  const home = (t: string) => (picked.includes(t) ? t : picked.includes('custom app') ? 'custom app' : picked[0]);
+  return { ...DESIGN_PLAN, tasks: DESIGN_PLAN.tasks.map((t) => ({ ...t, tool: home(t.tool) })) };
+}
 
 /** How many Q/A pairs the design-step prompt carries (its DATA block's stepsSoFar). */
 function stepsSoFar(prompt: string): number {
@@ -115,9 +137,9 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
-      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(TOOL_PICK);
+      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
-      if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(DESIGN_PLAN);
+      if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },

@@ -352,15 +352,16 @@ async function designShots(p) {
   assert((await p.locator(`${D} [data-testid="review-card"]`).count()) === 1, 'no decision card at stage 3');
   assert((await p.locator(`${D} [data-testid="review"]`).count()) === 0, 'the decision form is still editable at stage 3');
   await sleep(2500);
-  // Tool picker: the AI fills three rows as suggestions; one is a custom app with the CSIC note.
+  // Tool picker: the AI suggests the one tool, with why it picked it; it is a custom app, so the CSIC note shows.
   await p.click(`${D} [data-action="tools-suggest"]`);
   await p.waitForSelector(`${D} .tp-row.suggested`, { timeout: 90000 });
-  assert((await p.locator(`${D} .tp-row.suggested`).count()) === 3, 'expected three suggested rows');
+  assert((await p.locator(`${D} .tp-row.suggested`).count()) === 1, 'expected one suggested row');
+  assert((await p.locator(`${D} [data-testid="tool-context"][open] li`).count()) >= 1, 'no "why this tool" lines on the suggestion');
   assert((await p.locator(`${D} [data-testid="csic-note"]`).count()) === 1, 'no CSIC note on the custom-app row');
   await into(`${D} [data-testid="tool-picker"]`);
   await shot(p, '40-toolpicker.png');
   await p.click(`${D} [data-action="tools-save"]`);
-  await notice('Saved 3 features');
+  await notice('Saved 1 feature');
   await p.waitForSelector(`${D} .tp-row.suggested`, { state: 'detached', timeout: 10000 }); // saved: no longer suggestions
   const graph = await (await fetch(`${base}/api/graph`)).json();
   const built = (graph.edges ?? graph.links ?? []).filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes('CAFE-2026-002:approach.md'));

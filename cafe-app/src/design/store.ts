@@ -17,9 +17,14 @@ export interface DesignFeature {
   what?: string;
   tool?: string;
   reason?: string;
+  /** The facts and the rule the suggestion rested on ("why this tool"), 1 to 6 lines; the operator can edit or drop them. */
+  context?: string[];
   pathway?: Pathway;
   flags: string[];
 }
+
+/** Questions the tool picker sent to the team in one E2 because the form said too little to pick. */
+export interface ToolQuestions { questions: string[]; emailKey: string; at: string }
 
 /** What a brainstorm question settles (the AI says; a hand-written question has none). */
 export type DesignTag = 'must-show' | 'smallest-input' | 'users' | 'replaces' | 'builder';
@@ -44,6 +49,7 @@ export interface DesignState {
   summary?: string;
   cafeCheck?: CafeCheck;
   approvedAt?: string;
+  toolQuestions?: ToolQuestions;
 }
 
 /** Said in design.md and on approval when the Café check has a CSIC flag. */
@@ -61,7 +67,7 @@ function normalize(raw: Partial<DesignState>): DesignState {
     ...raw,
     version: 1,
     status: STATUSES.includes(raw.status as DesignStatus) ? (raw.status as DesignStatus) : 'not-started',
-    features: arr<DesignFeature>(raw.features).map((f) => ({ ...f, flags: arr<string>(f.flags) })),
+    features: arr<DesignFeature>(raw.features).map((f) => ({ ...f, flags: arr<string>(f.flags), ...(f.context ? { context: arr<string>(f.context) } : {}) })),
     steps: arr<DesignStep>(raw.steps).map((s) => ({ ...s, suggested: arr<string>(s.suggested) })),
   };
 }

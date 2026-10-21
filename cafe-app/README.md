@@ -273,8 +273,12 @@ nothing is saved until you press a button, and you can do everything except plan
 **What you see**
 
 1. **Tool picker.** One row per feature: a name, one line on what it does, and a tool from the approved list
-   (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** adds
-   suggested rows (marked as suggestions) and keeps yours; **Add feature** adds an empty row. Each row shows
+   (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** asks for
+   the one tool for the proof of concept: it comes back as one suggested row with a "Why this tool" list (the facts from
+   the form it relied on and the rule that led to the tool), and the tool drop-down stays yours to change. When the form
+   says too little, the AI returns every question it needs instead, all of them in one E2 draft in the Outbox; the panel
+   lists them and Suggest waits until the reply is marked received (or you forget the questions). **Add feature** adds an
+   empty row. Each row shows
    its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any other tool is
    Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the picks and links each
    feature to its tool in the universe. A tool that is not on the approved list is refused.

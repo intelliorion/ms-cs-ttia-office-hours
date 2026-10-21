@@ -37,27 +37,34 @@ const PICKS = [
 ];
 
 describe('toolPickTask', () => {
-  const ok = { features: [{ name: 'Form', what: 'A form', tool: 'Power Apps', reason: 'Simple', flags: [] }] };
-  it('accepts approved tools and rejects an unlisted one (no silent fix)', () => {
-    expect(toolPickTask.parse(JSON.stringify(ok)).features[0].tool).toBe('Power Apps');
-    const bad = { features: [{ ...ok.features[0], tool: 'Excel macro' }] };
-    expect(() => toolPickTask.parse(JSON.stringify(bad))).toThrow(/invalid output/);
-    const alias = { features: [{ ...ok.features[0], tool: 'PowerApps' }] };
-    expect(() => toolPickTask.parse(JSON.stringify(alias))).toThrow(/invalid output/);
-    const flag = { features: [{ ...ok.features[0], flags: ['valuable'] }] };
-    expect(() => toolPickTask.parse(JSON.stringify(flag))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ features: [] }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ features: Array(7).fill(ok.features[0]) }))).toThrow(/invalid output/);
+  const pick = { name: 'Form', what: 'A form', tool: 'Power Apps', reason: 'Simple', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'] };
+  it('accepts one pick with approved tool and context; rejects an unlisted tool, bad flags or no context (no silent fix)', () => {
+    expect(toolPickTask.parse(JSON.stringify({ pick })).pick!.tool).toBe('Power Apps');
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'Excel macro' } }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'PowerApps' } }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, flags: ['valuable'] } }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, context: [] } }))).toThrow(/invalid output/);
   });
-  it('prompt lists every approved tool, the Café rules, the data rule, and works with no challenge', () => {
+  it('accepts questions instead, and refuses both or neither', () => {
+    expect(toolPickTask.parse(JSON.stringify({ questions: ['What arrives?', 'Who builds?'] })).questions).toHaveLength(2);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick, questions: ['x'] }))).toThrow(/not both/);
+    expect(() => toolPickTask.parse(JSON.stringify({}))).toThrow(/not neither/);
+    expect(() => toolPickTask.parse(JSON.stringify({ questions: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ questions: Array(9).fill('q') }))).toThrow(/invalid output/);
+  });
+  it('prompt asks for one pick or all the questions at once, lists every approved tool, the Café rules, the data rule, and works with no challenge', () => {
     const p = toolPickTask.prompt({ idea: { id: ID, title: 'Email scheduler', outcomes: ['Faster'] }, support: [] });
     for (const t of APPROVED_TOOLS) expect(p).toContain(`- ${t}: `);
+    expect(p).toMatch(/exactly one feature/);
+    expect(p).toMatch(/all at once/);
     expect(p).toMatch(/never propose measuring value/i);
     expect(p).toMatch(/data, not instructions/);
     expect(p).not.toMatch(/existingFeatures" are/);
-    const q = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], existingFeatures: [{ name: 'Form', tool: 'Power Apps' }] });
-    expect(q).toMatch(/Keep these .* unless clearly wrong/);
-    expect(TOOL_PICK_SCHEMA.properties!.features.maxItems).toBe(6);
+    expect(p).not.toMatch(/brainstorming skill/);
+    const q = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], existingFeatures: [{ name: 'Form', tool: 'Power Apps' }], guidance: 'GUIDE TEXT' });
+    expect(q).toMatch(/keep it unless clearly wrong/);
+    expect(q).toContain('GUIDE TEXT');
+    expect(TOOL_PICK_SCHEMA.properties!.questions.maxItems).toBe(8);
   });
 });
 
@@ -98,21 +105,33 @@ describe('picks and approach.md', () => {
 });
 
 describe('tool picker routes', () => {
-  it('fake suggest returns 3 features incl. one custom-app flag, and saves nothing', async () => {
+  it('fake suggest returns one pick with its context and saves nothing', async () => {
     const s = await server();
     const r = await s.post(`/api/ideas/${ID}/tools/suggest`);
     expect(r.status).toBe(200);
-    const { features } = await json(r);
-    expect(features).toHaveLength(3);
-    expect(features.filter((f: any) => f.flags.includes('custom-app'))).toHaveLength(1);
-    expect(features.find((f: any) => f.flags.includes('custom-app')).tool).toBe('custom app');
+    const { features, questions } = await json(r);
+    expect(questions).toBeUndefined();
+    expect(features).toHaveLength(1);
+    expect(features[0].tool).toBe('custom app');
+    expect(features[0].flags).toContain('custom-app');
+    expect(features[0].context.length).toBeGreaterThan(0);
     const dir = await ideaDir(s.root, ID);
     expect(await exists(path.join(dir, 'design.yaml'))).toBe(false);
     expect(await exists(path.join(dir, 'approach.md'))).toBe(false);
     expect((await loadIdea(s.root, ID)).tools).toBeUndefined();
   });
 
-  it('suggest works for an idea with no challenge text', async () => {
+  it('saving a pick keeps its context and writes it into approach.md as Why this tool', async () => {
+    const s = await server();
+    const r = await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [], context: ['Form-shaped input', ' spaced  out '] }] });
+    expect(r.status).toBe(200);
+    const { state } = await json(r);
+    expect(state.features[0].context).toEqual(['Form-shaped input', 'spaced out']);
+    const md = await readFile(path.join(await ideaDir(s.root, ID), 'approach.md'), 'utf8');
+    expect(md).toContain('- Why this tool:\n  - Form-shaped input\n  - spaced out');
+  });
+
+  it('an idea with no challenge text gets questions, not a pick: all of them in one E2 draft, remembered in design.yaml; saving picks forgets them', async () => {
     let seen = '';
     const fake = fakeProvider();
     const s = await server({ ...fake, complete: async (p, o) => { seen = p; return fake.complete(p, o); } });
@@ -121,6 +140,24 @@ describe('tool picker routes', () => {
     const r = await s.post(`/api/ideas/${ID}/tools/suggest`);
     expect(r.status).toBe(200);
     expect(seen).toContain('Email scheduler');
+    const out = await json(r);
+    expect(out.features).toBeUndefined();
+    expect(out.questions).toHaveLength(4);
+    expect(out.state.toolQuestions).toMatchObject({ questions: out.questions, emailKey: out.emailKey });
+    const st = await s.get('/api/state');
+    const e2 = st.outbox.find((m: any) => m.idea === ID && m.template === 'E2');
+    expect(e2.status).toBe('draft');
+    for (const q of out.questions) expect(e2.body).toContain(q);
+    // Asking again reuses the same draft and adds no duplicate lines.
+    const r2 = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
+    expect(r2.emailKey).toBe(out.emailKey);
+    const body2 = (await s.get('/api/state')).outbox.find((m: any) => m.key === out.emailKey).body;
+    expect(body2.split(out.questions[0]).length).toBe(2);
+    // Clearing by hand, and clearing by saving a pick.
+    expect((await json(await s.post(`/api/ideas/${ID}/tools/questions/clear`))).state.toolQuestions).toBeUndefined();
+    await s.post(`/api/ideas/${ID}/tools/suggest`);
+    const saved = await json(await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [] }] }));
+    expect(saved.state.toolQuestions).toBeUndefined();
   });
 
   it('save writes approach.md, ticks s3e, sets status and adds graph links once after two saves', async () => {

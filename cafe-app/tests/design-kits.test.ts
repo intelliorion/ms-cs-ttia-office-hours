@@ -197,7 +197,7 @@ describe('plan routes', () => {
     const readme = await readFile(path.join(dir, 'kit', 'custom-app', 'README.md'), 'utf8');
     expect(readme).toContain('## CSIC note');
     expect(readme).toContain(CUSTOM_APP_CSIC);
-    expect(readme).toContain('Hand the scheduling engine to a coding agent');
+    expect(readme).toContain('Hand the intake and scheduling to a coding agent');
     expect(readme).not.toContain('Build the request form');
     // The stage and the closure never move.
     const idea = await loadIdea(s.root, ID);

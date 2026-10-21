@@ -283,4 +283,48 @@ describe('IdeaDetails design sections', () => {
     expect((plan.querySelector('[data-action="write-plan"]') as HTMLButtonElement).disabled).toBe(true);
     expect(plan.textContent).toContain('approve it again');
   });
+
+  it('a suggested pick shows its "why this tool" lines open, and Save posts them with the row', async () => {
+    api.designPost.mockImplementation(async (_id: string, route: string, body: any) => (route === 'tools/suggest'
+      ? { features: [{ name: 'Intake', what: 'Takes requests', tool: 'Power Apps', reason: 'Form-shaped', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'] }], provider: 'fake' }
+      : { state: designState({ features: body.features.map((f: any, i: number) => ({ id: `f${i}`, ...f })) }), designMd: '# Design' }));
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [] }), designMd: '# Design' } : { files: [] }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="tools-suggest"]');
+    await flush();
+    const ctx = el.querySelector('[data-testid="tool-context"]') as HTMLDetailsElement;
+    expect(ctx.open).toBe(true);
+    expect(ctx.textContent).toContain('No live system → Power Apps');
+    expect(el.querySelectorAll('.tp-row')).toHaveLength(1);
+    await click('[data-action="tools-save"]');
+    await flush();
+    const saveCall = api.designPost.mock.calls.find((c: any[]) => c[1] === 'tools')!;
+    expect(saveCall[2].features[0].context).toEqual(['Form-shaped input', 'No live system → Power Apps']);
+  });
+
+  it('questions out to the team: listed in the picker, Suggest disabled until the reply is marked received, Forget clears', async () => {
+    const tq = { questions: ['What arrives?', 'Who builds?'], emailKey: 'k9', at: '2026-10-21' };
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
+    api.designPost.mockImplementation(async () => ({ state: designState({ features: [] }) }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    const box = el.querySelector('[data-testid="tool-questions"]')!;
+    expect(box.textContent).toContain('Who builds?');
+    expect(box.textContent).toContain('waiting for the reply');
+    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(true);
+    await click('[data-action="tools-forget"]');
+    await flush();
+    expect(api.designPost.mock.calls.some((c: any[]) => c[1] === 'tools/questions/clear')).toBe(true);
+  });
+
+  it('with the reply marked received the picker says so and Suggest is enabled again', async () => {
+    const tq = { questions: ['What arrives?'], emailKey: 'k9', at: '2026-10-21' };
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, checklist: { s2d: { done: true } } }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="tool-questions"]')!.textContent).toContain('reply received');
+    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(false);
+  });
 });

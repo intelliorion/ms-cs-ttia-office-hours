@@ -1,13 +1,15 @@
 import path from 'node:path';
 import type { Clock } from '../clock';
 import type { Idea } from '../ideas/idea';
+import { draftEmail, updateDraft } from '../comms/outbox';
+import { addQuestion } from './brainstorm';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { writeFileAtomic } from '../workspace/files';
 import { canonicalTool, slug } from '../graph/ontology';
 import { FEATURE_FLAGS, type FeatureFlag, type ToolPickInput } from '../ai/tasks';
-import { readDesign, writeDesign, writeDesignMd, type DesignFeature, type DesignState, type Pathway } from './store';
+import { readDesign, writeDesign, writeDesignMd, type DesignFeature, type DesignState, type Pathway , skillGuidance } from './store';
 import { cafeCheck } from './cafecheck';
 
 /** Where each approved tool lands on the pathway ladder (Café skill, Part 3). */
@@ -39,7 +41,7 @@ export function pathwayLabel(tool: string, builder?: string): string {
   return pathwayOf(tool, builder) === 'Assisted Citizen' ? `${base} (${ASSISTED_NOTE})` : base;
 }
 
-export interface PickInput { id?: string; name: string; what?: string; tool?: string; reason?: string; flags?: string[] }
+export interface PickInput { id?: string; name: string; what?: string; tool?: string; reason?: string; flags?: string[]; context?: string[] }
 
 /** One line of plain text: every whitespace run (newlines too) becomes one space, so AI text can never start a heading or field. */
 const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -71,9 +73,10 @@ export function validatePicks(raw: unknown, builder?: string): DesignFeature[] {
     ids.add(id);
     const what = str(r.what, 160);
     const reason = str(r.reason, 160);
+    const context = (Array.isArray(r.context) ? r.context : []).map((c) => str(c, 160)).filter(Boolean).slice(0, 6);
     out.push({
       id, name, ...(what ? { what } : {}), ...(tool ? { tool, pathway: pathwayOf(tool, builder) } : {}),
-      ...(reason ? { reason } : {}), flags: [...new Set(flags)],
+      ...(reason ? { reason } : {}), ...(context.length ? { context } : {}), flags: [...new Set(flags)],
     });
   }
   return out;
@@ -94,6 +97,7 @@ export function renderApproachMd(idea: Idea, features: DesignFeature[]): string 
     out.push(`- Pathway: ${f.tool ? pathwayLabel(f.tool, builder) : '(after a tool is picked)'}`);
     out.push(`- Reason: ${f.reason || '(none given)'}`);
     out.push(`- Flags: ${f.flags.length ? f.flags.join(', ') : 'none'}`);
+    if (f.context?.length) { out.push('- Why this tool:'); for (const c of f.context) out.push(`  - ${c}`); }
     out.push('');
   }
   return out.join('\n');
@@ -104,6 +108,8 @@ export function toolPickInput(idea: Idea, state: DesignState): ToolPickInput {
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     support: idea.support,
+    builderNamed: Boolean(builderOf(idea)),
+    guidance: skillGuidance('brainstorming', 6000),
     ...(state.features.length ? {
       existingFeatures: state.features.map((f) => ({ name: f.name, what: f.what, tool: f.tool, reason: f.reason })),
     } : {}),
@@ -138,6 +144,8 @@ export async function saveToolPicks(
     : prev.status === 'designing' ? 'designing' : 'picking';
   const state: DesignState = { ...prev, status, features };
   if (reopen) delete state.approvedAt;
+  // Saving picks settles whatever the picker wanted to ask.
+  delete state.toolQuestions;
   const tools = toolsMap(features);
   const withTools: Idea = { ...idea, tools };
   state.cafeCheck = cafeCheck(withTools, state);
@@ -149,4 +157,30 @@ export async function saveToolPicks(
   if (picked) await tick(root, id, TOOL_STEP, true, { by: 'app', source: APPROACH_FILE, clock: opts.clock, steps: opts.steps });
   const designFile = await writeDesignMd(root, withTools, state);
   return { state, approachFile, designFile };
+}
+
+/**
+ * The picker could not pick: every question it needs goes into the idea's E2 draft at once (drafted or reused),
+ * and design.yaml remembers them, so the panel can say the team was asked and the Suggest button can wait.
+ */
+export async function askToolQuestions(root: string, idea: Idea, questions: string[], clock: Clock): Promise<{ state: DesignState; emailKey: string; questions: string[] }> {
+  const qs = questions.map((q) => str(q, 200)).filter(Boolean).slice(0, 8);
+  if (!qs.length) throw new Error('The AI gave no questions');
+  const rec = await draftEmail(root, { template: 'E2', ideaId: idea.id }, clock);
+  if (rec.status !== 'draft') throw new Error('An E2 is approved and waiting to be sent. Send it first, then ask again');
+  let body = rec.body;
+  for (const q of qs) body = addQuestion(body, q);
+  if (body !== rec.body) await updateDraft(root, rec.key, { body });
+  const state = await readDesign(root, idea.id);
+  state.toolQuestions = { questions: qs, emailKey: rec.key, at: clock() };
+  await writeDesign(root, idea.id, state);
+  return { state, emailKey: rec.key, questions: qs };
+}
+
+/** The operator forgets the questions (answers came some other way, or the picker should try again). */
+export async function clearToolQuestions(root: string, id: string): Promise<DesignState> {
+  const state = await readDesign(root, id);
+  delete state.toolQuestions;
+  await writeDesign(root, id, state);
+  return state;
 }

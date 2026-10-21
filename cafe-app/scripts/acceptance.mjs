@@ -12,7 +12,7 @@
 // 05-injection.eml, where it deliberately obeys the injected text (stage Launch, a budget flag) to prove the
 // code, not the AI, decides what is Safe. Every other task goes to the built-in fake.
 // --real-ai: asserts tiers and kinds, never AI wording; 120 s per drop.
-// After the drop-through, --fake also runs a design pass on one idea: tool picker → three brainstorm steps
+// After the drop-through, --fake also runs a design pass on one idea: tool picker (one pick) → three brainstorm steps
 // (the second answered "I don't know", which drafts an E2) → approve → plan.md and the starter kits.
 // Run it with tsx (npm run acceptance), since it imports the app's TypeScript.
 import { promises as fs } from 'node:fs';
@@ -317,12 +317,12 @@ async function designPass() {
 
   // Tool picker: the AI suggests, the operator saves the picks.
   const sug = await api('POST', u('tools/suggest'));
-  const saved = await api('POST', u('tools'), { features: sug.features.map(({ name, what, tool, reason, flags }) => ({ name, what, tool, reason, flags })) });
+  const saved = await api('POST', u('tools'), { features: sug.features.map(({ name, what, tool, reason, flags, context }) => ({ name, what, tool, reason, flags, context })) });
   const built = (await graph()).edges.filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes(`${ID}:approach.md`));
   const approach = await exists(path.join(dir, 'approach.md'));
-  check('(design) tool picks', '3 suggested, saved; approach.md; BUILT_WITH links',
-    `${sug.features.length} suggested, ${saved.state.features.length} saved, approach.md ${approach}, ${built.length} BUILT_WITH`,
-    sug.features.length === 3 && saved.state.features.length === 3 && saved.state.features.some((f) => f.tool === 'custom app')
+  check('(design) tool picks', '1 suggested with context, saved; approach.md; BUILT_WITH links',
+    `${sug.features.length} suggested, ${saved.state.features.length} saved, context ${saved.state.features[0]?.context?.length ?? 0}, approach.md ${approach}, ${built.length} BUILT_WITH`,
+    sug.features.length === 1 && saved.state.features.length === 1 && saved.state.features.some((f) => f.tool === 'custom app') && (saved.state.features[0].context?.length ?? 0) > 0
       && approach && built.length >= 1 && (await ideaOf(ID)).checklist?.s3e?.done);
 
   // Brainstorm: three questions, one at a time; the second is "I don't know", which goes into an E2 draft.

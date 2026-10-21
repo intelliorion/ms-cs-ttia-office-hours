@@ -21,7 +21,7 @@ import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask, designPlanTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
-import { saveToolPicks, toolPickInput, mergeSuggestions } from '../design/tools';
+import { saveToolPicks, toolPickInput, mergeSuggestions , askToolQuestions, clearToolQuestions } from '../design/tools';
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
@@ -146,9 +146,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const state = await readDesign(root, idea.id);
     return byHand(async () => {
       const { provider, output } = await ai.runWith(toolPickTask, toolPickInput(idea, state));
-      return { features: mergeSuggestions(state.features, output.features), provider };
+      // Not enough in the form: every question goes to the team in one E2 draft; nothing is suggested.
+      if (output.questions?.length) return { ...(await askToolQuestions(root, idea, output.questions, clock)), provider };
+      return { features: mergeSuggestions(state.features, output.pick ? [output.pick] : []), provider };
     })();
   });
+  add('POST', '/api/ideas/:id/tools/questions/clear', async ({ params }) => ({ state: await clearToolQuestions(root, params.id) }));
   add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
     const { state, designFile } = await saveToolPicks(root, params.id, body.features, { clock, steps: await steps() });
     return { state, designMd: await readFile(designFile, 'utf8') };

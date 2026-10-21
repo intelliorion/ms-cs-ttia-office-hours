@@ -53,6 +53,8 @@ export interface FeatureRow {
   tool: string;
   reason: string;
   flags: string[];
+  /** "Why this tool": the facts and the rule the suggestion rested on; kept with the saved pick. */
+  context: string[];
   /** Filled by the AI and not saved yet: shown with a highlighted border. */
   suggested: boolean;
 }
@@ -81,15 +83,16 @@ export function featureRows(raw: unknown, opts: { fromAi?: boolean; tools?: read
       key: str(f.id) || newKey(),
       name: str(f.name), what: str(f.what), tool, reason: str(f.reason),
       flags: flagsFor(tool, flags),
+      context: Array.isArray(f.context) ? f.context.filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 6) : [],
       suggested: Boolean(opts.fromAi) && !str(f.id),
     };
   });
 }
 
-export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', tool: '', reason: '', flags: [], suggested: false });
+export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', tool: '', reason: '', flags: [], context: [], suggested: false });
 
-/** The body for POST …/tools: only name, what, tool, reason, flags; rows with no name and nothing else are dropped. */
-export function picksBody(rows: FeatureRow[]): { features: { name: string; what?: string; tool?: string; reason?: string; flags: string[] }[] } {
+/** The body for POST …/tools: name, what, tool, reason, flags and the context lines; rows with no name and nothing else are dropped. */
+export function picksBody(rows: FeatureRow[]): { features: { name: string; what?: string; tool?: string; reason?: string; flags: string[]; context?: string[] }[] } {
   return {
     features: rows
       .filter((r) => r.name.trim() || r.what.trim() || r.tool)
@@ -99,6 +102,7 @@ export function picksBody(rows: FeatureRow[]): { features: { name: string; what?
         ...(r.tool ? { tool: r.tool } : {}),
         ...(r.reason.trim() ? { reason: r.reason.trim() } : {}),
         flags: flagsFor(r.tool, r.flags),
+        ...(r.context.length ? { context: r.context } : {}),
       })),
   };
 }
@@ -184,3 +188,7 @@ export const features = (n: number) => `${n} feature${n === 1 ? '' : 's'}`;
 
 /** Suggested answers typed one per line in the hand question form: blanks dropped, at most 4. */
 export const suggestedLines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 4);
+
+/** The Suggest button waits while questions are out to the team and no reply has been recorded (step s2d). */
+export const suggestWaiting = (design: { toolQuestions?: { questions: string[] } } | null | undefined, idea: { checklist?: Record<string, { done?: boolean }> }): boolean =>
+  Boolean(design?.toolQuestions?.questions?.length) && !idea.checklist?.s2d?.done;

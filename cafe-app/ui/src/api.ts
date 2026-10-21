@@ -36,5 +36,5 @@ export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismi
 
 /** The design series: GET an idea's design (state + live design.md) or its plan (plan.md + kit files). */
 export const ideaGet = (id: string, what: 'design' | 'plan') => fetch(`/api/ideas/${encodeURIComponent(id)}/${what}`).then((r) => handle<any>(r));
-export type DesignRoute = 'tools/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan';
+export type DesignRoute = 'tools/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan' | 'tools/questions/clear';
 export const designPost = (id: string, what: DesignRoute, body: unknown = {}) => post(`/api/ideas/${encodeURIComponent(id)}/${what}`, body);

@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, flagsFor, flagWord, mergeRows,
-  pathwayText, picksBody, picksProblem, suggestWaiting, type FeatureRow,
+  askedWithAnswers, pathwayText, picksBody, picksProblem, suggestWaiting, type FeatureRow,
 } from './designHelpers';
 import type { DesignCall, DesignView } from './DesignSection';
 
@@ -67,8 +67,10 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
       {asked && (
         <div className="tp-asked" data-testid="tool-questions">
           <div className="tp-asked-h">Asked the team {asked.at} <span className="sec-n">{waiting ? 'waiting for the reply' : 'reply received'}</span></div>
-          <ol>{asked.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
-          <div className="hint">All in one E2 draft in the Outbox. {waiting ? 'The AI suggests nothing until the team replies; you can still pick by hand.' : 'Ask the AI again, or pick by hand.'}
+          <ol>{askedWithAnswers(asked.questions, idea).map((x, i) => (
+            <li key={i}>{x.question}{x.answer && <div className="tp-answer" data-testid="tool-answer">↳ {x.answer}</div>}</li>
+          ))}</ol>
+          <div className="hint">All in one E2 draft in the Outbox. {waiting ? 'The AI suggests nothing until the team replies; you can still pick by hand.' : 'The answers go to the AI with the form: press Suggest with AI again, or pick by hand.'}
             {' '}<button className="link-btn" data-action="tools-forget" disabled={off} onClick={() => void forget()}>Forget these questions</button></div>
         </div>
       )}

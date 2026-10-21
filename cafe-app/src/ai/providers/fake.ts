@@ -48,7 +48,7 @@ const TRIAGE = {
 };
 
 /** Three tool picks for any idea, one of them a custom app (a CSIC flag). */
-/** One pick with the context it rests on; when the prompt's data carries no challenge text, the questions instead. */
+/** One pick with the context it rests on; when the data carries no challenge text and no team answers yet, the questions instead. */
 const TOOL_PICK = {
   pick: {
     name: 'Request intake and scheduling', what: 'Takes each request in one place and works out a send slot across time zones', tool: 'custom app',
@@ -137,7 +137,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: triage')) return JSON.stringify(TRIAGE);
-      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
+      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';

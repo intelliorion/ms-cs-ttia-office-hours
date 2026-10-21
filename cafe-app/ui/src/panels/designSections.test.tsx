@@ -327,4 +327,16 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="tool-questions"]')!.textContent).toContain('reply received');
     expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it('answers the Inbox recorded show under the asked questions and re-enable Suggest', async () => {
+    const tq = { questions: ['What does a request look like when it arrives?', 'Who builds?'], emailKey: 'k9', at: '2026-10-21' };
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, answers: [{ question: 'What does a request look like when it arrives', answer: 'An email to the shared mailbox', source: 'r.eml' }] }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="tool-answer"]')!.textContent).toContain('An email to the shared mailbox');
+    expect(el.querySelectorAll('[data-testid="tool-answer"]')).toHaveLength(1);
+    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(el.querySelector('[data-testid="tool-questions"]')!.textContent).toContain('press Suggest with AI again');
+  });
 });

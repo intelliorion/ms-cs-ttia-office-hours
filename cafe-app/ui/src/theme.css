@@ -458,3 +458,4 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .tp-ctx{margin-top:4px;font-size:12.5px}
 .tp-ctx summary{cursor:pointer;color:var(--muted)}
 .tp-ctx ul{margin:4px 0 0;padding-left:18px;color:var(--text);line-height:1.4}
+.tp-answer{color:var(--teal);font-size:13px;margin:2px 0 4px}

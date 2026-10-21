@@ -291,6 +291,8 @@ export interface ToolPickInput {
   support: string[];
   /** Whether the form names a builder (the pathway depends on it). */
   builderNamed?: boolean;
+  /** The team's replies to questions sent earlier (Inbox answers and answered design steps): part of the form now. */
+  teamAnswers?: { question: string; answer: string }[];
   existingFeatures?: { name: string; what?: string; tool?: string; reason?: string }[];
   /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
   guidance?: string;
@@ -335,6 +337,7 @@ function toolPickData(input: ToolPickInput) {
     idea: ideaData(input.idea),
     support: (Array.isArray(input.support) ? input.support : []).slice(0, 20).map((s) => cap(s, 200)),
     builderNamed: Boolean(input.builderNamed),
+    ...(input.teamAnswers?.length ? { teamAnswers: input.teamAnswers.slice(0, 12).map((a) => ({ question: cap(a.question, 200), answer: cap(a.answer, 500) })) } : {}),
     ...(input.existingFeatures?.length ? {
       existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
         name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
@@ -355,6 +358,7 @@ export const toolPickTask: Task<ToolPickOutput> = {
       'First judge whether the form says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty.',
       'If enough is known, return "pick": exactly one feature, the whole proof of concept, with the one tool for it. Do not split the idea into several features.',
       'If not enough is known, return "questions": every question you would need answered, all at once (2 to 8), each one short and answerable by the team in a sentence. The questions go to the team in one email; you will be asked again when the answers are in. Do not also return a pick.',
+      ...(data.teamAnswers ? ['"teamAnswers" are the team\'s replies to questions sent earlier. Treat them as part of the form. Never ask again anything answered there, even in other words; if what you would have asked is answered, pick.'] : []),
       ...(inp.guidance ? ['Guidance from the brainstorming skill on telling a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
       ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. If one has a tool, keep it unless clearly wrong, and return it as the pick.'] : []),
       'Approved tools (use exactly one of these labels for "tool"; anything else is not on the approved list):',

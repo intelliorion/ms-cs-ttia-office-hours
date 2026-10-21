@@ -1,4 +1,5 @@
 /** Pure helpers for the Tool picker, Design and Plan sections of an idea's details. */
+import { sameQuestion } from '../../../src/inbox/question';
 
 /** The approved tools, canonical labels in the server's order (src/graph/ontology.ts APPROVED_TOOLS). */
 export const APPROVED_TOOLS = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'] as const;
@@ -189,6 +190,15 @@ export const features = (n: number) => `${n} feature${n === 1 ? '' : 's'}`;
 /** Suggested answers typed one per line in the hand question form: blanks dropped, at most 4. */
 export const suggestedLines = (text: string) => text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 4);
 
-/** The Suggest button waits while questions are out to the team and no reply has been recorded (step s2d). */
-export const suggestWaiting = (design: { toolQuestions?: { questions: string[] } } | null | undefined, idea: { checklist?: Record<string, { done?: boolean }> }): boolean =>
-  Boolean(design?.toolQuestions?.questions?.length) && !idea.checklist?.s2d?.done;
+/** Each question the picker asked, with the team's answer the Inbox recorded for it (matched loosely), if any. */
+export function askedWithAnswers(questions: string[], idea: { answers?: { question: string; answer: string }[] }): { question: string; answer?: string }[] {
+  const answers = idea.answers ?? [];
+  return questions.map((q) => ({ question: q, ...(answers.find((a) => sameQuestion(a.question, q)) ? { answer: answers.find((a) => sameQuestion(a.question, q))!.answer } : {}) }));
+}
+
+/** The Suggest button waits while questions are out to the team and nothing has come back: no reply marked received (s2d) and no recorded answer matching any of them. */
+export const suggestWaiting = (design: { toolQuestions?: { questions: string[] } } | null | undefined, idea: { checklist?: Record<string, { done?: boolean }>; answers?: { question: string; answer: string }[] }): boolean => {
+  const qs = design?.toolQuestions?.questions ?? [];
+  if (!qs.length || idea.checklist?.s2d?.done) return false;
+  return !askedWithAnswers(qs, idea).some((x) => x.answer);
+};

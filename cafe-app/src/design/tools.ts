@@ -103,12 +103,21 @@ export function renderApproachMd(idea: Idea, features: DesignFeature[]): string 
   return out.join('\n');
 }
 
-/** The tool picker's input for the AI: the idea, its support and the features already there. */
+/** The team's replies so far: answers the Inbox recorded on the idea, then answered design steps. */
+export function teamAnswers(idea: Idea, state: DesignState): { question: string; answer: string }[] {
+  const recorded = ((idea as Idea & { answers?: { question: string; answer: string }[] }).answers ?? [])
+    .map((a) => ({ question: str(a.question, 200), answer: str(a.answer, 500) }));
+  const steps = state.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: str(s.question, 200), answer: str(s.answer, 500) }));
+  return [...recorded, ...steps].filter((a) => a.question && a.answer);
+}
+
+/** The tool picker's input for the AI: the idea, its support, the team's replies and the features already there. */
 export function toolPickInput(idea: Idea, state: DesignState): ToolPickInput {
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     support: idea.support,
     builderNamed: Boolean(builderOf(idea)),
+    ...(teamAnswers(idea, state).length ? { teamAnswers: teamAnswers(idea, state) } : {}),
     guidance: skillGuidance('brainstorming', 6000),
     ...(state.features.length ? {
       existingFeatures: state.features.map((f) => ({ name: f.name, what: f.what, tool: f.tool, reason: f.reason })),

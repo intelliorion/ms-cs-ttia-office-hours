@@ -160,6 +160,22 @@ describe('tool picker routes', () => {
     expect(saved.state.toolQuestions).toBeUndefined();
   });
 
+  it('once the team\'s answers are recorded on the idea, suggest sends them to the AI and gets the pick', async () => {
+    let seen = '';
+    const fake = fakeProvider();
+    const s = await server({ ...fake, complete: async (p, o) => { seen = p; return fake.complete(p, o); } });
+    const idea = await loadIdea(s.root, ID);
+    await saveIdea(s.root, { ...idea, challenge: undefined, current_process: undefined });
+    expect((await json(await s.post(`/api/ideas/${ID}/tools/suggest`))).questions).toHaveLength(4);
+    await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), answers: [{ question: 'What does a request look like when it arrives?', answer: 'An email to the shared mailbox', source: 'reply.eml' }] } as any);
+    const out = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
+    expect(seen).toContain('"teamAnswers"');
+    expect(seen).toContain('An email to the shared mailbox');
+    expect(seen).toMatch(/Never ask again anything answered there/);
+    expect(out.questions).toBeUndefined();
+    expect(out.features).toHaveLength(1);
+  });
+
   it('save writes approach.md, ticks s3e, sets status and adds graph links once after two saves', async () => {
     const s = await server();
     const r1 = await s.post(`/api/ideas/${ID}/tools`, { features: PICKS });

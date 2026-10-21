@@ -13,6 +13,8 @@ export interface Held {
   action: Action; rule: HeldRule; why: string;
   /** The existing node or idea this clashes with, when there is one. */
   existing?: string;
+  /** The new star (in the held link) that matched `existing`: the one end a "use the existing star" rewrites. */
+  node?: string;
 }
 export interface ConflictContext {
   idea: Idea | null;
@@ -75,7 +77,7 @@ function checkLink(l: AiLink, ctx: ConflictContext): Omit<Held, 'action'> | null
   for (const n of l.newNodes ?? []) {
     if (n.type === 'Person' || isPersonLabel(n.label, ctx)) return { rule: 'person-star', why: 'People come from the form only, never from text' };
     const twin = ctx.nodes.find((x) => x.type === n.type && x.id !== n.id && (sameLabel(x.label, n.label) || wordOverlap(x.label, n.label) >= NEAR_DUPLICATE));
-    if (twin) return { rule: 'near-duplicate-star', why: `Looks like ${twin.label}: merge or keep both?`, existing: twin.id };
+    if (twin) return { rule: 'near-duplicate-star', why: `Looks like ${twin.label}: merge or keep both?`, existing: twin.id, node: n.id };
   }
   if (l.confidence < LOW_CONFIDENCE) return { rule: 'low-confidence', why: `The AI was not sure (${pct(l.confidence)})` };
   return null;

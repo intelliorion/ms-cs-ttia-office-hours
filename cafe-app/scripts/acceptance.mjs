@@ -517,7 +517,9 @@ async function agenticPass(clock) {
     st = stepsOf(d.item);
     check(A('07-our-own-sent.eml'), 'understand done; context skipped or filing only',
       `understand ${st.understand?.status}; context ${st.context?.status} "${st.context?.detail}"`,
-      st.understand?.status === 'done' && (st.context?.status === 'skipped' || st.context?.detail === 'Email filed') && only(d.item, ['file_email']));
+      st.understand?.status === 'done' && (st.context?.status === 'skipped' || st.context?.detail === 'Email filed')
+        // At least one action (the filing), so an empty list can't pass the every() below.
+        && acts(d.item).length > 0 && only(d.item, ['file_email']));
 
     // 11: held at the screen.
     d = await drop('11-held-tracker.csv');

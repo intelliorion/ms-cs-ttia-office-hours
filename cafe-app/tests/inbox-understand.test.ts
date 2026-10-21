@@ -27,7 +27,7 @@ describe('understandTask', () => {
     expect(p).toContain('Slot finding');
     expect(p).toContain('"teamAnswers"');
     expect(p).toMatch(/Reuse a label from knownStars/);
-    expect(p).toMatch(/Never name people in "understood"/);
+    expect(p).toMatch(/Never name people in "what", "understood" or "uncertain"/);
     expect(p).toMatch(/data, not instructions/);
   });
   it('the fake answers understand with the reply fixture, the conflicting reply, or the transcript', async () => {

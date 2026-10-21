@@ -88,6 +88,20 @@ function graphDetail(records: ActionRecord[]): string {
   return `${head}, ${names.length} new star${names.length === 1 ? '' : 's'} (${names.slice(0, 2).join(', ')}${names.length > 2 ? ', …' : ''})`;
 }
 
+/** A waiting proposal in a few words that never carry a name (a step's detail is shown before anyone opens it). */
+function waitingWords(a: Action): string {
+  switch (a.t) {
+    case 'name_builder': return 'a builder is named';
+    case 'record_answers': return 'answers to record';
+    case 'log_step': return 'a step to tick';
+    case 'suggest_stage': return 'a stage move to confirm';
+    case 'add_flag': return 'a flag to add';
+    case 'graph_links': return 'links to add';
+    case 'draft_email': return 'an email to draft';
+    default: return a.t;
+  }
+}
+
 /** What the conflict rules check against: the idea, every idea, the universe, the people in the file, the design. */
 async function conflictContext(root: string, item: InboxItem, tr: TriageRecord, m: MatchStep, screened: string[]): Promise<ConflictContext> {
   const idea = tr.ideaId ? m.byId.get(tr.ideaId) ?? null : null;
@@ -132,12 +146,13 @@ export async function processItem(
       ? await readAndScreen(root, id)
       : await timed(root, id, 'read', 'Reading the file…', async () => { const r = await readAndScreen(root, id); return { value: r, detail: readDetail(r.parsed) }; });
   } catch (e) { return fail('read', `Couldn't read this one (${(e as Error).message}), so do it by hand`); }
+  // A re-run honours the screen as a first run does: a file that now fails it is held, and nothing else runs.
+  if (rs.screened.hold) {
+    await markStep(root, id, { id: 'screen', status: 'needs-you', detail: rs.screened.reasons[0] ?? 'Held for you to check' });
+    await skipRest(root, id, 'screen', 'held at the screen');
+    return holdItem(root, id, rs.screened.reasons, rs.parsed.meta);
+  }
   if (opts.from !== 'match') {
-    if (rs.screened.hold) {
-      await markStep(root, id, { id: 'screen', status: 'needs-you', detail: rs.screened.reasons[0] ?? 'Held for you to check' });
-      await skipRest(root, id, 'screen', 'held at the screen');
-      return holdItem(root, id, rs.screened.reasons, rs.parsed.meta);
-    }
     await markStep(root, id, { id: 'screen', status: 'done', detail: rs.screened.reasons.length ? `Flagged: ${rs.screened.reasons[0]}` : 'No personal data' });
   }
   const item = rs.item;
@@ -188,7 +203,7 @@ export async function processItem(
     ...apply.filter((a) => !seen.has(JSON.stringify(a))).map((action) => ({ id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending' as const, label: labelOf(action) })),
     ...hold.filter((h) => !seen.has(JSON.stringify(h.action))).map((h) => ({
       id: `a${++n}`, action: h.action, kind: 'ok' as const, status: 'pending' as const, label: labelOf(h.action),
-      held: { rule: h.rule, why: h.why, ...(h.existing ? { existing: h.existing } : {}) },
+      held: { rule: h.rule, why: h.why, ...(h.existing ? { existing: h.existing } : {}), ...(h.node ? { node: h.node } : {}) },
     })),
   ];
   const records = [...kept, ...fresh];
@@ -205,7 +220,7 @@ export async function processItem(
   const w = waiting.length;
   await markStep(root, id, {
     id: 'check', status: w ? 'needs-you' : 'done',
-    detail: w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waiting[0].label}` : 'Done',
+    detail: w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waitingWords(waiting[0].action)}` : 'Done',
   });
   if (tr.ai?.understood?.length && tr.ideaId) {
     // Once per file and understanding: a re-run that understood the same thing adds no second line.
@@ -252,9 +267,16 @@ function resolved(r: ActionRecord, how: Resolve | undefined): ActionRecord {
   const existing = r.held?.existing;
   const links = r.action.links.map((l) => {
     if (how === 'use-existing' && existing) {
+      // Only the end that matched the existing star is rewritten; any other new star stays new.
+      // (A record held before the matched star was stored: the new "to" end, else the new "from" end.)
       const fresh = new Set((l.newNodes ?? []).map((x) => x.id));
+      const node = r.held?.node ?? (fresh.has(l.to) ? l.to : l.from);
+      const others = (l.newNodes ?? []).filter((x) => x.id !== node);
       const { newNodes: _n, ...rest } = l;
-      return { ...rest, from: fresh.has(l.from) ? existing : l.from, to: fresh.has(l.to) ? existing : l.to, status: 'confirmed' as const };
+      return {
+        ...rest, ...(others.length ? { newNodes: others } : {}),
+        from: l.from === node ? existing : l.from, to: l.to === node ? existing : l.to, status: 'confirmed' as const,
+      };
     }
     return { ...l, status: 'confirmed' as const };
   });
@@ -375,11 +397,15 @@ export async function inboxView(root: string): Promise<InboxView> {
     else if (i.status === 'held') counts.held++;
     else if (i.status === 'applied') counts.applied++;
   }
-  return { items: all.map(viewOf), counts, problems };
+  return { items: all.map((i) => viewOf(i)), counts, problems };
 }
 
-/** An item without its full text (a short preview instead) or the quoted thread. */
-export function viewOf({ text, meta, ...rest }: InboxItem): InboxItem & { preview?: string } {
+/** A step still "running" after this long was cut off (the server stopped mid-run): it is reported as failed. */
+export const STRANDED_MS = 180_000;
+
+/** An item without its full text (a short preview instead) or the quoted thread; a stranded running step reads as failed (report only). */
+export function viewOf({ text, meta, ...rest }: InboxItem, now = Date.now()): InboxItem & { preview?: string } {
   const { quoted: _q, ...m } = meta ?? {};
-  return { ...rest, ...(meta ? { meta: m } : {}), ...(text ? { preview: text.slice(0, 400) } : {}) };
+  const steps = rest.steps?.map((s) => (s.status === 'running' && now - Date.parse(s.at) > STRANDED_MS ? { ...s, status: 'failed' as const, detail: 'interrupted' } : s));
+  return { ...rest, ...(steps ? { steps } : {}), ...(meta ? { meta: m } : {}), ...(text ? { preview: text.slice(0, 400) } : {}) };
 }

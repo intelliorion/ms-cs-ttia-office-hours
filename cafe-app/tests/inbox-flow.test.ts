@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS } from '../src/round/round';
 import { readAiLinks, appendAiLink } from '../src/graph/store';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
 import { readHistory } from '../src/workspace/files';
+import { getItem, updateItem } from '../src/inbox/store';
 
 const ID = 'CAFE-2026-001';
 const reply = `From: team@example.test\nSubject: Re: ${ID} Email scheduler\n\nAbout 40 a week. Two people triage by hand.\n`;
@@ -149,5 +150,81 @@ describe('the pipeline', () => {
     expect(again.item.steps.at(-1)).toMatchObject({ id: 'check', status: 'done' });
     const understood = (await readHistory(await ideaDir(s.root, ID))).filter((h) => h.detail?.startsWith('Understood: '));
     expect(understood).toHaveLength(1);
+  });
+});
+
+describe('final review fixes', () => {
+  const twoStars = {
+    what: 'A reply about slot finding', understood: ['Slots come from a calendar feed'], kind: 'reply', ideaId: ID, matchConfidence: 0.95,
+    facts: {
+      answers: [], replyReceived: true, builderNamed: null, newFlags: [], stageHint: null,
+      graph: {
+        nodes: [{ type: 'Capability', label: 'Slot findings' }, { type: 'System', label: 'Calendar feed' }],
+        links: [{ from: 'Slot findings', to: 'Calendar feed', rel: 'USES_DATA', description: 'Reads the calendar feed', confidence: 0.85 }],
+      },
+    },
+    uncertain: [],
+  };
+  it('use-existing on a held link with two new stars rewrites only the matched end, keeps the other star, no self-link', async () => {
+    const fake = fakeProvider();
+    const s = await start({ ...fake, complete: async (p: string, o: any) => (p.startsWith('TASK: understand') ? JSON.stringify(twoStars) : fake.complete(p, o)) });
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'slots', title: 'Slots', dedupe_key: 'slots|person 1' }));
+    await appendAiLink(s.root, { ...slotFinding, from: 'idea:CAFE-2026-002' });
+    const { item } = await (await s.drop('slots.eml', reply)).json();
+    const dup = item.actions.find((a: any) => a.held?.rule === 'near-duplicate-star');
+    expect(dup.held).toMatchObject({ existing: 'capability:slot-finding', node: 'capability:slot-findings' });
+    const r = await (await s.post(`/api/inbox/${item.id}/apply`, { actionIds: [dup.id], resolve: { [dup.id]: 'use-existing' } })).json();
+    expect(r.item.actions.find((a: any) => a.id === dup.id).status).toBe('applied');
+    const links = (await readAiLinks(s.root)).links.filter((l) => l.source.includes('slots'));
+    expect(links.every((l) => l.from !== l.to)).toBe(true);
+    const l = links.find((x) => x.rel === 'USES_DATA')!;
+    expect(l).toMatchObject({ from: 'capability:slot-finding', to: 'system:calendar-feed', status: 'confirmed' });
+    expect((l.newNodes ?? []).map((n) => n.id)).toEqual(['system:calendar-feed']);
+  });
+  it('process with an ideaId checks the idea exists and refuses once something is applied', async () => {
+    const s = await start();
+    // Nothing applied yet (it asks Which idea?): an idea that doesn't exist is refused.
+    const ask = (await (await s.drop('thoughts.txt', 'Some thoughts about requests arriving by email.')).json()).item;
+    const none = await s.post(`/api/inbox/${ask.id}/process`, { ideaId: 'CAFE-2026-999' });
+    expect(none.status).toBe(400);
+    expect((await none.json()).error).toMatch(/No idea CAFE-2026-999/);
+    // Something applied: picking again is refused until it is undone.
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    const applied = await s.post(`/api/inbox/${item.id}/process`, { ideaId: ID });
+    expect(applied.status).toBe(400);
+    expect((await applied.json()).error).toMatch(/Undo what was done first/);
+  });
+  it('the check step names no one: an unheld builder proposal is described without the name', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('reply2.eml', reply.replace('About 40', 'We have a second builder now. About 40'))).json();
+    const check = item.steps.at(-1);
+    expect(check).toMatchObject({ id: 'check', status: 'needs-you' });
+    expect(check.detail).not.toMatch(/Person 9/);
+    expect(check.detail).toBe('1 item waits: a builder is named');
+  });
+  it('a running step older than 180 s is reported as failed (interrupted), the sidecar is not rewritten', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    const steps = item.steps.map((x: any) => (x.id === 'understand' ? { ...x, status: 'running', at: new Date(Date.now() - 181_000).toISOString() } : x));
+    await updateItem(s.root, item.id, { steps });
+    const v: any = await (await fetch(`${s.base}/api/inbox`)).json();
+    const u = v.items.find((i: any) => i.id === item.id).steps.find((x: any) => x.id === 'understand');
+    expect(u).toMatchObject({ status: 'failed', detail: 'interrupted' });
+    expect((await getItem(s.root, item.id))!.steps!.find((x) => x.id === 'understand')!.status).toBe('running');
+    // A step running for less than that is still running.
+    await updateItem(s.root, item.id, { steps: item.steps.map((x: any) => (x.id === 'understand' ? { ...x, status: 'running', at: new Date().toISOString() } : x)) });
+    const v2: any = await (await fetch(`${s.base}/api/inbox`)).json();
+    expect(v2.items.find((i: any) => i.id === item.id).steps.find((x: any) => x.id === 'understand').status).toBe('running');
+  });
+  it('a re-run honours the screen: a file that now fails the screen is held, as on a first run', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    expect(item.status).toBe('applied');
+    await writeFile(path.join(s.root, ...item.file.split('/')), `${reply}\nHer salary and passport number are below.\n`);
+    const r = await s.post(`/api/inbox/${item.id}/process`, {});
+    const again = (await r.json()).item;
+    expect(again.status).toBe('held');
+    expect(again.steps.find((x: any) => x.id === 'screen')).toMatchObject({ status: 'needs-you' });
+    expect(again.steps.filter((x: any) => ['match', 'understand', 'context', 'graph', 'check'].includes(x.id)).every((x: any) => x.status === 'skipped')).toBe(true);
   });
 });

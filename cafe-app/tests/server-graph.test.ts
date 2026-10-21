@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, sampleIdea, FIXTURE } from './helpers';
 import { saveIdea } from '../src/ideas/store';
-import { appendAiLink } from '../src/graph/store';
+import { appendAiLink, readAiLinks } from '../src/graph/store';
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
@@ -74,5 +74,18 @@ describe('/api/graph', () => {
     await post();
     const g2 = await json(await fetch(`${s.base}/api/graph`));
     expect(g2.edges.length).toBe(g1.edges.length);
+  });
+  it('extract keeps a person-star hold in the answer only: nothing about it is written to the graph store', async () => {
+    process.env.CAFE_AI_FAKE = '1';
+    const s = await startServer('2026-10-21');
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
+    // A team member whose name is the label the fake proposes for a System.
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails', people: { submitter: 'Person 1', team: [{ name: 'Shared mailbox', role: 'builder' } as any] } }));
+    const r = await json(await fetch(`${s.base}/api/ai/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'CAFE-2026-001' }) }));
+    expect(r.held.some((h: any) => h.rule === 'person-star')).toBe(true);
+    const { links } = await readAiLinks(s.root);
+    expect(links.some((l) => l.from === 'system:shared-mailbox' || l.to === 'system:shared-mailbox')).toBe(false);
+    const g = await json(await fetch(`${s.base}/api/graph`));
+    expect(g.nodes.some((n: any) => n.id === 'system:shared-mailbox')).toBe(false);
   });
 });

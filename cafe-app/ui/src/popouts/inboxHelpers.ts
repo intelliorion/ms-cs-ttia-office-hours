@@ -283,6 +283,8 @@ export function heldChoices(h: Held): HeldChoice[] {
   switch (h.rule) {
     case 'near-duplicate-star': return [{ label: 'Use the existing star', kind: 'apply', resolve: 'use-existing' }, { label: 'Keep both', kind: 'apply', resolve: 'take-file' }, { label: 'No', kind: 'drop' }];
     case 'contradicts-fact': return [{ label: "Keep the form's value", kind: 'drop' }, { label: "Take the file's value", kind: 'apply', resolve: 'take-file' }];
+    // People come from the form only: a person is never added as a star.
+    case 'person-star': return [{ label: 'No', kind: 'drop' }];
     default: return [{ label: 'Yes', kind: 'apply' }, { label: 'No', kind: 'drop' }];
   }
 }

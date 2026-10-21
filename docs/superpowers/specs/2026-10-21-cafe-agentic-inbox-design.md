@@ -60,6 +60,8 @@ AI graph facts (`facts.graph`: nodes and links from `ExtractOutput`) are applied
 
 The idea panel's Graph section and the star card keep Remove on AI links and lose Confirm. `POST /api/graph/confirm` stays for held-back links (the Needs-you card's "Add it anyway" calls it); `LinkTable` shows Confirm only for edges with `confirmed: false` (AI links whose stored status is `pending`), which now exist only through conflicts.
 
+**Amendment (final review).** On the Inbox path a link held by a conflict rule is a pending action record on the item's card, not a link in the graph store: nothing is written to `graph/ai-links.jsonl` until the operator chooses. "Add it anyway" and the other §4.2 choices go through `POST /api/inbox/:id/apply` (with `resolve` where the choice rewrites the link), not `POST /api/graph/confirm`; the confirm route stays for pending links already in the store (from `/api/ai/extract` or earlier runs). A `person-star` hold is never written to the store on any path; on `/api/ai/extract` it is reported only in the response's `held`, and its only choice on the card is No.
+
 `POST /api/ai/extract` ("Grow the universe from this idea") follows the same rule: links applied confirmed; new stars applied; the conflict rules (§4.2) hold back what they catch; the response says what was held and why.
 
 ### 4.2 Conflict rules (code, `src/inbox/conflicts.ts`)
@@ -76,7 +78,9 @@ The idea panel's Graph section and the star card keep Remove on AI links and los
 | `duplicate-idea` | a `create_idea` or import row whose title normalises equal to an existing idea's, or whose capability set equals an existing idea's at the same function | "Looks like CAFE-2026-003 (same capabilities, same function)" |
 | `screened` | the screen step flagged anything on this file | the screen's reason |
 
-Held proposals become `ActionRecord`s with `kind: 'ok'`, `status: 'pending'`, plus `held: { rule, why }`. The Needs-you card offers per item: Yes (apply), No (drop), and for `near-duplicate-star` "Use <existing>" (rewrite the link to the existing node, then apply), for `two-ideas` the idea picker, for `contradicts-fact` "Keep the form's value" (drop) / "Take the file's value" (apply). Undo stays per applied action.
+**Amendment (final review).** On the Inbox path, `two-ideas` is covered by the "Which idea?" ask (the match cap: below a sure match the item asks for the idea and nothing is applied until the pick), and `duplicate-idea` by the importer's own dedupe (form exports go through `importExport`, which keeps duplicates out on its own). Both rules stay active in `checkProposals` for `create_idea` proposals and for future import-row checks.
+
+Held proposals become `ActionRecord`s with `kind: 'ok'`, `status: 'pending'`, plus `held: { rule, why }` (and, for `near-duplicate-star`, `existing` and `node`: the existing star and the new star that matched it; "Use the existing star" rewrites only that end of the link and keeps any other new star). The Needs-you card offers per item: Yes (apply), No (drop), and for `near-duplicate-star` "Use <existing>" (rewrite the link to the existing node, then apply), for `two-ideas` the idea picker, for `contradicts-fact` "Keep the form's value" (drop) / "Take the file's value" (apply). Undo stays per applied action.
 
 Nothing in `kindOf` changes for the fact actions except: `graph_links` is always `safe` (the conflict checker runs before `kindOf`, so a held link never reaches it as safe). `needsHand` (no AI) still makes every action `ok`.
 
@@ -113,9 +117,9 @@ Lite quality: no rim pulse, no dot halo, no progress hairline animation.
 
 - `GET /api/inbox` → `InboxView` plus `steps` on each item (already returned by `viewOf`; add `steps`, `held` on action records).
 - `POST /api/inbox/drop` unchanged; returns the item after step 8 or at the first needs-you.
-- `POST /api/inbox/:id/process` reprocess (steps 4–8), body `{ ideaId? }`.
+- `POST /api/inbox/:id/process` reprocess (steps 4–8), body `{ ideaId? }`; with `ideaId` it makes the same checks as a pick (the idea exists, nothing applied yet).
 - `POST /api/inbox/:id/apply` body `{ actionIds, resolve?: { [actionId]: 'use-existing' | 'take-file' } }` extends today's apply with the §4.2 choices.
-- `POST /api/graph/confirm`, `/remove` unchanged.
+- `POST /api/graph/confirm`, `/remove` unchanged. Inbox-held links are pending records on the card, not in the graph store (§4.1 amendment): "Add it anyway" and every held choice go through `/apply`.
 - `POST /api/ai/extract` response adds `{ held: Held[] }`.
 
 ## 8. Files

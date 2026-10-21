@@ -178,5 +178,7 @@ describe('agentic inbox helpers', () => {
     expect(heldChoices({ rule: 'near-duplicate-star', why: 'x', existing: 'capability:slot-finding' }).map((c) => c.label)).toEqual(['Use the existing star', 'Keep both', 'No']);
     expect(heldChoices({ rule: 'contradicts-fact', why: 'x' }).map((c) => c.label)).toEqual(["Keep the form's value", "Take the file's value"]);
     expect(heldChoices({ rule: 'low-confidence', why: 'x' }).map((c) => c.label)).toEqual(['Yes', 'No']);
+    // A person never becomes a star: the only choice is No.
+    expect(heldChoices({ rule: 'person-star', why: 'x' })).toEqual([{ label: 'No', kind: 'drop' }]);
   });
 });

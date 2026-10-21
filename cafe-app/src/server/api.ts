@@ -133,7 +133,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     };
     const { apply, hold } = checkProposals(ctx, [{ t: 'graph_links', ideaId: idea.id, links: planned.links }]);
     for (const a of apply) if (a.t === 'graph_links') for (const l of a.links) await appendAiLink(root, l);
-    for (const h of hold) if (h.action.t === 'graph_links') for (const l of h.action.links) await appendAiLink(root, { ...l, status: 'pending' });
+    // A person never becomes a star, not even a pending one: a person-star hold stays in the answer only.
+    for (const h of hold) if (h.action.t === 'graph_links' && h.rule !== 'person-star') for (const l of h.action.links) await appendAiLink(root, { ...l, status: 'pending' });
     const after = await rebuildGraph(root);
     const ids = new Set(planned.links.map((l) => edgeId(l.from, l.rel, l.to)));
     const added = after.edges.filter((e) => ids.has(e.id));
@@ -239,8 +240,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     }
     return { item: await applyRecords(root, params.id, ids, clock, resolve as Record<string, Resolve>) };
   });
+  // With an idea: the same checks as a pick (the idea exists, nothing applied yet).
   add('POST', '/api/inbox/:id/process', async ({ params, body }) =>
-    ({ item: viewOf(await reprocessItem(root, params.id, ai, clock, body.ideaId ? { ideaId: String(body.ideaId) } : {})) }));
+    ({ item: viewOf(body.ideaId ? await chooseIdea(root, params.id, String(body.ideaId), ai, clock) : await reprocessItem(root, params.id, ai, clock)) }));
   add('POST', '/api/inbox/:id/dismiss-action', async ({ params, body }) =>
     ({ item: viewOf(await dropRecord(root, params.id, String(body.actionId ?? ''))) }));
   add('POST', '/api/inbox/:id/undo', async ({ params, body }) => {

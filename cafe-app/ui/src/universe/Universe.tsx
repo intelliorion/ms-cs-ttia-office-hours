@@ -34,14 +34,17 @@ export interface UniverseProps {
 }
 
 const SPIN = 0.03; // rad/s while idle
-const IDLE_AFTER_MS = 8000;
+const IDLE_AFTER_MS = 3000; // the slow spin resumes this long after the last click or wheel
 const MAX_PAN = 400;
 
 export function hasWebGL(): boolean { return probeGl().webgl; }
 
-/** Fixed camera framing: the graph fits the centre gap between the panels (x 480–1440 of 1920). */
-function homeFor(radius: number, focus = false) {
-  const d = Math.min(600, Math.max(60, radius * (focus ? 1.75 : 2.85)));
+/**
+ * Fixed camera framing: the graph fits the centre gap between the panels (x 480–1440 of 1920). Focus hides the panels
+ * but keeps the same distance, so the whole graph stays in view with room around it.
+ */
+function homeFor(radius: number, _focus = false) {
+  const d = Math.min(600, Math.max(60, radius * 2.85));
   return { position: new Vector3(0, 0.36, 1).normalize().multiplyScalar(d), target: new Vector3(0, -radius * 0.08, 0) };
 }
 

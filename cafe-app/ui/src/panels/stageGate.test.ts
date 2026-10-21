@@ -47,6 +47,11 @@ describe('sectionsFor', () => {
   it('design not loaded yet: the stage-3 picker still shows (it says Loading), the rest waits', () => {
     expect(sectionsFor(idea(3, { review }), null, [])).toEqual({ review: 'summary', tools: 'active', design: 'hidden', plan: 'hidden' });
   });
+  it('plan files written earlier stay visible after the design is reopened (approvedAt gone)', () => {
+    expect(sectionsFor(idea(3, { review }), { features: feats, steps: [{ n: 1 }] }, [], { files: ['plan.md'] }).plan).toBe('active');
+    expect(sectionsFor(idea(4, { review }), { features: feats }, [], { files: ['plan.md'] }).plan).toBe('summary');
+    expect(sectionsFor(idea(3, { review, closed: { as: 'csic' } }), { features: feats }, [], { files: ['plan.md'] }).plan).toBe('summary');
+  });
   it('names the home stage of each section', () => {
     expect(HOME_STAGE).toEqual({ review: 2, tools: 3, design: 3, plan: 3 });
   });

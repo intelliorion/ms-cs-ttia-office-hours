@@ -105,6 +105,9 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiReview]);
   const edited = () => { if (suggested) { setSuggested(false); onClearAi(); } };
+  // The checks start open until a decision is picked; a suggestion opens them so its ticks are seen.
+  const [checksOpen, setChecksOpen] = useState(!idea.review?.decision);
+  useEffect(() => { if (aiReview) setChecksOpen(true); }, [aiReview]);
   const closed = Boolean(idea.closed);
   const off = closed || busy;
   return (
@@ -124,9 +127,9 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
       </div>
       <textarea className={`reason${suggested ? ' suggested-box' : ''}`} rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={off}
         onChange={(e) => { edited(); setReason(e.target.value); }} aria-label="Reason" />
-      <details className="checks" open={!decision}>
+      <details className="checks" open={checksOpen} onToggle={(e) => setChecksOpen((e.target as HTMLDetailsElement).open)}>
         <summary>Before you decide <span className="sec-n">{Object.values(criteria).filter(Boolean).length} of {(state.criteria ?? []).length} ticked, for your own notes</span></summary>
-        <ul className="criteria">
+        <ul className={`criteria${suggested ? ' suggested' : ''}`}>
           {(state.criteria ?? []).map((c: any) => (
             <li key={c.id}>
               <label>
@@ -140,7 +143,7 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
       </details>
       {suggested && <div className="sg-by" data-testid="ai-review-by">Suggested by {aiName}. Check it, change what you like, then save.</div>}
       <div className="rv-foot">
-        <span className="hint">{closed ? 'Closed. Set a stage to reopen it before deciding.' : decision ? SAVE_HINTS[decision] ?? '' : 'Pick a decision and give a reason.'}</span>
+        <span className="hint">{decision ? SAVE_HINTS[decision] ?? '' : 'Pick a decision and give a reason.'}</span>
         <button className="btn primary" data-action="save-review" disabled={off || !decision || !reason.trim()}
           onClick={() => onSave({ criteria, decision, reason })}>
           {decision ? `Save and draft ${DECISION_EMAIL[decision] ?? ''}`.trim() : 'Save decision'}

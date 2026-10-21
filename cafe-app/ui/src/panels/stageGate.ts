@@ -12,14 +12,15 @@ export const HOME_STAGE: Record<SectionKey, number> = { review: 2, tools: 3, des
 interface IdeaLike { stage: number; closed?: unknown; review?: unknown }
 interface DesignLike { features?: unknown[]; steps?: unknown[]; summary?: string; approvedAt?: string }
 
-export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefined, editing: readonly string[]): Gates {
+export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefined, editing: readonly string[], plan?: { files?: unknown[] } | null): Gates {
   const closed = Boolean(idea.closed);
   const stage = idea.stage;
   const has: Record<SectionKey, boolean> = {
     review: Boolean(idea.review),
     tools: Boolean(design?.features?.length),
     design: Boolean(design?.steps?.length || design?.summary),
-    plan: Boolean(design?.approvedAt),
+    // Plan files outlive the approval: reopening the design drops approvedAt but keeps plan.md and the kits.
+    plan: Boolean(design?.approvedAt) || Boolean(plan?.files?.length),
   };
   // The design and the plan only open once the step before them is done, or once they hold data of their own.
   const open: Record<SectionKey, boolean> = {

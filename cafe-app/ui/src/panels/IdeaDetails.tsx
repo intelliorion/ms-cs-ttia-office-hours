@@ -143,7 +143,7 @@ export function IdeaDetails({ id }: { id: string }) {
       return r;
     }, () => `${where(t)}.`);
   const stageValue = idea.closed ? `close:${idea.closed.as}` : `stage:${idea.stage}`;
-  const gates = sectionsFor(idea, design?.state, editing);
+  const gates = sectionsFor(idea, design?.state, editing, plan);
   const edit = (k: SectionKey) => (idea.closed ? undefined : () => setEditing((xs) => (xs.includes(k) ? xs : [...xs, k])));
   const mine = suggest && suggest.id === id ? suggest : null;
   const links = ideaLinks(graph, id);
@@ -182,7 +182,7 @@ export function IdeaDetails({ id }: { id: string }) {
           <Review idea={idea} state={state} busy={busy || aiBusy} aiReview={aiReview} aiName={providerName(aiReview?.provider, ai)}
             onClearAi={() => setAiReview(null)} aiBar={(
               <div className="ai-row">
-                <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy || Boolean(idea.closed)} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
+                <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
                   {aiBusy && !aiFor ? 'Working…' : 'Suggest a decision'}</button>
               </div>
             )}

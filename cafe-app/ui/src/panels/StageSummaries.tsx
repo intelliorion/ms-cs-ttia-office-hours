@@ -40,7 +40,7 @@ export function ToolsCard({ design, onEdit }: { design: DesignView | null; onEdi
   const feats: any[] = design?.state?.features ?? [];
   return (
     <Card title="Tools" note={feats.length ? `${feats.length} feature${feats.length === 1 ? '' : 's'}` : undefined} testId="tools-card" onEdit={onEdit}>
-      {!design ? <div className="hint">Loading…</div> : feats.length ? (
+      {!design ? <div className="hint">Reading the design files…</div> : feats.length ? (
         <ul className="card-list">
           {feats.map((f) => (
             <li key={f.id ?? f.name}><span className="card-k">{f.name}</span><span className="card-v">{f.tool ?? 'no tool picked'}{f.pathway ? ` · ${f.pathway}` : ''}</span></li>

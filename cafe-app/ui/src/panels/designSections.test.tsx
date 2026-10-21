@@ -271,4 +271,16 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="tools-card"]')).toBeTruthy();
     expect(el.querySelector('[data-action^="edit-"]')).toBeNull();
   });
+
+  it('plan files written earlier stay on screen after the design is reopened; writing again waits for approval', async () => {
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design'
+      ? { state: designState({ summary: 'Done.' }), designMd: '# Design' } : { files: ['plan.md', 'kit/power-apps/screens.md'] }));
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 3 }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    const plan = el.querySelector('[data-testid="plan-kits"]')!;
+    expect(plan.textContent).toContain('kit/power-apps/screens.md');
+    expect((plan.querySelector('[data-action="write-plan"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(plan.textContent).toContain('approve it again');
+  });
 });

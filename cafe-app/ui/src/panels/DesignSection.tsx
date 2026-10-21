@@ -204,9 +204,11 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
   const [fallback, setFallback] = useState<string | null>(null);
   const fbRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (fallback) { fbRef.current?.focus(); fbRef.current?.select(); } }, [fallback]);
-  if (!design || designPhase(design.state) !== 'approved') return null;
   const files = plan?.files ?? [];
-  const off = busy || aiWorking;
+  const approved = Boolean(design) && designPhase(design!.state) === 'approved';
+  // Files written earlier stay on screen after the design is reopened; writing again waits for a new approval.
+  if (!design || (!approved && files.length === 0)) return null;
+  const off = busy || aiWorking || !approved;
   const write = () => call(() => designPost(idea.id, 'plan'), { ai: 'plan', ok: (r: any) => `Wrote ${r.files.length} file${r.files.length === 1 ? '' : 's'}: plan.md and the starter kits.` });
   const copy = async () => {
     const text = buildInstruction(idea.id, idea.slug, design.folder);
@@ -218,7 +220,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
     <section className="sec" data-testid="plan-kits">
       <h3>Plan and kits {files.length > 0 && <span className="sec-n">{files.length} file{files.length === 1 ? '' : 's'}</span>}</h3>
       <div className="ai-row">
-        <button className="btn primary" data-action="write-plan" disabled={noAi || off} title={noAi ? `${NO_AI_TIP}: plan.md needs the AI` : undefined} onClick={() => void write()}>
+        <button className="btn primary" data-action="write-plan" disabled={noAi || off} title={noAi ? `${NO_AI_TIP}: plan.md needs the AI` : !approved ? 'Approve the design again first' : undefined} onClick={() => void write()}>
           {aiWorking ? 'Working…' : files.length ? 'Write the plan and kits again' : 'Write the plan and kits'}</button>
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
@@ -227,7 +229,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           <ul className="pk-files" aria-label="Plan and kit files">
             {files.map((f) => <li key={f}>{f}</li>)}
           </ul>
-          <div className="hint">Writing again rewrites plan.md and the kit files the app made; your own files are kept.</div>
+          <div className="hint">{approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}</div>
         </>
       ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a starter kit for each picked tool. No code: the kits are templates.'}</div>}
       {hasAgentKit(files) && (

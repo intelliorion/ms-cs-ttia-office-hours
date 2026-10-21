@@ -8,7 +8,7 @@ export function IdeasPane() {
   return (
     <>
       <IdeasList hidden={leftView.kind !== 'list'} />
-      {leftView.kind === 'idea' && <IdeaDetails id={leftView.id} />}
+      {leftView.kind === 'idea' && <IdeaDetails key={leftView.id} id={leftView.id} />}
     </>
   );
 }

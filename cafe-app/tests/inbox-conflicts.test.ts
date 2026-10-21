@@ -1,6 +1,6 @@
 // cafe-app/tests/inbox-conflicts.test.ts
 import { describe, it, expect } from 'vitest';
-import { checkProposals, normaliseLabel, wordOverlap, type ConflictContext } from '../src/inbox/conflicts';
+import { checkProposals, normaliseLabel, sameLabel, wordOverlap, type ConflictContext } from '../src/inbox/conflicts';
 import type { Action } from '../src/inbox/actions';
 import type { AiLink } from '../src/graph/ontology';
 import { sampleIdea } from './helpers';
@@ -22,13 +22,10 @@ const ctx = (over: Partial<ConflictContext> = {}): ConflictContext => ({
 
 describe('normaliseLabel and wordOverlap', () => {
   it('lower-cases, strips punctuation and stop words, singularises', () => {
-    expect(normaliseLabel('The Shared Mailboxes!')).toBe('shared mailbox');
+    expect(normaliseLabel('The Shared Mailboxes!')).toBe('shared mailboxes');
     expect(normaliseLabel('Slot-finding')).toBe('slot finding');
-    expect(normaliseLabel('Slot templates')).toBe(normaliseLabel('Slot template'));
-    expect(normaliseLabel('Processes')).toBe(normaliseLabel('Process'));
-    expect(normaliseLabel('Queries')).toBe(normaliseLabel('Query'));
-    expect(normaliseLabel('Status')).toBe('status');
-    expect(normaliseLabel('Analysis')).toBe('analysis');
+    for (const [x, y] of [['Slot templates', 'Slot template'], ['Processes', 'Process'], ['Queries', 'Query'], ['Analyses', 'Analysis'], ['Cases', 'Case'], ['Databases', 'Database'], ['Mailboxes', 'Mailbox']]) expect(sameLabel(x, y)).toBe(true);
+    expect(sameLabel('Status', 'Statue')).toBe(false);
   });
   it('overlap is the share of words in common over the shorter label', () => {
     expect(wordOverlap('Request intake form', 'Request intake')).toBeCloseTo(2 / 3);

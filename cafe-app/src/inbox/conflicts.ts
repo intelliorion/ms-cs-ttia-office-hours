@@ -31,33 +31,41 @@ export const LOW_CONFIDENCE = 0.5;
 export const NEAR_DUPLICATE = 0.8;
 const STOP = new Set(['the', 'a', 'an', 'of', 'for', 'to', 'in', 'on', 'and', 'or', 'by', 'with', 'into', 's']);
 
-const singular = (w: string): string => {
-  if (w.length <= 3) return w;
-  if (w.endsWith('ies')) return `${w.slice(0, -3)}y`;
-  if (/(ses|xes|zes|ches|shes)$/.test(w)) return w.slice(0, -2);
-  if (/(ss|us|is)$/.test(w)) return w;
-  return w.endsWith('s') ? w.slice(0, -1) : w;
-};
-
 export function normaliseLabel(s: string): string {
   return s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)).map(singular).join(' ').trim();
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w && !STOP.has(w)).join(' ').trim();
+}
+
+/** Same word, allowing a plain plural (s, es, ies/y, es/is) either way round. */
+export function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+  if (l === `${s}s` || l === `${s}es`) return true;
+  if (l.endsWith('ies') && s.endsWith('y') && l.slice(0, -3) === s.slice(0, -1)) return true;
+  return [[a, b], [b, a]].some(([p, q]) => p.endsWith('es') && q.endsWith('is') && p.slice(0, -2) === q.slice(0, -2));
+}
+
+const words = (s: string) => normaliseLabel(s).split(' ').filter(Boolean);
+
+export function sameLabel(a: string, b: string): boolean {
+  const x = words(a); const y = words(b);
+  return x.length === y.length && x.every((w, i) => sameWord(w, y[i]));
 }
 
 export function wordOverlap(a: string, b: string): number {
-  const x = new Set(normaliseLabel(a).split(' ').filter(Boolean)); const y = new Set(normaliseLabel(b).split(' ').filter(Boolean));
-  if (!x.size || !y.size) return 0;
-  let n = 0; for (const w of x) if (y.has(w)) n++;
-  return n / Math.max(x.size, y.size);
+  const x = words(a); const y = words(b);
+  if (!x.length || !y.length) return 0;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  const n = short.filter((w) => long.some((v) => sameWord(w, v))).length;
+  return n / long.length;
 }
 
 export function isPersonLabel(label: string, ctx: ConflictContext): boolean {
-  const k = normaliseLabel(label);
   const people = [
     ...ctx.peoplePresent, ...(ctx.idea?.people.team.map((p) => p.name) ?? []),
     ctx.idea?.people.submitter ?? '', (ctx.idea?.people as { builder?: string } | undefined)?.builder ?? '',
   ];
-  return people.some((p) => p && normaliseLabel(p) === k);
+  return people.some((p) => p && sameLabel(p, label));
 }
 
 const pct = (c: number) => `${Math.round(c * 100)}%`;
@@ -66,8 +74,7 @@ const pct = (c: number) => `${Math.round(c * 100)}%`;
 function checkLink(l: AiLink, ctx: ConflictContext): Omit<Held, 'action'> | null {
   for (const n of l.newNodes ?? []) {
     if (n.type === 'Person' || isPersonLabel(n.label, ctx)) return { rule: 'person-star', why: 'People come from the form only, never from text' };
-    const k = normaliseLabel(n.label);
-    const twin = ctx.nodes.find((x) => x.type === n.type && x.id !== n.id && (normaliseLabel(x.label) === k || wordOverlap(x.label, n.label) >= NEAR_DUPLICATE));
+    const twin = ctx.nodes.find((x) => x.type === n.type && x.id !== n.id && (sameLabel(x.label, n.label) || wordOverlap(x.label, n.label) >= NEAR_DUPLICATE));
     if (twin) return { rule: 'near-duplicate-star', why: `Looks like ${twin.label}: merge or keep both?`, existing: twin.id };
   }
   if (l.confidence < LOW_CONFIDENCE) return { rule: 'low-confidence', why: `The AI was not sure (${pct(l.confidence)})` };
@@ -100,7 +107,7 @@ export function checkProposals(ctx: ConflictContext, actions: Action[]): { apply
       }
       case 'name_builder': {
         const have = (ctx.idea?.people as { builder?: string } | undefined)?.builder;
-        if (have && normaliseLabel(have) !== normaliseLabel(a.name)) hold.push({ action: a, rule: 'contradicts-fact', why: 'A second builder is named: the form names one already' });
+        if (have && !sameLabel(have, a.name)) hold.push({ action: a, rule: 'contradicts-fact', why: 'A second builder is named: the form names one already' });
         else apply.push(a);
         break;
       }
@@ -111,8 +118,7 @@ export function checkProposals(ctx: ConflictContext, actions: Action[]): { apply
         break;
       }
       case 'create_idea': {
-        const k = normaliseLabel(a.fields.title);
-        const twin = ctx.ideas.find((i) => normaliseLabel(i.title) === k);
+        const twin = ctx.ideas.find((i) => sameLabel(i.title, a.fields.title));
         if (twin) hold.push({ action: a, rule: 'duplicate-idea', why: `Looks like ${twin.id} (same title)`, existing: twin.id });
         else apply.push(a);
         break;

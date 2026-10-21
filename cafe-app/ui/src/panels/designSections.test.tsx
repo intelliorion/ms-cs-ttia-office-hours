@@ -217,4 +217,58 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="design"] .ds-step')).toBeTruthy();
     expect(el.querySelector('[data-testid="design"]')?.textContent).not.toContain('Loading');
   });
+
+  it('stage 1 shows no action section, only the Next hint', async () => {
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 1 }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="review"]')).toBeNull();
+    expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
+    expect(el.querySelector('[data-testid="design"]')).toBeNull();
+    expect(el.textContent).toContain('The decision opens at stage 2');
+  });
+
+  it('stage 2 shows the Decision form and nothing from the design series', async () => {
+    useStore.setState({ state: { ...STATE, decisions: { select: 'Select (E3)' }, ideas: [{ ...IDEA, stage: 2 }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="review"] input[type="radio"][value="select"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
+  });
+
+  it('stage 3 shows the decision as a card above the tool picker; Edit reopens the form', async () => {
+    useStore.setState({ state: { ...STATE, decisions: { select: 'Select (E3)' },
+      ideas: [{ ...IDEA, stage: 3, review: { decision: 'select', reason: 'Good fit.', criteria: {}, at: '2026-10-20' } }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    const card = el.querySelector('[data-testid="review-card"]')!;
+    expect(card.textContent).toContain('Select (E3)');
+    expect(card.textContent).toContain('Good fit.');
+    expect(el.querySelector('[data-testid="tool-picker"]')).toBeTruthy();
+    await click('[data-action="edit-review-card"]');
+    expect(el.querySelector('[data-testid="review-card"]')).toBeNull();
+    expect(el.querySelector('[data-testid="review"] textarea.reason')).toBeTruthy();
+  });
+
+  it('stage 4 shows cards for tools, design and plan, with no editable form', async () => {
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design'
+      ? { state: designState({ summary: 'Shows sorted requests.', approvedAt: '2026-10-20' }), designMd: '# Design' } : { files: ['plan.md'], planMd: '# Plan' }));
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 4 }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="tools-card"]')!.textContent).toContain('Power Apps');
+    expect(el.querySelector('[data-testid="design-card"]')!.textContent).toContain('Shows sorted requests.');
+    expect(el.querySelector('[data-testid="plan-card"]')!.textContent).toContain('plan.md');
+    expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
+    expect(el.querySelector('[data-action="write-plan"]')).toBeNull();
+    expect(el.querySelector('[data-testid="review-card"]')!.textContent).toContain('No decision recorded');
+  });
+
+  it('a closed idea shows cards without Edit links', async () => {
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 3, closed: { as: 'csic' } }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    expect(el.querySelector('[data-testid="tools-card"]')).toBeTruthy();
+    expect(el.querySelector('[data-action^="edit-"]')).toBeNull();
+  });
 });

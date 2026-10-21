@@ -7,10 +7,13 @@ import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel, ideaLinks, ty
 import { Details, Emails, History, Review, StageMenu } from '../popouts/IdeaSections';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
+import { sectionsFor, type SectionKey } from './stageGate';
+import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
 
 /**
  * One idea, in the left panel in place of the list: Back, its ID and stage, then (one column) the suggestion strip,
- * Review, Tool picker, Design, Plan and kits, Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
+ * the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3; cards for
+ * the earlier ones after that), Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
   const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
@@ -28,6 +31,8 @@ export function IdeaDetails({ id }: { id: string }) {
   const [plan, setPlan] = useState<PlanView | null>(null);
   /** Which design section is waiting on the AI ('tools', 'design', 'plan'); null for the Review and Graph AI calls. */
   const [aiFor, setAiFor] = useState<string | null>(null);
+  /** Cards the operator reopened with Edit; cleared when another idea opens. */
+  const [editing, setEditing] = useState<SectionKey[]>([]);
   const idRef = useRef(id);
   const inFlight = useRef(false);
   idRef.current = id;
@@ -44,7 +49,7 @@ export function IdeaDetails({ id }: { id: string }) {
     setDesign(null); setPlan(null); void loadDesign();
   }, [loadDesign]);
   useEffect(() => {
-    setNotice(null); setFallback(null); setAiReview(null); void loadHistory();
+    setNotice(null); setFallback(null); setAiReview(null); setEditing([]); void loadHistory();
     scroller.current?.scrollTo({ top: 0 });
     backBtn.current?.focus({ preventScroll: true });
   }, [id, loadHistory, setNotice]);
@@ -138,6 +143,8 @@ export function IdeaDetails({ id }: { id: string }) {
       return r;
     }, () => `${where(t)}.`);
   const stageValue = idea.closed ? `close:${idea.closed.as}` : `stage:${idea.stage}`;
+  const gates = sectionsFor(idea, design?.state, editing);
+  const edit = (k: SectionKey) => (idea.closed ? undefined : () => setEditing((xs) => (xs.includes(k) ? xs : [...xs, k])));
   const mine = suggest && suggest.id === id ? suggest : null;
   const links = ideaLinks(graph, id);
 
@@ -171,21 +178,36 @@ export function IdeaDetails({ id }: { id: string }) {
         </div>
       )}
       <div className="id-scroll" ref={scroller}>
-        <Review idea={idea} state={state} busy={busy || aiBusy} aiReview={aiReview} aiName={providerName(aiReview?.provider, ai)}
-          onClearAi={() => setAiReview(null)} aiBar={(
-            <div className="ai-row">
-              <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy || Boolean(idea.closed)} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
-                {aiBusy && !aiFor ? 'Working…' : 'Suggest a review'}</button>
-            </div>
-          )}
-          onSave={(body) => act(() => ideaPost(id, 'review', body), (r: any) =>
-            [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
-        <ToolPickerSection key={`tools-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'tools')} aiWorking={aiFor === 'tools'}
-          noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />
-        <DesignSection key={`design-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'design')} aiWorking={aiFor === 'design'}
-          noAi={noAi} call={designCall} onOutbox={() => openPopout({ kind: 'outbox' })} />
-        <PlanSection key={`plan-${id}`} idea={idea} design={design} plan={plan} busy={busy || (aiBusy && aiFor !== 'plan')} aiWorking={aiFor === 'plan'}
-          noAi={noAi} call={designCall} />
+        {gates.review === 'active' && (
+          <Review idea={idea} state={state} busy={busy || aiBusy} aiReview={aiReview} aiName={providerName(aiReview?.provider, ai)}
+            onClearAi={() => setAiReview(null)} aiBar={(
+              <div className="ai-row">
+                <button className="btn" data-action="ai-suggest-review" disabled={noAi || aiBusy || busy || Boolean(idea.closed)} title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggestReview()}>
+                  {aiBusy && !aiFor ? 'Working…' : 'Suggest a decision'}</button>
+              </div>
+            )}
+            onSave={(body) => act(() => ideaPost(id, 'review', body), (r: any) =>
+              [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
+        )}
+        {gates.review === 'summary' && <ReviewCard idea={idea} state={state} onEdit={edit('review')} />}
+        {idea.stage === 1 && !idea.closed && (
+          <section className="sec"><h3>Next</h3><div className="hint">Send the acknowledgement (E1) from Emails below. The decision opens at stage 2.</div></section>
+        )}
+        {gates.tools === 'active' && (
+          <ToolPickerSection key={`tools-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'tools')} aiWorking={aiFor === 'tools'}
+            noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />
+        )}
+        {gates.tools === 'summary' && <ToolsCard design={design} onEdit={edit('tools')} />}
+        {gates.design === 'active' && (
+          <DesignSection key={`design-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'design')} aiWorking={aiFor === 'design'}
+            noAi={noAi} call={designCall} onOutbox={() => openPopout({ kind: 'outbox' })} />
+        )}
+        {gates.design === 'summary' && <DesignCard design={design} onEdit={edit('design')} />}
+        {gates.plan === 'active' && (
+          <PlanSection key={`plan-${id}`} idea={idea} design={design} plan={plan} busy={busy || (aiBusy && aiFor !== 'plan')} aiWorking={aiFor === 'plan'}
+            noAi={noAi} call={designCall} />
+        )}
+        {gates.plan === 'summary' && <PlanCard plan={plan} onEdit={edit('plan')} />}
         <section className="sec">
           <h3>Stage</h3>
           <StageMenu state={state} value={stageValue} busy={busy} onPick={setStage} />

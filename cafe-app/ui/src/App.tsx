@@ -31,9 +31,9 @@ export default function App() {
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice };
+      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh };
     }
-  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice]);
+  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh]);
   useEffect(() => {
     // One Esc handler: idea details go Back, then a drawer closes, then the star card closes. A modal handles its own Esc.
     const on = (e: KeyboardEvent) => {

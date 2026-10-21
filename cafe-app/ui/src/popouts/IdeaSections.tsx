@@ -106,33 +106,42 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
   }, [aiReview]);
   const edited = () => { if (suggested) { setSuggested(false); onClearAi(); } };
   const closed = Boolean(idea.closed);
+  const off = closed || busy;
   return (
-    <section className="sec">
-      <h3>Review {idea.review && <span className="sec-n">saved {shortDate(idea.review.at)}</span>}</h3>
+    <section className="sec" data-testid="review">
+      <h3>Decision {idea.review && <span className="sec-n">saved {shortDate(idea.review.at)}</span>}</h3>
+      <div className="hint lead">Pick what happens to this idea. Saving drafts the matching email into the Outbox; nothing moves until you say yes.</div>
       {aiBar}
-      <ul className={`criteria${suggested ? ' suggested' : ''}`}>
-        {(state.criteria ?? []).map((c: any) => (
-          <li key={c.id}>
-            <label>
-              <input type="checkbox" checked={criteria[c.id] === true} disabled={closed || busy}
-                onChange={(e) => { edited(); setCriteria((x) => ({ ...x, [c.id]: e.target.checked })); }} />
-              <span>{c.text}</span>
-            </label>
-          </li>
+      <div className={`decisions${suggested ? ' suggested' : ''}`} role="radiogroup" aria-label="Decision" data-action="decision">
+        {Object.entries(state.decisions ?? {}).map(([k, v]) => (
+          <label key={k} className={`dc${decision === k ? ' on' : ''}`}>
+            <input type="radio" name={`decision-${idea.id}`} value={k} checked={decision === k} disabled={off}
+              onChange={() => { edited(); setDecision(k); }} />
+            <span className="dc-l">{String(v)}</span>
+            <span className="dc-h">{DECISION_HINTS[k] ?? ''}</span>
+          </label>
         ))}
-      </ul>
-      <div className="rv-row">
-        <select className={suggested ? 'suggested-box' : ''} value={decision} disabled={closed || busy} onChange={(e) => { edited(); setDecision(e.target.value); }} aria-label="Decision" data-action="decision">
-          <option value="">Pick a decision…</option>
-          {Object.entries(state.decisions ?? {}).map(([k, v]) => <option key={k} value={k}>{String(v)}</option>)}
-        </select>
       </div>
-      <textarea className={`reason${suggested ? ' suggested-box' : ''}`} rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={closed || busy}
+      <textarea className={`reason${suggested ? ' suggested-box' : ''}`} rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={off}
         onChange={(e) => { edited(); setReason(e.target.value); }} aria-label="Reason" />
+      <details className="checks" open={!decision}>
+        <summary>Before you decide <span className="sec-n">{Object.values(criteria).filter(Boolean).length} of {(state.criteria ?? []).length} ticked, for your own notes</span></summary>
+        <ul className="criteria">
+          {(state.criteria ?? []).map((c: any) => (
+            <li key={c.id}>
+              <label>
+                <input type="checkbox" checked={criteria[c.id] === true} disabled={off}
+                  onChange={(e) => { edited(); setCriteria((x) => ({ ...x, [c.id]: e.target.checked })); }} />
+                <span>{c.text}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </details>
       {suggested && <div className="sg-by" data-testid="ai-review-by">Suggested by {aiName}. Check it, change what you like, then save.</div>}
       <div className="rv-foot">
-        <span className="hint">{closed ? 'Closed. Set a stage to reopen it before reviewing.' : 'Saving drafts the decision email. Nothing moves until you say yes.'}</span>
-        <button className="btn primary" data-action="save-review" disabled={closed || busy || !decision || !reason.trim()}
+        <span className="hint">{closed ? 'Closed. Set a stage to reopen it before deciding.' : decision ? SAVE_HINTS[decision] ?? '' : 'Pick a decision and give a reason.'}</span>
+        <button className="btn primary" data-action="save-review" disabled={off || !decision || !reason.trim()}
           onClick={() => onSave({ criteria, decision, reason })}>
           {decision ? `Save and draft ${DECISION_EMAIL[decision] ?? ''}`.trim() : 'Save decision'}
         </button>
@@ -140,6 +149,24 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
     </section>
   );
 }
+
+/** One line per decision: what it means for the team. */
+export const DECISION_HINTS: Record<string, string> = {
+  select: 'Into the design series: tools, brainstorm, plan.',
+  reuse: 'Something that exists already covers it.',
+  csic: 'Needs a live system or custom build: the CSIC Repository takes it.',
+  notnow: 'Parked; can come back in a later round.',
+  ask: 'Not decidable yet: questions go to the team first.',
+};
+
+/** What Save does for each decision, shown by the button. */
+export const SAVE_HINTS: Record<string, string> = {
+  select: 'Drafts E3 and offers the move to the design series.',
+  reuse: 'Drafts E4 and offers to close the idea as reused.',
+  csic: 'Drafts E5, writes the CSIC handoff and offers to close the idea.',
+  notnow: 'Drafts E6 and offers to close the idea for this round.',
+  ask: 'Drafts E2 with your questions; the idea stays here.',
+};
 
 export function Emails({ idea, outbox, busy, onDraft, onReply, onSetFirst, onApprove, onCopy, onSent }: {
   idea: any; outbox: any[]; busy: boolean;

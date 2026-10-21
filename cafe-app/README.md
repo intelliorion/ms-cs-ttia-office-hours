@@ -251,6 +251,17 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 for the screenshot tour and tests. It cannot be picked in the chip, and only the exact value `1` turns it on.
 Do not set it for real rounds.
 
+## What the idea panel shows, by stage
+
+Each action section has a home stage. Before it, the section is hidden; at it, the full form; after it (or once the idea is closed) a compact read-only card with an Edit link. Anything already saved is never hidden.
+
+| Stage | Editable | Cards |
+|---|---|---|
+| 1 Submit Idea | nothing yet: send E1 from Emails | |
+| 2 Review and Select | Decision (the choice first, the five checks fold away under it) | |
+| 3 Design series | Tool picker, then Design, then Plan and kits | Decision |
+| 4 Launch and Learn | nothing new | Decision, Tools, Design, Plan |
+
 ## Design series: tool picker, brainstorm, plan and kits
 
 An idea's details (the left panel) carry three more sections, after Review and before Stage. They are meant

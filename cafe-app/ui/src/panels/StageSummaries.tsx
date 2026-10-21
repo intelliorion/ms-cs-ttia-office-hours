@@ -1,0 +1,84 @@
+import { shortDate } from './filterIdeas';
+import { CafeCheckCard, Toggle, type DesignView, type PlanView } from './DesignSection';
+import { hasAgentKit } from './designHelpers';
+
+/**
+ * Compact read-only cards for sections whose stage has passed: the decision, the tool picks, the design and the plan.
+ * Each card carries an Edit link that reopens the full form while the idea is open; a closed idea shows no link.
+ */
+function Card({ title, note, testId, onEdit, children }: {
+  title: string; note?: string; testId: string; onEdit?: () => void; children: React.ReactNode;
+}) {
+  return (
+    <section className="sec sec-card" data-testid={testId}>
+      <h3>{title} {note && <span className="sec-n">{note}</span>}
+        {onEdit && <button className="link-btn card-edit" data-action={`edit-${testId}`} onClick={onEdit}>Edit</button>}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+export function ReviewCard({ idea, state, onEdit }: { idea: any; state: any; onEdit?: () => void }) {
+  const r = idea.review;
+  const criteria: any[] = state.criteria ?? [];
+  const ticked = criteria.filter((c) => r?.criteria?.[c.id]);
+  return (
+    <Card title="Decision" note={r ? `saved ${shortDate(r.at)}` : undefined} testId="review-card" onEdit={onEdit}>
+      {r ? (
+        <>
+          <div className="card-main">{state.decisions?.[r.decision] ?? r.decision}</div>
+          <div className="card-text">{r.reason}</div>
+          <div className="hint">{ticked.length ? `Checks passed: ${ticked.map((c) => c.short ?? c.text).join('; ')}.` : 'No checks ticked.'}</div>
+        </>
+      ) : <div className="hint warn">No decision recorded for this idea. Use Edit to record one; the decision email is drafted from it.</div>}
+    </Card>
+  );
+}
+
+export function ToolsCard({ design, onEdit }: { design: DesignView | null; onEdit?: () => void }) {
+  const feats: any[] = design?.state?.features ?? [];
+  return (
+    <Card title="Tools" note={feats.length ? `${feats.length} feature${feats.length === 1 ? '' : 's'}` : undefined} testId="tools-card" onEdit={onEdit}>
+      {!design ? <div className="hint">Loading…</div> : feats.length ? (
+        <ul className="card-list">
+          {feats.map((f) => (
+            <li key={f.id ?? f.name}><span className="card-k">{f.name}</span><span className="card-v">{f.tool ?? 'no tool picked'}{f.pathway ? ` · ${f.pathway}` : ''}</span></li>
+          ))}
+        </ul>
+      ) : <div className="hint warn">No tools picked. Use Edit to pick a tool for each feature.</div>}
+    </Card>
+  );
+}
+
+export function DesignCard({ design, onEdit }: { design: DesignView | null; onEdit?: () => void }) {
+  const s = design?.state ?? {};
+  const steps: any[] = s.steps ?? [];
+  const note = s.approvedAt ? `approved ${s.approvedAt}` : s.summary ? 'complete, not approved' : `${steps.length} question${steps.length === 1 ? '' : 's'}, not finished`;
+  return (
+    <Card title="Design" note={note} testId="design-card" onEdit={onEdit}>
+      {s.summary ? <div className="card-text">{s.summary}</div> : (
+        <ol className="card-list card-steps">
+          {steps.map((st) => <li key={st.n}><span className="card-k">{st.question}</span><span className="card-v">{st.answer ?? (st.askedTeam ? 'asked the team' : 'not answered')}</span></li>)}
+        </ol>
+      )}
+      <CafeCheckCard check={s.cafeCheck} />
+      <Toggle label="design.md" text={design?.designMd} action="toggle-design-md" />
+    </Card>
+  );
+}
+
+export function PlanCard({ plan, onEdit }: { plan: PlanView | null; onEdit?: () => void }) {
+  const files = plan?.files ?? [];
+  return (
+    <Card title="Plan and kits" note={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : undefined} testId="plan-card" onEdit={onEdit}>
+      {files.length ? (
+        <>
+          <ul className="pk-files" aria-label="Plan and kit files">{files.map((f) => <li key={f}>{f}</li>)}</ul>
+          {hasAgentKit(files) && <div className="hint">The custom-app part goes to the CSIC Repository with its build instruction (under Edit).</div>}
+          <Toggle label="plan.md" text={plan?.planMd} action="toggle-plan-md" />
+        </>
+      ) : <div className="hint warn">The plan was never written. Use Edit to write plan.md and the kits.</div>}
+    </Card>
+  );
+}

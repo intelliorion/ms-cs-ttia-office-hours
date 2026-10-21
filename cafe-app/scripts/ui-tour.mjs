@@ -97,10 +97,12 @@ async function popoutShots(p) {
   await sleep(3500);
   await p.mouse.move(960, 1060);
   await shot(p, '30-panel-idea.png');
-  // A CSIC review through the panel: tick two criteria, pick the decision, give a reason, save.
+  // A CSIC decision through the panel (the idea is at stage 2, so the Decision form is the one action section):
+  // tick two checks, pick the decision, give a reason, save.
+  assert((await p.locator(`${DETAILS} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker shows at stage 2');
   const crit = p.locator(`${DETAILS} .criteria input`);
   await crit.nth(0).check(); await crit.nth(2).check();
-  await p.selectOption(`${DETAILS} [data-action="decision"]`, 'csic');
+  await p.check(`${DETAILS} input[name^="decision-"][value="csic"]`);
   await p.fill(`${DETAILS} textarea.reason`, 'It needs the live shared mailbox, so it belongs in the CSIC Repository.');
   await p.click(`${DETAILS} [data-action="save-review"]`);
   await p.waitForSelector('[data-testid="suggest"]');
@@ -334,8 +336,14 @@ async function designShots(p) {
   const notice = (text) => p.waitForSelector(`${D} .pop-notice:has-text("${text}")`, { timeout: 90000 });
   const into = async (sel) => { await p.locator(sel).first().evaluate((el) => el.scrollIntoView({ block: 'start' })); await sleep(400); };
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
+  // The series opens at stage 3; the panel shows the decision as a card above the tool picker.
+  await post('/api/ideas/CAFE-2026-002/stage', { stage: 3 });
+  await p.evaluate(() => window.__cafe.refresh());
+  await sleep(500);
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
+  assert((await p.locator(`${D} [data-testid="review-card"]`).count()) === 1, 'no decision card at stage 3');
+  assert((await p.locator(`${D} [data-testid="review"]`).count()) === 0, 'the decision form is still editable at stage 3');
   await sleep(2500);
   // Tool picker: the AI fills three rows as suggestions; one is a custom app with the CSIC note.
   await p.click(`${D} [data-action="tools-suggest"]`);
@@ -396,6 +404,25 @@ async function designShots(p) {
   await shot(p, '44-plan-kits.png');
   const stage = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.id === 'CAFE-2026-002');
   assert(!stage.closed, 'the idea was closed without a click on Yes');
+  // Stage 4: every earlier section is a read-only card; Edit reopens one.
+  await p.selectOption(`${D} [data-action="stage"]`, 'stage:4');
+  await p.waitForSelector(`${D} [data-testid="plan-card"]`, { timeout: 10000 });
+  assert((await p.locator(`${D} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker is still a form at stage 4');
+  await into(`${D} [data-testid="review-card"]`);
+  await sleep(400);
+  await shot(p, '45-stage4-cards.png');
+  await p.click(`${D} [data-action="edit-tools-card"]`);
+  await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
+  // Stage 1: no action section at all, only the Next hint.
+  await p.click(`${D} [data-action="back"]`);
+  await p.waitForSelector(D, { state: 'detached' });
+  const first = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.stage === 1 && !i.closed);
+  assert(first, 'no stage-1 idea to show');
+  await p.evaluate((id) => window.__cafe.openIdea(id), first.id);
+  await p.waitForSelector(`${D} [data-action="stage"]`);
+  assert((await p.locator(`${D} [data-testid="review"], ${D} [data-testid="tool-picker"], ${D} [data-testid="design"]`).count()) === 0, 'an action section shows at stage 1');
+  await sleep(1500);
+  await shot(p, '46-stage1.png');
 }
 
 // Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.

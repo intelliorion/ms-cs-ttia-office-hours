@@ -11,7 +11,7 @@ export interface PlanView { planMd?: string; files: string[] }
 /** Runs one design call: busy state, notice, and a refresh after. `ai` names the section waiting on the AI. Null on failure. */
 export type DesignCall = <T = any>(fn: () => Promise<T>, o: { ai?: string; ok: (r: T) => string | undefined }) => Promise<T | null>;
 
-function Toggle({ label, text, action }: { label: string; text: string | undefined; action: string }) {
+export function Toggle({ label, text, action }: { label: string; text: string | undefined; action: string }) {
   const [open, setOpen] = useState(false);
   if (!text) return null;
   return (
@@ -22,7 +22,7 @@ function Toggle({ label, text, action }: { label: string; text: string | undefin
   );
 }
 
-function CafeCheckCard({ check }: { check: any }) {
+export function CafeCheckCard({ check }: { check: any }) {
   const rows = cafeCheckRows(check);
   const clean = rows.every((r) => r.clean);
   return (

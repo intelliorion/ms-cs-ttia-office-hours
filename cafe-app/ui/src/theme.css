@@ -441,7 +441,14 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .card-k{color:var(--cream);overflow-wrap:anywhere}
 .card-v{color:var(--muted);overflow-wrap:anywhere}
 
-/* "Only related" in the idea head: a small chip beside the ID. */
-.chip-btn{border:1px solid var(--panel-border);background:rgba(20,26,26,.6);color:var(--muted);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
-.chip-btn:hover{border-color:var(--teal);color:var(--text)}
-.chip-btn.on{border-color:var(--teal);color:#fff;background:rgba(125,211,207,.12)}
+/* Stage button in the idea head, with its drop-down menu. */
+.stage-wrap{position:relative;margin-left:auto}
+.stg-btn{background:rgba(20,26,26,.6);cursor:pointer;font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px}
+.stg-btn:hover:not(:disabled){background:rgba(125,211,207,.1)}
+.stg-btn .caret{font-size:10px;opacity:.8}
+.stage-pop{z-index:40;min-width:240px;margin:0;padding:6px;list-style:none;background:rgba(14,19,19,.97);border:1px solid var(--panel-border);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.stage-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 10px 2px}
+.stage-opt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;color:var(--text);font:inherit;font-size:13.5px;padding:6px 10px;border-radius:4px;cursor:pointer}
+.stage-opt:hover:not(:disabled){background:rgba(125,211,207,.12);color:#fff}
+.stage-opt.on{color:#fff}
+.stage-opt .tick{width:12px;color:var(--teal);flex:none}

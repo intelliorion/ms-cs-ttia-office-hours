@@ -1,31 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { shortDate } from '../panels/filterIdeas';
 import { applySuggestion, type ReviewSuggestion } from './aiUi';
 import {
   DECISION_EMAIL, IDEA_TEMPLATES, reviewKey, shouldResetReview, TEMPLATE_TITLES, emailAction, emailStatus, historyLine, type HistoryEntry,
 } from './ideaHelpers';
 
-/** The sections of an idea's details (shown in the left panel): Review, Stage, Emails, Details and History. */
+/** The sections of an idea's details (shown in the left panel): Decision, the stage button, Emails, Details and History. */
 
 const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', member: 'Member' };
 
-export function StageMenu({ state, value, busy, onPick }: { state: any; value: string; busy: boolean; onPick: (t: { stage?: number; closeAs?: string }) => void }) {
+/**
+ * The stage badge in the idea head is a button; it opens this small menu of the stages and the close-as reasons.
+ * Picking one applies at once (the server returns the notice and any suggestion). Esc or a click elsewhere closes it.
+ */
+export function StageButton({ state, value, label, colour, busy, onPick }: {
+  state: any; value: string; label: string; colour: string; busy: boolean; onPick: (t: { stage?: number; closeAs?: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  // The panel clips its overflow, so the menu is pinned to the viewport under the button.
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLUListElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const toggle = () => {
+    if (!open) { const r = btn.current?.getBoundingClientRect(); if (r) setAt({ top: r.bottom + 6, right: window.innerWidth - r.right }); }
+    setOpen((o) => !o);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { const t = e.target as Node; if (!box.current?.contains(t) && !menu.current?.contains(t)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc, true);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc, true); };
+  }, [open]);
+  const pick = (v: string) => {
+    setOpen(false);
+    if (v === value) return;
+    const [k, n] = v.split(':');
+    onPick(k === 'close' ? { closeAs: n } : { stage: Number(n) });
+  };
+  const item = (v: string, text: string) => (
+    <li key={v} role="menuitemradio" aria-checked={v === value}>
+      <button className={`stage-opt${v === value ? ' on' : ''}`} data-action="stage-pick" data-value={v} disabled={busy} onClick={() => pick(v)}>
+        <span className="tick">{v === value ? '✓' : ''}</span>{text}
+      </button>
+    </li>
+  );
   return (
-    <label className="stage-menu">
-      <span>Stage</span>
-      <select value={value} disabled={busy} data-action="stage" aria-label="Stage"
-        onChange={(e) => {
-          const [k, v] = e.target.value.split(':');
-          onPick(k === 'close' ? { closeAs: v } : { stage: Number(v) });
-        }}>
-        <optgroup label="Stages">
-          {Object.keys(state.stageNames).map((n) => <option key={n} value={`stage:${n}`}>{n} · {state.stageNames[n]}</option>)}
-        </optgroup>
-        <optgroup label="Close as">
-          {Object.keys(state.closures).map((c) => <option key={c} value={`close:${c}`}>Closed: {state.closures[c]}</option>)}
-        </optgroup>
-      </select>
-    </label>
+    <div className="stage-wrap" ref={box}>
+      <button ref={btn} className="stg stg-btn" style={{ ['--c' as string]: colour }} data-action="stage" aria-haspopup="menu" aria-expanded={open}
+        title="Change the stage" disabled={busy} onClick={toggle}>{label} <span className="caret">▾</span></button>
+      {open && at && createPortal(
+        <ul ref={menu} className="stage-pop" role="menu" aria-label="Stage" data-testid="stage-menu" style={{ position: 'fixed', top: at.top, right: at.right }}>
+          <li className="stage-h">Stages</li>
+          {Object.keys(state.stageNames).map((n) => item(`stage:${n}`, `${n} · ${state.stageNames[n]}`))}
+          <li className="stage-h">Close as</li>
+          {Object.keys(state.closures).map((c) => item(`close:${c}`, state.closures[c]))}
+        </ul>, document.body)}
+    </div>
   );
 }
 

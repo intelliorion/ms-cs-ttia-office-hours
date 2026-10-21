@@ -4,7 +4,7 @@ import { copyText, getHistory, ideaGet, ideaPost, post } from '../api';
 import { extractNotice, NO_AI_TIP, providerName, type ReviewSuggestion } from '../popouts/aiUi';
 import { LinkTable } from '../popouts/LinkTable';
 import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel, ideaLinks, type HistoryEntry } from '../popouts/ideaHelpers';
-import { Details, Emails, History, Review, StageMenu } from '../popouts/IdeaSections';
+import { Details, Emails, History, Review, StageButton } from '../popouts/IdeaSections';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
 import { sectionsFor, type SectionKey } from './stageGate';
@@ -13,10 +13,10 @@ import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
 /**
  * One idea, in the left panel in place of the list: Back, its ID and stage, then (one column) the suggestion strip,
  * the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3; cards for
- * the earlier ones after that), Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
+ * the earlier ones after that), Emails, Graph links, Details and History. The universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
-  const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai, onlyRelated, toggleOnlyRelated } = useStore();
+  const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
   const [aiBusy, setAiBusy] = useState(false);
   const [aiReview, setAiReview] = useState<ReviewSuggestion | null>(null);
   const idea = state?.ideas.find((i: any) => i.id === id);
@@ -118,9 +118,6 @@ export function IdeaDetails({ id }: { id: string }) {
     <div className="id-head">
       <button ref={backBtn} className="btn back" data-action="back" aria-label="Back to the ideas list" title="Back to the list (Esc)" onClick={backToList}>← Back</button>
       <span className="iid">{id}</span>
-      <button className={`chip-btn${onlyRelated ? ' on' : ''}`} data-action="only-related" aria-pressed={onlyRelated}
-        title={onlyRelated ? 'Show the whole universe again' : 'Show only this idea and what it links to'} onClick={toggleOnlyRelated}>
-        {onlyRelated ? 'Show all' : 'Only related'}</button>
       {extra}
     </div>
   );
@@ -153,7 +150,7 @@ export function IdeaDetails({ id }: { id: string }) {
 
   return (
     <div className="idea-detail" data-testid="idea-details" role="region" aria-label={`${idea.id} ${idea.title}`}>
-      {head(<span className="stg" style={{ ['--c' as string]: m.stageColour }}>{m.stageLabel}</span>)}
+      {head(<StageButton state={state} value={stageValue} label={m.stageLabel} colour={m.stageColour} busy={busy} onPick={setStage} />)}
       <h3 className="id-title">{idea.title || 'Untitled idea'}</h3>
       <div className="pop-sub">
         {[idea.function, idea.region, idea.participation].filter(Boolean).join(' · ') || 'Function and region not given'}
@@ -211,10 +208,6 @@ export function IdeaDetails({ id }: { id: string }) {
             noAi={noAi} call={designCall} />
         )}
         {gates.plan === 'summary' && <PlanCard plan={plan} onEdit={edit('plan')} />}
-        <section className="sec">
-          <h3>Stage</h3>
-          <StageMenu state={state} value={stageValue} busy={busy} onPick={setStage} />
-        </section>
         <Emails idea={idea} outbox={state.outbox ?? []} busy={busy}
           onDraft={(template) => act(() => ideaPost(id, 'draft', { template }), (r: any) => `${r.template} is drafted in the Outbox.`)}
           onReply={() => act(() => ideaPost(id, 'reply'), () => 'Reply received. The answers step is done.')}

@@ -20,7 +20,7 @@ declare global { interface Window { __cafe?: Record<string, (...a: any[]) => voi
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
-    leftView, openIdea, backToList, onlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
+    leftView, openIdea, backToList, onlyRelated, toggleOnlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
   // No card for the idea whose details are already showing in the panel.
@@ -91,6 +91,11 @@ export default function App() {
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
           <button className="pill" data-action="quality" data-quality={quality} title="Cycle Full → Lite → Flat" onClick={cycleQuality}>{qualityLabel(quality)}</button>
+          {leftView.kind === 'idea' && (
+            <button className={`pill${onlyRelated ? ' on' : ''}`} data-action="only-related" aria-pressed={onlyRelated}
+              title={onlyRelated ? 'Show the whole universe again' : 'Show only this idea and what it links to'} onClick={toggleOnlyRelated}>
+              {onlyRelated ? 'Show all' : 'Only related'}</button>
+          )}
         </div>
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}

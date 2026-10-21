@@ -98,11 +98,11 @@ async function popoutShots(p) {
   await p.mouse.move(960, 1060);
   await shot(p, '30-panel-idea.png');
   // "Only related": the universe keeps just this idea and what it links to (one hop); Show all brings the rest back.
-  await p.click(`${DETAILS} [data-action="only-related"]`);
+  await p.click('[data-action="only-related"]');
   await sleep(3000);
   await shot(p, '34-only-related.png');
-  assert((await p.textContent(`${DETAILS} [data-action="only-related"]`)) === 'Show all', 'the Only related chip did not flip');
-  await p.click(`${DETAILS} [data-action="only-related"]`);
+  assert((await p.textContent('[data-action="only-related"]')) === 'Show all', 'the Only related pill did not flip');
+  await p.click('[data-action="only-related"]');
   await sleep(1500);
   // A CSIC decision through the panel (the idea is at stage 2, so the Decision form is the one action section):
   // tick two checks, pick the decision, give a reason, save.
@@ -412,7 +412,10 @@ async function designShots(p) {
   const stage = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.id === 'CAFE-2026-002');
   assert(!stage.closed, 'the idea was closed without a click on Yes');
   // Stage 4: every earlier section is a read-only card; Edit reopens one.
-  await p.selectOption(`${D} [data-action="stage"]`, 'stage:4');
+  await p.click(`${D} [data-action="stage"]`);
+  await p.waitForSelector('[data-testid="stage-menu"]');
+  await shot(p, '47-stage-menu.png');
+  await p.click('[data-action="stage-pick"][data-value="stage:4"]');
   await p.waitForSelector(`${D} [data-testid="plan-card"]`, { timeout: 10000 });
   assert((await p.locator(`${D} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker is still a form at stage 4');
   await into(`${D} [data-testid="review-card"]`);

@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, sampleIdea, FIXTURE } from './helpers';
 import { saveIdea } from '../src/ideas/store';
+import { appendAiLink } from '../src/graph/store';
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
@@ -48,5 +49,30 @@ describe('/api/graph', () => {
     const ai = g.edges.filter((e: any) => String(e.source).startsWith('ai:'));
     expect(ai.length).toBeGreaterThan(0);
     expect(ai.every((e: any) => e.confirmed)).toBe(true);
+  });
+
+  it('extract holds a link whose new star near-duplicates an existing one: pending, counted apart, not duplicated by a second run', async () => {
+    process.env.CAFE_AI_FAKE = '1';
+    const s = await startServer('2026-10-21');
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
+    await appendAiLink(s.root, {
+      from: 'idea:CAFE-2026-001', to: 'capability:workflow-routings', rel: 'NEEDS', description: 'seed', source: 'operator', confidence: 0.9, status: 'confirmed',
+      newNodes: [{ id: 'capability:workflow-routings', type: 'Capability', label: 'Workflow routings' }],
+    });
+    const post = async () => json(await fetch(`${s.base}/api/ai/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'CAFE-2026-001' }) }));
+    const r = await post();
+    expect(r.held.length).toBeGreaterThan(0);
+    expect(r.held.every((h: any) => h.rule === 'near-duplicate-star')).toBe(true);
+    expect(r.held[0].why).toMatch(/Looks like Workflow routings/);
+    expect(r.held[0].existing).toBe('capability:workflow-routings');
+    expect(r.added).toBe(r.links.filter((e: any) => e.confirmed).length);
+    expect(r.links.some((e: any) => !e.confirmed)).toBe(true);
+    const g1 = await json(await fetch(`${s.base}/api/graph`));
+    const held = g1.edges.find((e: any) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:workflow-routing');
+    expect(held).toMatchObject({ confirmed: false });
+    await post();
+    const g2 = await json(await fetch(`${s.base}/api/graph`));
+    expect(g2.edges.length).toBe(g1.edges.length);
   });
 });

@@ -246,6 +246,16 @@ describe('Undo is field-level (Review Focus 5)', () => {
     expect(links.find((l) => l.to === 'capability:catalogue-lookup')!.status).toBe('removed');
   });
 
+  it('graph_links: a link whose status changed since it was added is kept, and Undo says so', async () => {
+    const { root, item } = await setup();
+    await setAiLinkStatus(root, 'idea:CAFE-2026-001|NEEDS|capability:document-reading', 'pending');
+    const after = await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
+    expect(rec(after, 'graph_links', (r) => r.kind === 'safe').note).toMatch(/Kept the link .*document-reading.*you pending it since/);
+    const links = (await readAiLinks(root)).links;
+    expect(links.find((l) => l.to === 'capability:document-reading')!.status).toBe('pending');
+    expect(links.find((l) => l.to === 'capability:catalogue-lookup')!.status).toBe('removed');
+  });
+
   it('a failing undo log never marks an applied action failed', async () => {
     const root = await tmpWorkspace('2026-10-19');
     for (const i of IDEAS) await saveIdea(root, i);

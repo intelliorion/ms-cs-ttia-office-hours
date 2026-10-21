@@ -156,13 +156,13 @@ describe('triageTask', () => {
     const root = await workspace();
     const link = (idea: string, label: string) => ({ from: `idea:${idea}`, to: `capability:${label.toLowerCase()}`, rel: 'NEEDS' as const, description: 'x', source: 'test', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: `capability:${label.toLowerCase()}`, type: 'Capability' as const, label }] });
     await appendAiLink(root, link('CAFE-2026-002', 'Beta star'));
-    await appendAiLink(root, link('CAFE-2026-001', 'Alpha star'));
+    await appendAiLink(root, link('CAFE-2026-001', 'Zulu star'));
     const { calls, connector } = recorder(JSON.stringify(GOOD));
     const dropped = await saveDrop(root, 'reply.txt', 'CAFE-2026-001 About 40 a week', clock);
     await triageItem(root, dropped.id, connector);
     const p = calls[0];
-    expect(p).toContain('Alpha star');
-    expect(p.indexOf('Alpha star')).toBeLessThan(p.indexOf('Beta star'));
+    expect(p).toContain('Zulu star');
+    expect(p.indexOf('Zulu star')).toBeLessThan(p.indexOf('Beta star'));
   });
 
   it('ideaId and builderNamed must be a string or null', () => {

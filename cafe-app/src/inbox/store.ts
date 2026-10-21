@@ -31,6 +31,8 @@ export interface InboxItem {
   /** Filled by Task 3 (actions). */
   actions?: unknown[];
   problems?: string[];
+  /** The run, step by step (src/inbox/steps.ts). */
+  steps?: import('./steps').Step[];
   /** Where a held file was before it moved to inbox/held/ (lets an interrupted hold finish the move). */
   heldFrom?: string;
   /** Only on the value saveDrop returns for a repeat drop; never stored. */

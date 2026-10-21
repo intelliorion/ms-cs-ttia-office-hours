@@ -16,7 +16,12 @@ export interface ActionRecord {
   result?: unknown;
   error?: string;
   note?: string;
+  /** Set when the app held this proposal back because it conflicts with what the Café already knows. */
+  held?: Held;
 }
+
+/** Why a proposal waits for the operator: the rule that caught it, in words, and the star it looks like (if any). */
+export interface Held { rule: string; why: string; existing?: string }
 
 export interface InboxItemView {
   id: string;
@@ -28,10 +33,11 @@ export interface InboxItemView {
   meta?: { from?: string; subject?: string; date?: string; speakers?: string[]; attachments?: string[] };
   preview?: string;
   hold?: { reasons: string[] };
+  steps?: Step[];
   triage?: {
     ideaId: string | null; confidence: number; ask: boolean; suggested?: string;
     candidates: { id: string; title: string }[]; notes: string[]; export?: true; needsHand?: true; aiError?: string;
-    ai?: { what?: string; summary?: string; kind?: string };
+    ai?: { what?: string; summary?: string; kind?: string; understood?: string[]; uncertain?: string[] };
     match?: { how?: string };
   };
   actions?: ActionRecord[];
@@ -164,3 +170,103 @@ export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok'
   list('failed', 'not added', true);
   return { text: `${parts.join(', ')}.`, kind: bad ? 'error' : 'ok' };
 }
+
+// ---- The agentic Inbox: eight recorded steps per item, conflicts held per action, a full history. ----
+
+/** Mirrors the server's step log (src/inbox/steps.ts). */
+export type StepId = 'receive' | 'read' | 'screen' | 'match' | 'understand' | 'context' | 'graph' | 'check';
+export type StepStatus = 'running' | 'done' | 'skipped' | 'needs-you' | 'failed';
+export interface Step { id: StepId; status: StepStatus; at: string; detail: string; ms?: number }
+export const STEP_ORDER: StepId[] = ['receive', 'read', 'screen', 'match', 'understand', 'context', 'graph', 'check'];
+export const STEP_WORDS: Record<StepId, string> = { receive: 'Receive', read: 'Read', screen: 'Screen', match: 'Match', understand: 'Understand', context: 'Update context', graph: 'Build the graph', check: 'Check' };
+/** The CSS suffix of a step's dot. */
+export const stepGlyph = (s: StepStatus | 'todo') => ({ running: 'run', done: 'ok', skipped: 'skip', 'needs-you': 'you', failed: 'bad', todo: 'todo' } as const)[s];
+
+/** Is any step of this item still running? */
+export const isRunning = (i: Pick<InboxItemView, 'steps'>) => !!i.steps?.some((s) => s.status === 'running');
+
+/** Poll the Inbox only while some item has a step running. */
+export const shouldPoll = (v: { items: { steps?: Step[] }[] } | null | undefined) => !!v?.items.some((i) => i.steps?.some((s) => s.status === 'running'));
+
+/** Waits on the operator: a step that needs them, or a held proposal. Held files and dismissed items are counted apart. */
+export const needsYou = (i: Pick<InboxItemView, 'steps' | 'actions' | 'status'>) =>
+  i.status !== 'dismissed' && i.status !== 'held'
+  && (!!i.steps?.some((s) => s.status === 'needs-you') || (i.actions ?? []).some((a) => a.status === 'pending' && !!a.held));
+
+/** Shown in the middle zone: running, needs you, or a held file waiting for a reply or a delete. */
+export const inFlight = (i: InboxItemView) => isRunning(i) || needsYou(i) || i.status === 'held';
+
+/** Has any step or action of this item failed? */
+export const hasFailed = (i: Pick<InboxItemView, 'steps' | 'actions'>) =>
+  !!i.steps?.some((s) => s.status === 'failed') || (i.actions ?? []).some((a) => a.status === 'failed');
+
+export type Chip = 'all' | 'needs-you' | 'held' | 'done' | 'failed' | 'dismissed';
+export const CHIPS: { id: Chip; label: string }[] = [
+  { id: 'all', label: 'All' }, { id: 'needs-you', label: 'Needs you' }, { id: 'held', label: 'Held' },
+  { id: 'done', label: 'Done' }, { id: 'failed', label: 'Failed' }, { id: 'dismissed', label: 'Dismissed' },
+];
+
+export function filterItems(items: InboxItemView[], chip: Chip, q: string): InboxItemView[] {
+  const byChip = items.filter((i) => chip === 'all' ? true
+    : chip === 'needs-you' ? needsYou(i)
+    : chip === 'held' ? i.status === 'held'
+    : chip === 'done' ? i.status === 'applied'
+    : chip === 'failed' ? hasFailed(i)
+    : i.status === 'dismissed');
+  const k = q.trim().toLowerCase();
+  return k ? byChip.filter((i) => `${i.name} ${i.triage?.ideaId ?? ''} ${itemHeadline(i)}`.toLowerCase().includes(k)) : byChip;
+}
+
+/** Items newest first, grouped by day: Today, Yesterday, then dates. */
+export function groupByDay(items: InboxItemView[], now = new Date()): { label: string; items: InboxItemView[] }[] {
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const today = day(now); const yesterday = day(new Date(now.getTime() - 86_400_000));
+  const label = (iso: string) => { const d = iso.slice(0, 10); return d === today ? 'Today' : d === yesterday ? 'Yesterday' : dayOf(iso) || 'Undated'; };
+  const out: { label: string; items: InboxItemView[] }[] = [];
+  for (const i of [...items].sort((a, b) => (b.receivedAt ?? '').localeCompare(a.receivedAt ?? ''))) {
+    const l = label(i.receivedAt ?? '');
+    const g = out.at(-1); if (g && g.label === l) g.items.push(i); else out.push({ label: l, items: [i] });
+  }
+  return out;
+}
+
+/** The one-line result of an item: step 8's detail, else the hold reason, else the last step's detail. */
+export function resultLine(i: Pick<InboxItemView, 'steps' | 'status' | 'hold'>): string {
+  const check = i.steps?.find((s) => s.id === 'check');
+  if (check?.status === 'done' || check?.status === 'needs-you') return check.detail;
+  if (i.status === 'held' && i.hold?.reasons?.length) return i.hold.reasons[0];
+  return i.steps?.at(-1)?.detail ?? '';
+}
+
+/** The status chip of a history row. */
+export function statusWord(i: InboxItemView): { word: string; tone: 'run' | 'you' | 'held' | 'bad' | 'ok' | 'off' } {
+  if (i.status === 'dismissed') return { word: 'Dismissed', tone: 'off' };
+  if (isRunning(i)) return { word: 'Running', tone: 'run' };
+  if (i.status === 'held') return { word: 'Held', tone: 'held' };
+  if (needsYou(i)) return { word: 'Needs you', tone: 'you' };
+  if (hasFailed(i)) return { word: 'Failed', tone: 'bad' };
+  return { word: 'Done', tone: 'ok' };
+}
+
+/** The operator acted on this item: applied or undid a proposal that waited for them, or picked the idea. */
+export const byYou = (i: Pick<InboxItemView, 'actions'>) =>
+  (i.actions ?? []).some((a) => (a.kind === 'ok' && a.status === 'applied') || a.status === 'undone');
+
+/** A time of day from an ISO stamp, e.g. 09:41 (UTC, as stored). */
+export const timeOf = (iso: string | undefined) => (/T(\d{2}:\d{2})/.exec(iso ?? '')?.[1] ?? '');
+
+export interface HeldChoice { label: string; kind: 'apply' | 'drop'; resolve?: 'use-existing' | 'take-file' }
+/** The choices offered for a held proposal, per conflict rule. */
+export function heldChoices(h: Held): HeldChoice[] {
+  switch (h.rule) {
+    case 'near-duplicate-star': return [{ label: 'Use the existing star', kind: 'apply', resolve: 'use-existing' }, { label: 'Keep both', kind: 'apply', resolve: 'take-file' }, { label: 'No', kind: 'drop' }];
+    case 'contradicts-fact': return [{ label: "Keep the form's value", kind: 'drop' }, { label: "Take the file's value", kind: 'apply', resolve: 'take-file' }];
+    default: return [{ label: 'Yes', kind: 'apply' }, { label: 'No', kind: 'drop' }];
+  }
+}
+
+/** The rule that held a proposal, as a short tag. */
+export const RULE_WORDS: Record<string, string> = {
+  'contradicts-fact': 'Contradiction', 'person-star': 'A person', 'near-duplicate-star': 'Looks the same', 'low-confidence': 'Not sure',
+  'two-ideas': 'Two ideas', 'duplicate-idea': 'Duplicate idea', screened: 'Screened',
+};

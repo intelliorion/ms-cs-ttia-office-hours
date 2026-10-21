@@ -139,3 +139,37 @@ describe('dropSummary: one notice for a multi-file drop', () => {
     expect(dropSummary([{ kind: 'added', name: 'a' }, { kind: 'duplicate', name: 'b', text: 'x' }])).toEqual({ text: '1 added, 1 already dropped: b.', kind: 'ok' });
   });
 });
+
+import { shouldPoll, groupByDay, filterItems, resultLine, heldChoices } from './inboxHelpers';
+
+describe('agentic inbox helpers', () => {
+  const step = (id: string, status: string) => ({ id, status, at: '2026-10-21T10:00:00Z', detail: id });
+  it('shouldPoll only while a step is running', () => {
+    expect(shouldPoll({ items: [{ steps: [step('read', 'running')] }] } as any)).toBe(true);
+    expect(shouldPoll({ items: [{ steps: [step('check', 'done')] }] } as any)).toBe(false);
+    expect(shouldPoll(null)).toBe(false);
+  });
+  it('groupByDay labels today and yesterday, then dates, newest first', () => {
+    const g = groupByDay([{ receivedAt: '2026-10-21T09:00:00Z' }, { receivedAt: '2026-10-20T09:00:00Z' }, { receivedAt: '2026-10-01T09:00:00Z' }] as any, new Date('2026-10-21T12:00:00Z'));
+    expect(g.map((x) => x.label)).toEqual(['Today', 'Yesterday', '1 Oct 2026']);
+  });
+  it('filterItems by chip and by text over name and idea', () => {
+    const items = [
+      { name: 'reply.eml', status: 'applied', steps: [step('check', 'done')], triage: { ideaId: 'CAFE-2026-001' } },
+      { name: 'people.csv', status: 'held', steps: [step('screen', 'needs-you')] },
+      { name: 'reply2.eml', status: 'triaged', steps: [step('check', 'needs-you')], actions: [{ status: 'pending', held: { rule: 'low-confidence', why: 'x' } }] },
+    ] as any;
+    expect(filterItems(items, 'needs-you', '').map((i: any) => i.name)).toEqual(['reply2.eml']);
+    expect(filterItems(items, 'held', '').map((i: any) => i.name)).toEqual(['people.csv']);
+    expect(filterItems(items, 'all', '001').map((i: any) => i.name)).toEqual(['reply.eml']);
+  });
+  it('resultLine is the check detail, else the hold reason, else the last step detail', () => {
+    expect(resultLine({ steps: [step('check', 'done')] } as any)).toBe('check');
+    expect(resultLine({ status: 'held', hold: { reasons: ['Looks like a list of people'] }, steps: [] } as any)).toBe('Looks like a list of people');
+  });
+  it('heldChoices per rule', () => {
+    expect(heldChoices({ rule: 'near-duplicate-star', why: 'x', existing: 'capability:slot-finding' }).map((c) => c.label)).toEqual(['Use the existing star', 'Keep both', 'No']);
+    expect(heldChoices({ rule: 'contradicts-fact', why: 'x' }).map((c) => c.label)).toEqual(["Keep the form's value", "Take the file's value"]);
+    expect(heldChoices({ rule: 'low-confidence', why: 'x' }).map((c) => c.label)).toEqual(['Yes', 'No']);
+  });
+});

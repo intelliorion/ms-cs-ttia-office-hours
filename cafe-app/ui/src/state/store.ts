@@ -65,7 +65,7 @@ export function openIdeaPatch(id: string, narrow: boolean) {
   return { leftView: { kind: 'idea', id } as LeftView, selectedId: `idea:${id}`, popout: null, focus: false, drawer: (narrow ? 'ideas' : null) as Drawer };
 }
 /** Back to the list: the selection and the camera stay; the idea's notice and suggestion go. */
-export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null }; }
+export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null, onlyRelated: false }; }
 export type EscAction = 'none' | 'blur' | 'back' | 'drawer' | 'deselect';
 /** What Esc does, in order: a modal handles its own; a text field lets go; idea details go back; a drawer closes; a star card closes. */
 export function escAction(s: { modal: boolean; leftView: LeftView; detailsVisible: boolean; drawer: Drawer; card: boolean; target?: any }): EscAction {
@@ -88,6 +88,9 @@ export interface AppState {
   labels: boolean;
   /** Bumped by Reset view; the universe flies home when it changes. */
   viewNonce: number;
+  /** Only the open idea's one-hop neighbourhood is drawn; off again on Back. */
+  onlyRelated: boolean;
+  toggleOnlyRelated: () => void;
   /** Focus mode: only the universe (and the title bar) show. */
   focus: boolean;
   toggleFocus: () => void;
@@ -127,7 +130,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -147,6 +150,7 @@ export const useStore = create<AppState>((set) => ({
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
+  toggleOnlyRelated: () => set((s) => ({ onlyRelated: !s.onlyRelated, viewNonce: s.viewNonce + 1 })),
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
   cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),

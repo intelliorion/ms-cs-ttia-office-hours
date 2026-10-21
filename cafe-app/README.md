@@ -253,6 +253,8 @@ Do not set it for real rounds.
 
 ## What the idea panel shows, by stage
 
+In the idea head, **Only related** draws just that idea and what it links to (one hop) and nothing else; **Show all** or Back brings the whole universe back. Stars keep their positions.
+
 Each action section has a home stage. Before it, the section is hidden; at it, the full form; after it (or once the idea is closed) a compact read-only card with an Edit link. Anything already saved is never hidden.
 
 | Stage | Editable | Cards |

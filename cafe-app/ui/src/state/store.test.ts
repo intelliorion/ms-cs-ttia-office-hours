@@ -118,7 +118,7 @@ describe('left panel view', () => {
     const mem: Record<string, string> = {};
     vi.stubGlobal('localStorage', { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v; } });
     const { useStore, backPatch } = await import('./store');
-    expect(backPatch()).toEqual({ leftView: { kind: 'list' }, notice: null, suggest: null });
+    expect(backPatch()).toEqual({ leftView: { kind: 'list' }, notice: null, suggest: null, onlyRelated: false });
     useStore.setState({ focus: true, popout: { kind: 'inbox' } });
     useStore.getState().openIdea('CAFE-2026-003');
     expect(useStore.getState()).toMatchObject({ leftView: { kind: 'idea', id: 'CAFE-2026-003' }, selectedId: 'idea:CAFE-2026-003', focus: false, popout: null });
@@ -148,6 +148,15 @@ describe('quality', () => {
     const { nextQuality, qualityLabel } = await import('./store');
     expect([nextQuality('full'), nextQuality('lite'), nextQuality('flat')]).toEqual(['lite', 'flat', 'full']);
     expect(['full', 'lite', 'flat'].map((q) => qualityLabel(q as any))).toEqual(['Quality: Full', 'Quality: Lite', 'Quality: Flat']);
+  });
+  it('Only related flips and re-frames; Back switches it off', async () => {
+    const { useStore } = await import('./store');
+    useStore.setState({ onlyRelated: false });
+    const n = useStore.getState().viewNonce;
+    useStore.getState().toggleOnlyRelated();
+    expect(useStore.getState()).toMatchObject({ onlyRelated: true, viewNonce: n + 1 });
+    useStore.getState().backToList();
+    expect(useStore.getState().onlyRelated).toBe(false);
   });
   it('reads and writes the per-browser quality, ignoring junk and broken storage', async () => {
     const { readQuality, writeQuality, readQualityByHand } = await import('./store');

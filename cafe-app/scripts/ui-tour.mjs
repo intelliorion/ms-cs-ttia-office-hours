@@ -97,6 +97,13 @@ async function popoutShots(p) {
   await sleep(3500);
   await p.mouse.move(960, 1060);
   await shot(p, '30-panel-idea.png');
+  // "Only related": the universe keeps just this idea and what it links to (one hop); Show all brings the rest back.
+  await p.click(`${DETAILS} [data-action="only-related"]`);
+  await sleep(3000);
+  await shot(p, '34-only-related.png');
+  assert((await p.textContent(`${DETAILS} [data-action="only-related"]`)) === 'Show all', 'the Only related chip did not flip');
+  await p.click(`${DETAILS} [data-action="only-related"]`);
+  await sleep(1500);
   // A CSIC decision through the panel (the idea is at stage 2, so the Decision form is the one action section):
   // tick two checks, pick the decision, give a reason, save.
   assert((await p.locator(`${DETAILS} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker shows at stage 2');

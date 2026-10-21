@@ -1,8 +1,9 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
 import { Drawers } from './layout/Drawers';
+import { relatedGraph } from './universe/graphView';
 import { useStore } from './state/store';
 import { IdeasPane } from './panels/IdeasPane';
 import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
@@ -19,12 +20,14 @@ declare global { interface Window { __cafe?: Record<string, (...a: any[]) => voi
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
-    leftView, openIdea, backToList, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
+    leftView, openIdea, backToList, onlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
   // No card for the idea whose details are already showing in the panel.
   const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
   const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
+  // "Only related" in the idea panel: the universe gets the one-hop neighbourhood instead of the whole graph.
+  const shown = useMemo(() => (graph && onlyRelated && leftView.kind === 'idea' ? relatedGraph(graph, `idea:${leftView.id}`) : graph), [graph, onlyRelated, leftView]);
   useEffect(() => { void refresh(); }, [refresh]);
   // Lite drops the panels' backdrop blur too (theme.css), so the quality is on the root element.
   useEffect(() => { document.documentElement.dataset.quality = quality; }, [quality]);
@@ -58,8 +61,8 @@ export default function App() {
   return (
     <>
       <Stage focus={focus}>
-        {graph && (
-          <Universe graph={graph} layout={graph.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus}
+        {shown && (
+          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
             quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}

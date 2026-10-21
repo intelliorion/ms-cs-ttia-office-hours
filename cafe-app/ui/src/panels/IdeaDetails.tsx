@@ -16,7 +16,7 @@ import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
  * the earlier ones after that), Stage, Emails, Graph links, Details and History. The universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
-  const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
+  const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai, onlyRelated, toggleOnlyRelated } = useStore();
   const [aiBusy, setAiBusy] = useState(false);
   const [aiReview, setAiReview] = useState<ReviewSuggestion | null>(null);
   const idea = state?.ideas.find((i: any) => i.id === id);
@@ -118,6 +118,9 @@ export function IdeaDetails({ id }: { id: string }) {
     <div className="id-head">
       <button ref={backBtn} className="btn back" data-action="back" aria-label="Back to the ideas list" title="Back to the list (Esc)" onClick={backToList}>← Back</button>
       <span className="iid">{id}</span>
+      <button className={`chip-btn${onlyRelated ? ' on' : ''}`} data-action="only-related" aria-pressed={onlyRelated}
+        title={onlyRelated ? 'Show the whole universe again' : 'Show only this idea and what it links to'} onClick={toggleOnlyRelated}>
+        {onlyRelated ? 'Show all' : 'Only related'}</button>
       {extra}
     </div>
   );

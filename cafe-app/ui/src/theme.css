@@ -440,3 +440,8 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .card-steps li::before{display:none}
 .card-k{color:var(--cream);overflow-wrap:anywhere}
 .card-v{color:var(--muted);overflow-wrap:anywhere}
+
+/* "Only related" in the idea head: a small chip beside the ID. */
+.chip-btn{border:1px solid var(--panel-border);background:rgba(20,26,26,.6);color:var(--muted);border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.chip-btn:hover{border-color:var(--teal);color:var(--text)}
+.chip-btn.on{border-color:var(--teal);color:#fff;background:rgba(125,211,207,.12)}

@@ -32,6 +32,21 @@ export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<stri
   return out;
 }
 
+/**
+ * The graph cut down to one node's neighbourhood (one hop: the node and everything linked to it) with only the links
+ * among them. Positions are kept, so "Only related" removes the rest of the universe without moving a star.
+ */
+export function relatedGraph(graph: Graph, id: string): Graph {
+  const keep = neighbourhood(graph, id);
+  const layout = graph.layout ? Object.fromEntries(Object.entries(graph.layout).filter(([k]) => keep.has(k))) : undefined;
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
+    edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+    ...(layout ? { layout } : {}),
+  };
+}
+
 export function degrees(graph: Pick<Graph, 'edges'>): Map<string, number> {
   const d = new Map<string, number>();
   for (const e of graph.edges) { d.set(e.from, (d.get(e.from) ?? 0) + 1); d.set(e.to, (d.get(e.to) ?? 0) + 1); }

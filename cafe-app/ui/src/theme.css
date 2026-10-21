@@ -86,11 +86,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .pop-id{font-family:var(--mono);font-size:13px;color:var(--cream);letter-spacing:.04em;margin-bottom:2px}
 .pop-sub{font-size:14px;color:var(--muted);margin-top:4px;display:flex;gap:14px;align-items:center}
 .pop-sub .flagn{margin-left:0}
-.stage-menu{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .modal select,.modal textarea{background:rgba(10,14,14,.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:14px;padding:7px 10px;outline:none}
 .modal select:focus,.modal textarea:focus{border-color:var(--teal)}
 .modal select option,.modal select optgroup{background:#151c1c;color:var(--text)}
-.stage-menu select{font-size:15px;padding:8px 12px;border-color:rgba(125,211,207,.55);min-width:230px}
 .pop-strip{flex:none;display:flex;flex-direction:column;gap:8px;padding:12px 24px 10px;border-bottom:1px solid rgba(160,190,185,.16);max-height:220px;overflow-y:auto}
 .suggest-bar{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid rgba(245,179,107,.55);border-left:3px solid var(--amber);border-radius:4px;background:rgba(245,179,107,.1)}
 .sg-k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--amber)}
@@ -442,7 +440,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .card-v{color:var(--muted);overflow-wrap:anywhere}
 
 /* Stage button in the idea head, with its drop-down menu. */
-.stage-wrap{position:relative;margin-left:auto}
+.stg-wrap{position:relative;margin-left:auto}
 .stg-btn{background:rgba(20,26,26,.6);cursor:pointer;font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px}
 .stg-btn:hover:not(:disabled){background:rgba(125,211,207,.1)}
 .stg-btn .caret{font-size:10px;opacity:.8}

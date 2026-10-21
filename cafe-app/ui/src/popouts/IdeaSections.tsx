@@ -49,7 +49,7 @@ export function StageButton({ state, value, label, colour, busy, onPick }: {
     </li>
   );
   return (
-    <div className="stage-wrap" ref={box}>
+    <div className="stg-wrap" ref={box}>
       <button ref={btn} className="stg stg-btn" style={{ ['--c' as string]: colour }} data-action="stage" aria-haspopup="menu" aria-expanded={open}
         title="Change the stage" disabled={busy} onClick={toggle}>{label} <span className="caret">▾</span></button>
       {open && at && createPortal(

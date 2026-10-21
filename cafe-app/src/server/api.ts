@@ -29,7 +29,9 @@ import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } fro
 import { extractInput, planAiLinks } from '../ai/apply';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
-import { processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView } from '../inbox/flow';
+import {
+  processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
+} from '../inbox/flow';
 
 
 /**
@@ -231,8 +233,16 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
   add('POST', '/api/inbox/:id/apply', async ({ params, body }) => {
     const ids = Array.isArray(body.actionIds) ? body.actionIds.map(String) : [];
-    return { item: await applyRecords(root, params.id, ids, clock) };
+    const resolve = body.resolve ?? {};
+    if (typeof resolve !== 'object' || Array.isArray(resolve) || Object.values(resolve).some((v) => v !== 'use-existing' && v !== 'take-file')) {
+      throw new Error('Unknown resolve');
+    }
+    return { item: await applyRecords(root, params.id, ids, clock, resolve as Record<string, Resolve>) };
   });
+  add('POST', '/api/inbox/:id/process', async ({ params, body }) =>
+    ({ item: viewOf(await reprocessItem(root, params.id, ai, clock, body.ideaId ? { ideaId: String(body.ideaId) } : {})) }));
+  add('POST', '/api/inbox/:id/dismiss-action', async ({ params, body }) =>
+    ({ item: viewOf(await dropRecord(root, params.id, String(body.actionId ?? ''))) }));
   add('POST', '/api/inbox/:id/undo', async ({ params, body }) => {
     const recordId = String(body.recordId ?? '');
     const item = await undoRecord(root, params.id, recordId, clock);

@@ -155,6 +155,8 @@ export async function holdItem(root: string, id: string, reasons: string[], read
     meta,
     hold: { reasons },
     ...(item.problems?.length ? { problems: item.problems } : {}),
+    // The run so far (what the screen said), so the Inbox shows where it stopped.
+    ...(item.steps?.length ? { steps: item.steps } : {}),
     ...(heldFrom ? { heldFrom } : {}),
   };
   await writeItem(root, next);

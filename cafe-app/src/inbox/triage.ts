@@ -8,10 +8,10 @@ import { understandTask, type Understanding, type TriageInput } from '../ai/task
 import { rebuildGraph } from '../graph/store';
 import { nodeId } from '../graph/ontology';
 import type { Connector } from '../ai/connector';
-import { parseDrop } from './parse';
+import { parseDrop, type ParsedDrop } from './parse';
 import { screenDrop, knownParticipants } from './screen';
 import { getItem, updateItem, holdItem, type InboxItem } from './store';
-import { matchIdea, displayName, ASK_BELOW, type MatchResult } from './match';
+import { matchIdea, displayName, ASK_BELOW, type MatchResult, type MatchHow } from './match';
 
 /** What triage stores on the item (item.triage). Task 3 builds actions from it. */
 export interface TriageRecord {
@@ -98,19 +98,40 @@ function combine(match: MatchResult, ai: Understanding | undefined, byId: Map<st
   return { ideaId: ask ? null : ideaId, confidence, ask, ...(ask && ideaId ? { suggested: ideaId } : {}), candidates };
 }
 
-/**
- * Triage one dropped item: screen a fresh parse first (held → stop, nothing else reads it),
- * then match, then (not for exports) ask the AI for facts. Stores item.triage; never applies anything.
- * opts.ideaId: the operator chose the idea ("Which idea?"), so the match is certain.
- */
-export async function triageItem(
-  root: string, id: string, connector: Connector | null | undefined, opts: { ideaId?: string } = {},
-): Promise<InboxItem> {
+/** What the screen made of the file, in a few words ("Email, 2 paragraphs, our earlier email quoted"). */
+export function readDetail(parsed: ParsedDrop): string {
+  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+  const lines = parsed.text.split('\n').filter((l) => l.trim()).length;
+  switch (parsed.type) {
+    case 'email': {
+      const paras = parsed.text.split(/\n\s*\n/).filter((p) => p.trim()).length;
+      return `Email, ${n(paras, 'paragraph')}${parsed.meta.quoted ? ', our earlier email quoted' : ''}`;
+    }
+    case 'export': {
+      const rows = exportRows(parsed);
+      return rows === undefined ? 'Form export' : `Form export, ${n(rows, 'row')}`;
+    }
+    case 'transcript': {
+      const who = parsed.meta.speakers?.length ?? 0;
+      return `Transcript, ${n(lines, 'line')}${who ? `, ${n(who, 'speaker')}` : ''}`;
+    }
+    case 'document': return `Document, ${n(lines, 'line')}`;
+    default: return `Note, ${n(lines, 'line')}`;
+  }
+}
+
+/** Data rows of a CSV export (the header not counted); undefined when the file can't be counted here (xlsx). */
+export function exportRows(parsed: ParsedDrop): number | undefined {
+  if (parsed.type !== 'export' || parsed.screenText === undefined) return undefined;
+  return Math.max(0, parsed.screenText.split('\n').filter((l) => l.trim()).length - 1);
+}
+
+export const HOW_WORDS: Record<MatchHow, string> = { 'cafe-id': 'Café ID', title: 'title', sender: 'sender', chosen: 'your pick', none: 'nothing' };
+
+/** Steps 2 and 3: read a fresh parse of the stored file and screen it. Nothing is written. */
+export async function readAndScreen(root: string, id: string) {
   const item = await getItem(root, id);
   if (!item) throw new Error(`No inbox item ${id}`);
-  if (item.status === 'held') return item;
-
-  // 1. Screen before anything else reads the text.
   const bytes = new Uint8Array(await fs.readFile(path.join(root, ...item.file.split('/'))));
   const parsed = parseDrop(path.basename(item.file), bytes);
   const screened = screenDrop(item.name, parsed, await knownParticipants(root));
@@ -118,33 +139,49 @@ export async function triageItem(
     screened.hold = true;
     screened.reasons.push("Looks like a tracker and this kind of file can't be checked yet, so it's held for you to check by hand");
   }
-  if (screened.hold) return holdItem(root, id, screened.reasons, parsed.meta);
+  return { item, parsed, screened };
+}
 
-  const at = new Date().toISOString();
+export interface MatchStep { match: MatchResult; ideas: Idea[]; byId: Map<string, Idea> }
+
+/** Step 4: the deterministic match (or the operator's choice). Nothing is written. */
+export async function matchStep(root: string, item: InboxItem, parsed: ParsedDrop, opts: { ideaId?: string } = {}): Promise<MatchStep> {
   const { ideas } = await listIdeas(root);
   const byId = new Map(ideas.map((i) => [i.id, i]));
   const fresh: InboxItem = { ...item, type: parsed.type, text: parsed.text, meta: parsed.meta };
+  const chosen = opts.ideaId && byId.has(opts.ideaId) ? opts.ideaId : undefined;
+  const match: MatchResult = chosen ? { ideaId: chosen, confidence: 1, how: 'chosen', candidates: [chosen] } : matchIdea(fresh, ideas);
+  return { match, ideas, byId };
+}
+
+/**
+ * Step 5: (not for exports) ask the AI for facts. Writes what was read (type, text, meta, problems) and
+ * item.triage; never applies anything. Returns the TriageRecord.
+ */
+export async function understandStep(
+  root: string, item: InboxItem, parsed: ParsedDrop, m: MatchStep, connector: Connector | null | undefined,
+): Promise<TriageRecord> {
+  const at = new Date().toISOString();
+  const { match, byId } = m;
   // The screen passed: only now are the text and what was read from it stored.
   const read: Partial<InboxItem> = {
     type: parsed.type, text: parsed.text, meta: parsed.meta,
     ...(parsed.problems?.length ? { problems: [...new Set([...(item.problems ?? []), ...parsed.problems])] } : {}),
   };
 
-  // 2. Exports never go to the AI: Task 3 imports them.
+  // Exports never go to the AI: they are imported.
   if (parsed.type === 'export') {
     const triage: TriageRecord = {
       at, match: { confidence: 0, how: 'none', candidates: [] }, ideaId: null, confidence: 0, ask: false,
       candidates: [], notes: ['A list export: import it to add or update ideas'], export: true,
     };
-    return updateItem(root, id, { ...read, type: 'export', status: 'triaged', triage });
+    await updateItem(root, item.id, { ...read, type: 'export', status: 'triaged', triage });
+    return triage;
   }
 
-  // 3. Deterministic match (or the operator's choice).
-  const chosen = opts.ideaId && byId.has(opts.ideaId) ? opts.ideaId : undefined;
-  const match: MatchResult = chosen ? { ideaId: chosen, confidence: 1, how: 'chosen', candidates: [chosen] } : matchIdea(fresh, ideas);
   const notes = match.note ? [match.note] : [];
 
-  // 4. The AI: facts only, checked against the schema.
+  // The AI: facts only, checked against the schema.
   const idea = match.ideaId ? byId.get(match.ideaId) : undefined;
   const meta = parsed.meta;
   // Display names only: addresses never go to the AI.
@@ -195,5 +232,22 @@ export async function triageItem(
     ...(ai ? { ai, provider } : { needsHand: true as const }),
     ...(aiError ? { aiError } : {}),
   };
-  return updateItem(root, id, { ...read, status: 'triaged', triage });
+  await updateItem(root, item.id, { ...read, status: 'triaged', triage });
+  return triage;
+}
+
+/**
+ * Triage one dropped item: screen a fresh parse first (held → stop, nothing else reads it),
+ * then match, then (not for exports) ask the AI for facts. Stores item.triage; never applies anything.
+ * opts.ideaId: the operator chose the idea ("Which idea?"), so the match is certain.
+ */
+export async function triageItem(
+  root: string, id: string, connector: Connector | null | undefined, opts: { ideaId?: string } = {},
+): Promise<InboxItem> {
+  const { item, parsed, screened } = await readAndScreen(root, id);
+  if (item.status === 'held') return item;
+  if (screened.hold) return holdItem(root, id, screened.reasons, parsed.meta);
+  const m = await matchStep(root, item, parsed, opts);
+  await understandStep(root, item, parsed, m, connector);
+  return (await getItem(root, id))!;
 }

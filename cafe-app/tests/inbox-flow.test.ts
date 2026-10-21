@@ -1,0 +1,125 @@
+// cafe-app/tests/inbox-flow.test.ts
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdir, writeFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { startServer, sampleIdea } from './helpers';
+import { fakeProvider } from '../src/ai/providers/fake';
+import { createConnector, type Provider } from '../src/ai/connector';
+import { DEFAULT_SETTINGS } from '../src/round/round';
+import { readAiLinks, appendAiLink } from '../src/graph/store';
+import { saveIdea, loadIdea } from '../src/ideas/store';
+
+const ID = 'CAFE-2026-001';
+const reply = `From: team@example.test\nSubject: Re: ${ID} Email scheduler\n\nAbout 40 a week. Two people triage by hand.\n`;
+const statuses = (item: any) => item.steps.map((s: any) => `${s.id}:${s.status}`);
+const slotFinding = { from: `idea:${ID}`, to: 'capability:slot-finding', rel: 'NEEDS' as const, description: 'd', source: 'ai:fake:earlier', confidence: 1, status: 'confirmed' as const, newNodes: [{ id: 'capability:slot-finding', type: 'Capability' as const, label: 'Slot finding' }] };
+
+let close: (() => Promise<void>) | undefined;
+afterEach(async () => { await close?.(); close = undefined; vi.unstubAllEnvs(); });
+
+/** The brief's startServer(today, { ai }) adapted: the server takes a connector; the fake answers only with CAFE_AI_FAKE=1. */
+async function start(provider: Provider = fakeProvider(), opts: { builder?: string } = {}) {
+  vi.stubEnv('CAFE_AI_FAKE', '1');
+  const s = await startServer('2026-10-21', { connector: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) });
+  close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
+  // The idea the reply is about, with the E2 questions sent (so the answers and the reply are Safe).
+  const people = { submitter: 'Person 1', team: [], ...(opts.builder ? { builder: opts.builder } : {}) };
+  await saveIdea(s.root, sampleIdea({ sent: { E2: '2026-10-20' }, people } as any));
+  const folder = (await readdir(path.join(s.root, 'ideas'))).find((f) => f.startsWith(ID))!;
+  const dir = path.join(s.root, 'ideas', folder, 'emails');
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${ID}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n1. How many requests a week?\n2. Who does it today?\n`);
+  type Res = Omit<Response, 'json'> & { json(): Promise<any> };
+  const post = (url: string, body: unknown = {}): Promise<Res> => fetch(`${s.base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const drop = (name: string, text: string): Promise<Res> => fetch(`${s.base}/api/inbox/drop`, { method: 'POST', headers: { 'x-filename': encodeURIComponent(name), 'content-type': 'text/plain' }, body: text });
+  return { ...s, post, drop };
+}
+
+describe('the pipeline', () => {
+  it('records the eight steps in order for a clean reply and applies answers and links in one run', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    expect(statuses(item)).toEqual(['receive:done', 'read:done', 'screen:done', 'match:done', 'understand:done', 'context:done', 'graph:done', 'check:done']);
+    expect(item.steps[4].ms).toBeGreaterThanOrEqual(0);
+    expect(item.steps[7].detail).toBe('Done');
+    expect(item.status).toBe('applied');
+    const links = (await readAiLinks(s.root)).links;
+    expect(links.length).toBeGreaterThan(0);
+    expect(links.every((l) => l.status === 'confirmed')).toBe(true);
+  });
+  it('a conflicting reply applies the rest and holds the second builder and the near-duplicate star (needs-you at check)', async () => {
+    const s = await start(fakeProvider(), { builder: 'Person 3' });
+    await appendAiLink(s.root, slotFinding);
+    const { item } = await (await s.drop('reply2.eml', reply.replace('About 40', 'We have a second builder now. About 40'))).json();
+    expect(item.steps.at(-1)).toMatchObject({ id: 'check', status: 'needs-you' });
+    expect(item.steps.at(-1).detail).toMatch(/2 items wait/);
+    const held = item.actions.filter((a: any) => a.held);
+    expect(held.map((a: any) => a.held.rule).sort()).toEqual(['contradicts-fact', 'near-duplicate-star']);
+    expect(item.actions.find((a: any) => a.action.t === 'reply_received').status).toBe('applied');
+    expect(item.status).toBe('triaged');
+  });
+  it('AI failure: understand failed, the rest skipped, nothing applied without you', async () => {
+    const fake = fakeProvider();
+    const s = await start({ ...fake, complete: async () => { throw new Error('rate limited'); } });
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    expect(statuses(item).slice(4)).toEqual(['understand:failed', 'context:skipped', 'graph:skipped', 'check:skipped']);
+    expect(item.steps[4].detail).toMatch(/rate limited/);
+    expect(item.problems.join(' ')).toMatch(/by hand/);
+  });
+  it('held at the screen: steps stop at screen with needs-you', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('people.csv', 'Name,Email,Phone\nA B,a@x.test,+1 555 0100\nC D,c@x.test,+1 555 0101\nE F,e@x.test,+1 555 0102\n')).json();
+    expect(item.status).toBe('held');
+    expect(statuses(item).slice(0, 3)).toEqual(['receive:done', 'read:done', 'screen:needs-you']);
+    expect(item.steps.slice(3).every((x: any) => x.status === 'skipped')).toBe(true);
+  });
+  it('repeat drop: receive only, says it is the same file, no AI call', async () => {
+    const fake = fakeProvider(); let calls = 0;
+    const s = await start({ ...fake, complete: async (p: string, o: any) => { calls++; return fake.complete(p, o); } });
+    await s.drop('reply.eml', reply);
+    const n = calls;
+    expect(n).toBeGreaterThan(0);
+    const r = await (await s.drop('reply.eml', reply)).json();
+    expect(r.duplicate).toBe(true);
+    expect(calls).toBe(n);
+    expect(r.item.steps[0].detail).toMatch(/Same file/);
+  });
+  it('reprocess re-runs 4–8 and keeps applied records (no double filing, no double links)', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('reply.eml', reply)).json();
+    const links = (await readAiLinks(s.root)).links.length;
+    const again = await (await s.post(`/api/inbox/${item.id}/process`, {})).json();
+    expect(again.item.actions.filter((a: any) => a.action.t === 'file_email')).toHaveLength(1);
+    expect((await readAiLinks(s.root)).links.length).toBe(links);
+    expect(statuses(again.item).slice(3)).toEqual(['match:done', 'understand:done', 'context:done', 'graph:done', 'check:done']);
+  });
+  it('apply with resolve use-existing rewrites the held link to the existing star', async () => {
+    const s = await start(fakeProvider(), { builder: 'Person 3' });
+    // The existing star hangs off another idea, so the rewritten link is a new edge (the very same edge would add nothing).
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'slots', title: 'Slots', dedupe_key: 'slots|person 1' }));
+    await appendAiLink(s.root, { ...slotFinding, from: 'idea:CAFE-2026-002' });
+    const { item } = await (await s.drop('reply2.eml', reply.replace('About 40', 'second builder. About 40'))).json();
+    const dup = item.actions.find((a: any) => a.held?.rule === 'near-duplicate-star');
+    const r = await (await s.post(`/api/inbox/${item.id}/apply`, { actionIds: [dup.id], resolve: { [dup.id]: 'use-existing' } })).json();
+    expect(r.item.actions.find((a: any) => a.id === dup.id).status).toBe('applied');
+    const links = (await readAiLinks(s.root)).links.filter((l) => l.source.includes('reply2'));
+    expect(links.some((l) => l.to === 'capability:slot-finding' && l.status === 'confirmed')).toBe(true);
+    expect(links.some((l) => l.to === 'capability:slot-findings')).toBe(false);
+  });
+  it('apply refuses an unknown resolve', async () => {
+    const s = await start(fakeProvider(), { builder: 'Person 3' });
+    const { item } = await (await s.drop('reply2.eml', reply.replace('About 40', 'second builder. About 40'))).json();
+    const h = item.actions.find((a: any) => a.held);
+    const r = await s.post(`/api/inbox/${item.id}/apply`, { actionIds: [h.id], resolve: { [h.id]: 'merge-all' } });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/Unknown resolve/);
+  });
+  it('dismiss-action drops a held record', async () => {
+    const s = await start(fakeProvider(), { builder: 'Person 3' });
+    const { item } = await (await s.drop('reply2.eml', reply.replace('About 40', 'second builder. About 40'))).json();
+    const h = item.actions.find((a: any) => a.held?.rule === 'contradicts-fact');
+    const r = await (await s.post(`/api/inbox/${item.id}/dismiss-action`, { actionId: h.id })).json();
+    expect(r.item.actions.find((a: any) => a.id === h.id)).toMatchObject({ status: 'undone', note: 'Dropped by you' });
+    expect((await loadIdea(s.root, ID)).people).toMatchObject({ builder: 'Person 3' });
+  });
+});

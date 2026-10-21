@@ -172,7 +172,9 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
   it('when the AI fails, the item needs a hand and nothing is applied', async () => {
     const { root, item } = await setup(() => { throw new Error('boom'); });
     expect((item.triage as any).needsHand).toBe(true);
-    expect((item.actions as ActionRecord[]).every((r) => r.status === 'pending' && r.kind === 'ok')).toBe(true);
+    // The run stops at understand (failed, the rest skipped): nothing is planned, so nothing is applied.
+    expect(((item.actions ?? []) as ActionRecord[]).every((r) => r.status === 'pending' && r.kind === 'ok')).toBe(true);
+    expect(item.steps?.find((x) => x.id === 'understand')?.status).toBe('failed');
     expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s2d).toBeUndefined();
     await expect(readdir(path.join(await ideaDir(root, 'CAFE-2026-001'), 'emails', 'in'))).rejects.toThrow();
     expect(await undoLines(root)).toHaveLength(0);

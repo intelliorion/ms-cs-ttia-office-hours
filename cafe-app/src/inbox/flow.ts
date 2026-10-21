@@ -10,9 +10,15 @@ import { currentRoundId } from '../round/store';
 import { loadTemplates, render } from '../comms/templates';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { saveDrop, getItem, updateItem, holdItem, deleteHeld, listItems, type InboxItem } from './store';
-import { triageItem, type TriageRecord } from './triage';
-import { matchIdea, ASK_BELOW } from './match';
-import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, type ActionRecord } from './actions';
+import { readAndScreen, matchStep, understandStep, readDetail, exportRows, HOW_WORDS, type TriageRecord, type MatchStep } from './triage';
+import { matchIdea, displayName, ASK_BELOW } from './match';
+import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, type Action, type ActionRecord } from './actions';
+import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus } from './steps';
+import { checkProposals, type ConflictContext } from './conflicts';
+import { appendHistory } from '../workspace/files';
+import { ideaDir } from '../ideas/store';
+import { readDesign } from '../design/store';
+import { rebuildGraph } from '../graph/store';
 
 /** Route-level inbox operations. The server runs every one of these behind its POST lock. */
 
@@ -49,42 +55,165 @@ async function applyOne(root: string, item: InboxItem, records: ActionRecord[], 
   }
 }
 
-/** Triage, plan the actions and apply the Safe ones. AI failures leave it needing a hand; nothing is thrown. */
-export async function processItem(
-  root: string, id: string, connector: Connector | null | undefined, clock: Clock, opts: { ideaId?: string } = {},
-): Promise<InboxItem> {
-  let item: InboxItem;
-  try {
-    item = await triageItem(root, id, connector, opts);
-  } catch (e) {
-    const before = await load(root, id);
-    return updateItem(root, id, { status: 'triaged', problems: [...(before.problems ?? []), `Couldn't sort this one (${(e as Error).message}), so do it by hand`] });
+/** "3 answers recorded, reply received, email filed": what the context step did, in this order. */
+function contextDetail(records: ActionRecord[]): string {
+  const of = (t: Action['t']) => records.filter((r) => r.action.t === t);
+  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+  const parts: string[] = [];
+  const answers = of('record_answers').reduce((k, r) => k + (r.action as Extract<Action, { t: 'record_answers' }>).answers.length, 0);
+  if (answers) parts.push(`${n(answers, 'answer')} recorded`);
+  if (of('reply_received').length) parts.push('reply received');
+  if (of('name_builder').length) parts.push('builder named');
+  if (of('add_flag').length) parts.push(`${n(of('add_flag').length, 'flag')} added`);
+  for (const r of of('log_step')) parts.push(`step ${(r.action as Extract<Action, { t: 'log_step' }>).step} ticked`);
+  for (const r of of('import_export')) {
+    const created = (r.result as { created?: unknown[] } | undefined)?.created?.length ?? 0;
+    parts.push(`imported ${n(created, 'idea')}`);
   }
-  if (item.status === 'held') return item;
-  let plan: Awaited<ReturnType<typeof planActions>>;
-  try {
-    plan = await planActions(root, item);
-  } catch (e) {
-    return updateItem(root, id, { status: 'triaged', problems: [...(item.problems ?? []), `Couldn't plan what to do (${(e as Error).message}), so do it by hand`] });
-  }
-  if (plan.hold) return holdItem(root, id, plan.hold);
+  // An email is filed under the idea's emails/ folder, anything else under notes/.
+  const filed = of('file_email');
+  if (filed.length) parts.push(filed.some((r) => (r.inverse as { files?: string[] } | undefined)?.files?.some((f) => f.includes('/emails/'))) ? 'email filed' : 'note filed');
+  const out = parts.join(', ') || 'Updated';
+  return out[0].toUpperCase() + out.slice(1);
+}
 
-  const kept = recordsOf(item).filter((r) => r.status !== 'pending' && r.action.t !== 'ask_idea');
-  let n = kept.reduce((m, r) => Math.max(m, Number(r.id.slice(1)) || 0), 0);
-  const needsHand = !!(item.triage as TriageRecord | undefined)?.needsHand;
-  const fresh: ActionRecord[] = plan.actions.map((action) => ({
-    id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending', label: labelOf(action),
-  }));
-  const records = [...kept, ...fresh];
-  await updateItem(root, id, { actions: [...records] });
-  for (let i = kept.length; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, item, records, i, clock);
-  return save(root, item, records);
+/** "2 links added, 1 new star (Capability: Slot finding)". */
+function graphDetail(records: ActionRecord[]): string {
+  const links = records.flatMap((r) => (r.action.t === 'graph_links' ? r.action.links : []));
+  const stars = new Map<string, string>();
+  for (const l of links) for (const x of l.newNodes ?? []) stars.set(x.id, `${x.type}: ${x.label}`);
+  const names = [...stars.values()];
+  const head = `${links.length} link${links.length === 1 ? '' : 's'} added`;
+  if (!names.length) return head;
+  return `${head}, ${names.length} new star${names.length === 1 ? '' : 's'} (${names.slice(0, 2).join(', ')}${names.length > 2 ? ', …' : ''})`;
+}
+
+/** What the conflict rules check against: the idea, every idea, the universe, the people in the file, the design. */
+async function conflictContext(root: string, item: InboxItem, tr: TriageRecord, m: MatchStep, screened: string[]): Promise<ConflictContext> {
+  const idea = tr.ideaId ? m.byId.get(tr.ideaId) ?? null : null;
+  const meta = item.meta ?? {};
+  const peoplePresent = [...new Set([...(meta.to ?? []), ...(meta.cc ?? []), ...(meta.speakers ?? []), ...(meta.from ? [meta.from] : [])].map(displayName).filter(Boolean))];
+  return {
+    idea, ideas: m.ideas, nodes: (await rebuildGraph(root)).nodes, peoplePresent,
+    design: idea ? await readDesign(root, idea.id).catch(() => null) : null,
+    match: { ideaId: m.match.ideaId ?? null, confidence: m.match.confidence, candidates: m.match.candidates },
+    aiIdeaId: tr.ai?.ideaId ?? null, screened,
+  };
+}
+
+async function sizeOf(root: string, item: InboxItem): Promise<number> {
+  try { return (await fs.stat(path.join(root, ...item.file.split('/')))).size; } catch { return item.text?.length ?? 0; }
 }
 
 /**
- * Store a drop; a repeat (same bytes) returns the first item and does nothing else, unless that item
- * never got past "new" (sorting was interrupted): then it is sorted now. The answer is the item as the
- * Inbox shows it (a preview, never the full text or the quoted thread).
+ * The run, step by step (receive, read, screen, match, understand, context, graph, check), each written to the
+ * sidecar as it ends. The conflict rules hold only the items that clash; everything else Safe is applied at once.
+ * Failures end the run with the rest skipped and a "do it by hand" problem; nothing is thrown.
+ * opts.from 'match': a re-run of steps 4–8 (read and screen are not recorded again).
+ */
+export async function processItem(
+  root: string, id: string, connector: Connector | null | undefined, clock: Clock, opts: { ideaId?: string; from?: 'match' } = {},
+): Promise<InboxItem> {
+  const first = await load(root, id);
+  if (first.status === 'held') return first;
+  if (!stepOf(first, 'receive')) {
+    await markStep(root, id, { id: 'receive', status: 'done', detail: `${first.name}, ${Math.max(1, Math.round((await sizeOf(root, first)) / 1024))} KB` });
+  }
+  const fail = async (after: StepId, msg: string) => {
+    await skipRest(root, id, after, 'after a failure');
+    return updateItem(root, id, { status: 'triaged', problems: [...((await load(root, id)).problems ?? []), msg] });
+  };
+
+  // 2 read, 3 screen (not recorded again on a re-run from match)
+  let rs: Awaited<ReturnType<typeof readAndScreen>>;
+  try {
+    rs = opts.from === 'match'
+      ? await readAndScreen(root, id)
+      : await timed(root, id, 'read', 'Reading the file…', async () => { const r = await readAndScreen(root, id); return { value: r, detail: readDetail(r.parsed) }; });
+  } catch (e) { return fail('read', `Couldn't read this one (${(e as Error).message}), so do it by hand`); }
+  if (opts.from !== 'match') {
+    if (rs.screened.hold) {
+      await markStep(root, id, { id: 'screen', status: 'needs-you', detail: rs.screened.reasons[0] ?? 'Held for you to check' });
+      await skipRest(root, id, 'screen', 'held at the screen');
+      return holdItem(root, id, rs.screened.reasons, rs.parsed.meta);
+    }
+    await markStep(root, id, { id: 'screen', status: 'done', detail: rs.screened.reasons.length ? `Flagged: ${rs.screened.reasons[0]}` : 'No personal data' });
+  }
+  const item = rs.item;
+
+  // 4 match
+  let m: MatchStep;
+  try { m = await matchStep(root, item, rs.parsed, opts); } catch (e) { return fail('match', `Couldn't match this one (${(e as Error).message}), so do it by hand`); }
+  const isExport = rs.parsed.type === 'export';
+  await markStep(root, id, {
+    id: 'match', status: 'done',
+    detail: isExport ? `A form export: ${exportRows(rs.parsed) ?? 'some'} rows` : m.match.ideaId ? `${m.match.ideaId} by ${HOW_WORDS[m.match.how]}` : 'No idea matched yet',
+  });
+
+  // 5 understand
+  let tr: TriageRecord;
+  try {
+    tr = await timed(root, id, 'understand', 'Asking the AI…', async () => {
+      const t = await understandStep(root, item, rs.parsed, m, connector);
+      const status: StepStatus = t.export ? 'skipped' : t.ai ? 'done' : t.aiError ? 'failed' : 'skipped';
+      const detail = t.export ? 'A form export: no AI needed' : t.ai ? t.ai.what : t.aiError ? `The AI couldn't help (${t.aiError})` : 'No AI connected: facts by hand';
+      return { value: t, detail, status };
+    });
+  } catch (e) { return fail('understand', `Couldn't sort this one (${(e as Error).message}), so do it by hand`); }
+  if (tr.aiError) return fail('understand', `The AI couldn't help (${tr.aiError}), so do this one by hand`);
+  if (tr.ask) {
+    await markStep(root, id, { id: 'match', status: 'needs-you', detail: `Could be ${tr.candidates.slice(0, 2).map((c) => c.id).join(' or ') || 'any idea'}: pick one` });
+    await skipRest(root, id, 'match', 'waiting for your pick');
+  }
+
+  // plan → conflicts → 6 context, 7 graph, 8 check
+  const triaged = await load(root, id);
+  let plan: Awaited<ReturnType<typeof planActions>>;
+  try { plan = await planActions(root, triaged); } catch (e) { return fail('understand', `Couldn't plan what to do (${(e as Error).message}), so do it by hand`); }
+  if (plan.hold) {
+    await markStep(root, id, { id: 'context', status: 'needs-you', detail: plan.hold[0] });
+    await skipRest(root, id, 'context', 'held');
+    return holdItem(root, id, plan.hold);
+  }
+  const ctx = await conflictContext(root, triaged, tr, m, rs.screened.reasons);
+  const { apply, hold } = checkProposals(ctx, plan.actions);
+  const kept = recordsOf(triaged).filter((r) => r.status !== 'pending' && r.action.t !== 'ask_idea');
+  const seen = new Set(kept.map((r) => JSON.stringify(r.action)));
+  let n = kept.reduce((mx, r) => Math.max(mx, Number(r.id.slice(1)) || 0), 0);
+  const needsHand = !!tr.needsHand;
+  const fresh: ActionRecord[] = [
+    ...apply.filter((a) => !seen.has(JSON.stringify(a))).map((action) => ({ id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending' as const, label: labelOf(action) })),
+    ...hold.filter((h) => !seen.has(JSON.stringify(h.action))).map((h) => ({
+      id: `a${++n}`, action: h.action, kind: 'ok' as const, status: 'pending' as const, label: labelOf(h.action),
+      held: { rule: h.rule, why: h.why, ...(h.existing ? { existing: h.existing } : {}) },
+    })),
+  ];
+  const records = [...kept, ...fresh];
+  await updateItem(root, id, { actions: [...records] });
+  if (tr.ask) return save(root, triaged, records);
+  for (let i = kept.length; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, triaged, records, i, clock);
+  // Everything applied on this item so far (a re-run keeps what an earlier run applied, and says so).
+  const applied = records.filter((r) => r.status === 'applied');
+  const ctxApplied = applied.filter((r) => r.action.t !== 'graph_links');
+  const graphApplied = applied.filter((r) => r.action.t === 'graph_links');
+  await markStep(root, id, { id: 'context', status: ctxApplied.length ? 'done' : 'skipped', detail: ctxApplied.length ? contextDetail(ctxApplied) : 'Nothing to update' });
+  await markStep(root, id, { id: 'graph', status: graphApplied.length ? 'done' : 'skipped', detail: graphApplied.length ? graphDetail(graphApplied) : 'No graph facts' });
+  const waiting = records.filter((r) => r.status === 'pending' && r.kind === 'ok');
+  const w = waiting.length;
+  await markStep(root, id, {
+    id: 'check', status: w ? 'needs-you' : 'done',
+    detail: w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waiting[0].label}` : 'Done',
+  });
+  if (tr.ai?.understood?.length && tr.ideaId) {
+    await appendHistory(await ideaDir(root, tr.ideaId), { at: clock(), action: 'inbox', by: 'app', detail: `Understood: ${tr.ai.understood.join(' · ')}`, source: triaged.file });
+  }
+  return save(root, triaged, records);
+}
+
+/**
+ * Store a drop; a repeat (same bytes) returns the first item with only a "Same file" receive step and does
+ * nothing else, unless that item never got past "new" (sorting was interrupted): then it is sorted now.
+ * The answer is the item as the Inbox shows it (a preview, never the full text or the quoted thread).
  */
 export async function processDrop(
   root: string, name: string, data: Uint8Array | string, connector: Connector | null | undefined, clock: Clock,
@@ -92,12 +221,43 @@ export async function processDrop(
   const saved = await saveDrop(root, name, data, clock);
   if (saved.duplicate && saved.status !== 'new') {
     const { duplicate: _d, ...item } = saved;
-    return { item: viewOf(item), duplicate: true };
+    const receive: Step = { id: 'receive', status: 'done', at: new Date().toISOString(), detail: `Same file as ${item.name} (dropped ${item.receivedAt.slice(0, 10)})` };
+    return { item: { ...viewOf(item), steps: [receive] }, duplicate: true };
   }
   return { item: viewOf(await processItem(root, saved.id, connector, clock)) };
 }
 
-export async function applyRecords(root: string, id: string, actionIds: string[], clock: Clock): Promise<InboxItem> {
+/** Run steps 4–8 again (a new pick, or after a fix); what was applied stays applied and is not done twice. */
+export async function reprocessItem(
+  root: string, id: string, connector: Connector | null | undefined, clock: Clock, opts: { ideaId?: string } = {},
+): Promise<InboxItem> {
+  const item = await load(root, id);
+  if (item.status === 'held') throw new Error('A held item is not read: delete it or draft a reply');
+  await resetStepsFrom(root, id, 'match');
+  return processItem(root, id, connector, clock, { ...opts, from: 'match' });
+}
+
+export type Resolve = 'use-existing' | 'take-file';
+
+/** A held graph_links record as the operator settled it: onto the existing star, or as the file has it. Confirmed either way. */
+function resolved(r: ActionRecord, how: Resolve | undefined): ActionRecord {
+  if (r.action.t !== 'graph_links') return r;
+  const existing = r.held?.existing;
+  const links = r.action.links.map((l) => {
+    if (how === 'use-existing' && existing) {
+      const fresh = new Set((l.newNodes ?? []).map((x) => x.id));
+      const { newNodes: _n, ...rest } = l;
+      return { ...rest, from: fresh.has(l.from) ? existing : l.from, to: fresh.has(l.to) ? existing : l.to, status: 'confirmed' as const };
+    }
+    return { ...l, status: 'confirmed' as const };
+  });
+  const action = { ...r.action, links };
+  return { ...r, action, label: labelOf(action) };
+}
+
+export async function applyRecords(
+  root: string, id: string, actionIds: string[], clock: Clock, resolve: Record<string, Resolve> = {},
+): Promise<InboxItem> {
   const item = await load(root, id);
   if (item.status === 'held') throw new Error('A held item has nothing to apply: delete it or draft a reply asking for counts');
   const records = [...recordsOf(item)];
@@ -108,7 +268,22 @@ export async function applyRecords(root: string, id: string, actionIds: string[]
     if (records[i].status === 'applied' || records[i].status === 'undone') throw new Error(`That one is already ${records[i].status}`);
     if (records[i].action.t === 'ask_idea') throw new Error('Choose the idea first');
   }
-  for (const aid of actionIds) await applyOne(root, item, records, records.findIndex((r) => r.id === aid), clock);
+  for (const aid of actionIds) {
+    const i = records.findIndex((r) => r.id === aid);
+    if (records[i].action.t === 'graph_links' && (resolve[aid] || records[i].held)) records[i] = resolved(records[i], resolve[aid]);
+    await applyOne(root, item, records, i, clock);
+  }
+  return save(root, item, records);
+}
+
+/** The operator said no to one waiting record: it is kept on the item as dropped, and nothing is changed. */
+export async function dropRecord(root: string, id: string, actionId: string): Promise<InboxItem> {
+  const item = await load(root, id);
+  const records = [...recordsOf(item)];
+  const i = records.findIndex((r) => r.id === actionId);
+  if (i < 0) throw new Error(`No action ${actionId} on this item`);
+  if (records[i].status !== 'pending') throw new Error(`That one is already ${records[i].status}`);
+  records[i] = { ...records[i], status: 'undone', note: 'Dropped by you', undoneAt: new Date().toISOString() };
   return save(root, item, records);
 }
 
@@ -129,7 +304,7 @@ export async function chooseIdea(root: string, id: string, ideaId: string, conne
   if (recordsOf(item).some((r) => r.status === 'applied')) throw new Error('Undo what was done first');
   const { ideas } = await listIdeas(root);
   if (!ideas.some((i) => i.id === ideaId)) throw new Error(`No idea ${ideaId}`);
-  return processItem(root, id, connector, clock, { ideaId });
+  return reprocessItem(root, id, connector, clock, { ideaId });
 }
 
 export async function dismissItem(root: string, id: string): Promise<InboxItem> {

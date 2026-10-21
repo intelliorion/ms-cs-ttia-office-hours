@@ -193,7 +193,10 @@ describe('/api/inbox: emails and notes', () => {
     expect(r.status).toBe(200);
     const { item } = await json(r);
     expect(item.triage.needsHand).toBe(true);
-    expect(item.actions.every((a: any) => a.status === 'pending')).toBe(true);
+    // The run stops at understand (failed, the rest skipped): nothing is planned, so nothing is applied.
+    expect((item.actions ?? []).every((a: any) => a.status === 'pending')).toBe(true);
+    expect(item.steps.find((x: any) => x.id === 'understand')).toMatchObject({ status: 'failed', detail: expect.stringMatching(/timed out/) });
+    expect(item.problems.join(' ')).toMatch(/by hand/);
     expect((await listIdeas(s.root)).ideas.find((i) => i.id === 'CAFE-2026-001')!.checklist.s2d).toBeUndefined();
   });
 

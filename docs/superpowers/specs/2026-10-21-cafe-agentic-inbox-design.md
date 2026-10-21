@@ -16,7 +16,7 @@ Non-goals: no free-running AI loop, no AI write access, no personal data to the 
 - `src/inbox/triage.ts`: builds `TriageInput`, runs `triageTask`, `combine` → `TriageRecord`.
 - `src/inbox/actions.ts`: `Action` union, `kindOf` (code decides Safe / OK / Held), `planActions`, `applyAction` with field-level `Inverse`, `labelOf`.
 - `src/inbox/flow.ts`: `processItem` (triage → plan → apply Safe), `processDrop`, `applyRecords`, `undoRecord`, `chooseIdea`, `dismissItem`, `deleteItem`, `draftHeldReply`, `inboxView`, `viewOf`.
-- Graph: `src/graph/store.ts` AI links with status `unconfirmed | confirmed | removed` (`setAiLinkStatus`), `src/graph/build.ts` merges form-grade edges and AI links; routes `POST /api/graph/confirm`, `POST /api/graph/remove`, `POST /api/ai/extract`.
+- Graph: `src/graph/store.ts` AI links with status `pending | confirmed | removed` (`setAiLinkStatus`), `src/graph/build.ts` merges form-grade edges and AI links; routes `POST /api/graph/confirm`, `POST /api/graph/remove`, `POST /api/ai/extract`.
 - UI: `ui/src/popouts/InboxPopout.tsx` (drop zone, paste, item list, per-action Yes / Undo, dismissed), `inboxHelpers.ts`, `LinkTable.tsx` (Confirm on unconfirmed, Remove on AI links).
 
 All of the above keeps its tests. This spec adds a step log, a conflict checker, a richer AI pass, a new graph rule and a new Inbox screen on top of it.
@@ -56,9 +56,9 @@ Reprocessing: `POST /api/inbox/:id/process` re-runs steps 4–8 on an item (used
 
 ### 4.1 Applied on arrival
 
-AI graph facts (`facts.graph`: nodes and links from `ExtractOutput`) are applied in step 7 as `graph_links` actions with `kind: 'safe'`, including links that create new stars, and every link is stored with status `confirmed`. Confidence is kept on the edge for display (the universe already draws confidence) but no longer gates anything. The dashed amber "unconfirmed" look remains only for links held back by a conflict rule (status `unconfirmed`, waiting), so the universe shows what is waiting on the operator and nothing else.
+AI graph facts (`facts.graph`: nodes and links from `ExtractOutput`) are applied in step 7 as `graph_links` actions with `kind: 'safe'`, including links that create new stars, and every link is stored with status `confirmed`. Confidence is kept on the edge for display (the universe already draws confidence) but no longer gates anything. The dashed amber "unconfirmed" look remains only for links held back by a conflict rule (status `pending`, waiting), so the universe shows what is waiting on the operator and nothing else.
 
-The idea panel's Graph section and the star card keep Remove on AI links and lose Confirm. `POST /api/graph/confirm` stays for held-back links (the Needs-you card's "Add it anyway" calls it); `LinkTable` shows Confirm only for `status === 'unconfirmed'` links, which now exist only through conflicts.
+The idea panel's Graph section and the star card keep Remove on AI links and lose Confirm. `POST /api/graph/confirm` stays for held-back links (the Needs-you card's "Add it anyway" calls it); `LinkTable` shows Confirm only for edges with `confirmed: false` (AI links whose stored status is `pending`), which now exist only through conflicts.
 
 `POST /api/ai/extract` ("Grow the universe from this idea") follows the same rule: links applied confirmed; new stars applied; the conflict rules (§4.2) hold back what they catch; the response says what was held and why.
 
@@ -122,7 +122,7 @@ Lite quality: no rim pulse, no dot halo, no progress hairline animation.
 
 Server: `src/inbox/steps.ts` (Step types, `markStep`, `stepsReset`), `src/inbox/conflicts.ts` (rules, `normaliseLabel`, `checkProposals`), `src/inbox/flow.ts` (pipeline rewritten around steps), `src/inbox/triage.ts` → calls `understandTask`, `src/ai/tasks.ts` (`understandTask`, schema), `src/ai/providers/fake.ts` (scripted `understand`: reply with answers; a conflicting reply naming a second builder; a near-duplicate star), `src/inbox/actions.ts` (`graph_links` safe; `held` on records; resolve options), `src/server/api.ts` (routes), `src/graph/store.ts` (links stored confirmed by default).
 
-UI: `ui/src/popouts/InboxPopout.tsx` (three zones), `ui/src/popouts/InboxCard.tsx` (steps strip, held rows, undo list), `ui/src/popouts/inboxHelpers.ts` (grouping by day, filters, step glyphs, polling rule), `ui/src/popouts/LinkTable.tsx` (Confirm only for `unconfirmed`), `ui/src/theme.css`.
+UI: `ui/src/popouts/InboxPopout.tsx` (three zones), `ui/src/popouts/InboxCard.tsx` (steps strip, held rows, undo list), `ui/src/popouts/inboxHelpers.ts` (grouping by day, filters, step glyphs, polling rule), `ui/src/popouts/LinkTable.tsx` (Confirm only for edges not yet confirmed), `ui/src/theme.css`.
 
 Scripts and docs: `scripts/acceptance.mjs` (six-file pass: reply, transcript, export, our own email, people list, conflicting reply), `scripts/ui-tour.mjs` (`--only=agentic`: drop well, card mid-flight, Needs-you card, history), `README.md` (Inbox section rewritten; graph rule), `test-data/README.md`.
 
@@ -130,7 +130,7 @@ Scripts and docs: `scripts/acceptance.mjs` (six-file pass: reply, transcript, ex
 
 - Unit: `steps.test.ts` (append, reset from step 4, atomic write), `conflicts.test.ts` (one test per rule with a firing and a non-firing case; `normaliseLabel`), `flow.test.ts` (eight steps recorded in order; failure marks failed then skipped; needs-you at screen stops; needs-you at check applies the rest; repeat drop records receive only; export fan-out), `understand` task (schema, prompt carries knownStars and teamAnswers, never a person label).
 - Routes: process re-runs 4–8 without re-applying; apply with resolve `use-existing` rewrites the link; extract returns held.
-- UI: card renders five dot states; polling starts and stops; history grouping and filters; Needs-you choices call the right routes; LinkTable shows no Confirm on confirmed links.
+- UI: card renders five dot states; polling starts and stops; history grouping and filters; Needs-you choices call the right routes; LinkTable shows no Confirm on confirmed edges.
 - Acceptance (`--fake`): the six files end as expected (Done ×3, Held ×1, Needs-you ×2 with the rules named), the graph gains confirmed links with no Confirm needed, and the conflicting builder waits while the reply's answers are applied.
 - Tour shots 60–64.
 

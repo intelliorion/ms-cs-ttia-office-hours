@@ -11,7 +11,8 @@ describe('Flat2D', () => {
     act(() => createRoot(el).render(
       <Flat2D graph={{ nodes: [], edges: [] }} layout={{}} selectedId={null} hoverId={null} labels={false} onSelect={() => {}} onHover={() => {}} />,
     ));
-    expect(el.textContent).toBe('Import an export to light up the universe');
+    expect(el.querySelector('[data-testid="flat2d"]')).not.toBeNull();
+    expect(el.textContent).toBe(''); // the welcome card carries the invitation
     expect(el.innerHTML).not.toContain('NaN');
   });
 });

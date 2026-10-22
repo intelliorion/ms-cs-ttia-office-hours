@@ -14,7 +14,9 @@ interface IdeaRow { id: string; title?: string; round?: string }
  */
 export function RoundPopout() {
   const { state, closePopout, refresh, notice, setNotice } = useStore();
-  const rounds: RoundRow[] = state?.rounds ?? [];
+  // Newest first by the day made, then by id (the server's order too, kept here so the list never depends on it).
+  const rounds: RoundRow[] = [...(state?.rounds ?? [])].sort((a: RoundRow, b: RoundRow) =>
+    String(b.created ?? '').localeCompare(String(a.created ?? '')) || b.id.localeCompare(a.id));
   const ideas: IdeaRow[] = state?.ideas ?? [];
   const roundFields: Pairs = state?.fields?.round ?? [];
   const settingFields: Pairs = state?.fields?.settings ?? [];
@@ -53,9 +55,9 @@ export function RoundPopout() {
     catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); return false; }
     finally { setBusy(false); }
   };
-  const create = () => {
+  const create = async () => {
     const name = newName.trim();
-    return run(() => post('/api/rounds', { name }), name ? `${name} created.` : 'Round created.');
+    if (await run(() => post('/api/rounds', { name }), name ? `${name} created.` : 'Round created.')) setNewName('');
   };
   const assign = async () => {
     const ids = picked;

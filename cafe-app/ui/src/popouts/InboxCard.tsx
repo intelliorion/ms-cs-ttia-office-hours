@@ -68,7 +68,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
         )}
         <span className="ib-when">{dayOf(item.receivedAt)}</span>
         {!heldFile && item.status !== 'dismissed' && (
-          <button className="btn sm ghost" data-action="dismiss" disabled={busy} title="Hide it from the Import; nothing is undone"
+          <button className="btn sm ghost" data-action="dismiss" disabled={busy} title="Hide it from the Import list; nothing is undone"
             onClick={() => void go('Dismissing…', () => inboxPost(item.id, 'dismiss'), () => `${item.name} dismissed.`)}>Dismiss</button>
         )}
         {item.status === 'dismissed' && <span className="st st-sent">Dismissed</span>}

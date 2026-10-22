@@ -99,9 +99,10 @@ export function RoundChip({ ideaId, round, onDone }: { ideaId: string; round: st
       await post(`/api/ideas/${encodeURIComponent(ideaId)}/round`, { round: v });
       setNotice({ text: v ? `Put in ${rounds.find((r) => r.id === v)?.name ?? v}.` : 'Taken out of its round.', kind: 'ok' });
     } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
-    await refresh();
-    onDone?.();
-    setBusy(false);
+    finally {
+      // The store's refresh reports its own errors; whatever happens, the chip is usable again.
+      try { await refresh(); onDone?.(); } catch { /* reported by the store */ } finally { setBusy(false); }
+    }
   };
   const label = round ? rounds.find((r) => r.id === round)?.name ?? round : 'No round';
   const item = (v: string, text: string) => (

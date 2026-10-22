@@ -88,7 +88,7 @@ export function Universe(input: UniverseProps) {
         <Scene {...props} onHover={onHover} />
       </Canvas>
       <div className="universe-vignette" />
-      {empty && <div className="flat2d-empty" data-testid="universe-empty">Import an export to light up the universe</div>}
+      {empty && <div className="flat2d-empty" data-testid="universe-empty" />}
     </div>
   );
 }

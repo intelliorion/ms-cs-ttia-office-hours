@@ -165,7 +165,7 @@ export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok'
   const bad = outcomes.some((o) => o.kind === 'too-large' || o.kind === 'failed');
   if (outcomes.length === 1) {
     const [o] = outcomes;
-    if (o.kind === 'added') return { text: `${o.name} is in the Import.`, kind: 'ok' };
+    if (o.kind === 'added') return { text: `${o.name} imported.`, kind: 'ok' };
     return { text: o.kind === 'duplicate' ? `${o.text}. Nothing was done again.` : o.text, kind: bad ? 'error' : 'ok' };
   }
   const of = (k: DropOutcome['kind']) => outcomes.filter((o) => o.kind === k);

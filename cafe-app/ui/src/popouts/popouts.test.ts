@@ -152,6 +152,9 @@ describe('title bar and the Rounds pop-out', () => {
   });
 
   it('lists the rounds newest first with their idea counts', () => {
+    // Handed over oldest first: the pop-out must still show the newest (by created) at the top.
+    const st = fixture();
+    useStore.setState({ state: { ...st, rounds: [...st.rounds].reverse() } as any });
     act(() => root.render(createElement(RoundPopout)));
     const rows = [...el.querySelectorAll('[data-round]')];
     expect(rows.map((r) => r.getAttribute('data-round'))).toEqual(['ROUND-002', 'ROUND-001']);
@@ -170,6 +173,7 @@ describe('title bar and the Rounds pop-out', () => {
     await flush();
     expect(post).toHaveBeenCalledWith('/api/rounds', { name: 'Winter clinic' });
     expect(refresh).toHaveBeenCalled();
+    expect(name.value).toBe(''); // no second round with the same name by a second click
   });
 
   it('puts the ticked ideas in the picked round', async () => {
@@ -212,6 +216,15 @@ describe('title bar and the Rounds pop-out', () => {
     await flush();
     expect(post).toHaveBeenCalledWith('/api/ideas/CAFE-2026-001/round', { round: '' });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('the round chip comes back from busy even when the refresh fails', async () => {
+    refresh.mockRejectedValueOnce(new Error('offline'));
+    act(() => root.render(createElement(RoundChip, { ideaId: 'CAFE-2026-001', round: 'ROUND-001' })));
+    act(() => q<HTMLButtonElement>('.rnd-wrap [data-action="round-chip"]').click());
+    act(() => q<HTMLButtonElement>('[data-testid="round-menu"] [data-value=""]').click());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(q<HTMLButtonElement>('.rnd-wrap [data-action="round-chip"]').disabled).toBe(false);
   });
 
   it('the round chip says No round when the idea has none', () => {

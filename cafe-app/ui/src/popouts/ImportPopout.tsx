@@ -28,7 +28,7 @@ export function ImportPopout() {
   };
 
   return (
-    <Modal title={<><div className="pop-id">Import</div><h2>Bring in ideas from the Café form</h2></>} label="Import" onClose={closePopout} width={860} height={760} className="small-pop">
+    <Modal title={<><div className="pop-id">Import with a report</div><h2>Bring in ideas from the Café form</h2></>} label="Import with a report" onClose={closePopout} width={860} height={760} className="small-pop">
       <div className="pop-single">
         <div
           className={`dropzone${over ? ' over' : ''}`} data-testid="dropzone"

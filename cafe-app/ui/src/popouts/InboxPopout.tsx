@@ -143,7 +143,7 @@ export function InboxPopout() {
             {busy && <div className="ib-busy" role="status">{busy}</div>}
           </div>
           <div className="ib-well-r">
-            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files for the Import" disabled={!!busy}
+            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={!!busy}
               onChange={(e) => void dropFiles(e.target.files)} />
             <div className="ib-paste">
               <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={1} placeholder="Paste an email or a quick note"
@@ -180,7 +180,7 @@ export function InboxPopout() {
             </div>
             <input className="search ib-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or idea" aria-label="Search the history" />
           </div>
-          {inbox === null && <div className="hint">Reading the Import…</div>}
+          {inbox === null && <div className="hint">Reading the imports…</div>}
           {inbox && !items.length && <div className="hint">Nothing dropped yet. Drop a reply, a meeting transcript or a Café export above.</div>}
           {inbox && items.length > 0 && !days.length && <div className="hint">Nothing matches.</div>}
           {days.map((d) => (

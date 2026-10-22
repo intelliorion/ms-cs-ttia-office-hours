@@ -61,14 +61,24 @@ const ANSWER_STARS = 60;
 /** How many stars light up at most. */
 const LIT_MAX = 150;
 
-export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, focusId?: string): Promise<ChatEntry> {
+export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, focusId?: string, mentionIds: string[] = []): Promise<ChatEntry> {
   const command = text.trim().slice(0, COMMAND_MAX);
   if (!command) throw new Error('Type a command first');
   const all = await readChat(root);
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
   const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
-  const hidden = hideNames(command, graph.nodes);
+  // @mentions name a star exactly: each "@Label" becomes that star's code, whatever else the text matches.
+  const mentioned = [...new Set(mentionIds)].map((mid) => graph.nodes.find((n) => n.id === mid)).filter((n): n is NonNullable<typeof n> => !!n);
+  let pre = command;
+  mentioned.forEach((n, i) => { pre = pre.split(`@${n.label}`).join(`\u0000${i}\u0000`); });
+  const hidden = hideNames(pre, graph.nodes);
+  mentioned.forEach((n, i) => {
+    const known = [...hidden.codes].find(([, v]) => v.id === n.id)?.[0];
+    const code = known ?? codeFor(hidden.codes, n);
+    if (!known) hidden.legend.push(n.type === 'Person' ? { code, type: n.type } : { code, type: n.type, label: n.label });
+    hidden.text = hidden.text.split(`\u0000${i}\u0000`).join(`[${code}]`);
+  });
   const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x && !!x.trim()))].sort();
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),

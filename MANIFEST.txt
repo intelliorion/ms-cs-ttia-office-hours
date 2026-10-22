@@ -17,6 +17,7 @@ cafe-app/skills/brainstorming.md
 cafe-app/skills/writing-plans.md
 cafe-app/src/ai/apply.ts
 cafe-app/src/ai/connector.ts
+cafe-app/src/ai/grow.ts
 cafe-app/src/ai/providers/claude.ts
 cafe-app/src/ai/providers/cli.ts
 cafe-app/src/ai/providers/copilot.ts
@@ -220,8 +221,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-KOEjh8c8.js
-cafe-app/web/assets/index-QD2WQFZa.css
+cafe-app/web/assets/index-Br0lM0x9.css
+cafe-app/web/assets/index-C7d5KoJ3.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

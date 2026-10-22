@@ -40,6 +40,7 @@ export const designPost = (id: string, what: DesignRoute, body: unknown = {}) =>
 
 /** The command bar: the operator's commands, the agent's replies and the actions waiting for "Do it". */
 export const getChat = () => fetch('/api/chat').then((r) => handle<{ entries: any[] }>(r));
-export const chatSend = (text: string, focus?: string | null) => post('/api/chat', focus ? { text, focus } : { text });
+export const chatSend = (text: string, focus?: string | null, mentions: string[] = []) =>
+  post('/api/chat', { text, ...(focus ? { focus } : {}), ...(mentions.length ? { mentions } : {}) });
 export const chatPost = (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) =>
   post(`/api/chat/${encodeURIComponent(id)}/${what}`, actionId ? { actionId } : {});

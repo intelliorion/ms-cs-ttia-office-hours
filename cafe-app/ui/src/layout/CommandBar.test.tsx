@@ -38,7 +38,7 @@ describe('CommandBar', () => {
     const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
     await act(async () => { input.focus(); type(input, 'link Zainab Okafor to BSI'); });
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
-    expect(chatSend).toHaveBeenCalledWith('link Zainab Okafor to BSI', null);
+    expect(chatSend).toHaveBeenCalledWith('link Zainab Okafor to BSI', null, []);
     expect(el.querySelector('[data-testid="command-thinking"]')?.textContent).toBe('Claude Code is reading your command…');
     await act(async () => { finish(proposed); });
     expect(el.querySelector('[data-testid="command-thinking"]')).toBeNull();
@@ -104,10 +104,27 @@ describe('CommandBar', () => {
     const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
     await act(async () => { input.focus(); type(input, 'grow it'); });
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
-    expect(chatSend).toHaveBeenLastCalledWith('grow it', 'idea:CAFE-2026-001');
+    expect(chatSend).toHaveBeenLastCalledWith('grow it', 'idea:CAFE-2026-001', []);
     expect(el.querySelector('.cmd-me-about')?.textContent).toBe('About Vendor contract summariser');
     await act(async () => { useStore.setState({ leftView: { kind: 'list' } as any, selectedId: 'team:gss' }); });
     expect(el.querySelector('[data-testid="command-about"]')?.textContent).toBe('About: GSS');
+    act(() => root.unmount()); el.remove();
+  });
+
+  it('@ searches the stars; arrows and Enter pick one, which goes in by full name and is sent as a mention', async () => {
+    vi.mocked(chatSend).mockClear();
+    vi.mocked(chatSend).mockResolvedValue({ id: 'c5', at: '2026-10-22', text: 'x', kind: 'question', reply: 'ok', problems: [], actions: [] });
+    const { el, root } = await mount();
+    const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
+    await act(async () => { input.focus(); type(input, 'who works on @g'); });
+    expect([...el.querySelectorAll('[data-testid="command-mentions"] .cm-l')].map((x) => x.textContent)).toEqual(['GSS']);
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(input.value).toBe('who works on @GSS ');
+    expect(el.querySelector('[data-testid="command-mentions"]')).toBeNull();
+    expect(chatSend).not.toHaveBeenCalled(); // Enter picked the star; it did not send
+    await act(async () => { type(input, 'who works on @GSS ideas?'); });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(chatSend).toHaveBeenLastCalledWith('who works on @GSS ideas?', null, ['team:gss']);
     act(() => root.unmount()); el.remove();
   });
 

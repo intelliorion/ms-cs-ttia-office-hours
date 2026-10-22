@@ -240,6 +240,16 @@ describe('the command bar', () => {
     expect((await rels(root))).not.toContain('idea:CAFE-2026-002 NEEDS capability:clause-finding');
   });
 
+  it('@mentions name the star exactly, even a short name the text would not match; a person mentioned stays a code', async () => {
+    const { root, prompts, ai } = await setup(() => ({ kind: 'unclear', reply: 'Say more.', actions: [] }));
+    await saveIdea(root, { ...IDEAS[0], support: ['Agent Design Guidance'] });
+    await runCommand(root, 'link @Zainab Okafor to @Agent Design Guidance please', ai, clock, undefined, ['person:zainab-okafor', 'support:agent-design-guidance', 'gone:x']);
+    const data = JSON.parse(prompts[0].slice(prompts[0].indexOf('<<<DATA') + 7, prompts[0].indexOf('DATA>>>')));
+    expect(data.command).toMatch(/^link \[P\d+\] to \[U\d+\] please$/);
+    expect(prompts[0]).not.toMatch(/Zainab|Okafor/);
+    expect(data.stars).toContainEqual(expect.objectContaining({ type: 'Support', label: 'Agent Design Guidance' }));
+  });
+
   it('a person on screen is still only a code', async () => {
     const { root, prompts, ai } = await setup(() => ({ kind: 'unclear', reply: 'Say more.', actions: [] }));
     await runCommand(root, 'what about them?', ai, clock, 'person:zainab-okafor');

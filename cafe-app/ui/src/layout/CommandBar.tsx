@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { chatPost, chatSend, getChat } from '../api';
 import { useStore } from '../state/store';
-import { EXAMPLES, KIND_WORD, STATUS_WORD, canUndo, waitingCount, type ChatEntryView } from './commandHelpers';
+import { NODE_COLOURS } from '../universe/graphView';
+import { NODE_LABELS } from '../../../src/graph/ontology';
+import { EXAMPLES, KIND_WORD, STATUS_WORD, canUndo, insertMention, mentionQuery, searchStars, waitingCount, type ChatEntryView, type StarHit } from './commandHelpers';
 
 /**
  * The command bar: the operator tells the Café what to do in their own words. The AI reads the command with every
@@ -19,6 +21,11 @@ export function CommandBar() {
   const [thinking, setThinking] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // @mentions: the "@query" being typed, the stars it matches, the one the arrows are on, and the stars picked so far.
+  const [at, setAt] = useState<{ start: number; query: string } | null>(null);
+  const [hi, setHi] = useState(0);
+  const [mentions, setMentions] = useState<StarHit[]>([]);
+  const hits = at && graph ? searchStars(graph.nodes, at.query) : [];
   const wrap = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -36,8 +43,25 @@ export function CommandBar() {
     const t = text.trim();
     if (!t || thinking) return;
     setOpen(true); setThinking(t); setText(''); setError(null); setHighlight(null);
-    try { const e = await chatSend(t, focusLabel ? focus : null); setCurrent(e); setHighlight(e.highlight ?? null); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
+    const ids = mentions.filter((m) => t.includes(`@${m.label}`)).map((m) => m.id);
+    setMentions([]); setAt(null);
+    try { const e = await chatSend(t, focusLabel ? focus : null, ids); setCurrent(e); setHighlight(e.highlight ?? null); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
   };
+  const pick = (h: StarHit) => {
+    if (!at || !input.current) return;
+    const caret = input.current.selectionStart ?? text.length;
+    const next = insertMention(text, at.start, caret, h.label);
+    caretTo.current = next.caret;
+    setText(next.text); setAt(null); setHi(0);
+    setMentions((ms) => (ms.some((m) => m.id === h.id) ? ms : [...ms, h]));
+  };
+  // Put the caret after the picked name in the same paint as the new text, so the next key lands there.
+  const caretTo = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (caretTo.current === null || !input.current) return;
+    input.current.focus(); input.current.setSelectionRange(caretTo.current, caretTo.current);
+    caretTo.current = null;
+  }, [text]);
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     setBusy(true); setError(null);
     try { setCurrent(await chatPost(id, what, actionId)); if (what !== 'cancel') void refresh(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
@@ -50,12 +74,19 @@ export function CommandBar() {
       <div className="cmd-bar">
         <span className="cmd-spark" aria-hidden="true">✦</span>
         {focusLabel && <span className="cmd-about" data-testid="command-about" title={`"This" and "it" mean ${focusLabel}`}>About: {focusLabel}</span>}
-        <input ref={input} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => setOpen(true)}
+        <input ref={input} value={text} onFocus={() => setOpen(true)}
+          onChange={(e) => { setText(e.target.value); setAt(mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length)); setHi(0); }}
           onKeyDown={(e) => {
+            if (hits.length) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => (i + 1) % hits.length); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => (i - 1 + hits.length) % hits.length); return; }
+              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(hits[hi] ?? hits[0]); return; }
+              if (e.key === 'Escape') { e.preventDefault(); setAt(null); return; }
+            }
             if (e.key === 'Enter') { e.preventDefault(); void send(); }
             if (e.key === 'Escape') { e.preventDefault(); setOpen(false); input.current?.blur(); }
           }}
-          placeholder={focusLabel ? 'Ask or tell about this…' : 'Tell the Café what to do…'} aria-label="Command" data-testid="command-input" maxLength={600} disabled={!!thinking} />
+          placeholder={focusLabel ? 'Ask or tell about this… (@ to pick a star)' : 'Tell the Café what to do… (@ to pick a star)'} aria-label="Command" data-testid="command-input" maxLength={600} disabled={!!thinking} />
         {waiting > 0 && !open && <span className="cmd-badge" title="Actions waiting for you">{waiting}</span>}
         {highlight && (
           <button className="cmd-lit" data-action="command-clear-lit" title="Clear the highlight" onClick={() => setHighlight(null)}>
@@ -64,6 +95,18 @@ export function CommandBar() {
         )}
         <button className="cmd-send" data-action="command-send" aria-label="Send" disabled={!text.trim() || !!thinking} onClick={() => void send()}>↵</button>
       </div>
+      {hits.length > 0 && (
+        <ul className="cmd-mentions" role="listbox" aria-label="Stars" data-testid="command-mentions">
+          {hits.map((h, i) => (
+            <li key={h.id} role="option" aria-selected={i === hi} className={i === hi ? 'on' : ''}
+              onMouseDown={(e) => { e.preventDefault(); pick(h); }} onMouseEnter={() => setHi(i)}>
+              <span className="dot" style={{ background: (NODE_COLOURS as Record<string, string>)[h.type] ?? '#9fb0ae' }} />
+              <span className="cm-l">{h.label}</span>
+              <span className="cm-t">{NODE_LABELS[h.type as keyof typeof NODE_LABELS] ?? h.type}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {open && (
         <div className="cmd-panel" role="dialog" aria-label="Command chat" data-testid="command-panel">
           <div className="cmd-list" ref={list}>

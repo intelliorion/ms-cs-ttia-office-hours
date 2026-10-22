@@ -47,11 +47,11 @@ export const chatPost = (id: string, what: 'do' | 'cancel' | 'undo', actionId?: 
  * Sends one message and reads the server's progress lines as they come (each step the agent takes), then the message.
  * Aborting the signal is Stop: the server finishes the step it is on and stops.
  */
-export async function chatStream(body: { text: string; focus?: string | null; mentions?: string[]; thread?: string | null }, onProgress: (p: any) => void, signal?: AbortSignal): Promise<any> {
+export async function chatStream(body: { text: string; focus?: string[] | null; mentions?: string[]; thread?: string | null }, onProgress: (p: any) => void, signal?: AbortSignal): Promise<any> {
   const res = await fetch('/api/chat', {
     method: 'POST', signal,
     headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
-    body: JSON.stringify({ text: body.text, ...(body.focus ? { focus: body.focus } : {}), ...(body.mentions?.length ? { mentions: body.mentions } : {}), ...(body.thread ? { thread: body.thread } : {}) }),
+    body: JSON.stringify({ text: body.text, ...(body.focus?.length ? { focus: body.focus } : {}), ...(body.mentions?.length ? { mentions: body.mentions } : {}), ...(body.thread ? { thread: body.thread } : {}) }),
   });
   if (!res.ok || !res.body) return handle<any>(res);
   const reader = res.body.getReader();

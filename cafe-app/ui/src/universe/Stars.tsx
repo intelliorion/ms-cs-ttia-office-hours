@@ -13,6 +13,8 @@ export interface StarsProps {
   deg: Map<string, number>;
   hood: Set<string> | null;
   selectedId: string | null;
+  /** Every star picked with Ctrl/⌘+click: each glows like the selected one. */
+  picked?: Set<string> | null;
   hoverId: string | null;
   labels: boolean;
   /** Focus mode: no side panels, so labels may use the whole stage. */
@@ -21,7 +23,7 @@ export interface StarsProps {
   lite?: boolean;
   /** How bright stars outside the lit set are (0 hides them, with their labels and rings). */
   dim?: number;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, additive?: boolean) => void;
   onHover: (id: string | null) => void;
 }
 
@@ -98,7 +100,7 @@ function emissiveByInstance(m: Material) {
 }
 
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
-export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, lite = false, dim = DIM, onSelect, onHover }: StarsProps) {
+export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, onSelect, onHover }: StarsProps) {
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
   const glint = useRef<InstancedMesh>(null);
@@ -144,7 +146,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
       const id = nodes[i].id;
       const lit = !hood || hood.has(id);
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
-      b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId ? 1.4 : 1) * twinkle;
+      b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId || picked?.has(id) ? 1.4 : 1) * twinkle;
       c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
     }
     const g = lite ? glint.current : null;
@@ -159,7 +161,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
     const g = root.current; if (!g) return;
     const narrowNow = typeof window !== 'undefined' && window.innerWidth < 1000;
     const rank = (id: string, type: string, i: number) =>
-      (id === selectedId || id === hoverId ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (TYPE_RANK[type] ?? 9) * 10 - sizes[i];
+      (id === selectedId || id === hoverId || picked?.has(id) ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (TYPE_RANK[type] ?? 9) * 10 - sizes[i];
     const order = nodes.map((d, i) => [d, i] as const).filter(([d]) => labelEls.current.has(d.id))
       .sort((a, b) => rank(a[0].id, a[0].type, a[1]) - rank(b[0].id, b[0].type, b[1]));
     type Box = [number, number, number, number];
@@ -213,7 +215,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
         key={`hit-${n}`} ref={hit} args={[undefined, undefined, n]}
         onPointerMove={(e) => { e.stopPropagation(); const id = pick(e); if (id !== hoverId) onHover(id); }}
         onPointerOut={() => onHover(null)}
-        onClick={(e) => { e.stopPropagation(); if (e.delta > 5) return; const id = pick(e); if (id) onSelect(id); }}
+        onClick={(e) => { e.stopPropagation(); if (e.delta > 5) return; const id = pick(e); if (id) onSelect(id, e.nativeEvent.ctrlKey || e.nativeEvent.metaKey); }}
       >
         <sphereGeometry args={[1, 8, 6]} />
         <meshBasicMaterial visible={false} />
@@ -237,7 +239,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
         if (!show || hidden(d.id)) return null;
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }} {...(lite ? LITE_LABEL : {})}>
-            <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId ? ' hot' : ''}`}>
+            <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId || picked?.has(d.id) ? ' hot' : ''}`}>
               <div className="l1" title={d.label}>{starLabel(d.label)}</div>
               {d.type === 'Idea' && <div className="l2">{d.attrs?.closed ? `Closed · ${d.attrs.closed}` : String(d.attrs?.stageLabel ?? '')}</div>}
             </div>

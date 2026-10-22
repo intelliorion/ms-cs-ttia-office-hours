@@ -82,3 +82,25 @@ describe('RightPanels', () => {
     act(() => root.unmount()); el.remove();
   });
 });
+
+import { inCommon } from './contextHelpers';
+describe('several stars picked', () => {
+  it('the right side shows Selected and In common; the context is multi', async () => {
+    expect(rightContext({ leftView: { kind: 'list' }, selectedId: 'idea:CAFE-2026-002', selectedIds: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'] }, graph))
+      .toEqual({ kind: 'multi', ids: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'] });
+    expect(inCommon(graph, ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'])).toEqual([{ id: 'capability:policy-q-a', with: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'] }]);
+    useStore.setState({ graph, state: { ideas, outbox: [], steps: [], rounds: [], stageNames: { 1: 'Submit Idea', 2: 'Review and Select' }, closures: {} } as any,
+      leftView: { kind: 'list' } as any, selectedId: 'idea:CAFE-2026-002', selectedIds: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'] });
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = createRoot(el);
+    await act(async () => root.render(<RightPanels />));
+    expect([...el.querySelectorAll('h2')].map((h) => h.textContent)).toEqual(['Selected', 'In common']);
+    expect([...el.querySelectorAll('[data-pick]')].map((b) => b.getAttribute('data-pick'))).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002']);
+    expect(el.querySelectorAll('[data-testid="ctx-compare"] tbody tr')).toHaveLength(2);
+    expect(el.querySelector('[data-common="capability:policy-q-a"] .ctx-share')?.textContent).toBe('2 of 2');
+    // Clicking a shared star adds it to the selection.
+    await act(async () => { (el.querySelector('[data-common="capability:policy-q-a"]') as HTMLButtonElement).click(); });
+    expect(useStore.getState().selectedIds).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'capability:policy-q-a']);
+    act(() => root.unmount()); el.remove();
+  });
+});

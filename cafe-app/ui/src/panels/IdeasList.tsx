@@ -1,11 +1,13 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
+import { useChat } from '../state/chat';
 import { STAGE_RING } from '../universe/graphView';
 import { filterIdeas, stageKey, emailChips } from './filterIdeas';
 
 /** The list stays mounted while an idea's details show (hidden), so its search, chips and scroll are kept for Back. */
 export function IdeasList({ hidden = false }: { hidden?: boolean }) {
-  const { state, hover, openIdea, selectedId } = useStore();
+  const { state, hover, openIdea, selectedId, selectedIds, clickStar, setHighlight } = useStore();
+  const picked = new Set(selectedIds);
   const listRef = useRef<HTMLUListElement>(null);
   const scrollTop = useRef(0);
   // A hidden (display:none) list can lose its scroll offset; put it back when the list shows again.
@@ -33,6 +35,13 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
         ))}
       </div>
       <div className="count">{shown.length} of {ideas.length} ideas</div>
+      {selectedIds.length >= 2 && (
+        <div className="multi-strip" data-testid="multi-strip">
+          <span className="grow"><b>{selectedIds.length}</b> selected</span>
+          <button className="btn sm primary" data-action="multi-ask" onClick={() => { setHighlight(null); useChat.getState().setOpen(true); }}>Ask the AI about these</button>
+          <button className="link-btn" data-action="multi-clear" onClick={() => clickStar(null)}>Clear</button>
+        </div>
+      )}
       <ul className="idea-list" ref={listRef} onScroll={(e) => { scrollTop.current = e.currentTarget.scrollTop; }}>
         {shown.map((i) => {
           const key = stageKey(i);
@@ -40,8 +49,8 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
           const mails = emailChips(i, state.outbox ?? []);
           const late = i.overdue?.[0];
           return (
-            <li key={i.id} className={selectedId === id ? 'sel' : ''} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
-              onClick={() => openIdea(i.id)}>
+            <li key={i.id} className={picked.has(id) ? 'sel sel-many' : selectedId === id ? 'sel' : ''} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
+              onClick={(e) => (e.ctrlKey || e.metaKey ? clickStar(id, true) : openIdea(i.id))}>
               <div className="r1" title={i.title}><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
               <div className="r2">
                 <span className="fr">{[i.function, i.region].filter(Boolean).join(' · ') || '—'}</span>

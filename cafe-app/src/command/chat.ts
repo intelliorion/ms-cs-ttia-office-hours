@@ -92,7 +92,8 @@ const LIT_MAX = 150;
 
 export type Progress = { stage: 'thinking'; step: number } | { stage: 'step'; step: ChatStep };
 export interface RunOptions {
-  focus?: string; mentions?: string[];
+  /** What is on screen: one star ("this"), or several picked with Ctrl/⌘+click ("these"). */
+  focus?: string | string[]; mentions?: string[];
   /** The conversation to continue; a new one is started when it is absent or unknown. */
   thread?: string;
   progress?: (p: Progress) => void;
@@ -134,8 +135,10 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
     return e.code;
   };
   mentioned.forEach((n, i) => { hidden.text = hidden.text.split(`\u0000${i}\u0000`).join(`[${addToLegend(n)}]`); });
-  const focusNode = opts.focus ? nodes.get(opts.focus) : undefined;
-  const focus = focusNode ? addToLegend(focusNode) : undefined;
+  const focusNodes = (Array.isArray(opts.focus) ? opts.focus : opts.focus ? [opts.focus] : []).map((f) => nodes.get(f)).filter((n): n is GNode => !!n);
+  const focusNode = focusNodes.length === 1 ? focusNodes[0] : undefined;
+  const focusCodes = focusNodes.map(addToLegend);
+  const focus = focusCodes.length > 1 ? focusCodes : focusCodes[0];
   /** An idea's text, with every name the app knows swapped for the conversation's code. */
   const coded = (s: unknown) => {
     const t = String(s ?? '');
@@ -154,7 +157,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
 
   const entry: ChatEntry = {
     id, thread: thread.id, at: clock(), ts: now, text: message, reply: '', actions: [], problems: [], steps: [],
-    ...(focusNode ? { about: focusNode.label } : {}),
+    ...(focusNode ? { about: focusNode.label } : focusNodes.length > 1 ? { about: `${focusNodes.length} selected: ${focusNodes.map((n) => n.label).join(', ')}` } : {}),
   };
   const done: AgentStepDone[] = [];
   const results: QueryResult[] = [];

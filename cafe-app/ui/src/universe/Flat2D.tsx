@@ -10,7 +10,8 @@ interface Props {
   hideUnlit?: number;
   hoverId: string | null;
   labels: boolean;
-  onSelect: (id: string | null) => void;
+  onSelect: (id: string | null, additive?: boolean) => void;
+  selectedIds?: string[];
   onHover: (id: string | null) => void;
 }
 
@@ -21,7 +22,7 @@ const PAD = 50;
 const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Person: 7 };
 
 /** No WebGL: the same graph drawn flat in SVG, using x and y of the layout. */
-export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId, labels, onSelect, onHover }: Props) {
+export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, onSelect, onHover }: Props) {
   const { w: stageW, h: stageH } = useStageSize();
   const BOX = boxFor(stageW, stageH);
   const { pts } = useMemo(() => {
@@ -35,7 +36,7 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit,
     return { pts, k };
   }, [graph.nodes, layout, BOX.w, BOX.h]);
   const deg = useMemo(() => degrees(graph), [graph]);
-  const litSet = highlight?.length ? new Set(highlight) : null;
+  const litSet = highlight?.length ? new Set(highlight) : selectedIds.length >= 2 ? new Set(selectedIds.flatMap((id) => [...neighbourhood(graph, id)])) : null;
   const hood = litSet ?? (selectedId ? neighbourhood(graph, selectedId) : null);
   const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
   const lit = (id: string) => !hood || hood.has(id);
@@ -79,7 +80,7 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit,
         return (
           <g key={n.id} opacity={o} style={{ cursor: 'pointer' }} data-id={n.id}
             onMouseEnter={() => onHover(n.id)} onMouseLeave={() => onHover(null)}
-            onClick={(e) => { e.stopPropagation(); onSelect(n.id); }}>
+            onClick={(e) => { e.stopPropagation(); onSelect(n.id, e.ctrlKey || e.metaKey); }}>
             <circle cx={p[0]} cy={p[1]} r={r * (hot ? 4.2 : 3.4)} fill={`url(#h-${n.type})`} />
             {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={r * 1.75} fill="none" stroke={ringColour(n)} strokeWidth={1.2} />}
             <circle cx={p[0]} cy={p[1]} r={r} fill={NODE_COLOURS[n.type]} />

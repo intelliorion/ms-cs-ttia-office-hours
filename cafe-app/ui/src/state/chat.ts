@@ -23,7 +23,7 @@ interface ChatState {
   toggle: () => void;
   newChat: () => void;
   openThread: (id: string) => Promise<void>;
-  send: (m: { text: string; focus?: string | null; about?: string; mentions?: string[] }) => Promise<ChatEntryView | null>;
+  send: (m: { text: string; focus?: string[] | null; about?: string; mentions?: string[] }) => Promise<ChatEntryView | null>;
   stop: () => void;
   act: (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => Promise<ChatEntryView | null>;
 }

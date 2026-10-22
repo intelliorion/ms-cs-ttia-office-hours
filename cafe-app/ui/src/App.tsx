@@ -21,7 +21,7 @@ import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from '
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, selectedIds, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
     leftView, openIdea, backToList, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // A click shows what was clicked, with no card in between (see clickStar).
   const onSelect = clickStar;
@@ -64,7 +64,7 @@ export default function App() {
     <>
       <Stage focus={focus}>
         {shown && (
-          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} highlight={highlight} hideUnlit={hideUnlit} hoverId={hoverId} labels={labels} focus={focus}
+          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} selectedIds={selectedIds} highlight={highlight} hideUnlit={hideUnlit} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
             quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}

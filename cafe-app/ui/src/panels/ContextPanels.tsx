@@ -8,7 +8,7 @@ import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
 import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
-import { ideasAround, rightContext, type RightContext } from './contextHelpers';
+import { ideasAround, inCommon, rightContext, type RightContext } from './contextHelpers';
 
 const TOP = { left: 'calc(var(--sw) - 460px)', top: 92, width: 440, height: 460 } as const;
 const BOTTOM = { left: 'calc(var(--sw) - 460px)', top: 572, width: 440, height: 'calc(var(--sh) - 592px)' } as const;
@@ -16,8 +16,9 @@ const BOTTOM = { left: 'calc(var(--sw) - 460px)', top: 572, width: 440, height: 
 export function useRightContext(): RightContext {
   const leftView = useStore((s) => s.leftView);
   const selectedId = useStore((s) => s.selectedId);
+  const selectedIds = useStore((s) => s.selectedIds);
   const graph = useStore((s) => s.graph);
-  return rightContext({ leftView, selectedId }, graph);
+  return rightContext({ leftView, selectedId, selectedIds }, graph);
 }
 
 /**
@@ -31,6 +32,12 @@ export function RightPanels() {
     return <>
       <Panel title="Submission" side="right" style={TOP}><IdeaSubmission id={ctx.id} /></Panel>
       <Panel title="Connections" side="right" style={BOTTOM}><IdeaConnections id={ctx.id} /></Panel>
+    </>;
+  }
+  if (ctx.kind === 'multi') {
+    return <>
+      <Panel title="Selected" side="right" style={TOP}><MultiSelected ids={ctx.ids} /></Panel>
+      <Panel title="In common" side="right" style={BOTTOM}><InCommon ids={ctx.ids} /></Panel>
     </>;
   }
   if (ctx.kind === 'star') {
@@ -49,6 +56,7 @@ export function RightPanels() {
 export function ContextStack() {
   const ctx = useRightContext();
   if (ctx.kind === 'idea') return <><div className="sub-h">Submission</div><IdeaSubmission id={ctx.id} /><div className="sub-h">Connections</div><IdeaConnections id={ctx.id} /></>;
+  if (ctx.kind === 'multi') return <><MultiSelected ids={ctx.ids} /><div className="sub-h">In common</div><InCommon ids={ctx.ids} /></>;
   if (ctx.kind === 'star') return <><StarLinks nodeId={ctx.nodeId} /><div className="sub-h">Ideas around it</div><IdeasAround nodeId={ctx.nodeId} /></>;
   return <><Overview part="pipeline" /><Overview part="demand" /></>;
 }
@@ -164,6 +172,67 @@ function IdeasAround({ nodeId }: { nodeId: string }) {
             {r.hops === 2 && <span className="ctx-via">through a linked star</span>}
           </li>
         ))}
+      </ul>
+    </div>
+  );
+}
+
+const dotOf = (type: string) => (NODE_COLOURS as Record<string, string>)[type] ?? '#9fb0ae';
+const kindOf = (type: string) => NODE_LABELS[type as keyof typeof NODE_LABELS] ?? type;
+
+/** Two or more stars picked with Ctrl/⌘+click: each one (click to keep just it, ✕ to drop it), and the ideas side by side. */
+function MultiSelected({ ids }: { ids: string[] }) {
+  const { graph, state, clickStar } = useStore();
+  const nodes = ids.map((id) => graph?.nodes.find((n: any) => n.id === id)).filter(Boolean) as any[];
+  const ideas = nodes.filter((n) => n.type === 'Idea').map((n) => (state?.ideas ?? []).find((i: any) => `idea:${i.id}` === n.id)).filter(Boolean) as any[];
+  const roundName = (id: string) => (state?.rounds ?? []).find((r: any) => r.id === id)?.name ?? '—';
+  return (
+    <div className="ctx-scroll" data-testid="ctx-multi">
+      <div className="hint">Ctrl/⌘+click a star to add it or take it out. A plain click keeps just that one.</div>
+      <ul className="ctx-picked">
+        {nodes.map((n) => (
+          <li key={n.id}>
+            <button className="ctx-pick" data-pick={n.id} title="Keep just this one" onClick={() => clickStar(n.id)}>
+              <span className="dot" style={{ background: dotOf(n.type) }} /><span className="ctx-pick-t">{n.label}</span><span className="cm-t">{kindOf(n.type)}</span>
+            </button>
+            <button className="as-x" aria-label={`Take ${n.label} out`} title="Take it out" onClick={() => clickStar(n.id, true)}>✕</button>
+          </li>
+        ))}
+      </ul>
+      {ideas.length >= 2 && (
+        <table className="ctx-compare" data-testid="ctx-compare">
+          <thead><tr><th>Idea</th><th>Stage</th><th>Function</th><th>Region</th><th>Round</th></tr></thead>
+          <tbody>{ideas.map((i) => (
+            <tr key={i.id}><td title={i.title}>{i.title}</td><td>{state?.stageNames?.[i.stage] ?? i.stage}</td><td>{i.function ?? '—'}</td><td>{i.region ?? '—'}</td><td>{i.round ? roundName(i.round) : '—'}</td></tr>
+          ))}</tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/** What the picked stars share: every star linked to two or more of them, most shared first; a click adds it. */
+function InCommon({ ids }: { ids: string[] }) {
+  const { graph, clickStar, hover } = useStore();
+  if (!graph) return null;
+  const rows = inCommon(graph, ids);
+  const label = (id: string) => graph.nodes.find((n: any) => n.id === id)?.label ?? id;
+  if (!rows.length) return <p className="hint" data-testid="ctx-common">Nothing links to more than one of them.</p>;
+  return (
+    <div className="ctx-scroll" data-testid="ctx-common">
+      <ul className="ctx-picked">
+        {rows.map((r) => {
+          const n = graph.nodes.find((x: any) => x.id === r.id);
+          return (
+            <li key={r.id}>
+              <button className="ctx-pick" data-common={r.id} title={`Linked to ${r.with.map(label).join(', ')}. Click to add it.`}
+                onMouseEnter={() => hover(r.id)} onMouseLeave={() => hover(null)} onClick={() => clickStar(r.id, true)}>
+                <span className="dot" style={{ background: dotOf(n?.type) }} /><span className="ctx-pick-t">{n?.label ?? r.id}</span>
+                <span className="ctx-share">{r.with.length} of {ids.length}</span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

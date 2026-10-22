@@ -7,12 +7,13 @@ import { neighbourhood } from '../universe/graphView';
  * in view (starting at 90%; 50% at least). Clear ends the highlight, or lets go of the star.
  */
 export function FocusBar() {
-  const { highlight, setHighlight, hideUnlit, setHideUnlit, selectedId, select, graph } = useStore();
+  const { highlight, setHighlight, hideUnlit, setHideUnlit, selectedId, selectedIds, select, graph } = useStore();
   const node = selectedId ? graph?.nodes.find((n: any) => n.id === selectedId) : undefined;
-  if (!highlight && !node) return null;
+  if (!highlight && !node && selectedIds.length < 2) return null;
   const pct = Math.round(hideUnlit * 100);
   const what = highlight
     ? `${highlight.length} star${highlight.length === 1 ? '' : 's'} lit`
+    : selectedIds.length >= 2 ? `${selectedIds.length} selected and their links`
     : (() => { const k = neighbourhood(graph, node.id).size - 1; return `${node.label} and its ${k} link${k === 1 ? '' : 's'}`; })();
   return (
     <div className="hl-bar abs" role="group" aria-label="What is in view" data-testid="highlight-bar">

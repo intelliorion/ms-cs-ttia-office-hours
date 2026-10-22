@@ -9,12 +9,14 @@ import {
   type ChatEntryView, type SlashCmd, type StarHit,
 } from './commandHelpers';
 
-/** What "this" means: the idea open on the left, else the star clicked in the universe. */
-function useFocus() {
-  const { leftView, selectedId, graph } = useStore();
+/** What "this" means: the stars picked with Ctrl/⌘+click ("these"), else the idea open on the left, else the star clicked. */
+function useFocus(): { ids: string[]; label: string; type?: string } | null {
+  const { leftView, selectedId, selectedIds, graph } = useStore();
+  const many = selectedIds.filter((id) => graph?.nodes.some((n: any) => n.id === id));
+  if (many.length >= 2) return { ids: many, label: `${many.length} selected` };
   const id = leftView.kind === 'idea' ? `idea:${leftView.id}` : selectedId;
   const node = id ? graph?.nodes.find((n: any) => n.id === id) : undefined;
-  return node ? { id: node.id as string, label: node.label as string, type: node.type as string } : null;
+  return node ? { ids: [node.id as string], label: node.label as string, type: node.type as string } : null;
 }
 
 /** The title-bar AI button: opens the assistant (also Ctrl/⌘+K) and counts the changes waiting. The highlight has its own bar at the bottom. */
@@ -56,7 +58,7 @@ export function Assistant() {
   const typeOf = useMemo(() => new Map<string, string>((graph?.nodes ?? []).map((n: any) => [n.id, n.type])), [graph]);
   const send = async (m: { text: string; mentions?: string[]; noFocus?: boolean }) => {
     setHighlight(null);
-    const e = await chat.send({ text: m.text, focus: m.noFocus ? null : focus?.id, about: m.noFocus ? undefined : focus?.label, mentions: m.mentions });
+    const e = await chat.send({ text: m.text, focus: m.noFocus ? null : focus?.ids, about: m.noFocus ? undefined : focus?.label, mentions: m.mentions });
     if (e?.highlight?.length) setHighlight(e.highlight);
   };
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
@@ -207,7 +209,7 @@ function Message({ e, chips, busy, onAct, onSend, onRetry, onLight }: {
 
 /** The box to type in: grows to four lines, @ picks a star (narrow with @idea:, @person:…), / offers shortcuts, ↑ brings back the last message. */
 function Composer({ focus, onSend, onSlash }: {
-  focus: { id: string; label: string } | null;
+  focus: { ids: string[]; label: string } | null;
   onSend: (m: { text: string; mentions?: string[]; noFocus?: boolean }) => Promise<void>;
   onSlash: (cmd: SlashCmd) => void;
 }) {
@@ -220,7 +222,7 @@ function Composer({ focus, onSend, onSlash }: {
   const [noFocus, setNoFocus] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const caretTo = useRef<number | null>(null);
-  useEffect(() => { setNoFocus(false); }, [focus?.id]);
+  useEffect(() => { setNoFocus(false); }, [focus?.ids.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { box.current?.focus(); }, [chat.focusNonce]);
   useLayoutEffect(() => {
     const el = box.current; if (!el) return;

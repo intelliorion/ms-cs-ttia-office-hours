@@ -697,7 +697,7 @@ export interface AgentStepDone { did: 'search' | 'read_idea'; thought: string; r
 export interface AgentInput {
   history?: { operator: string; agent: string; found?: string[] }[];
   message: string;
-  focus?: string;
+  focus?: string | string[];
   stars: { code: string; type: NodeType; label?: string }[];
   vocabulary?: { stages: string[]; functions: string[]; regions: string[]; rounds: string[] };
   steps: AgentStepDone[];
@@ -739,6 +739,7 @@ export const agentTask: Task<AgentOutput> = {
       'division and round, with type and label (a person by type only, never by name). "vocabulary" lists the stages, functions, regions and rounds.',
       '"history" is this conversation so far, oldest first, with the same codes: read the message in its light ("those", "the second one", "do the same for [T2]").',
       'When "focus" is given, it is the star the operator has on screen: "this", "it" and a message that names no star mean that star.',
+      'When "focus" is a list, the operator picked several stars: "these", "them", "all of them" and a message that names no star mean those stars.',
       '"steps" is what you have already done for this message and what each tool returned. Use it; do not repeat a search that already answered.',
       'Choose next:',
       '- search: run query (a knowledge-graph query, below) and see what it finds. Search before you answer any question about the programme;',

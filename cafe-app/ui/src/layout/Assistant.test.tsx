@@ -72,7 +72,7 @@ describe('the Café assistant', () => {
     const { el, root, box } = await mount();
     await act(async () => { box().focus(); type(box(), 'who leads @GSS ideas?'); });
     await act(async () => { key(box(), 'Enter'); });
-    expect(vi.mocked(chatStream).mock.calls[0][0]).toMatchObject({ text: 'who leads @GSS ideas?', focus: 'idea:CAFE-2026-001' });
+    expect(vi.mocked(chatStream).mock.calls[0][0]).toMatchObject({ text: 'who leads @GSS ideas?', focus: ['idea:CAFE-2026-001'] });
     expect(el.querySelector('[data-testid="command-thinking"] [data-testid="assistant-steps"]')?.textContent).toMatch(/Finding the leads of GSS ideas1 found/);
     expect(el.querySelector('[data-action="assistant-stop"]')).not.toBeNull();
     await act(async () => { finish(answer); });

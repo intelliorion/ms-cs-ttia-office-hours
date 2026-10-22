@@ -26,7 +26,9 @@ export interface UniverseProps {
   focus?: boolean;
   /** Bumped by Reset view. */
   viewNonce?: number;
-  onSelect: (id: string | null) => void;
+  onSelect: (id: string | null, additive?: boolean) => void;
+  /** Two or more stars picked with Ctrl/⌘+click. */
+  selectedIds?: string[];
   onHover: (id: string | null) => void;
   /** Full (bloom), Lite (no post-processing, soft halos) or Flat (the 2D map). Default full. */
   quality?: Quality;
@@ -97,7 +99,7 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
+function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
   const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
   const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
@@ -113,7 +115,10 @@ function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId
   const deg = useMemo(() => degrees(graph), [graph]);
   const lit = useMemo(() => (highlight?.length ? new Set(highlight) : null), [highlight]);
   // What is in view: an answer's lit stars win (they are the newest thing asked for), else the selected star and its links.
-  const hood = useMemo(() => lit ?? (selectedId ? neighbourhood(graph, selectedId) : null), [graph, selectedId, lit]);
+  const pickedSet = useMemo(() => (selectedIds.length >= 2 ? new Set(selectedIds) : null), [selectedIds]);
+  // Several stars picked: each with its links, so what they share shows.
+  const multi = useMemo(() => (selectedIds.length >= 2 ? new Set(selectedIds.flatMap((id) => [...neighbourhood(graph, id)])) : null), [graph, selectedIds]);
+  const hood = useMemo(() => lit ?? multi ?? (selectedId ? neighbourhood(graph, selectedId) : null), [graph, selectedId, lit, multi]);
   // The bottom bar's slider sets how much of the rest is hidden, for either.
   const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
 
@@ -173,8 +178,8 @@ function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId
       <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
       <ambientLight intensity={0.2} />
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={lit ? null : selectedId} lit={lit} dim={dim} lite={lite} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
+        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}

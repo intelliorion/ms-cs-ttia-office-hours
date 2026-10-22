@@ -84,7 +84,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
   add('GET', '/api/chat/threads/:id', async ({ params }) => readThread(root, params.id));
   add('POST', '/api/chat', async ({ body, progress, stopped }) => runCommand(root, String(body.text ?? ''), ai, clock, {
-    focus: body.focus ? String(body.focus) : undefined,
+    focus: Array.isArray(body.focus) ? body.focus.slice(0, 30).map(String) : body.focus ? String(body.focus) : undefined,
     mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 20).map(String) : [],
     thread: body.thread ? String(body.thread) : undefined,
     progress, stopped,

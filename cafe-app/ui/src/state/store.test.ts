@@ -111,7 +111,7 @@ describe('focus mode', () => {
 describe('left panel view', () => {
   it('opening an idea shows its details, selects its star, closes any modal and turns Focus off', async () => {
     const { openIdeaPatch } = await import('./store');
-    expect(openIdeaPatch('CAFE-2026-002', false)).toEqual({ leftView: { kind: 'idea', id: 'CAFE-2026-002' }, selectedId: 'idea:CAFE-2026-002', popout: null, focus: false, drawer: null });
+    expect(openIdeaPatch('CAFE-2026-002', false)).toEqual({ leftView: { kind: 'idea', id: 'CAFE-2026-002' }, selectedId: 'idea:CAFE-2026-002', selectedIds: [], popout: null, focus: false, drawer: null });
     expect(openIdeaPatch('CAFE-2026-002', true).drawer).toBe('ideas');
   });
   it('back returns to the list and keeps the selection', async () => {
@@ -222,5 +222,23 @@ describe('clicking a star in focus mode', () => {
     useStore.getState().clickStar('team:gss');
     expect(useStore.getState()).toMatchObject({ focus: true, leftView: { kind: 'list' }, selectedId: 'team:gss' });
     useStore.setState({ focus: false });
+  });
+});
+
+describe('Ctrl/⌘+click: several stars', () => {
+  it('adds and removes stars; two or more make a multi-selection (an open idea goes back to the list); one left is a plain selection; a plain click replaces it', async () => {
+    const { useStore } = await import('./store');
+    useStore.setState({ leftView: { kind: 'idea', id: 'CAFE-2026-001' }, selectedId: 'idea:CAFE-2026-001', selectedIds: [], highlight: ['x'], focus: false } as any);
+    useStore.getState().clickStar('team:gss', true);
+    expect(useStore.getState()).toMatchObject({ selectedIds: ['idea:CAFE-2026-001', 'team:gss'], selectedId: 'team:gss', leftView: { kind: 'list' }, highlight: null });
+    useStore.getState().clickStar('idea:CAFE-2026-002', true);
+    expect(useStore.getState().selectedIds).toEqual(['idea:CAFE-2026-001', 'team:gss', 'idea:CAFE-2026-002']);
+    expect(useStore.getState().leftView).toEqual({ kind: 'list' }); // a Ctrl+click on an idea does not open it
+    useStore.getState().clickStar('team:gss', true);
+    useStore.getState().clickStar('idea:CAFE-2026-001', true);
+    expect(useStore.getState()).toMatchObject({ selectedIds: [], selectedId: 'idea:CAFE-2026-002' });
+    useStore.getState().clickStar('team:gss', true);
+    useStore.getState().clickStar('capability:x');
+    expect(useStore.getState()).toMatchObject({ selectedIds: [], selectedId: 'capability:x' });
   });
 });

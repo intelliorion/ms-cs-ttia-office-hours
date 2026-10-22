@@ -94,6 +94,15 @@ describe('the Café assistant: changes', () => {
     expect(await rels(root)).not.toContain('idea:CAFE-2026-002 NEEDS capability:clause-finding');
   });
 
+  it('several stars on screen ("these"): all go as focus codes, people included as codes only', async () => {
+    const { root, prompts, ai } = await setup([() => ({ next: 'clarify', thought: 'Not sure', reply: 'Say more.' })]);
+    const e = await runCommand(root, 'what do these share?', ai, clock, { focus: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'person:zainab-okafor'] });
+    const data = JSON.parse(prompts[0].slice(prompts[0].indexOf('<<<DATA') + 7, prompts[0].indexOf('DATA>>>')));
+    expect(data.focus).toEqual([expect.stringMatching(/^I\d+$/), expect.stringMatching(/^I\d+$/), expect.stringMatching(/^P\d+$/)]);
+    expect(prompts[0]).not.toMatch(NAMES);
+    expect(e.about).toBe('3 selected: Desk booking assistant, Procurement FAQ bot, Zainab Okafor');
+  });
+
   it('@mentions and a person on screen are codes only', async () => {
     const { root, prompts, ai } = await setup([() => ({ next: 'clarify', thought: 'Not sure', reply: 'Say more.' })]);
     await saveIdea(root, { ...IDEAS[0], support: ['Agent Design Guidance'] });

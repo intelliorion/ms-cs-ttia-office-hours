@@ -71,7 +71,7 @@ export function isNarrow(): boolean { try { return window.matchMedia('(max-width
  * any modal closes, Focus turns off so the panel shows, and on a narrow window the Ideas drawer opens to host it.
  */
 export function openIdeaPatch(id: string, narrow: boolean) {
-  return { leftView: { kind: 'idea', id } as LeftView, selectedId: `idea:${id}`, popout: null, focus: false, drawer: (narrow ? 'ideas' : null) as Drawer };
+  return { leftView: { kind: 'idea', id } as LeftView, selectedId: `idea:${id}`, selectedIds: [] as string[], popout: null, focus: false, drawer: (narrow ? 'ideas' : null) as Drawer };
 }
 /** Back to the list: the selection and the camera stay; the idea's notice and suggestion go. */
 export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null }; }
@@ -92,6 +92,8 @@ export interface AppState {
   state: any | null;
   graph: any | null;
   selectedId: string | null;
+  /** Two or more stars picked with Ctrl/⌘+click (empty otherwise; selectedId is then the one star, or the last one picked). */
+  selectedIds: string[];
   /** The stars a command-bar answer rests on, lit in the universe until cleared. */
   highlight: string[] | null;
   setHighlight: (ids: string[] | null) => void;
@@ -123,8 +125,9 @@ export interface AppState {
   /**
    * A click on a star: an idea opens; any other star shows on the right with the list on the left; a lit answer ends.
    * In focus mode the panels stay hidden: the click only selects the star (its neighbourhood shows in the universe).
+   * With Ctrl/⌘ (additive) the star joins the selection, or leaves it if it was in; two or more make a multi-selection.
    */
-  clickStar: (id: string | null) => void;
+  clickStar: (id: string | null, additive?: boolean) => void;
   backToList: () => void;
   notice: Notice | null;
   suggest: Suggest | null;
@@ -148,7 +151,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -164,12 +167,12 @@ export const useStore = create<AppState>((set) => ({
       }));
     } catch (e) { set({ notice: { text: (e as Error).message, kind: 'error' } }); }
   },
-  select: (id) => set({ selectedId: id }),
+  select: (id) => set({ selectedId: id, selectedIds: [] }),
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
-  resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
+  resetView: () => set((s) => ({ selectedId: null, selectedIds: [], viewNonce: s.viewNonce + 1 })),
   // Entering focus starts clean; leaving it keeps the star clicked in focus mode, so the panels show it.
-  toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, viewNonce: s.viewNonce + 1 }; }),
+  toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, selectedIds: s.focus ? s.selectedIds : [], viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
   cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),
   autoPickQuality: (renderer) => {
@@ -185,11 +188,17 @@ export const useStore = create<AppState>((set) => ({
   openPopout: (p) => set({ popout: p, drawer: null }),
   openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return openIdeaPatch(id, isNarrow()); }),
   backToList: () => set(backPatch()),
-  clickStar: (id) => set((s) => {
-    if (!id) return { selectedId: null };
-    if (s.focus) return { selectedId: id, highlight: null };
+  clickStar: (id, additive = false) => set((s) => {
+    if (!id) return { selectedId: null, selectedIds: [] };
+    if (additive) {
+      const now = s.selectedIds.length ? s.selectedIds : s.selectedId ? [s.selectedId] : [];
+      const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+      if (next.length >= 2) return { ...(s.leftView.kind === 'idea' && !s.focus ? backPatch() : {}), selectedIds: next, selectedId: next[next.length - 1], highlight: null };
+      return { selectedIds: [], selectedId: next[0] ?? null, highlight: null };
+    }
+    if (s.focus) return { selectedId: id, selectedIds: [], highlight: null };
     if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null };
-    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, highlight: null };
+    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, selectedIds: [], highlight: null };
   }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),

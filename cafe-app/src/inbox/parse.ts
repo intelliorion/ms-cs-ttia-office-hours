@@ -16,6 +16,16 @@ export interface InboxMeta {
   speakers?: string[];
   /** Attachment file names of an email (never read). */
   attachments?: string[];
+  /** A PDF's page count (a text PDF, or a scanned one read by the AI). */
+  pages?: number;
+  /** Words read from a PDF or a picture. */
+  words?: number;
+  /** The text came from the AI looking at a picture or a scanned PDF. */
+  readBy?: 'ai';
+  /** The AI's description of the picture. */
+  notes?: string;
+  /** Only between parseDrop and readAndScreen: a PDF or a picture still to be read. Never stored. */
+  pending?: 'pdf' | 'picture';
 }
 
 export interface ParsedDrop {
@@ -24,10 +34,14 @@ export interface ParsedDrop {
   meta: InboxMeta;
   /** Raw text for the personal-data screen only (exports); never stored or sent anywhere. */
   screenText?: string;
-  /** Set when the file can't be read at all yet (PDFs, images); the item should be held with this reason. */
+  /** Set when the file can't be read at all (a picture format we don't take, a protected PDF); the item is held with this reason. */
   unreadable?: string;
   problems?: string[];
 }
+
+const PICTURES = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+const UNSUPPORTED_PICTURES = ['bmp', 'tif', 'tiff', 'heic'];
+const MAX_PICTURE_BYTES = 10 * 1024 * 1024;
 
 const ext = (name: string) => (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
 const nl = (s: string) => s.replace(/\r\n?/g, '\n');
@@ -43,8 +57,18 @@ export function typeOfName(name: string): InboxType {
   return 'unknown';
 }
 
+/**
+ * Read a dropped file by code. A PDF or a picture is only marked pending here (readAndScreen reads it:
+ * a PDF's text by code, a picture by the AI), so this stays synchronous.
+ */
 export function parseDrop(name: string, bytes: Uint8Array): ParsedDrop {
-  switch (ext(name)) {
+  const e = ext(name);
+  if (e === 'pdf' || PICTURES.includes(e) || UNSUPPORTED_PICTURES.includes(e)) {
+    if (UNSUPPORTED_PICTURES.includes(e)) return { type: 'unknown', text: '', meta: {}, unreadable: "This picture format isn't supported; save it as PNG or JPG" };
+    if (bytes.length > MAX_PICTURE_BYTES) return { type: 'unknown', text: '', meta: {}, unreadable: 'Pictures and PDFs up to 10 MB only' };
+    return e === 'pdf' ? { type: 'document', text: '', meta: { pending: 'pdf' } } : { type: 'note', text: '', meta: { pending: 'picture' } };
+  }
+  switch (e) {
     case 'eml':
       return parseEml(bytes);
     case 'msg':
@@ -60,8 +84,6 @@ export function parseDrop(name: string, bytes: Uint8Array): ParsedDrop {
       return { type: 'export', text: '', meta: {}, screenText: nl(decode(bytes, 'utf-8')) };
     case 'xlsx':
       return { type: 'export', text: '', meta: {} };
-    case 'pdf': case 'png': case 'jpg': case 'jpeg': case 'gif': case 'heic': case 'webp': case 'bmp': case 'tif': case 'tiff':
-      return { type: 'unknown', text: '', meta: {}, unreadable: "Can't read PDFs or images yet, so it's held for you to check by hand" };
     default:
       return { type: 'unknown', text: '', meta: {}, problems: ["Can't read this kind of file"] };
   }

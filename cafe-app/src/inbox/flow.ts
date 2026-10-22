@@ -10,7 +10,7 @@ import { currentRoundId, NO_ROUND } from '../round/store';
 import { loadTemplates, render } from '../comms/templates';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { saveDrop, getItem, updateItem, holdItem, deleteHeld, listItems, type InboxItem } from './store';
-import { readAndScreen, matchStep, understandStep, readDetail, exportRows, HOW_WORDS, type TriageRecord, type MatchStep } from './triage';
+import { readAndScreen, matchStep, understandStep, readDetail, exportRows, HOW_WORDS, TEXT_NOT_KEPT, type TriageRecord, type MatchStep } from './triage';
 import { matchIdea, displayName, ASK_BELOW } from './match';
 import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, type Action, type ActionRecord } from './actions';
 import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus } from './steps';
@@ -139,16 +139,24 @@ export async function processItem(
     return updateItem(root, id, { status: 'triaged', problems: had.includes(msg) ? had : [...had, msg] });
   };
 
-  // 2 read, 3 screen (not recorded again on a re-run from match)
+  // 2 read, 3 screen (not recorded again on a re-run from match; a picture is looked at again)
+  // While the AI looks at a picture, the running Read step says so.
+  const reading = (detail: string) => markStep(root, id, { id: 'read', status: 'running', detail });
   let rs: Awaited<ReturnType<typeof readAndScreen>>;
   try {
     rs = opts.from === 'match'
-      ? await readAndScreen(root, id)
-      : await timed(root, id, 'read', 'Reading the file…', async () => { const r = await readAndScreen(root, id); return { value: r, detail: readDetail(r.parsed) }; });
+      ? await readAndScreen(root, id, connector)
+      : await timed(root, id, 'read', 'Reading the file…', async () => {
+        const r = await readAndScreen(root, id, connector, reading);
+        return { value: r, detail: readDetail(r.parsed, r.aiMs) };
+      });
   } catch (e) { return fail('read', `Couldn't read this one (${(e as Error).message}), so do it by hand`); }
   // A re-run honours the screen as a first run does: a file that now fails it is held, and nothing else runs.
   if (rs.screened.hold) {
-    await markStep(root, id, { id: 'screen', status: 'needs-you', detail: rs.screened.reasons[0] ?? 'Held for you to check' });
+    const why = rs.screened.reasons[0] ?? 'Held for you to check';
+    // A picture's transcription is never stored when it is held, and the detail says so.
+    const detail = rs.parsed.meta.readBy === 'ai' ? `${why.replace(/\.?$/, '.')} ${TEXT_NOT_KEPT}` : why;
+    await markStep(root, id, { id: 'screen', status: 'needs-you', detail });
     await skipRest(root, id, 'screen', 'held at the screen');
     return holdItem(root, id, rs.screened.reasons, rs.parsed.meta);
   }

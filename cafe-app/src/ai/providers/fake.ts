@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Provider } from '../connector';
 
 /**
@@ -66,7 +67,40 @@ const UNDERSTAND_TRANSCRIPT = {
   },
   uncertain: [],
 };
+/** The kit's 14-whiteboard.png and 15-scanned.pdf, as the AI reads them. */
+export const WHITEBOARD_TEXT = [
+  'CAFE-2026-002 DESK BOOKING',
+  'NEEDS: FIND A FREE DESK, SWAP A BOOKING, RELEASE NO-SHOWS',
+  'TOOL: COPILOT STUDIO',
+  'DATA: FLOOR PLAN SYSTEM',
+].join('\n');
+/** A picture of a 12-person tracker (synthetic): the screen must hold it. */
+const TRACKER_TEXT = ['Name, Employee ID, Phone', ...Array.from({ length: 12 }, (_, i) => `Person ${i + 1}, EMP-${String(i + 1).padStart(4, '0')}, 555-${String(101 + i).padStart(4, '0')}`)].join('\n');
+function lookFor(file: string) {
+  const name = path.basename(file).toLowerCase();
+  if (/whiteboard|scanned/.test(name)) return { text: WHITEBOARD_TEXT, notes: 'A whiteboard photo with a bulleted list', readable: true };
+  if (name.includes('tracker')) return { text: TRACKER_TEXT, notes: 'A photo of a printed team tracker', readable: true };
+  return { text: '', notes: 'A blank picture', readable: false };
+}
+const UNDERSTAND_WHITEBOARD = {
+  what: 'A whiteboard photo listing what the desk booking idea needs',
+  understood: ['It needs to find a free desk, swap a booking and release no-shows', 'Built with Copilot Studio on the floor plan system'],
+  kind: 'update', ideaId: 'CAFE-2026-002', matchConfidence: 0.95,
+  facts: {
+    answers: [], replyReceived: false, builderNamed: null, newFlags: [], stageHint: null,
+    graph: {
+      nodes: [{ type: 'Capability', label: 'Desk finding' }, { type: 'System', label: 'Floor plan system' }, { type: 'Tool', label: 'Copilot Studio' }],
+      links: [
+        { from: 'idea', to: 'Desk finding', rel: 'NEEDS', description: 'Finds a free desk', confidence: 0.9 },
+        { from: 'Desk finding', to: 'Floor plan system', rel: 'USES_DATA', description: 'Reads the floor plan', confidence: 0.8 },
+        { from: 'Desk finding', to: 'Copilot Studio', rel: 'BUILT_WITH', description: 'Built in Copilot Studio', confidence: 0.8 },
+      ],
+    },
+  },
+  uncertain: [],
+};
 function understandFor(prompt: string) {
+  if (prompt.includes('DESK BOOKING')) return UNDERSTAND_WHITEBOARD;
   if (/second builder/i.test(prompt)) return UNDERSTAND_CONFLICT;
   if (/"type":"transcript"|-->/.test(prompt)) return UNDERSTAND_TRANSCRIPT;
   return UNDERSTAND_REPLY;
@@ -151,6 +185,11 @@ function stepsSoFar(prompt: string): number {
 }
 
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
+/** The tour's hook: CAFE_AI_FAKE_DELAY=<ms> makes every answer slow enough to see a step running. */
+async function fakeDelay() {
+  const delay = Number(process.env.CAFE_AI_FAKE_DELAY);
+  if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+}
 
 export function fakeProvider(): Provider {
   return {
@@ -159,9 +198,7 @@ export function fakeProvider(): Provider {
     available: async () => enabled(),
     async complete(prompt) {
       if (!enabled()) throw new Error('The fake AI is off');
-      // The tour's hook: CAFE_AI_FAKE_DELAY=<ms> makes every answer slow enough to see a step running.
-      const delay = Number(process.env.CAFE_AI_FAKE_DELAY);
-      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      await fakeDelay();
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));
@@ -170,6 +207,12 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
+    },
+    /** A canned transcription chosen by the file name (never opens the file). */
+    async look(file) {
+      if (!enabled()) throw new Error('The fake AI is off');
+      await fakeDelay();
+      return JSON.stringify(lookFor(file));
     },
   };
 }

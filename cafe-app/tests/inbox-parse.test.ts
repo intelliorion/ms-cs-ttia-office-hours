@@ -166,9 +166,17 @@ describe('parseDrop', () => {
     expect(csv).toMatchObject({ type: 'export', text: '' });
     expect(csv.screenText).toContain('Person 21');
     expect(parseDrop('list.xlsx', new Uint8Array([1, 2]))).toMatchObject({ type: 'export', text: '' });
-    const pdf = parseDrop('scan.pdf', new Uint8Array([1, 2]));
-    expect(pdf.type).toBe('unknown');
-    expect(pdf.unreadable).toMatch(/PDFs or images/);
+    expect(parseDrop('scan.pdf', new Uint8Array([1, 2]))).toEqual({ type: 'document', text: '', meta: { pending: 'pdf' } });
+    for (const n of ['a.png', 'a.jpg', 'a.JPEG', 'a.gif', 'a.webp']) {
+      expect(parseDrop(n, new Uint8Array([1]))).toEqual({ type: 'note', text: '', meta: { pending: 'picture' } });
+    }
+    for (const n of ['a.bmp', 'a.tif', 'a.tiff', 'a.heic']) {
+      expect(parseDrop(n, new Uint8Array([1])).unreadable).toBe("This picture format isn't supported; save it as PNG or JPG");
+    }
+    const big = new Uint8Array(10 * 1024 * 1024 + 1);
+    expect(parseDrop('big.png', big).unreadable).toBe('Pictures and PDFs up to 10 MB only');
+    expect(parseDrop('big.pdf', big).unreadable).toBe('Pictures and PDFs up to 10 MB only');
+    expect(parseDrop('ok.png', new Uint8Array(10 * 1024 * 1024)).meta.pending).toBe('picture');
     expect(parseDrop('thing.bin', new Uint8Array([1])).type).toBe('unknown');
   });
 });
@@ -200,10 +208,10 @@ describe('screen', () => {
     expect(screenDrop('transcript.vtt', t, [])).toEqual({ hold: false, reasons: [] });
   });
 
-  it('holds what it cannot read yet', () => {
-    const r = screenDrop('scan.png', parseDrop('scan.png', new Uint8Array([1])), []);
+  it('holds what it cannot read', () => {
+    const r = screenDrop('scan.bmp', parseDrop('scan.bmp', new Uint8Array([1])), []);
     expect(r.hold).toBe(true);
-    expect(r.reasons[0]).toMatch(/PDFs or images/);
+    expect(r.reasons[0]).toMatch(/format isn't supported/);
   });
 
   it('counts personal email addresses that are not known participants', () => {

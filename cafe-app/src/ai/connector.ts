@@ -1,9 +1,10 @@
+import path from 'node:path';
 import { paths } from '../workspace/paths';
 import { writeYaml } from '../workspace/files';
 import { loadSettings } from '../round/store';
 import { AI_CHOICES, type AiChoice, type Settings } from '../round/round';
 import { AiError } from './schema';
-import type { Task } from './tasks';
+import type { Task, LookTask, LookOutput } from './tasks';
 import { claudeProvider } from './providers/claude';
 import { copilotProvider } from './providers/copilot';
 import { vscodeProvider } from './providers/vscode';
@@ -16,6 +17,8 @@ export interface Provider {
   label: string;
   available(): Promise<boolean>;
   complete(prompt: string, opts: { timeoutMs: number }): Promise<string>;
+  /** Reads one picture or scanned PDF at `file` (an absolute path) with the prompt; absent when this AI can't see files. */
+  look?(file: string, prompt: string, opts: { timeoutMs: number }): Promise<string>;
   /** Used only when the settings pin it, never by 'auto'. */
   pinOnly?: boolean;
   /** Shown next to the provider in the status, e.g. a caution. */
@@ -29,7 +32,11 @@ export interface Connector {
   run<T>(task: Task<T>, input: unknown): Promise<T>;
   /** Like run, but also says which provider answered. */
   runWith<T>(task: Task<T>, input: unknown, opts?: { timeoutMs?: number }): Promise<{ provider: ProviderId; label: string; output: T }>;
+  /** The chosen provider opens one file and answers the look task; AiError('This AI cannot read pictures') when it can't. */
+  look(file: string, task: LookTask, opts?: { timeoutMs?: number }): Promise<{ provider: ProviderId; label: string; output: LookOutput; ms: number }>;
 }
+
+export const CANNOT_LOOK = 'This AI cannot read pictures';
 
 export const DEFAULT_TIMEOUT_MS = 90_000;
 /** The triage reads long emails and can take Claude Code more than 90 s. */
@@ -79,6 +86,17 @@ export function createConnector(opts: {
     return { provider: p.id, label: p.label, output: task.parse(raw) };
   }
 
+  async function look(file: string, task: LookTask, run: { timeoutMs?: number } = {}) {
+    const p = await pick();
+    if (!p) throw new AiError('No AI available');
+    if (!p.look) throw new AiError(CANNOT_LOOK);
+    const ms = Math.min(run.timeoutMs ?? task.timeoutMs ?? timeoutMs, ceiling);
+    const t0 = Date.now();
+    const raw = await withTimeout(p.look(file, task.prompt({ name: path.basename(file) }), { timeoutMs: ms }), ms, p.label);
+    if (typeof raw !== 'string') throw new AiError('invalid output: the reply was not text');
+    return { provider: p.id, label: p.label, output: task.parse(raw), ms: Date.now() - t0 };
+  }
+
   return {
     async status() {
       const p = await pick();
@@ -95,6 +113,7 @@ export function createConnector(opts: {
     },
     run: async <T>(task: Task<T>, input: unknown) => (await runWith(task, input)).output,
     runWith,
+    look,
   };
 }
 

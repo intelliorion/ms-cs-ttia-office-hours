@@ -2,14 +2,14 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { startServer, sampleIdea } from './helpers';
+import { startServer, sampleIdea, textPdf, imagePdf, MEMO_LINES } from './helpers';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import { readAiLinks, appendAiLink } from '../src/graph/store';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
 import { readHistory } from '../src/workspace/files';
-import { getItem, updateItem } from '../src/inbox/store';
+import { getItem, updateItem, listItems } from '../src/inbox/store';
 
 const ID = 'CAFE-2026-001';
 const reply = `From: team@example.test\nSubject: Re: ${ID} Email scheduler\n\nAbout 40 a week. Two people triage by hand.\n`;
@@ -35,7 +35,9 @@ async function start(provider: Provider = fakeProvider(), opts: { builder?: stri
   await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${ID}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n1. How many requests a week?\n2. Who does it today?\n`);
   type Res = Omit<Response, 'json'> & { json(): Promise<any> };
   const post = (url: string, body: unknown = {}): Promise<Res> => fetch(`${s.base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  const drop = (name: string, text: string): Promise<Res> => fetch(`${s.base}/api/inbox/drop`, { method: 'POST', headers: { 'x-filename': encodeURIComponent(name), 'content-type': 'text/plain' }, body: text });
+  const drop = (name: string, text: string | Uint8Array): Promise<Res> => fetch(`${s.base}/api/inbox/drop`, {
+    method: 'POST', headers: { 'x-filename': encodeURIComponent(name), 'content-type': typeof text === 'string' ? 'text/plain' : 'application/octet-stream' }, body: text,
+  });
   return { ...s, post, drop };
 }
 
@@ -226,5 +228,103 @@ describe('final review fixes', () => {
     expect(again.status).toBe('held');
     expect(again.steps.find((x: any) => x.id === 'screen')).toMatchObject({ status: 'needs-you' });
     expect(again.steps.filter((x: any) => ['match', 'understand', 'context', 'graph', 'check'].includes(x.id)).every((x: any) => x.status === 'skipped')).toBe(true);
+  });
+});
+
+describe('pictures and PDFs', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const desk = () => sampleIdea({ id: 'CAFE-2026-002', slug: 'desk-booking', title: 'Desk booking', dedupe_key: 'desk booking|person 4', people: { submitter: 'Person 4', team: [] } } as any);
+  const spying = () => { const fake = fakeProvider(); const look = vi.fn(fake.look!); return { provider: { ...fake, look }, look }; };
+
+  it('a whiteboard picture is read by the AI, matched by its Café ID and its stars added', async () => {
+    const { provider, look } = spying();
+    const s = await start(provider);
+    await saveIdea(s.root, desk());
+    const { item } = await (await s.drop('14-whiteboard.png', PNG)).json();
+    expect(look).toHaveBeenCalledTimes(1);
+    const read = item.steps.find((x: any) => x.id === 'read');
+    expect(read.status).toBe('done');
+    expect(read.detail).toMatch(/^Picture read by the AI, \d+\.\d s, 20 words$/);
+    expect(read.ms).toBeGreaterThanOrEqual(0);
+    expect(item.type).toBe('note');
+    expect(item.meta).toMatchObject({ readBy: 'ai', notes: 'A whiteboard photo with a bulleted list', words: 20 });
+    expect(item.triage.ideaId).toBe('CAFE-2026-002');
+    expect(item.steps.find((x: any) => x.id === 'graph')).toMatchObject({ status: 'done' });
+    const links = (await readAiLinks(s.root)).links.filter((l) => l.source.includes(item.file));
+    expect(links.length).toBeGreaterThan(0);
+    expect(links.every((l) => l.status === 'confirmed')).toBe(true);
+    expect(links.map((l) => `${l.from} ${l.to}`)).toContain('idea:CAFE-2026-002 capability:desk-finding');
+  });
+
+  it('a text PDF is read by code: the AI never looks', async () => {
+    const { provider, look } = spying();
+    const s = await start(provider);
+    const { item } = await (await s.drop('12-text.pdf', textPdf(MEMO_LINES))).json();
+    expect(look).not.toHaveBeenCalled();
+    expect(item.type).toBe('document');
+    expect(item.steps.find((x: any) => x.id === 'read').detail).toMatch(/^PDF, 1 page, \d+ words$/);
+    expect(item.meta).toMatchObject({ pages: 1 });
+    expect(item.meta.readBy).toBeUndefined();
+  });
+
+  it('a scanned PDF (no text layer) goes the picture way and keeps its pages', async () => {
+    const { provider, look } = spying();
+    const s = await start(provider);
+    await saveIdea(s.root, desk());
+    const { item } = await (await s.drop('15-scanned.pdf', imagePdf())).json();
+    expect(look).toHaveBeenCalledTimes(1);
+    expect(item.steps.find((x: any) => x.id === 'read').detail).toMatch(/^Scanned PDF read by the AI, \d+\.\d s, 20 words$/);
+    expect(item.type).toBe('note');
+    expect(item.meta).toMatchObject({ readBy: 'ai', pages: 1 });
+    expect(item.triage.ideaId).toBe('CAFE-2026-002');
+  });
+
+  it('a picture of a tracker is held at the screen and its transcription is not kept', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('tracker.png', PNG)).json();
+    expect(item.status).toBe('held');
+    expect(item.steps.find((x: any) => x.id === 'screen').status).toBe('needs-you');
+    const stored = (await getItem(s.root, item.id))!;
+    expect(stored.text).toBe('');
+    expect(stored.meta).toEqual({ readBy: 'ai' });
+    expect(stored.hold!.reasons).toContain('The text was not kept.');
+    expect(item.steps.find((x: any) => x.id === 'screen').detail).toMatch(/^Lists \d+ people by name\. The text was not kept\.$/);
+    expect(JSON.stringify(stored)).not.toMatch(/Person 5|EMP-|555-/);
+  });
+
+  it('while the AI looks, the Read step is running and says so', async () => {
+    const fake = fakeProvider();
+    let root = '';
+    let during: any;
+    const s = await start({ ...fake, look: async (file: string, prompt: string, o: any) => {
+      during = (await listItems(root))[0].steps?.find((x) => x.id === 'read');
+      return fake.look!(file, prompt, o);
+    } });
+    root = s.root;
+    await saveIdea(s.root, desk());
+    await s.drop('14-whiteboard.png', PNG);
+    expect(during).toMatchObject({ status: 'running', detail: 'Picture: the AI is reading it…' });
+  });
+
+  it('a blank picture is held with the AI\'s note', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('blank.png', PNG)).json();
+    expect(item.status).toBe('held');
+    expect(item.hold.reasons).toEqual(["Can't read this picture: A blank picture"]);
+  });
+
+  it('a picture with an AI that cannot look is held: it needs Claude Code', async () => {
+    const { look: _no, ...fake } = fakeProvider();
+    const s = await start(fake);
+    const { item } = await (await s.drop('14-whiteboard.png', PNG)).json();
+    expect(item.status).toBe('held');
+    expect(item.hold.reasons).toEqual(['Reading pictures needs Claude Code (AI helper → provider)']);
+  });
+
+  it('a .bmp is held: the format is not supported', async () => {
+    const s = await start();
+    const { item } = await (await s.drop('photo.bmp', PNG)).json();
+    expect(item.status).toBe('held');
+    expect(item.hold.reasons).toEqual(["This picture format isn't supported; save it as PNG or JPG"]);
   });
 });

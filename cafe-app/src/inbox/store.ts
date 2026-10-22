@@ -140,9 +140,12 @@ export async function holdItem(root: string, id: string, reasons: string[], read
   }
   const seen = item.meta ?? read;
   const from = seen?.from?.replace(/<[^>]*>/g, '').replace(/^"|"$/g, '').trim();
-  const meta = {
+  // Read by the AI (a picture): the transcription is not kept, and the sidecar says the AI read it.
+  const byAi = (read?.readBy ?? seen?.readBy) === 'ai';
+  const meta: InboxMeta = {
     ...(seen?.subject ? { subject: seen.subject } : {}),
     ...(from && !from.includes('@') ? { from } : {}),
+    ...(byAi ? { readBy: 'ai' as const } : {}),
   };
   const next: InboxItem = {
     id: item.id,
@@ -152,6 +155,7 @@ export async function holdItem(root: string, id: string, reasons: string[], read
     hash: item.hash,
     receivedAt: item.receivedAt,
     status: 'held',
+    ...(byAi ? { text: '' } : {}),
     meta,
     hold: { reasons },
     ...(item.problems?.length ? { problems: item.problems } : {}),

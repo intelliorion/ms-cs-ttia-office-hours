@@ -4,11 +4,13 @@ import YAML from 'yaml';
 import { listIdeas, ideaDir } from '../ideas/store';
 import type { Idea } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { understandTask, type Understanding, type TriageInput } from '../ai/tasks';
+import { understandTask, lookTask, type Understanding, type TriageInput } from '../ai/tasks';
+import { AiError } from '../ai/schema';
 import { rebuildGraph } from '../graph/store';
 import { nodeId } from '../graph/ontology';
-import type { Connector } from '../ai/connector';
+import { CANNOT_LOOK, type Connector } from '../ai/connector';
 import { parseDrop, type ParsedDrop } from './parse';
+import { readPdfText } from './pdf';
 import { screenDrop, knownParticipants } from './screen';
 import { getItem, updateItem, holdItem, type InboxItem } from './store';
 import { matchIdea, displayName, ASK_BELOW, type MatchResult, type MatchHow } from './match';
@@ -99,9 +101,14 @@ function combine(match: MatchResult, ai: Understanding | undefined, byId: Map<st
 }
 
 /** What the screen made of the file, in a few words ("Email, 2 paragraphs, our earlier email quoted"). */
-export function readDetail(parsed: ParsedDrop): string {
-  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+export function readDetail(parsed: ParsedDrop, aiMs?: number): string {
+  const n = (k: number, one: string, many = `${one}s`) => `${k.toLocaleString('en-US')} ${k === 1 ? one : many}`;
   const lines = parsed.text.split('\n').filter((l) => l.trim()).length;
+  const { pages, words = 0 } = parsed.meta;
+  if (parsed.meta.readBy === 'ai') {
+    return `${pages ? 'Scanned PDF' : 'Picture'} read by the AI, ${((aiMs ?? 0) / 1000).toFixed(1)} s, ${n(words, 'word')}`;
+  }
+  if (parsed.type === 'document' && pages) return `PDF, ${n(pages, 'page')}, ${n(words, 'word')}`;
   switch (parsed.type) {
     case 'email': {
       const paras = parsed.text.split(/\n\s*\n/).filter((p) => p.trim()).length;
@@ -128,18 +135,63 @@ export function exportRows(parsed: ParsedDrop): number | undefined {
 
 export const HOW_WORDS: Record<MatchHow, string> = { 'cafe-id': 'Café ID', title: 'title', sender: 'sender', chosen: 'your pick', none: 'nothing' };
 
-/** Steps 2 and 3: read a fresh parse of the stored file and screen it. Nothing is written. */
-export async function readAndScreen(root: string, id: string) {
+export const NEEDS_CLAUDE = 'Reading pictures needs Claude Code (AI helper → provider)';
+export const TEXT_NOT_KEPT = 'The text was not kept.';
+/** A PDF with fewer non-space characters than this in its text layer is a scan: the AI reads it as a picture. */
+export const SCANNED_BELOW = 40;
+
+const wordsOf = (text: string) => text.split(/\s+/).filter(Boolean).length;
+const unreadable = (reason: string): ParsedDrop => ({ type: 'unknown', text: '', meta: {}, unreadable: reason });
+
+/**
+ * A PDF's text by code; a picture (or a scanned PDF) by the AI looking at the stored file.
+ * onStep tells the Read step what is happening while the AI runs. AI errors other than "can't look" are thrown.
+ */
+async function readPending(
+  file: string, parsed: ParsedDrop, bytes: Uint8Array, ai: Connector | null | undefined, onStep?: (detail: string) => unknown,
+): Promise<{ parsed: ParsedDrop; aiMs?: number }> {
+  if (!parsed.meta.pending) return { parsed };
+  let pages: number | undefined;
+  if (parsed.meta.pending === 'pdf') {
+    const r = await readPdfText(bytes);
+    if ('error' in r) return { parsed: unreadable("Can't open this PDF (it may be protected)") };
+    if (r.text.replace(/\s/g, '').length >= SCANNED_BELOW) return { parsed: { type: 'document', text: r.text, meta: { pages: r.pages, words: wordsOf(r.text) } } };
+    pages = r.pages;
+  }
+  if (!ai) return { parsed: unreadable(NEEDS_CLAUDE) };
+  await onStep?.(pages ? 'Scanned PDF: the AI is reading it…' : 'Picture: the AI is reading it…');
+  let out: Awaited<ReturnType<Connector['look']>>;
+  try {
+    out = await ai.look(file, lookTask);
+  } catch (e) {
+    if (e instanceof AiError && (e.message === CANNOT_LOOK || e.message === 'No AI available')) return { parsed: unreadable(NEEDS_CLAUDE) };
+    throw e;
+  }
+  const { text, notes, readable } = out.output;
+  if (!readable || !text.trim()) return { parsed: unreadable(`Can't read this picture: ${notes.trim() || 'nothing in it to read'}`) };
+  return {
+    parsed: { type: 'note', text: text.trim(), meta: { readBy: 'ai', notes, words: wordsOf(text), ...(pages ? { pages } : {}) } },
+    aiMs: out.ms,
+  };
+}
+
+/**
+ * Steps 2 and 3: read a fresh parse of the stored file and screen it. Nothing is written.
+ * A picture or a scanned PDF is read by the AI (ai.look); when the screen then holds it, its reasons say the text was not kept.
+ */
+export async function readAndScreen(root: string, id: string, ai: Connector | null | undefined, onStep?: (detail: string) => unknown) {
   const item = await getItem(root, id);
   if (!item) throw new Error(`No inbox item ${id}`);
-  const bytes = new Uint8Array(await fs.readFile(path.join(root, ...item.file.split('/'))));
-  const parsed = parseDrop(path.basename(item.file), bytes);
+  const file = path.join(root, ...item.file.split('/'));
+  const bytes = new Uint8Array(await fs.readFile(file));
+  const { parsed, aiMs } = await readPending(file, parseDrop(path.basename(item.file), bytes), bytes, ai, onStep);
   const screened = screenDrop(item.name, parsed, await knownParticipants(root));
   if (!screened.hold && parsed.type === 'export' && parsed.screenText === undefined && TRACKER_NAME.test(item.name)) {
     screened.hold = true;
     screened.reasons.push("Looks like a tracker and this kind of file can't be checked yet, so it's held for you to check by hand");
   }
-  return { item, parsed, screened };
+  if (screened.hold && parsed.meta.readBy === 'ai') screened.reasons.push(TEXT_NOT_KEPT);
+  return { item, parsed, screened, aiMs };
 }
 
 export interface MatchStep { match: MatchResult; ideas: Idea[]; byId: Map<string, Idea> }
@@ -244,7 +296,7 @@ export async function understandStep(
 export async function triageItem(
   root: string, id: string, connector: Connector | null | undefined, opts: { ideaId?: string } = {},
 ): Promise<InboxItem> {
-  const { item, parsed, screened } = await readAndScreen(root, id);
+  const { item, parsed, screened } = await readAndScreen(root, id, connector);
   if (item.status === 'held') return item;
   if (screened.hold) return holdItem(root, id, screened.reasons, parsed.meta);
   const m = await matchStep(root, item, parsed, opts);

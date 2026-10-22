@@ -19,8 +19,12 @@ export function onPath(cmd: string): Promise<boolean> {
   });
 }
 
-/** Runs a CLI in a fresh empty temp folder (removed afterwards), with no shell, a scrubbed environment and a hard timeout. */
-export async function runCli(cmd: string, args: string[], opts: { stdin?: string; timeoutMs: number }): Promise<string> {
+/**
+ * Runs a CLI in a fresh empty temp folder (removed afterwards), with no shell, a scrubbed environment and a hard timeout.
+ * opts.cwd: run there instead; the caller made that folder and removes it.
+ */
+export async function runCli(cmd: string, args: string[], opts: { stdin?: string; timeoutMs: number; cwd?: string }): Promise<string> {
+  if (opts.cwd) return spawnIn(opts.cwd, cmd, args, opts);
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'cafe-ai-'));
   try {
     return await spawnIn(cwd, cmd, args, opts);

@@ -26,6 +26,7 @@
     "d3-force-3d": "3.0.5",
     "exceljs": "^4.4.0",
     "fflate": "0.8.3",
+    "pdfjs-dist": "4.10.38",
     "yaml": "^2.5.1"
   },
   "devDependencies": {

@@ -164,6 +164,9 @@ under **What the AI read**. **Pictures are read by the AI before the personal-da
 kept** (the held card says "The text was not kept"). Reading pictures needs Claude Code as the AI helper; with Copilot
 CLI or the VS Code helper a picture is held with "Reading pictures needs Claude Code (AI helper → provider)", and with
 no AI it is held too. **Run again** reads the picture again.
+The picture read runs Claude Code with none of your own settings loaded (so a dropped picture can never widen what
+the AI may read); on a machine whose Claude Code depends on `settings.json` for a proxy, an API-key helper or Bedrock,
+pictures are held with "Couldn't read this one" while everything else keeps working.
 
 **What is held.** Lists of people (for example a tracker with names, phone numbers or employee ids) are held,
 including a list the AI found in a picture. So are a protected or broken PDF ("Can't open this PDF (it may be

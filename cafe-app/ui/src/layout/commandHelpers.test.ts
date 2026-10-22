@@ -48,3 +48,13 @@ describe('chat helpers', () => {
     expect(suggestionsFor({ waiting: 2 })[0]).toBe('What is waiting for me in the Import?');
   });
 });
+
+import { newPersonHit } from './commandHelpers';
+describe('＋ New person', () => {
+  it('is offered for a full name that matches no person; never for one word, a kind filter or someone already known', () => {
+    expect(newPersonHit(nodes, 'Jane Roe')).toEqual({ id: 'new-person:Jane Roe', type: 'Person', label: 'Jane Roe' });
+    expect(newPersonHit(nodes, 'Jane')).toBeNull();
+    expect(newPersonHit(nodes, 'person:Jane Roe')).toBeNull();
+    expect(newPersonHit(nodes, 'avery chen')).toBeNull();
+  });
+});

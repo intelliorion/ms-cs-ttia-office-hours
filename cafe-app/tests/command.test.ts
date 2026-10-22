@@ -207,6 +207,32 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
   });
 });
 
+describe('the Café assistant: people', () => {
+  it('a new person picked with @ (＋ New person) is coded before the AI sees them, and joins the idea as builder; Undo restores the team', async () => {
+    const { root, prompts, ai } = await setup([(d) => propose([{ op: 'role', a: code(d, 'Person'), b: code(d, 'Idea', 'Desk booking assistant'), role: 'builder' }])({})]);
+    const entry = await runCommand(root, 'add @Rhys Llewellyn to the desk booking assistant as builder', ai, clock, { mentions: ['new-person:Rhys Llewellyn'] });
+    expect(prompts[0]).not.toMatch(/Rhys|Llewellyn/);
+    expect(entry.actions.map((a) => a.label)).toEqual(['Make Rhys Llewellyn the builder of Desk booking assistant']);
+    await doActions(root, entry.id, undefined, clock);
+    const idea = await loadIdea(root, 'CAFE-2026-001') as any;
+    expect(idea.people.builder).toBe('Rhys Llewellyn');
+    expect(idea.people.team).toContainEqual({ name: 'Rhys Llewellyn', role: 'member' });
+    expect(await rels(root)).toContain('person:rhys-llewellyn RELATED idea:CAFE-2026-001');
+    await undoChatAction(root, entry.id, 'a1', clock);
+    const back = await loadIdea(root, 'CAFE-2026-001') as any;
+    expect(back.people.builder).toBeUndefined();
+    expect(back.people.team.map((p: any) => p.name)).toEqual(['Avery Chen']);
+  });
+
+  it('a new person typed without @ can still be added by name (the AI saw it as typed), as a member', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'role', name: 'Jane Roe', b: code(d, 'Idea', 'Procurement FAQ bot'), role: 'member' }])({})]);
+    const entry = await runCommand(root, 'add Jane Roe to the procurement faq bot', ai, clock);
+    expect(entry.actions.map((a) => a.label)).toEqual(['Make Jane Roe a team member on Procurement FAQ bot']);
+    await doActions(root, entry.id, undefined, clock);
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team).toContainEqual({ name: 'Jane Roe', role: 'member' });
+  });
+});
+
 describe('the Café assistant: stars', () => {
   it('create a star with its link; remove a star with its links; both undo; form-owned stars get a pointer', async () => {
     const { root, ai } = await setup([(d) => (/remove/.test(d.message)

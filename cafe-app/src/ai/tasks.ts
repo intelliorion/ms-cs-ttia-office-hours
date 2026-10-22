@@ -677,7 +677,7 @@ export const lookTask: LookTask = {
 
 export const COMMAND_OPS = ['link', 'unlink', 'role', 'round', 'new_round', 'rename', 'merge', 'add_star', 'remove_star', 'grow', 'stage'] as const;
 export type CommandOp = (typeof COMMAND_OPS)[number];
-export const COMMAND_ROLES = ['lead', 'sponsor', 'member'] as const;
+export const COMMAND_ROLES = ['lead', 'sponsor', 'member', 'builder'] as const;
 export const COMMAND_MAX = 600;
 
 export interface CommandStep {
@@ -772,7 +772,9 @@ export const agentTask: Task<AgentOutput> = {
       `You have ${a.stepsLeft} step${a.stepsLeft === 1 ? '' : 's'} left including this one; with 1 left you must answer, propose or clarify.`,
       ...QUERY_GUIDE,
       'Actions (codes without brackets in a, b and ideas):',
-      '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor or member · round: put ideas in round b, or a new one by name',
+      '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
+      '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
+      '  A person written as a code in the message but marked new is still a code: use it as a.',
       '- new_round name · rename star a to name · merge a into b (a is the duplicate) · add_star of type (PainPoint, Capability, System or Support) named name,',
       '  linked to star b · remove_star a with its links · grow idea a (read it again and add what it finds) · stage: a stage move, which the app leaves to',
       '  the operator\'s stage button.',

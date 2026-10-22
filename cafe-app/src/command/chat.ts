@@ -122,10 +122,15 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
   const extraPeople: GNode[] = [...new Set(ideas.flatMap((i) => [i.people.submitter, (i.people as { builder?: string }).builder, ...i.people.team.map((p) => p.name)]))]
     .filter((x): x is string => !!x?.trim() && !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person', label }));
-  const codable = [...graph.nodes, ...extraPeople];
+  // A person picked with @ as "＋ New person" is coded like any other, so their name never reaches the AI.
+  const newPeople: GNode[] = (opts.mentions ?? []).filter((m) => m.startsWith('new-person:'))
+    .map((m) => m.slice('new-person:'.length).trim()).filter((x) => x && !known.has(x))
+    .map((label) => ({ id: nodeId('Person', label), type: 'Person', label }));
+  const codable = [...graph.nodes, ...extraPeople, ...newPeople];
+  for (const n of [...extraPeople, ...newPeople]) if (!nodes.has(n.id)) nodes.set(n.id, n);
 
   // @mentions name a star exactly: each "@Label" becomes that star's code, whatever else the text matches.
-  const mentioned = [...new Set(opts.mentions ?? [])].map((m) => nodes.get(m)).filter((n): n is GNode => !!n);
+  const mentioned = [...new Set(opts.mentions ?? [])].map((m) => nodes.get(m.startsWith('new-person:') ? nodeId('Person', m.slice('new-person:'.length).trim()) : m)).filter((n): n is GNode => !!n);
   let pre = message;
   mentioned.forEach((n, i) => { pre = pre.split(`@${n.label}`).join(`\u0000${i}\u0000`); });
   // The conversation's codes carry forward, so a star keeps its code from message to message.
@@ -221,7 +226,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         } else if (output.next === 'propose') {
           // The AI proposes; the app checks every action against the graph and the ideas before it shows a card.
           entry.kind = 'command';
-          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph, ideas, rounds });
+          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
         } else {

@@ -5,7 +5,7 @@ import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
 import { inboxCount } from '../popouts/inboxHelpers';
 import {
-  KIND_WORD, STATUS_WORD, canUndo, chipSegments, insertMention, mentionQuery, searchStars, slashMatches, suggestionsFor, waitingCount,
+  KIND_WORD, STATUS_WORD, canUndo, chipSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,
   type ChatEntryView, type SlashCmd, type StarHit,
 } from './commandHelpers';
 
@@ -230,7 +230,11 @@ function Composer({ focus, onSend, onSlash }: {
     if (caretTo.current !== null) { el.focus(); el.setSelectionRange(caretTo.current, caretTo.current); caretTo.current = null; }
   }, [text]);
 
-  const hits = at && graph ? searchStars(graph.nodes, at.query) : [];
+  // A star already picked at this @ ends the mention: the words after it are the message, not a name.
+  const done = !!at && mentions.some((m) => at.query.startsWith(`${m.label} `) || at.query === m.label);
+  const found = at && graph && !done ? searchStars(graph.nodes, at.query, 7) : [];
+  const fresh = at && graph && !done ? newPersonHit(graph.nodes, at.query) : null;
+  const hits = fresh ? [...found, fresh] : found;
   const slashes = !at ? slashMatches(text) : [];
   const menuLen = hits.length || slashes.length;
   const pick = (h: StarHit) => {
@@ -259,8 +263,8 @@ function Composer({ focus, onSend, onSlash }: {
             <li key={h.id} role="option" aria-selected={i === hi} className={i === hi ? 'on' : ''}
               onMouseDown={(e) => { e.preventDefault(); pick(h); }} onMouseEnter={() => setHi(i)}>
               <span className="dot" style={{ background: (NODE_COLOURS as Record<string, string>)[h.type] ?? '#9fb0ae' }} />
-              <span className="cm-l">{h.label}</span>
-              <span className="cm-t">{NODE_LABELS[h.type as keyof typeof NODE_LABELS] ?? h.type}</span>
+              <span className="cm-l">{h.id.startsWith('new-person:') ? <>＋ New person: <b>{h.label}</b></> : h.label}</span>
+              <span className="cm-t">{h.id.startsWith('new-person:') ? 'Coded for the AI' : NODE_LABELS[h.type as keyof typeof NODE_LABELS] ?? h.type}</span>
             </li>
           ))}
         </ul>

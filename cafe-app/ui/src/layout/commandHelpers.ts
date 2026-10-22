@@ -114,3 +114,14 @@ export function suggestionsFor(ctx: { focusType?: string; waiting?: number }): s
     'Which capability is needed by the most ideas?', 'Which pain points come up in more than one idea?', 'How many ideas does each function have, by stage?', 'Put the policy bots in a new round called 2026 Q4',
   ].slice(0, 4);
 }
+
+/**
+ * The "＋ New person" choice in the @ list: offered for a full name (two words or more, letters only) that matches no
+ * person in the graph. Picking it marks the name as a person, so it is coded before the AI sees it.
+ */
+export function newPersonHit(nodes: { type: string; label: string }[], query: string): StarHit | null {
+  const name = query.trim().replace(/\s+/g, ' ');
+  if (name.includes(':') || name.split(' ').length < 2 || name.split(' ').length > 4 || !/^[\p{L}' .-]+$/u.test(name)) return null;
+  if (nodes.some((n) => n.type === 'Person' && n.label.toLowerCase() === name.toLowerCase())) return null;
+  return { id: `new-person:${name}`, type: 'Person', label: name };
+}

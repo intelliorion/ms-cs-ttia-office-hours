@@ -178,6 +178,9 @@ export function Details({ idea }: { idea: any }) {
         </Field>
         <Field label="Tried it already">{idea.experimented || <span className="none">Not given</span>}</Field>
       </div>
+      <div className="field-row">
+        <Field label="Builder">{idea.people?.builder || <span className="none">Not named yet</span>}</Field>
+      </div>
     </section>
   );
 }

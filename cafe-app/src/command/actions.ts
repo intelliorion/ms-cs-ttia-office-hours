@@ -16,7 +16,7 @@ import { setAiLinkStatus } from '../graph/store';
 export type CommandAction =
   | { t: 'link'; from: string; rel: Relation; to: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string; source: string }
-  | { t: 'role'; ideaId: string; person: string; role: PersonRole | null }
+  | { t: 'role'; ideaId: string; person: string; role: PersonRole | 'builder' | null }
   | { t: 'round'; ideaIds: string[]; roundId?: string; newName?: string }
   | { t: 'new_round'; name: string }
   | { t: 'rename'; node: string; label: string }
@@ -31,7 +31,7 @@ export type CommandInverse =
   | { t: 'edit-on'; id: string }
   | { t: 'edits-off'; ids: string[] }
   | { t: 'ai-links-off'; edgeIds: string[] }
-  | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
+  | { t: 'team'; ideaId: string; before: Person[]; after: Person[]; builderBefore?: string | null; builderAfter?: string | null }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
 
 export interface Proposal { label: string; action: CommandAction }
@@ -74,10 +74,14 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
   const roundOf = (n: GNode) => ctx.rounds.find((r) => r.id === n.attrs?.roundId);
   const missing = (s: CommandStep) => problems.push(`I couldn't find ${[s.a, s.b].filter(Boolean).length > 1 ? 'both stars' : 'that star'} in the universe, so I left "${s.op}" out.`);
 
-  const roleProposal = (person: GNode, ideaNode: GNode, role: PersonRole | null) => {
+  const roleProposal = (person: GNode | string, ideaNode: GNode, role: PersonRole | 'builder' | null) => {
     const idea = ideaOf(ideaNode);
     if (!idea) return void problems.push(`${ideaNode.label} is not an idea I can change.`);
-    const name = person.label;
+    const name = typeof person === 'string' ? person : person.label;
+    if (role === 'builder') {
+      if ((idea.people as { builder?: string }).builder === name) return void problems.push(`${name} is already the builder of ${idea.title}.`);
+      return void proposals.push({ label: `Make ${name} the builder of ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: name, role: 'builder' } });
+    }
     const now = idea.people.team.find((p) => p.name === name);
     if (role === null) {
       if (idea.people.submitter === name && !now) return void problems.push(`${name} submitted ${idea.title}; the submitter stays.`);
@@ -125,8 +129,15 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       proposals.push({ label: `Link ${from.label} → ${to.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from: from.id, rel, to: to.id } });
     } else if (s.op === 'role') {
       const a = star(s.a); const b = star(s.b);
-      if (!a || !b || a.type !== 'Person' || b.type !== 'Idea' || !s.role) { missing(s); continue; }
-      roleProposal(a, b, s.role);
+      // A person not yet in the graph comes by name: the same person if the name matches one, else a new one.
+      const typed = !a && s.name?.trim() ? s.name.trim().replace(/\s+/g, ' ') : '';
+      const same = typed ? ctx.graph.nodes.find((n) => n.type === 'Person' && n.label.toLowerCase() === typed.toLowerCase()) : undefined;
+      const person = a ?? same ?? (typed.split(' ').length >= 2 ? typed : undefined);
+      if (!person || !b || (typeof person !== 'string' && person.type !== 'Person') || b.type !== 'Idea' || !s.role) {
+        if (typed && typed.split(' ').length < 2) { problems.push(`Give the person's full name to add them (or pick them with @).`); continue; }
+        missing(s); continue;
+      }
+      roleProposal(person, b, s.role);
     } else if (s.op === 'round') {
       const ideaNodes = (s.ideas ?? []).map((c) => star(c)).filter((n): n is GNode => n?.type === 'Idea' && !!ideaOf(n));
       if (!ideaNodes.length) { problems.push("I couldn't tell which ideas to put in the round."); continue; }
@@ -241,11 +252,20 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     case 'role': {
       const idea = await loadIdea(root, a.ideaId);
       const before = idea.people.team;
-      const after: Person[] = a.role === null
+      if (a.role === 'builder') {
+        // The builder is the idea's own field (the Import fills it from emails); they join the team too, so their star shows.
+        const builderBefore = (idea.people as { builder?: string }).builder ?? null;
+        const team = before.some((p) => p.name === a.person) ? before : [...before, { name: a.person, role: 'member' as const }];
+        await saveIdea(root, { ...idea, people: { ...idea.people, team, builder: a.person } as Idea['people'] });
+        await log(root, idea.id, clock, `${a.person} named as the builder`);
+        return { inverse: { t: 'team', ideaId: idea.id, before, after: team, builderBefore, builderAfter: a.person } };
+      }
+      const role = a.role; // lead, sponsor, member or null here: the builder returned above
+      const after: Person[] = role === null
         ? before.filter((p) => p.name !== a.person)
         : before.some((p) => p.name === a.person)
-          ? before.map((p) => (p.name === a.person ? { name: p.name, role: a.role! } : p))
-          : [...before, { name: a.person, role: a.role }];
+          ? before.map((p) => (p.name === a.person ? { name: p.name, role } : p))
+          : [...before, { name: a.person, role }];
       await saveIdea(root, { ...idea, people: { ...idea.people, team: after } });
       await log(root, idea.id, clock, a.role === null ? `${a.person} taken off the team` : `${a.person} set as ${a.role}`);
       return { inverse: { t: 'team', ideaId: idea.id, before, after } };
@@ -276,8 +296,11 @@ export async function undoAction(root: string, inv: CommandInverse, clock: Clock
   if (inv.t === 'ai-links-off') { for (const id of inv.edgeIds) await setAiLinkStatus(root, id, 'removed').catch(() => {}); return undefined; }
   if (inv.t === 'team') {
     const idea = await loadIdea(root, inv.ideaId);
-    if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after)) return `Kept: ${idea.title}'s team changed since`;
-    await saveIdea(root, { ...idea, people: { ...idea.people, team: inv.before } });
+    const builderNow = (idea.people as { builder?: string }).builder ?? null;
+    if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after) || (inv.builderAfter !== undefined && builderNow !== inv.builderAfter)) return `Kept: ${idea.title}'s team changed since`;
+    const people = { ...idea.people, team: inv.before } as Idea['people'] & { builder?: string };
+    if (inv.builderAfter !== undefined) { if (inv.builderBefore) people.builder = inv.builderBefore; else delete people.builder; }
+    await saveIdea(root, { ...idea, people });
     await log(root, idea.id, clock, 'team change undone');
     return undefined;
   }

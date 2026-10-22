@@ -124,6 +124,21 @@ describe('the Café assistant', () => {
     act(() => root.unmount()); el.remove();
   });
 
+  it('@ offers ＋ New person for a name not in the graph; picking it sends the name marked as a new person', async () => {
+    vi.mocked(chatStream).mockResolvedValue({ ...answer, id: 'c7', kind: 'command', reply: 'ok', actions: [], followups: [], highlight: [], trace: [], steps: [] });
+    useChat.setState({ open: true });
+    const { el, root, box } = await mount();
+    await act(async () => { box().focus(); type(box(), 'add @Jane Roe'); });
+    const opts = [...el.querySelectorAll('[data-testid="command-mentions"] li')].map((x) => x.textContent);
+    expect(opts.at(-1)).toBe('＋ New person: Jane RoeCoded for the AI');
+    await act(async () => { key(box(), 'Enter'); });
+    expect(box().value).toBe('add @Jane Roe ');
+    await act(async () => { type(box(), 'add @Jane Roe as builder of this'); });
+    await act(async () => { key(box(), 'Enter'); });
+    expect(vi.mocked(chatStream).mock.calls.at(-1)![0]).toMatchObject({ mentions: ['new-person:Jane Roe'] });
+    act(() => root.unmount()); el.remove();
+  });
+
   it('earlier chats reopen with their messages', async () => {
     vi.mocked(getThread).mockResolvedValue({ thread: { id: 't9', title: 'Policy bots' }, entries: [answer] });
     const { el, root } = await mount();

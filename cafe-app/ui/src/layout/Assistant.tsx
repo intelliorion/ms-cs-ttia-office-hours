@@ -17,27 +17,24 @@ function useFocus() {
   return node ? { id: node.id as string, label: node.label as string, type: node.type as string } : null;
 }
 
-/** The title-bar launcher: opens the assistant (Ctrl/⌘+K), and shows what "this" means, what waits and what is lit. */
+/** The title-bar AI button: opens the assistant (also Ctrl/⌘+K), counts the changes waiting, and clears a highlight. */
 export function AssistantLauncher() {
   const { open, setOpen, entries } = useChat();
   const { highlight, setHighlight } = useStore();
-  const focus = useFocus();
   const waiting = waitingCount(entries);
+  const mac = /Mac/i.test(typeof navigator !== 'undefined' ? navigator.platform : '');
   return (
-    <div className={`cmd${open ? ' open' : ''}`}>
-      <button className="cmd-bar cmd-launch" data-action="assistant-open" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="cmd-spark" aria-hidden="true">✦</span>
-        <span className="cmd-ph">{focus ? 'Ask or tell about this…' : 'Ask or tell the Café…'}</span>
-        {focus && <span className="cmd-about" data-testid="command-about" title={`"This" and "it" mean ${focus.label}`}>About: {focus.label}</span>}
-        {waiting > 0 && <span className="cmd-badge" title="Changes waiting for you">{waiting}</span>}
-        <kbd className="cmd-kbd">{/Mac/i.test(typeof navigator !== 'undefined' ? navigator.platform : '') ? '⌘K' : 'Ctrl K'}</kbd>
-      </button>
+    <>
       {highlight && (
         <button className="cmd-lit" data-action="command-clear-lit" title="Clear the highlight" onClick={() => setHighlight(null)}>
           {highlight.length} star{highlight.length === 1 ? '' : 's'} lit <span aria-hidden="true">✕</span>
         </button>
       )}
-    </div>
+      <button className={`pill ai-pill${open ? ' on' : ''}`} data-action="assistant-open" aria-expanded={open}
+        title={`Café assistant (${mac ? '⌘K' : 'Ctrl+K'}): ask about the programme, or tell it what to change`} onClick={() => setOpen(!open)}>
+        <span className="cmd-spark" aria-hidden="true">✦</span>AI{waiting > 0 && <span className="cmd-badge" title="Changes waiting for you">{waiting}</span>}
+      </button>
+    </>
   );
 }
 

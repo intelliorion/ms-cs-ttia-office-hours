@@ -811,3 +811,6 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .titlebar .cmd .cmd-bar{min-width:0;flex:1}
 .cmd-lit{flex:none;white-space:nowrap}
 @media (max-width: 1500px){.cmd-kbd{display:none}.titlebar .sub{display:none}}
+.ai-pill{display:inline-flex;align-items:center;gap:7px;font-weight:600}
+.ai-pill.on{border-color:var(--teal);color:#fff;box-shadow:0 0 14px rgba(125,211,207,.3)}
+.titlebar .btns{align-items:center}

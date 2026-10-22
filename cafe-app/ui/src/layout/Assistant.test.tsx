@@ -48,10 +48,10 @@ describe('the Café assistant', () => {
     useChat.setState({ open: false, thread: null, entries: [], threads: [], running: null, busy: false, error: null });
   });
 
-  it('opens from the launcher or Ctrl/⌘+K; shows what "this" means and suggestions that fit it', async () => {
+  it('opens from the AI button or Ctrl/⌘+K; shows what "this" means and suggestions that fit it', async () => {
     const { el, root } = await mount();
     expect(el.querySelector('[data-testid="assistant"]')).toBeNull();
-    expect(el.querySelector('[data-testid="command-about"]')?.textContent).toBe('About: Vendor contract summariser');
+    expect(el.querySelector('[data-action="assistant-open"]')?.textContent).toBe('✦AI');
     await act(async () => { key(document.body, 'k', { ctrlKey: true }); });
     expect(el.querySelector('[data-testid="assistant"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="assistant-about"]')?.textContent).toBe('About: Vendor contract summariser');

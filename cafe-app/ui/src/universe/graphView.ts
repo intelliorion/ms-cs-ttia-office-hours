@@ -53,8 +53,15 @@ export function degrees(graph: Pick<Graph, 'edges'>): Map<string, number> {
   return d;
 }
 
+/** The division and its teams have fixed sizes, a step above everything else, so they are easy to catch. */
+const FIXED_SIZE: Partial<Record<NodeType, number>> = { Entity: 6.0, Team: 5.0 };
+/** Every other star grows with its links up to this, which stays below a team. */
+const MAX_SIZE = 3.5;
+
 export function starSize(node: Pick<GNode, 'type'>, degree: number): number {
-  return Math.min(4, Math.round(((BASE_SIZE[node.type] ?? 1) + 0.15 * degree) * 1000) / 1000);
+  const fixed = FIXED_SIZE[node.type];
+  if (fixed) return fixed;
+  return Math.min(MAX_SIZE, Math.round(((BASE_SIZE[node.type] ?? 1) + 0.15 * degree) * 1000) / 1000);
 }
 
 export const labelAlways = (node: Pick<GNode, 'type'>) => ALWAYS.includes(node.type);

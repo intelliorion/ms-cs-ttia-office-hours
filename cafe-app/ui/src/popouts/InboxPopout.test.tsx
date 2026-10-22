@@ -37,6 +37,30 @@ describe('InboxPopout', () => {
     el.remove();
   });
 
+  it('while the AI works: no closing, no choosing files, the reason shown, and the pop-out edge glows', () => {
+    const closePopout = vi.fn();
+    useStore.setState({ closePopout, inbox: view([item('ib1', { name: '01-submissions.csv', steps: [{ id: 'understand', status: 'running', at, detail: 'Reading idea 2 of 7' }] })]) });
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = createRoot(el);
+    act(() => root.render(<InboxPopout />));
+    const x = el.querySelector('[data-action="close"]') as HTMLButtonElement;
+    expect(x.disabled).toBe(true);
+    expect(x.title).toMatch(/01-submissions\.csv/);
+    expect(el.querySelector('.modal')!.classList.contains('ai-working')).toBe(true);
+    expect((el.querySelector('[data-testid="inbox-file"]') as HTMLInputElement).disabled).toBe(true);
+    expect(el.querySelector('[data-testid="import-locked"]')?.textContent).toMatch(/01-submissions\.csv/);
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    act(() => { (el.querySelector('[data-testid="modal-back"]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+    expect(closePopout).not.toHaveBeenCalled();
+    // When the run ends, everything comes back.
+    act(() => { useStore.setState({ inbox: view([item('ib1', { name: '01-submissions.csv', steps: [{ id: 'check', status: 'done', at, detail: 'Done' }] })]) }); });
+    expect((el.querySelector('[data-action="close"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(el.querySelector('.modal')!.classList.contains('ai-working')).toBe(false);
+    expect((el.querySelector('[data-testid="inbox-file"]') as HTMLInputElement).disabled).toBe(false);
+    expect(el.querySelector('[data-testid="import-locked"]')).toBeNull();
+    act(() => root.unmount()); el.remove();
+  });
+
   it('does not poll when nothing runs; shows the three zones and the counts', () => {
     useStore.setState({ inbox: view([
       item('ib1', { status: 'applied', steps: [{ id: 'check', status: 'done', at, detail: 'Done' }] }),

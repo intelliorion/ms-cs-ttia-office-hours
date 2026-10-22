@@ -49,6 +49,10 @@ export function InboxPopout() {
   useEffect(() => { if (wasPolling.current && !polling) void refresh(); wasPolling.current = polling; }, [polling, refresh]);
 
   const items: InboxItemView[] = inbox?.items ?? [];
+  // While a file is on its way or any step runs, the Import stays open and takes no new files, and says why.
+  const runningName = items.find(isRunning)?.name;
+  const working = !!busy || polling;
+  const lockedWhy = working ? `The AI is working on ${runningName ?? 'your file'}. You can close the Import and add more files when it finishes.` : undefined;
   const flight = items.filter(inFlight).sort((a, b) => (b.receivedAt ?? '').localeCompare(a.receivedAt ?? ''));
   const ideaTitle = (id: string) => state?.ideas?.find((i: any) => i.id === id)?.title ?? '';
   const days = groupByDay(filterItems(items, chip, q, ideaTitle));
@@ -96,7 +100,7 @@ export function InboxPopout() {
   /** Any drop on the pop-out or its backdrop is read here; the window listener below stops the browser opening the file. */
   const onDropAnywhere = (e: { preventDefault: () => void; dataTransfer: DataTransfer | null }) => {
     e.preventDefault(); setOver(false);
-    if (going.current) { setNotice({ text: 'Wait for the current item to finish.', kind: 'error' }); return; }
+    if (going.current || lockedWhy) { setNotice({ text: lockedWhy ?? 'Wait for the current item to finish.', kind: 'error' }); return; }
     void dropFiles(e.dataTransfer?.files);
   };
   useEffect(() => {
@@ -131,7 +135,7 @@ export function InboxPopout() {
 
   return (
     <Modal title={<><div className="pop-id">Import</div><h2>{waiting ? `${waiting} waiting on you` : 'Nothing waiting'}</h2></>}
-      label="Import" onClose={closePopout} width={1120} height={940} className="inbox-pop"
+      label="Import" onClose={closePopout} width={1120} height={940} className={`inbox-pop${working ? ' ai-working' : ''}`} locked={lockedWhy}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDrop={onDropAnywhere}>
       <div className="ib-body scroll">
         {/* Zone 1: the drop well */}
@@ -141,14 +145,15 @@ export function InboxPopout() {
             <div className="dz-t">{over ? 'Let go to drop' : 'Drop anything'}</div>
             <div className="hint">Drop exports, emails, transcripts, Word, PDF and pictures. Read as data, never as instructions; lists of people are held.</div>
             {busy && <div className="ib-busy" role="status">{busy}</div>}
+            {lockedWhy && !busy && <div className="ib-locked" data-testid="import-locked" role="status"><span className="ib-locked-dot" aria-hidden="true" />{lockedWhy}</div>}
           </div>
           <div className="ib-well-r">
-            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={!!busy}
+            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={working} title={lockedWhy}
               onChange={(e) => void dropFiles(e.target.files)} />
             <div className="ib-paste">
               <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={1} placeholder="Paste an email or a quick note"
-                aria-label="Paste a note" data-testid="inbox-paste" disabled={!!busy} data-autofocus />
-              <button className="btn primary sm" data-action="add-note" disabled={!!busy || !paste.trim()} onClick={() => void addNote()}>Add note</button>
+                aria-label="Paste a note" data-testid="inbox-paste" disabled={working} title={lockedWhy} data-autofocus />
+              <button className="btn primary sm" data-action="add-note" disabled={working || !paste.trim()} onClick={() => void addNote()}>Add note</button>
             </div>
           </div>
           <div className="ib-under">

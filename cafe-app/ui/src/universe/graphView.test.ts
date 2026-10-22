@@ -7,7 +7,17 @@ describe('graph view helpers', () => {
   it('sizes stars by type and links, capped', () => {
     expect(starSize({ type: 'Person' } as any, 0)).toBe(1);
     expect(starSize({ type: 'Idea' } as any, 2)).toBeCloseTo(2.9);
-    expect(starSize({ type: 'Idea' } as any, 50)).toBe(4);
+    expect(starSize({ type: 'Idea' } as any, 50)).toBe(3.5);
+  });
+  it('makes the division the biggest star and teams the next, whatever their links', () => {
+    const division = starSize({ type: 'Entity' } as any, 2);
+    const team = starSize({ type: 'Team' } as any, 5);
+    const busiest = Math.max(...(['Idea', 'Capability', 'PainPoint', 'System', 'Person', 'Tool', 'Round', 'Support'] as const).map((t) => starSize({ type: t } as any, 99)));
+    expect(division).toBeGreaterThan(team);
+    expect(team).toBeGreaterThan(busiest);
+    // Easy to catch, not huge: at most about half again as big as than the busiest idea.
+    expect(division / busiest).toBeLessThanOrEqual(1.75);
+    expect(starSize({ type: 'Entity' } as any, 40)).toBe(division);
   });
   it('labels ideas, teams, tools and entities always', () => {
     expect(labelAlways({ type: 'Idea' } as any)).toBe(true); expect(labelAlways({ type: 'Round' } as any)).toBe(true); expect(labelAlways({ type: 'Person' } as any)).toBe(false);

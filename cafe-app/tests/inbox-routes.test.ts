@@ -51,6 +51,11 @@ async function sentE2(root: string, id: string, questions: string[]) {
   await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${id}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n`);
 }
 
+/** A capability the operator stands behind: one they picked a tool for. */
+async function pickTool(root: string, id: string, feature: string) {
+  const idea = (await listIdeas(root)).ideas.find((i) => i.id === id)!;
+  await saveIdea(root, { ...idea, tools: { [feature]: 'Copilot Studio' } });
+}
 const ideaFolders = async (root: string) => (await readdir(path.join(root, 'ideas'))).sort();
 
 describe('/api/inbox: exports', () => {
@@ -89,7 +94,7 @@ describe('/api/inbox: exports', () => {
 
   it('applying the one held item turns "Anything for you" to Done, so the badge stops counting it', async () => {
     const s = await server(triageConnector({
-      what: 'Invoices need design guidance.', understood: ['Invoices need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      what: 'Invoices need reading.', understood: ['Invoices need reading.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
       facts: { graph: { nodes: [{ type: 'Capability', label: 'Invoice reading' }], links: [{ from: 'idea', to: 'Invoice reading', rel: 'NEEDS', description: 'Reads invoices', confidence: 0.4 }] } },
     }));
     await s.drop('export.csv', await readFile(FIXTURE));
@@ -206,14 +211,15 @@ describe('/api/inbox: emails and notes', () => {
 
   it('a link at 0.7 or above between known stars is Safe, shows in /api/graph, and Undo removes it', async () => {
     const s = await server(triageConnector({
-      what: 'Invoices need design guidance.', understood: ['Invoices need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
-      facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Asked for guidance', confidence: 0.8 }] } },
+      what: 'Invoices need reading.', understood: ['Invoices need reading.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      facts: { graph: { nodes: [{ type: 'Capability', label: 'Invoice reading' }], links: [{ from: 'idea', to: 'Invoice reading', rel: 'NEEDS', description: 'Reads invoices', confidence: 0.8 }] } },
     }));
     await s.drop('export.csv', await readFile(FIXTURE));
-    const { item } = await json(await s.post('/api/inbox/drop', { text: 'Update on CAFE-2026-003: they want agent design guidance.', name: 'update' }));
+    await pickTool(s.root, 'CAFE-2026-002', 'Invoice reading');
+    const { item } = await json(await s.post('/api/inbox/drop', { text: 'Update on CAFE-2026-003: they want invoices read.', name: 'update' }));
     const g = item.actions.find((r: any) => r.action.t === 'graph_links');
     expect(g).toMatchObject({ kind: 'safe', status: 'applied' });
-    const id = 'idea:CAFE-2026-003|NEEDS|capability:agent-design-guidance';
+    const id = 'idea:CAFE-2026-003|NEEDS|capability:invoice-reading';
     let graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true });
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
@@ -223,14 +229,15 @@ describe('/api/inbox: emails and notes', () => {
 
   it('a link below 0.7 between existing stars is applied at once, confirmed; Undo removes it', async () => {
     const s = await server(triageConnector({
-      what: 'Invoices may need design guidance.', understood: ['Invoices may need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
-      facts: { graph: { nodes: [{ type: 'Capability', label: 'Agent Design Guidance' }], links: [{ from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
+      what: 'Invoices may need reading.', understood: ['Invoices may need reading.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      facts: { graph: { nodes: [{ type: 'Capability', label: 'Invoice reading' }], links: [{ from: 'idea', to: 'Invoice reading', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
     }));
     await s.drop('export.csv', await readFile(FIXTURE));
+    await pickTool(s.root, 'CAFE-2026-002', 'Invoice reading');
     const { item } = await json(await s.post('/api/inbox/drop', { text: 'Update on CAFE-2026-003.', name: 'update' }));
     const g = item.actions.find((r: any) => r.action.t === 'graph_links');
     expect(g).toMatchObject({ kind: 'safe', status: 'applied', inverse: { t: 'remove-ai-links' } });
-    const id = 'idea:CAFE-2026-003|NEEDS|capability:agent-design-guidance';
+    const id = 'idea:CAFE-2026-003|NEEDS|capability:invoice-reading';
     let graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true });
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });

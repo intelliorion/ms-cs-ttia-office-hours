@@ -21,8 +21,8 @@ const FIX = (name: string) => fileURLToPath(new URL(`./fixtures/inbox/${name}`, 
 const clock = fixedClock('2026-10-20');
 
 const IDEAS = [
-  sampleIdea({ people: { submitter: 'Person 2', team: [] }, support: ['Agent Design Guidance'], sent: { E2: '2026-10-19', E3: '2026-10-19' } }),
-  sampleIdea({ id: 'CAFE-2026-002', slug: 'catalogue-tagging', title: 'Catalogue tagging', function: 'GSS', support: ['Document reading', 'Catalogue lookup'], people: { submitter: 'Person 4', team: [] }, dedupe_key: 'b' }),
+  sampleIdea({ people: { submitter: 'Person 2', team: [] }, support: ['Agent Design Guidance'], tools: { 'Slot finding': 'Copilot Studio' }, sent: { E2: '2026-10-19', E3: '2026-10-19' } }),
+  sampleIdea({ id: 'CAFE-2026-002', slug: 'catalogue-tagging', title: 'Catalogue tagging', function: 'GSS', tools: { 'Document reading': 'Copilot Studio', 'Catalogue lookup': 'Power Apps' }, people: { submitter: 'Person 4', team: [] }, dedupe_key: 'b' }),
 ];
 
 function connectorFor(reply: Understanding | (() => never)) {
@@ -231,11 +231,11 @@ describe('Undo is field-level (Review Focus 5)', () => {
 
   it('graph_links (safe): undo removes the link; another link added since stays', async () => {
     const { root, item } = await setup();
-    await appendAiLink(root, link({ from: 'idea:CAFE-2026-002', to: 'capability:agent-design-guidance', source: 'operator' }));
+    await appendAiLink(root, link({ from: 'idea:CAFE-2026-002', to: 'capability:slot-finding', source: 'operator' }));
     await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
     const g = await rebuildGraph(root);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toBe(false);
-    expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-002|NEEDS|capability:agent-design-guidance')).toBe(true);
+    expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-002|NEEDS|capability:slot-finding')).toBe(true);
   });
 
   it('graph_links: links arrive confirmed; a link the operator removed after the apply stays removed, and Undo removes the rest', async () => {

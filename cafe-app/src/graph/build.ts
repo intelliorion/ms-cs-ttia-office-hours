@@ -62,12 +62,14 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     }
     for (const [name, r] of roles) {
       const pid = node({ id: nodeId('Person', name), type: 'Person', label: name });
-      if (teamId) edge(teamId, 'HAS_MEMBER', pid, 'CS Function of the idea', `${src}:CS Function`, 1);
+      // A person's team is the CS Function on their own submission; being on someone else's idea says nothing about it.
+      if (teamId && r.rel === 'SUBMITTED') edge(teamId, 'HAS_MEMBER', pid, 'CS Function of their submission', `${src}:CS Function`, 1);
       edge(pid, r.rel, ideaId, r.notes.join('; '), `${src}:Team Members and Lead`);
     }
+    // Help the submitter asked of the Café, not something the solution does: its own kind of star.
     for (const s of idea.support) {
-      const cid = node({ id: nodeId('Capability', s), type: 'Capability', label: s });
-      edge(ideaId, 'NEEDS', cid, 'Support Requested', `${src}:Support Requested`);
+      const sid = node({ id: nodeId('Support', s), type: 'Support', label: s });
+      edge(ideaId, 'ASKS_FOR', sid, 'Support Requested', `${src}:Support Requested`);
     }
     const tools = idea.tools ?? {};
     for (const [feature, tool] of Object.entries(tools)) {

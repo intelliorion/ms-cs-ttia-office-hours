@@ -1,7 +1,7 @@
 import { NODE_COLOURS } from '../universe/graphView';
 import { confidenceText, type LinkRow } from './ideaHelpers';
 
-const TYPE_KEY: Record<string, string> = { 'Pain point': 'PainPoint', 'System or data': 'System' };
+const TYPE_KEY: Record<string, string> = { 'Pain point': 'PainPoint', 'System or data': 'System', 'Support requested': 'Support' };
 
 /** Links with relation, the other star, source and confidence. Unconfirmed links get Confirm; every AI link gets Remove. */
 export function LinkTable({ rows, busy, onConfirm, onRemove, compact = false }: {

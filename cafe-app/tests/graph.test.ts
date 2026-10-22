@@ -36,7 +36,26 @@ describe('buildGraph', () => {
     expect(rels).toContain('person:person-3 SPONSORS idea:CAFE-2026-002');
     expect(rels).toContain('person:person-4 RELATED idea:CAFE-2026-002');
     expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.description).toBe('Submitter Name; also listed as Lead');
-    expect(rels).toContain('idea:CAFE-2026-002 NEEDS capability:agent-design-guidance');
+    expect(rels).toContain('idea:CAFE-2026-002 ASKS_FOR support:agent-design-guidance');
+    expect(g.nodes.find((n) => n.id === 'support:agent-design-guidance')?.type).toBe('Support');
+    expect(g.nodes.some((n) => n.type === 'Capability')).toBe(false);
+  });
+
+  it('puts a person in a team only through their own submission', () => {
+    const bsi = sampleIdea({
+      id: 'CAFE-2026-004', slug: 'bsi', title: 'Meeting notes', entity: 'CS', function: 'BSI', region: 'AMER',
+      support: [], people: { submitter: 'Person 6', team: [] },
+    });
+    const gss = sampleIdea({
+      id: 'CAFE-2026-005', slug: 'gss', title: 'FAQ bot', entity: 'CS', function: 'GSS', region: 'AMER',
+      support: [], people: { submitter: 'Person 7', team: [{ name: 'Person 7', role: 'lead' }, { name: 'Person 6', role: 'member' }, { name: 'Person 8', role: 'sponsor' }] },
+    });
+    const rels = buildGraph([bsi, gss], []).edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
+    expect(rels).toContain('team:bsi HAS_MEMBER person:person-6');
+    expect(rels).not.toContain('team:gss HAS_MEMBER person:person-6');
+    expect(rels).not.toContain('team:gss HAS_MEMBER person:person-8');
+    expect(rels).toContain('team:gss HAS_MEMBER person:person-7');
+    expect(rels).toContain('person:person-6 RELATED idea:CAFE-2026-005');
   });
 
   it('keeps one node per person across ideas, with a role link to each', () => {
@@ -83,7 +102,7 @@ describe('buildGraph', () => {
   });
 
   it('has a colour for every type', () => {
-    for (const t of ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System'] as const) expect(NODE_COLOURS[t]).toMatch(/^#/);
+    for (const t of ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Support'] as const) expect(NODE_COLOURS[t]).toMatch(/^#/);
     expect(nodeId('Team', 'GSS')).toBe('team:gss');
   });
 });
@@ -176,7 +195,7 @@ describe('store and layout', () => {
 });
 
 import { APPROVED_TOOLS, canonicalTool, isApprovedTool } from '../src/graph/ontology';
-import { planAiLinks } from '../src/ai/apply';
+import { extractInput, planAiLinks } from '../src/ai/apply';
 
 describe('approved tools', () => {
   it('maps variants to canonical labels and detects unapproved tools', () => {
@@ -201,6 +220,21 @@ describe('approved tools', () => {
     const { links, newNodes } = planAiLinks('CAFE-1', out as any, graph, [], 'fake');
     expect(links.map((l) => l.rel)).toEqual(['NEEDS']);
     expect(newNodes.map((n) => n.type)).toEqual(['Capability']);
+  });
+
+  it('never adds a support request: the AI cannot reuse or copy a Support star', () => {
+    const graph = buildGraph([rfx], []);
+    const out = {
+      nodes: [{ type: 'Capability' as const, label: 'Agent Design Guidance' }, { type: 'Capability' as const, label: 'Clause finding' }],
+      links: [
+        { from: 'idea', to: 'Agent Design Guidance', rel: 'NEEDS' as const, description: 'Asked for help', confidence: 0.9 },
+        { from: 'idea', to: 'Clause finding', rel: 'NEEDS' as const, description: 'Finds clauses', confidence: 0.9 },
+      ],
+    };
+    const { links } = planAiLinks('CAFE-2026-002', out as any, graph, [], 'fake');
+    expect(links.map((l) => l.to)).toEqual(['capability:clause-finding']);
+    const input = extractInput(rfx, graph.nodes);
+    expect(input.existing.capabilities).not.toContain('Agent Design Guidance');
   });
 });
 

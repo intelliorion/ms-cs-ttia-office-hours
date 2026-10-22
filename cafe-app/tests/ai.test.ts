@@ -313,7 +313,7 @@ describe('/api/ai routes', () => {
     const c = createConnector({ providers: [fake(reply)], settings: DEFAULT_SETTINGS });
     const s = await startServer('2026-10-19', { connector: c });
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
-    await saveIdea(s.root, sampleIdea({ support: ['Document parsing'] }));
+    await saveIdea(s.root, sampleIdea({ tools: { 'Document parsing': 'Copilot Studio' } }));
     await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
     expect(ex).toMatchObject({ added: 1, held: [] });

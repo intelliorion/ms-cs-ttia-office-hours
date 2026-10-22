@@ -103,6 +103,7 @@ export const extractTask: Task<ExtractOutput> = {
       "Read the idea's challenge, current process and outcomes.",
       'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint) and the systems or data it uses (System).',
       'Never propose a tool or product to build it with: the tool is chosen later, in the app, by the operator.',
+      'A capability is something the solution does. Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form.',
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
       'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System.',
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
@@ -302,7 +303,7 @@ export const understandTask: Task<Understanding> = {
       '"what": one line on what this file is. "understood": 1 to 6 plain lines on what it says that matters for the idea. "uncertain": up to 4 lines on what you could not tell. Never name people in "what", "understood" or "uncertain"; say "the team" or a role.',
       ...(data.knownStars ? ['"knownStars" are stars already in the universe. Reuse a label from knownStars when the same thing is meant; a new label only for a new thing.'] : []),
       ...(data.teamAnswers ? ['"teamAnswers" were already recorded from earlier replies: do not extract them again.'] : []),
-      'facts.graph: capabilities (Capability), pain points (PainPoint) and systems or data (System) the text shows the idea needs, as in the extract task. Never propose a tool or product to build it with, even when the text names one: the operator picks the tool later in the app (a named tool stays in the text, where the tool picker reads it). Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
+      'facts.graph: capabilities (Capability), pain points (PainPoint) and systems or data (System) the text shows the idea needs, as in the extract task. Never propose a tool or product to build it with, even when the text names one: the operator picks the tool later in the app (a named tool stays in the text, where the tool picker reads it). Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System. Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
     ], UNDERSTAND_SCHEMA, data, 'something the operator imported');
   },
   parse: parseUnderstanding,

@@ -7,7 +7,7 @@ export type Vec3 = [number, number, number];
 export interface Graph { nodes: GNode[]; edges: GEdge[]; layout?: Record<string, Vec3>; unconfirmed?: number }
 
 const BASE_SIZE: Record<NodeType, number> = {
-  Idea: 2.6, Team: 2.2, Entity: 2.4, Tool: 1.8, Capability: 1.6, System: 1.6, PainPoint: 1.4, Person: 1.0, Round: 2.4,
+  Idea: 2.6, Team: 2.2, Entity: 2.4, Tool: 1.8, Capability: 1.6, System: 1.6, PainPoint: 1.4, Person: 1.0, Round: 2.4, Support: 1.4,
 };
 const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity', 'Round'];
 

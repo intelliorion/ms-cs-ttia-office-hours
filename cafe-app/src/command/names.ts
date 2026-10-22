@@ -32,7 +32,11 @@ function aliases(n: GNode, firstNames: Map<string, number>): string[] {
  * Swaps every star the text names for a code like [P1], longest name first, whole words only, and lists the codes
  * for the AI. A person is listed by type only: their name never leaves the app.
  */
-export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean } = {}): { text: string; legend: LegendEntry[]; codes: Map<string, Coded> } {
+/**
+ * `seed` carries a conversation's codes forward, so a star keeps its code through the whole thread
+ * ([P1] in the first message is [P1] in the tenth); stars that are gone drop out, renamed ones take their new label.
+ */
+export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean; seed?: Map<string, Coded> } = {}): { text: string; legend: LegendEntry[]; codes: Map<string, Coded> } {
   const firstNames = new Map<string, number>();
   for (const n of nodes) if (n.type === 'Person') { const f = norm(n.label.split(/\s+/)[0]); firstNames.set(f, (firstNames.get(f) ?? 0) + 1); }
   const cands = nodes.flatMap((n) => aliases(n, firstNames).map((alias) => ({ n, alias })))
@@ -55,6 +59,13 @@ export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean } 
   const codes = new Map<string, Coded>();
   const codeOf = new Map<string, string>();
   const count: Partial<Record<NodeType, number>> = {};
+  const live = new Map(nodes.map((x) => [x.id, x]));
+  for (const [c, v] of opts.seed ?? []) {
+    const k = Number(c.slice(1)) || 0;
+    count[v.type] = Math.max(count[v.type] ?? 0, k); // never reuse a code, even one whose star is gone
+    const now = live.get(v.id);
+    if (now) { codes.set(c, { id: now.id, type: now.type, label: now.label }); codeOf.set(now.id, c); }
+  }
   const code = (n: GNode) => {
     let c = codeOf.get(n.id);
     if (!c) {

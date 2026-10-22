@@ -25,3 +25,26 @@ describe('@ mentions', () => {
     expect(insertMention('link @ven to GSS', 5, 9, 'Vendor contract summariser')).toEqual({ text: 'link @Vendor contract summariser to GSS', caret: 33 });
   });
 });
+
+import { chipSegments, slashMatches, suggestionsFor } from './commandHelpers';
+describe('chat helpers', () => {
+  it('@kind: narrows the search to one kind', () => {
+    expect(searchStars(nodes, 'person:').map((h) => h.label)).toEqual(['Avery Chen']);
+    expect(searchStars(nodes, 'idea:vendor').map((h) => h.type)).toEqual(['Idea']);
+  });
+  it('/ shortcuts match while the message is a bare /word', () => {
+    expect(slashMatches('/').map((s) => s.cmd)).toEqual(['/new', '/grow', '/undo', '/import', '/rounds']);
+    expect(slashMatches('/gr').map((s) => s.cmd)).toEqual(['/grow']);
+    expect(slashMatches('/grow it')).toEqual([]);
+  });
+  it('cuts text into runs and star chips, longest names first, whole words only', () => {
+    const stars = [{ id: 'team:gss', label: 'GSS' }, { id: 'idea:1', label: 'Vendor contract summariser' }, { id: 'c:1', label: 'Vendor' }];
+    expect(chipSegments('Vendor contract summariser is a GSS idea, not GSSX.', stars)).toEqual([
+      { id: 'idea:1', label: 'Vendor contract summariser' }, ' is a ', { id: 'team:gss', label: 'GSS' }, ' idea, not GSSX.',
+    ]);
+  });
+  it('suggests from what is on screen', () => {
+    expect(suggestionsFor({ focusType: 'Idea' })[0]).toBe('Who leads this?');
+    expect(suggestionsFor({ waiting: 2 })[0]).toBe('What is waiting for me in the Import?');
+  });
+});

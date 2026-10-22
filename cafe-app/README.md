@@ -136,15 +136,34 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
 6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
-## Command bar: tell the Café what to do
+## Café assistant: ask, or tell the Café what to do
 
-The box at the top of the screen, left of **Import**, takes your own instructions in plain words. Unlike a dropped
-file, a command **is** an instruction. Press Enter; the AI reads it and the chat panel below the box shows what it
-understood and one card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and
-every done action has **Undo** (a team or round that changed since is kept, and the card says so).
+Click the box at the top of the screen (left of **Import**) or press **Ctrl+K** (⌘K on a Mac): the assistant opens
+docked on the right, in place of the side panels, so the universe stays in view. Type in plain words and press Enter
+(Shift+Enter for a new line). Unlike a dropped file, a message **is** an instruction.
 
-**Changes and questions.** The agent first decides what you typed: a change to make, a question to answer, or
-neither (then it asks you to rephrase); the panel says which. **A question is answered by the knowledge graph, not
+**It works in steps, over the knowledge graph.** For each message the agent decides what to do next: search the graph,
+or read an idea's text; it sees what came back and decides again (up to 5 steps), then answers, proposes changes, or
+asks what you meant. Each step shows live as it happens ("Looking up who leads Procurement FAQ bot · 1 found"); **Stop**
+ends a message after the step it is on. If a search finds nothing it tries another way before saying the graph does not
+hold it, and a request like "find duplicate capabilities and merge them" is a search first, then merges for what it found.
+
+**A conversation keeps its context.** "Who leads them?", "and which of those are in BSI?" and "do the same for GSS" work:
+the agent gets the conversation so far, a star keeps the same code all through it, and a follow-up can start from what
+the last answer found, computed on the graph. **New chat** starts fresh; **⋯** lists earlier chats to reopen with their
+context. A change left waiting in another chat is cancelled, with a note, when a new chat starts.
+
+**In the box:** **@** picks a star (narrow it with `@idea:`, `@person:`, `@team:` and so on); **/** offers shortcuts
+(`/new`, `/grow` for the idea on screen, `/undo` for the last change in this chat, `/import`, `/rounds`); **↑** brings back
+your last message. "This" and "it" mean the idea open on the left, or the star you clicked; the **About:** chip shows
+which, and its ✕ asks in general instead.
+
+**In a reply:** star names are chips (hover one to light it, click to fly to it); an answer lights the stars it rests on,
+with **How I found it in the graph**, and offers up to three follow-ups you can send with a click. A change shows one
+card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and every done action has
+**Undo** (a team or round that changed since is kept, and the card says so).
+
+**Changes and questions.** The panel says how the agent read each message: a change, a question, or not sure. **A question is answered by the knowledge graph, not
 from the AI's memory.** The AI turns it into a query from a fixed set of steps (find stars by kind or name, follow
 links, filter ideas by stage, function, region or round, go from ideas to their submitter, lead, sponsor or members
 and back, keep what a second search also found, the shortest chain between two stars, rank by number of links, count
@@ -191,7 +210,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 - Word files: `.docx`.
 - PDFs: `.pdf`, with text or scanned, up to 10 MB.
 - Pictures: `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`, up to 10 MB (a whiteboard photo, a screenshot, a scan).
-- Notes as text files (`.txt`, `.md`). To tell the Café what to do, use the command bar instead (below).
+- Notes as text files (`.txt`, `.md`). To tell the Café what to do, use the Café assistant instead (above).
 - Dropping a file anywhere on the Import pop-out works, not only on the dashed zone.
 - Want something to try? `test-data/` holds synthetic files (exports, emails, a transcript, a Word file, a held tracker, a text PDF, a whiteboard picture, a scanned PDF, and a reply that clashes with what the app holds) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
 

@@ -3,10 +3,11 @@ import { readText, writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from '../graph/store';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
-import { answerTask, commandTask, COMMAND_MAX, type AnswerInput } from '../ai/tasks';
+import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentStepDone } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
-import { codeFor, hideNames, showNames } from './names';
+import type { GNode } from '../graph/ontology';
+import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
 import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
 import { validate } from '../ai/schema';
@@ -17,32 +18,44 @@ export interface ChatAction {
   status: 'proposed' | 'done' | 'cancelled' | 'undone' | 'failed';
   inverse?: CommandInverse; note?: string;
 }
-/** One command and what came of it. The operator's own words stay here, on this machine; the AI only saw them with names coded. */
+/** One step the agent took for a message, as the operator sees it. */
+export interface ChatStep { kind: 'search' | 'read'; text: string; found?: number }
+/** One message and what came of it. The operator's own words stay here, on this machine; the AI only saw them with names coded. */
 export interface ChatEntry {
-  id: string; at: string; text: string; reply: string; provider?: string;
+  id: string; thread: string; at: string; ts: number; text: string; reply: string; provider?: string;
   /** The idea or star on screen when the message was sent. */
   about?: string;
   /** How the agent read the message: a change to make, a question to answer, or neither. */
   kind?: 'command' | 'question' | 'unclear';
-  /** For a question: every star the queries passed through, lit in the universe. */
+  /** The steps the agent took: each search with how many stars it found, each idea it read. */
+  steps?: ChatStep[];
+  /** For a question: every star the searches found, lit in the universe. */
   highlight?: string[];
-  /** For a question: how each query found its answer, step by step, with how many stars each step left. */
+  /** For a question: how each search found its answer, step by step, with how many stars each step left. */
   trace?: StepTrace[][];
+  /** Follow-up questions the agent suggests, as the operator would type them. */
+  followups?: string[];
   actions: ChatAction[]; problems: string[]; error?: string;
+  /** What the AI saw and said, in codes: the conversation it gets next time. */
+  coded?: { text: string; reply: string; found?: string[] };
 }
+/** A conversation: its title, when it was last used, and the codes and last answer it carries forward. */
+export interface ChatThread { id: string; title: string; started: string; updated: number; codes: [string, Coded][]; last: string[] }
 
-const file = (root: string) => path.join(root, 'chat', 'log.jsonl');
+const dir = (root: string) => path.join(root, 'chat');
+const logFile = (root: string) => path.join(dir(root), 'log.jsonl');
+const threadsFile = (root: string) => path.join(dir(root), 'threads.json');
 
 export async function readChat(root: string): Promise<ChatEntry[]> {
   const out: ChatEntry[] = [];
-  for (const line of ((await readText(file(root))) ?? '').split('\n')) {
+  for (const line of ((await readText(logFile(root))) ?? '').split('\n')) {
     if (!line.trim()) continue;
-    try { out.push(JSON.parse(line) as ChatEntry); } catch { /* skipped */ }
+    try { const e = JSON.parse(line) as ChatEntry; out.push({ ...e, thread: e.thread ?? 't0', ts: e.ts ?? 0 }); } catch { /* skipped */ }
   }
   return out;
 }
 async function writeChat(root: string, entries: ChatEntry[]): Promise<void> {
-  await writeFileAtomic(file(root), entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''));
+  await writeFileAtomic(logFile(root), entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''));
 }
 async function save(root: string, entry: ChatEntry): Promise<ChatEntry> {
   const all = await readChat(root);
@@ -51,98 +64,181 @@ async function save(root: string, entry: ChatEntry): Promise<ChatEntry> {
   await writeChat(root, all);
   return entry;
 }
+export async function readThreads(root: string): Promise<ChatThread[]> {
+  try { const v = JSON.parse((await readText(threadsFile(root))) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+async function saveThread(root: string, t: ChatThread): Promise<void> {
+  const all = (await readThreads(root)).filter((x) => x.id !== t.id);
+  await writeFileAtomic(threadsFile(root), JSON.stringify([...all, t], null, 1));
+}
 
-/**
- * Runs a command: names the app knows are coded before the AI sees the text, the AI proposes steps, the app checks
- * each one and records proposals for the operator to do or cancel. Nothing changes here.
- */
-/** How many stars of each query the AI sees when it words an answer; the total is always given. */
-const ANSWER_STARS = 60;
+/** The conversations, most recent first, for the list; and one conversation with its messages. */
+export async function listThreads(root: string): Promise<{ id: string; title: string; updated: number; count: number }[]> {
+  const [threads, entries] = await Promise.all([readThreads(root), readChat(root)]);
+  return threads.sort((a, b) => b.updated - a.updated).slice(0, 30)
+    .map((t) => ({ id: t.id, title: t.title, updated: t.updated, count: entries.filter((e) => e.thread === t.id).length }));
+}
+export async function readThread(root: string, id: string): Promise<{ thread: { id: string; title: string } | null; entries: ChatEntry[] }> {
+  const t = (await readThreads(root)).find((x) => x.id === id);
+  return { thread: t ? { id: t.id, title: t.title } : null, entries: t ? (await readChat(root)).filter((e) => e.thread === id) : [] };
+}
+
+/** How many earlier exchanges the agent sees with each message. */
+const HISTORY = 6;
+/** How many stars of a search the agent sees; the total is always given. */
+const RESULT_STARS = 60;
 /** How many stars light up at most. */
 const LIT_MAX = 150;
 
-export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, focusId?: string, mentionIds: string[] = []): Promise<ChatEntry> {
-  const command = text.trim().slice(0, COMMAND_MAX);
-  if (!command) throw new Error('Type a command first');
+export type Progress = { stage: 'thinking'; step: number } | { stage: 'step'; step: ChatStep };
+export interface RunOptions {
+  focus?: string; mentions?: string[];
+  /** The conversation to continue; a new one is started when it is absent or unknown. */
+  thread?: string;
+  progress?: (p: Progress) => void;
+  /** Set when the operator presses Stop: the agent finishes the step it is on and stops. */
+  stopped?: () => boolean;
+}
+
+/**
+ * The Café assistant. Names the app knows are coded before the AI sees anything; the agent then works in steps:
+ * it searches the knowledge graph or reads an idea's text, sees what came back, and decides the next step, until it
+ * answers, proposes changes (each checked by the app and waiting for Do it) or asks what was meant. Nothing changes here.
+ */
+export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, opts: RunOptions = {}): Promise<ChatEntry> {
+  const message = text.trim().slice(0, COMMAND_MAX);
+  if (!message) throw new Error('Type a message first');
   const all = await readChat(root);
+  const threads = await readThreads(root);
+  const now = Date.now();
+  const thread: ChatThread = threads.find((t) => t.id === opts.thread)
+    ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: message.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
   const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
+  const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
+
   // @mentions name a star exactly: each "@Label" becomes that star's code, whatever else the text matches.
-  const mentioned = [...new Set(mentionIds)].map((mid) => graph.nodes.find((n) => n.id === mid)).filter((n): n is NonNullable<typeof n> => !!n);
-  let pre = command;
+  const mentioned = [...new Set(opts.mentions ?? [])].map((m) => nodes.get(m)).filter((n): n is GNode => !!n);
+  let pre = message;
   mentioned.forEach((n, i) => { pre = pre.split(`@${n.label}`).join(`\u0000${i}\u0000`); });
-  const hidden = hideNames(pre, graph.nodes);
-  mentioned.forEach((n, i) => {
-    const known = [...hidden.codes].find(([, v]) => v.id === n.id)?.[0];
-    const code = known ?? codeFor(hidden.codes, n);
-    if (!known) hidden.legend.push(n.type === 'Person' ? { code, type: n.type } : { code, type: n.type, label: n.label });
-    hidden.text = hidden.text.split(`\u0000${i}\u0000`).join(`[${code}]`);
-  });
+  // The conversation's codes carry forward, so a star keeps its code from message to message.
+  const hidden = hideNames(pre, graph.nodes, { seed: new Map(thread.codes) });
+  const legendOf = (n: GNode): LegendEntry => {
+    const code = codeFor(hidden.codes, n);
+    return n.type === 'Person' ? { code, type: n.type } : { code, type: n.type, label: n.label };
+  };
+  const addToLegend = (n: GNode) => {
+    const e = legendOf(n);
+    if (!hidden.legend.some((x) => x.code === e.code)) hidden.legend.push(e);
+    return e.code;
+  };
+  mentioned.forEach((n, i) => { hidden.text = hidden.text.split(`\u0000${i}\u0000`).join(`[${addToLegend(n)}]`); });
+  const focusNode = opts.focus ? nodes.get(opts.focus) : undefined;
+  const focus = focusNode ? addToLegend(focusNode) : undefined;
+  /** An idea's text, with every name the app knows swapped for the conversation's code. */
+  const coded = (s: unknown) => {
+    const t = String(s ?? '');
+    if (!t) return t;
+    const h = hideNames(t, graph.nodes, { seed: hidden.codes });
+    for (const [c, v] of h.codes) if (!hidden.codes.has(c)) hidden.codes.set(c, v);
+    return h.text;
+  };
+
   const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x && !!x.trim()))].sort();
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
   };
-  // What the operator has on screen, so "this" and "it" mean something; a person stays a code.
-  const focusNode = focusId ? graph.nodes.find((n) => n.id === focusId) : undefined;
-  let focus: string | undefined;
-  if (focusNode) {
-    const known = [...hidden.codes].find(([, v]) => v.id === focusNode.id)?.[0];
-    focus = known ?? codeFor(hidden.codes, focusNode);
-    if (!known) hidden.legend.push(focusNode.type === 'Person' ? { code: focus, type: focusNode.type } : { code: focus, type: focusNode.type, label: focusNode.label });
-  }
-  const entry: ChatEntry = { id, at: clock(), text: command, reply: '', actions: [], problems: [], ...(focusNode ? { about: focusNode.label } : {}) };
+  const history = all.filter((e) => e.thread === thread.id && e.coded).slice(-HISTORY)
+    .map((e) => ({ operator: e.coded!.text, agent: e.coded!.reply, ...(e.coded!.found?.length ? { found: e.coded!.found } : {}) }));
+
+  const entry: ChatEntry = {
+    id, thread: thread.id, at: clock(), ts: now, text: message, reply: '', actions: [], problems: [], steps: [],
+    ...(focusNode ? { about: focusNode.label } : {}),
+  };
+  const done: AgentStepDone[] = [];
+  const results: QueryResult[] = [];
+  let lastFound: string[] = thread.last;
+  let finalReply = '';
   try {
-    const { provider, output } = await ai.runWith(commandTask, { command: hidden.text, stars: hidden.legend, vocabulary, ...(focus ? { focus } : {}) });
-    entry.provider = provider;
-    entry.kind = output.kind;
-    entry.reply = showNames(output.reply, hidden.codes);
-    if (output.kind === 'command') {
-      const { proposals, problems } = resolveSteps(output.actions, { codes: hidden.codes, graph, ideas, rounds });
-      entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
-      entry.problems = problems;
-    } else if (output.kind === 'question') {
-      // The answer comes from the graph: the app runs the AI's queries, and the AI only words what they found.
-      // A question never changes anything: any actions sent with it are dropped.
-      const queries = (output.queries ?? []).filter((q): q is Query => validate(QUERY_SCHEMA, q).length === 0);
-      const bad = (output.queries?.length ?? 0) - queries.length;
-      if (bad) entry.problems.push(`${bad} of the AI's searches ${bad === 1 ? 'was' : 'were'} malformed and left out.`);
-      if (!queries.length) { entry.problems = [...entry.problems, "I couldn't turn that into a search of the universe. Try naming the stars or ideas you mean."]; return finish(root, all, entry); }
-      const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
-      const results: QueryResult[] = queries.map((q) => runQuery(q, { graph, ideas, rounds, idOf }));
-      entry.trace = results.map((r) => r.trace);
-      entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
-      const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
-      const coded = (sid: string) => codeFor(hidden.codes, nodes.get(sid)!);
-      const legend = (sid: string) => { const n = nodes.get(sid)!; const c = coded(sid); return n.type === 'Person' ? { code: c, type: n.type } : { code: c, type: n.type, label: n.label }; };
-      const answerIn: AnswerInput = {
-        question: hidden.text,
-        results: results.map((r) => ({
-          stars: r.final.slice(0, ANSWER_STARS).map(legend), total: r.final.length,
-          ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: coded(x.id), links: x.n })) } : {}),
-          ...(r.counts ? { counts: r.counts } : {}),
-          ...(r.path ? { path: r.path.map(coded) } : {}),
-        })),
-      };
-      const answered = await ai.runWith(answerTask, answerIn);
-      entry.reply = showNames(answered.output.answer, hidden.codes);
+    for (let step = 0; ; step++) {
+      if (opts.stopped?.()) { entry.error = 'Stopped. Nothing was changed.'; break; }
+      const left = AGENT_MAX_STEPS - step;
+      if (left <= 0) { entry.problems.push('I ran out of steps before I could finish. Try asking a narrower question.'); break; }
+      opts.progress?.({ stage: 'thinking', step });
+      const { provider, output } = await ai.runWith(agentTask, {
+        ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
+        stars: hidden.legend, vocabulary, steps: done, stepsLeft: left,
+      });
+      entry.provider = provider;
+      const thought = showNames(output.thought, hidden.codes);
+
+      if (output.next === 'search') {
+        const errs = validate(QUERY_SCHEMA, output.query);
+        if (errs.length) { done.push({ did: 'search', thought: output.thought, result: { error: `The query was malformed: ${errs.slice(0, 3).join('; ')}` } }); continue; }
+        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound });
+        results.push(r);
+        lastFound = r.final;
+        const s: ChatStep = { kind: 'search', text: thought, found: r.final.length };
+        entry.steps!.push(s); opts.progress?.({ stage: 'step', step: s });
+        done.push({
+          did: 'search', thought: output.thought,
+          result: {
+            stars: r.final.slice(0, RESULT_STARS).map((sid) => legendOf(nodes.get(sid)!)), total: r.final.length,
+            ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
+            ...(r.counts ? { counts: r.counts } : {}),
+            ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
+          },
+        });
+      } else if (output.next === 'read_idea') {
+        const ideaId = output.idea ? hidden.codes.get(output.idea.replace(/^\[|\]$/g, ''))?.id : undefined;
+        const idea = ideas.find((i) => `idea:${i.id}` === ideaId);
+        if (!idea) { done.push({ did: 'read_idea', thought: output.thought, result: { error: 'No idea has that code.' } }); continue; }
+        const s: ChatStep = { kind: 'read', text: thought };
+        entry.steps!.push(s); opts.progress?.({ stage: 'step', step: s });
+        done.push({
+          did: 'read_idea', thought: output.thought,
+          result: {
+            idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), title: idea.title, challenge: coded(idea.challenge), current_process: coded(idea.current_process),
+            outcomes: idea.outcomes, business_impact: coded(idea.business_impact), beneficiaries: idea.beneficiaries, additional_context: coded(idea.additional_context),
+          },
+        });
+      } else {
+        finalReply = output.reply ?? '';
+        entry.reply = showNames(finalReply || output.thought, hidden.codes);
+        if (output.next === 'answer') {
+          entry.kind = 'question';
+          if (output.followups?.length) entry.followups = output.followups.map((f) => showNames(f, hidden.codes));
+        } else if (output.next === 'propose') {
+          // The AI proposes; the app checks every action against the graph and the ideas before it shows a card.
+          entry.kind = 'command';
+          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph, ideas, rounds });
+          entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
+          entry.problems.push(...problems);
+        } else {
+          entry.kind = 'unclear';
+        }
+        break;
+      }
     }
   } catch (e) {
-    entry.error = `The AI couldn't read that (${(e as Error).message}). Try again, or make the change by hand.`;
+    entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
-  return finish(root, all, entry);
-}
-
-/** Only the latest command is shown, so nothing earlier may sit waiting out of sight. */
-async function finish(root: string, all: ChatEntry[], entry: ChatEntry): Promise<ChatEntry> {
-  for (const old of all) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A newer command replaced it'; }
+  if (results.length) {
+    entry.trace = results.map((r) => r.trace);
+    entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
+  }
+  entry.coded = { text: hidden.text, reply: finalReply, ...(results.length ? { found: lastFound.slice(0, RESULT_STARS).map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}) };
+  await saveThread(root, { ...thread, updated: now, codes: [...hidden.codes], last: lastFound });
+  // Changes left waiting in other conversations are not shown any more: cancel them, saying why.
+  for (const old of all) if (old.thread !== thread.id) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A new conversation replaced it'; }
   await writeChat(root, all);
   return save(root, entry);
 }
 
 async function entryOf(root: string, id: string): Promise<ChatEntry> {
   const e = (await readChat(root)).find((x) => x.id === id);
-  if (!e) throw new Error(`No command ${id}`);
+  if (!e) throw new Error(`No message ${id}`);
   return e;
 }
 

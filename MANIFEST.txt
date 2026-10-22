@@ -142,8 +142,6 @@ cafe-app/ui/package-lock.json
 cafe-app/ui/package.json
 cafe-app/ui/src/App.tsx
 cafe-app/ui/src/api.ts
-cafe-app/ui/src/layout/CommandBar.test.tsx
-cafe-app/ui/src/layout/CommandBar.tsx
 cafe-app/ui/src/layout/Drawers.tsx
 cafe-app/ui/src/layout/Panel.tsx
 cafe-app/ui/src/layout/Stage.test.ts
@@ -151,6 +149,7 @@ cafe-app/ui/src/layout/Stage.tsx
 cafe-app/ui/src/layout/TitleBar.tsx
 cafe-app/ui/src/layout/Welcome.test.tsx
 cafe-app/ui/src/layout/Welcome.tsx
+cafe-app/ui/src/layout/commandHelpers.test.ts
 cafe-app/ui/src/layout/commandHelpers.ts
 cafe-app/ui/src/main.tsx
 cafe-app/ui/src/panels/Charts.test.tsx
@@ -221,8 +220,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-Br0lM0x9.css
-cafe-app/web/assets/index-C7d5KoJ3.js
+cafe-app/web/assets/index-BKlppse6.css
+cafe-app/web/assets/index-DWz4fAQE.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

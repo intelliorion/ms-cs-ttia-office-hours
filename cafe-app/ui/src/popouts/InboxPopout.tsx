@@ -142,7 +142,7 @@ export function InboxPopout() {
           <div className="ib-well-r">
             <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={working} title={lockedWhy} data-autofocus
               onChange={(e) => void dropFiles(e.target.files)} />
-            <div className="hint">To tell the Café what to do, use the command bar at the top.</div>
+            <div className="hint">To tell the Café what to do, use the assistant at the top (Ctrl+K).</div>
           </div>
           <div className="ib-under">
             <span>A form export imports its ideas; for a line-by-line report use <button className="link-btn" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import with a report</button></span>

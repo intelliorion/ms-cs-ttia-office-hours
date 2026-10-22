@@ -4,6 +4,7 @@ export interface ChatActionView {
 export interface ChatEntryView {
   id: string; at: string; text: string; reply: string; actions: ChatActionView[]; problems: string[]; error?: string;
   kind?: 'command' | 'question' | 'unclear'; highlight?: string[]; about?: string; trace?: { text: string; size: number }[][];
+  thread?: string; steps?: { kind: 'search' | 'read'; text: string; found?: number }[]; followups?: string[];
 }
 
 export const STATUS_WORD: Record<ChatActionView['status'], string> = {
@@ -43,6 +44,12 @@ const RANK: Record<string, number> = { Idea: 0, Team: 1, Person: 2, Capability: 
 
 /** Stars whose name (or Café ID) contains the query: names starting with it first, then ideas, teams and people before the rest. */
 export function searchStars(nodes: { id: string; type: string; label: string; attrs?: Record<string, unknown> }[], query: string, limit = 8): StarHit[] {
+  // "@idea:desk", "@person:", "@team:gss": narrow to one kind first.
+  const kind = /^(idea|person|team|capability|pain|system|support|round|tool|division):(.*)$/i.exec(query.trim());
+  if (kind) {
+    const type = KIND_OF[kind[1].toLowerCase()];
+    return searchStars(nodes.filter((n) => n.type === type), kind[2], limit);
+  }
   const q = query.trim().toLowerCase();
   const score = (n: (typeof nodes)[number]) => {
     const l = n.label.toLowerCase(); const cafe = String(n.attrs?.cafeId ?? '').toLowerCase();
@@ -60,4 +67,50 @@ export function searchStars(nodes: { id: string; type: string; label: string; at
 export function insertMention(text: string, start: number, caret: number, label: string): { text: string; caret: number } {
   const piece = `@${label} `;
   return { text: text.slice(0, start) + piece + text.slice(caret).replace(/^ /, ''), caret: start + piece.length };
+}
+
+const KIND_OF: Record<string, string> = {
+  idea: 'Idea', person: 'Person', team: 'Team', capability: 'Capability', pain: 'PainPoint', system: 'System', support: 'Support', round: 'Round', tool: 'Tool', division: 'Entity',
+};
+
+/** The / shortcuts: what each does, shown as you type "/". */
+export const SLASH = [
+  { cmd: '/new', hint: 'Start a new chat' },
+  { cmd: '/grow', hint: 'Read the idea on screen again and add what it finds' },
+  { cmd: '/undo', hint: 'Undo the last change in this chat' },
+  { cmd: '/import', hint: 'Open the Import' },
+  { cmd: '/rounds', hint: 'Open Rounds' },
+] as const;
+export type SlashCmd = (typeof SLASH)[number]['cmd'];
+/** The shortcuts matching what is typed, while the message is a bare "/word". */
+export const slashMatches = (text: string) => (/^\/\w*$/.test(text) ? SLASH.filter((s) => s.cmd.startsWith(text.toLowerCase())) : []);
+
+export type Segment = string | { id: string; label: string };
+/** The text cut into plain runs and star names (longest names first, whole words only), so the names can show as chips. */
+export function chipSegments(text: string, stars: { id: string; label: string }[]): Segment[] {
+  const found: { start: number; end: number; id: string; label: string }[] = [];
+  const word = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
+  for (const s of [...stars].filter((x) => x.label.length >= 3).sort((a, b) => b.label.length - a.label.length)) {
+    for (let i = text.indexOf(s.label); i !== -1; i = text.indexOf(s.label, i + 1)) {
+      const end = i + s.label.length;
+      if (word(text[i - 1]) || word(text[end])) continue;
+      if (found.some((f) => i < f.end && end > f.start)) continue;
+      found.push({ start: i, end, id: s.id, label: s.label });
+    }
+  }
+  found.sort((a, b) => a.start - b.start);
+  const out: Segment[] = []; let at = 0;
+  for (const f of found) { if (f.start > at) out.push(text.slice(at, f.start)); out.push({ id: f.id, label: f.label }); at = f.end; }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+}
+
+/** What to offer on an empty chat, from what is on screen and what is waiting. */
+export function suggestionsFor(ctx: { focusType?: string; waiting?: number }): string[] {
+  if (ctx.focusType === 'Idea') return ['Who leads this?', 'Grow it', 'Which ideas share a capability with this one?', 'What does this idea say about its current process?'];
+  if (ctx.focusType) return ['Which ideas are linked to this?', 'What is related to this?', 'Which of those are in GSS?', 'Rename this to …'];
+  return [
+    ...(ctx.waiting ? ['What is waiting for me in the Import?'] : []),
+    'Which capability is needed by the most ideas?', 'Which pain points come up in more than one idea?', 'How many ideas does each function have, by stage?', 'Put the policy bots in a new round called 2026 Q4',
+  ].slice(0, 4);
 }

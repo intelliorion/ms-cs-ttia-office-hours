@@ -3,6 +3,8 @@ import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
 import { RightPanels } from './panels/ContextPanels';
+import { Assistant } from './layout/Assistant';
+import { useChat } from './state/chat';
 import { Welcome } from './layout/Welcome';
 import { Drawers } from './layout/Drawers';
 import { relatedGraph } from './universe/graphView';
@@ -25,6 +27,7 @@ export default function App() {
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
   // No card for the idea whose details are already showing in the panel.
+  const chatOpen = useChat((c) => c.open);
   const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
   const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
   // "Only related" in the idea panel: the universe gets the one-hop neighbourhood instead of the whole graph.
@@ -76,7 +79,8 @@ export default function App() {
         <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 'calc(var(--sh) - 112px)' }}>
           <IdeasPane />
         </Panel>
-        <RightPanels />
+        {/* The assistant docks in the right column while open; the context panels come back when it closes. */}
+        {!chatOpen && <RightPanels />}
         </>}
         <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
@@ -89,6 +93,7 @@ export default function App() {
               {onlyRelated ? 'Show all' : 'Only related'}</button>
           )}
         </div>
+        <Assistant />
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}
         {popout?.kind === 'outbox' && <OutboxPopout />}

@@ -223,8 +223,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
-      if (prompt.startsWith('TASK: command')) return JSON.stringify(commandFor(prompt));
-      if (prompt.startsWith('TASK: answer')) return JSON.stringify({ answer: 'Here is what the graph holds for that.' });
+      if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },
@@ -237,27 +236,31 @@ export function fakeProvider(): Provider {
   };
 }
 
-/** The command bar, read by rule from the coded command: link, unlink, put … in, rename … to, merge … into, move (a stage). */
-function commandFor(prompt: string) {
-  const m = /"command":\s*"((?:[^"\\]|\\.)*)"/.exec(prompt);
-  const cmd = m ? JSON.parse(`"${m[1]}"`) as string : '';
+/** The Café assistant, by rule from the coded message: a question searches once then answers; link, unlink, put … in,
+ * rename … to, merge … into, grow and move (a stage) are proposed; anything else asks what was meant. */
+function agentFor(prompt: string) {
+  const data = JSON.parse(prompt.slice(prompt.indexOf('<<<DATA') + 7, prompt.indexOf('DATA>>>')));
+  const cmd: string = data.message ?? '';
   const codes = [...cmd.matchAll(/\[([A-Z]\d+)\]/g)].map((x) => x[1]);
   const [a, b] = codes;
-  const say = (reply: string, actions: unknown[]) => ({ kind: 'command', reply, actions });
+  const focus: string | undefined = data.focus;
+  const propose = (reply: string, actions: unknown[]) => ({ next: 'propose', thought: 'Working out the change', reply, actions });
   if (/\?\s*$/.test(cmd)) {
-    return { kind: 'question', reply: 'You asked a question.', actions: [], ...(codes.length ? { queries: [{ steps: [{ op: 'stars', codes: [codes[0]] }, { op: 'follow' }] }] } : {}) };
+    const start = a ?? focus;
+    if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
+    const found = data.steps?.[0]?.result?.total ?? 0;
+    return { next: 'answer', thought: 'Answering', reply: found ? `The graph links [${start}] to ${found} stars.` : 'The graph does not hold that.', followups: ['Who leads them?', 'Which of those are in BSI?'] };
   }
-  const focus = /"focus":\s*"([A-Z]\d+)"/.exec(prompt)?.[1];
-  if (/^\s*grow/i.test(cmd) && (a ?? focus)) return say(`You asked to grow [${a ?? focus}].`, [{ op: 'grow', a: a ?? focus }]);
-  if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return say(`Remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
-  if (/^\s*link/i.test(cmd) && a && b) return say(`Link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
+  if (/^\s*grow/i.test(cmd) && (a ?? focus)) return propose(`You asked to grow [${a ?? focus}].`, [{ op: 'grow', a: a ?? focus }]);
+  if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return propose(`You asked to remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
+  if (/^\s*link/i.test(cmd) && a && b) return propose(`You asked to link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
   if (/^\s*put/i.test(cmd)) {
     const ideas = codes.filter((c) => c.startsWith('I')); const round = codes.find((c) => c.startsWith('R'));
     const name = /in (?:a )?(?:new )?round (?:called )?"?([^"]+?)"?\s*$/i.exec(cmd)?.[1];
-    return say('Put the ideas in the round.', [{ op: 'round', ideas, ...(round ? { b: round } : name ? { name } : {}) }]);
+    return propose('You asked to put the ideas in a round.', [{ op: 'round', ideas, ...(round ? { b: round } : name ? { name } : {}) }]);
   }
-  if (/^\s*rename/i.test(cmd) && a) return say(`Rename [${a}].`, [{ op: 'rename', a, name: /to\s+(.+)$/i.exec(cmd)?.[1]?.trim() ?? '' }]);
-  if (/^\s*merge/i.test(cmd) && a && b) return say(`Merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
-  if (/^\s*move/i.test(cmd) && a) return say(`Move [${a}] to another stage.`, [{ op: 'stage', a }]);
-  return { kind: 'unclear', reply: "I couldn't tell what you want: say it as a change or a question.", actions: [] };
+  if (/^\s*rename/i.test(cmd) && a) return propose(`You asked to rename [${a}].`, [{ op: 'rename', a, name: /to\s+(.+)$/i.exec(cmd)?.[1]?.trim() || 'Renamed' }]);
+  if (/^\s*merge/i.test(cmd) && a && b) return propose(`You asked to merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
+  if (/^\s*move/i.test(cmd) && a) return propose(`You asked to move [${a}] to another stage.`, [{ op: 'stage', a }]);
+  return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
 }

@@ -242,7 +242,8 @@ async function aiShots(p) {
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector('[data-testid="idea-details"]');
   await sleep(3000);
-  // Growing an idea is a command now: with the idea open, "grow it" in the command bar, then Do it.
+  // Growing an idea is a message now: with the idea open, open the assistant, "grow it", then Do it.
+  await p.click('[data-action="assistant-open"]');
   await p.fill('[data-testid="command-input"]', 'grow it');
   await p.press('[data-testid="command-input"]', 'Enter');
   await p.waitForSelector('[data-action="command-do"]', { timeout: 60000 });
@@ -250,7 +251,7 @@ async function aiShots(p) {
   await p.waitForSelector('.cmd-card.s-done', { timeout: 60000 });
   await sleep(3500);
   await shot(p, '14-grown.png');
-  await p.mouse.click(960, 1070);
+  await p.click('[data-action="assistant-open"]'); // close it again: the Connections panel comes back
   // A confirmed AI link still has Remove.
   const row = p.locator('[data-testid="ctx-connections"] li[data-edge]').first();
   await row.scrollIntoViewIfNeeded();

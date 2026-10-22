@@ -19,6 +19,10 @@ export interface RequestInfo {
   raw: Buffer;
   params: Record<string, string>;
   headers: http.IncomingHttpHeaders;
+  /** Present when the client asked for progress (Accept: application/x-ndjson): each call sends one line before the result. */
+  progress?: (event: unknown) => void;
+  /** True once the client has gone (it pressed Stop or closed the page). */
+  stopped?: () => boolean;
 }
 
 export type Handler = (req: RequestInfo) => Promise<unknown>;
@@ -102,6 +106,17 @@ export function createApp({ root, clock, connector }: ServerOptions): http.Serve
       const body = isJson && raw.length
         ? (JSON.parse(raw.toString('utf8')) as Record<string, unknown>)
         : {};
+      // Streaming: progress lines as the work goes, then the result as the last line. Opt-in, so every other caller is unchanged.
+      if (String(req.headers.accept ?? '').includes('application/x-ndjson')) {
+        let gone = false;
+        res.on('close', () => { if (!res.writableEnded) gone = true; });
+        res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+        const line = (v: unknown) => { if (!gone) res.write(JSON.stringify(v) + '\n'); };
+        const call = () => route.handler({ body, raw, params, headers: req.headers, progress: (e) => line({ type: 'progress', ...(e as object) }), stopped: () => gone });
+        try { line({ type: 'done', data: await (req.method === 'POST' ? exclusive(call) : call()) }); }
+        catch (e) { line({ type: 'error', error: (e as Error).message }); }
+        return res.end();
+      }
       const call = () => route.handler({ body, raw, params, headers: req.headers });
       return send(res, 200, await (req.method === 'POST' ? exclusive(call) : call()));
     } catch (e) {

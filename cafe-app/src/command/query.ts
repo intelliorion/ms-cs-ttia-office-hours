@@ -15,7 +15,7 @@ const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS'
 
 export interface QueryStep {
   op: (typeof QUERY_OPS)[number];
-  type?: NodeType; codes?: string[]; match?: string;
+  type?: NodeType; codes?: string[]; match?: string; last?: boolean;
   rel?: Relation; dir?: 'out' | 'in' | 'both';
   stage?: string; function?: string; region?: string; round?: string;
   role?: (typeof QUERY_ROLES)[number];
@@ -28,6 +28,7 @@ const STEP_PROPS: Record<string, JsonSchema> = {
   op: { type: 'string', enum: QUERY_OPS },
   type: { type: 'string', enum: NODE_TYPES },
   codes: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 2, maxLength: 8 } },
+  last: { type: 'boolean' },
   match: { type: 'string', minLength: 1, maxLength: 60 },
   rel: { type: 'string', enum: RELATIONS },
   dir: { type: 'string', enum: ['out', 'in', 'both'] },
@@ -52,6 +53,7 @@ export const QUERY_SCHEMA: JsonSchema = {
 export const QUERY_GUIDE = [
   'A query is a list of steps over a set of stars. Each step starts from the set the step before left:',
   '- stars: start a new set: the stars in codes, or every star of type, or those whose label contains match; ideas can also be narrowed by stage, function, region, round.',
+  '  With last: true it starts from the stars the previous answer in this conversation found ("those", "of these", "which of them"), narrowed the same way.',
   '- follow: go to the stars linked to the set, along rel (any when left out), dir out (set → star), in (star → set) or both (the default), keeping type when given.',
   '- filter: keep the stars of type, whose label contains match, or (ideas) with that stage, function, region or round.',
   '- role: from ideas to their people with role (submitter, lead, sponsor, member; anyone when left out), or from people to the ideas they have that role on.',
@@ -91,6 +93,8 @@ export interface QueryWorld {
   rounds: Round[];
   /** The code the AI used for a star → the star's id. */
   idOf: (code: string) => string | undefined;
+  /** The stars the previous answer in the conversation found, for follow-ups. */
+  last?: string[];
 }
 
 const PLURAL: Record<NodeType, string> = {
@@ -143,8 +147,10 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
       let text = '';
       if (s.op === 'stars') {
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
-        set = (s.codes?.length ? coded : w.graph.nodes.map((n) => n.id)).filter((id) => fits(id, s));
-        text = s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
+        const from = s.last ? (w.last ?? []).filter((id) => nodes.has(id)) : s.codes?.length ? coded : w.graph.nodes.map((n) => n.id);
+        set = from.filter((id) => fits(id, s));
+        text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
+          : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
       } else if (s.op === 'follow') {
         const from = new Set(set); const out = new Set<string>();
         for (const e of w.graph.edges) {
@@ -201,7 +207,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
       }
       if (log) trace.push({ text, size: set.length });
       // A broad scan to start from ("every capability") is not lit when later steps narrow it: only what the query found is.
-      const broadStart = s.op === 'stars' && !s.codes?.length && !s.match && steps.indexOf(s) < steps.length - 1;
+      const broadStart = s.op === 'stars' && !s.codes?.length && !s.match && !s.last && steps.indexOf(s) < steps.length - 1;
       // The inner search of an intersect only filters; it is not part of the chain shown.
       if (log && !broadStart) for (const id of set) touched.add(id);
     }

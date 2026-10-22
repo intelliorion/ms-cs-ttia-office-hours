@@ -27,7 +27,7 @@ import {
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { growIdea } from '../ai/grow';
-import { readChat, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
+import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
 import {
@@ -77,10 +77,18 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
 
   // The command bar: the operator's own instructions. The AI proposes; nothing changes until the operator says "Do it".
-  // Only the latest command: the agent keeps no conversation, so the panel shows none (the log keeps the record).
-  add('GET', '/api/chat', async () => ({ entries: (await readChat(root)).slice(-1) }));
-  add('POST', '/api/chat', async ({ body }) => runCommand(root, String(body.text ?? ''), ai, clock, body.focus ? String(body.focus) : undefined,
-    Array.isArray(body.mentions) ? body.mentions.slice(0, 20).map(String) : []));
+  // The Café assistant: conversations, and one message at a time (streamed when the client asks for progress).
+  add('GET', '/api/chat', async () => {
+    const threads = await listThreads(root);
+    return { threads, current: threads[0] ? await readThread(root, threads[0].id) : { thread: null, entries: [] } };
+  });
+  add('GET', '/api/chat/threads/:id', async ({ params }) => readThread(root, params.id));
+  add('POST', '/api/chat', async ({ body, progress, stopped }) => runCommand(root, String(body.text ?? ''), ai, clock, {
+    focus: body.focus ? String(body.focus) : undefined,
+    mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 20).map(String) : [],
+    thread: body.thread ? String(body.thread) : undefined,
+    progress, stopped,
+  }));
   add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock, ai));
   add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));
   add('POST', '/api/chat/:id/undo', async ({ params, body }) => undoChatAction(root, params.id, String(body.actionId ?? ''), clock));

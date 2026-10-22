@@ -13,7 +13,7 @@ import { saveDrop, getItem, updateItem, holdItem, deleteHeld, listItems, type In
 import { readAndScreen, matchStep, understandStep, readDetail, exportRows, HOW_WORDS, TEXT_NOT_KEPT, type TriageRecord, type MatchStep } from './triage';
 import { matchIdea, displayName, ASK_BELOW } from './match';
 import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, fingerprint, type Action, type ActionRecord } from './actions';
-import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus } from './steps';
+import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus, type TrailEntry } from './steps';
 import { checkProposals, type ConflictContext } from './conflicts';
 import { appendHistory, readHistory } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
@@ -284,6 +284,17 @@ function graphDrawn(before: { nodes: { id: string }[]; edges: { id: string }[] }
   return { stars, links, line: `${stars} star${stars === 1 ? '' : 's'} and ${links} link${links === 1 ? '' : 's'} from the form` };
 }
 
+/** "2 pain points", "3 capabilities", "1 system": the new stars the AI's links brought, by kind; else the link count. */
+function foundWords(records: ActionRecord[]): string[] {
+  const links = records.flatMap((r) => (r.action.t === 'graph_links' ? r.action.links : []));
+  const by = new Map<string, Set<string>>();
+  for (const l of links) for (const x of l.newNodes ?? []) { if (!by.has(x.type)) by.set(x.type, new Set()); by.get(x.type)!.add(x.id); }
+  const word: Record<string, [string, string]> = { PainPoint: ['pain point', 'pain points'], Capability: ['capability', 'capabilities'], System: ['system', 'systems'] };
+  const out = [...by.entries()].map(([t, ids]) => `${ids.size} ${(word[t] ?? [t.toLowerCase(), `${t.toLowerCase()}s`])[ids.size === 1 ? 0 : 1]}`);
+  if (!out.length && links.length) out.push(`${links.length} link${links.length === 1 ? '' : 's'} to stars already there`);
+  return out;
+}
+
 /**
  * Step 5 for a form export: the AI reads each new idea's challenge, current process and outcomes, and its pain points,
  * capabilities, tools and systems go into the universe confirmed, under the same conflict rules as any dropped file.
@@ -291,11 +302,13 @@ function graphDrawn(before: { nodes: { id: string }[]; edges: { id: string }[] }
  */
 export async function readNewIdeas(root: string, id: string, ideaIds: string[], connector: Connector, clock: Clock, formLine = ''): Promise<void> {
   const n = ideaIds.length; let read = 0; const failed: string[] = [];
+  const trail: TrailEntry[] = []; const since = new Date().toISOString(); const t0 = Date.now();
   for (const [k, ideaId] of ideaIds.entries()) {
     const idea = await loadIdea(root, ideaId).catch(() => null);
-    if (!idea) { failed.push(ideaId); continue; }
-    await markStep(root, id, { id: 'understand', status: 'running', detail: `Reading ${k + 1} of ${n}: ${idea.title}` });
+    if (!idea) { failed.push(ideaId); trail.push({ title: ideaId, found: [], failed: true }); continue; }
+    await markStep(root, id, { id: 'understand', status: 'running', detail: `Reading ${idea.title}`, of: [k + 1, n], trail: [...trail], since });
     await markStep(root, id, { id: 'check', status: 'running', detail: 'Waiting for the AI to finish reading' });
+    const entry: TrailEntry = { title: idea.title, found: [] };
     try {
       const before = await rebuildGraph(root);
       const { provider, output } = await connector.runWith(extractTask, extractInput(idea, before.nodes));
@@ -320,11 +333,16 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
         }
         await updateItem(root, id, { actions: [...records] });
         for (let i = start; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, item, records, i, clock);
+        entry.found = foundWords(records.slice(start).filter((r) => r.status === 'applied'));
+        if (hold.length) entry.held = hold.length;
       }
       read++;
     } catch {
       failed.push(ideaId);
+      entry.failed = true;
     }
+    trail.push(entry);
+    await markStep(root, id, { id: 'understand', status: 'running', detail: k + 1 < n ? 'Moving to the next idea' : 'Finishing up', of: [k + 1, n], trail: [...trail], since });
     const sofar = recordsOf(await load(root, id)).filter((r) => r.status === 'applied' && r.action.t === 'graph_links');
     await markStep(root, id, { id: 'graph', status: 'running', detail: [formLine, sofar.length ? graphDetail(sofar) : ''].filter(Boolean).join('; ') || 'Reading…' });
   }
@@ -341,7 +359,7 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
   }
   const ai = records.filter((r) => r.status === 'applied' && r.action.t === 'graph_links');
   await markStep(root, id, {
-    id: 'understand', status: read ? 'done' : 'failed',
+    id: 'understand', status: read ? 'done' : 'failed', ms: Date.now() - t0, of: [n, n], trail,
     detail: read === n ? `Read all ${n} new idea${n === 1 ? '' : 's'}` : `Read ${read} of ${n} new ideas; the AI couldn't read ${failed.join(', ')} (use AI suggest links on ${failed.length === 1 ? 'it' : 'them'})`,
   });
   const graphLine = [formLine, ai.length ? graphDetail(ai) : ''].filter(Boolean).join('; ');

@@ -226,3 +226,36 @@ describe('a picture still being read', () => {
     expect(shownKind(other)).toBe('unknown');
   });
 });
+
+describe('what the AI is doing, in words', () => {
+  const at = '2026-10-22T10:00:00Z';
+  const t0 = Date.parse(at);
+  it('names the steps by what they do, and only the AI\'s steps say AI', async () => {
+    const { STEP_WORDS, stepWho } = await import('./inboxHelpers');
+    expect(Object.values(STEP_WORDS)).toEqual(['Save', 'Read', 'Privacy check', 'Find the idea', 'AI reads', 'Update the idea', 'Grow the universe', 'Anything for you']);
+    expect(stepWho('understand', {})).toBe('ai');
+    expect(stepWho('read', {})).toBe('app');
+    expect(stepWho('read', { meta: { readBy: 'ai' } as any })).toBe('ai');
+    expect(stepWho('screen', { meta: { readBy: 'ai' } as any })).toBe('app');
+  });
+  it('a form export: the AI step wins over the waiting check, with the idea title, progress and seconds', async () => {
+    const { nowLine } = await import('./inboxHelpers');
+    const n = nowLine({ type: 'export', steps: [
+      { id: 'understand', status: 'running', at, since: at, detail: 'Reading Desk booking assistant', of: [3, 7] },
+      { id: 'check', status: 'running', at, detail: 'Waiting for the AI to finish reading' },
+    ] }, t0 + 12_000)!;
+    expect(n).toMatchObject({ who: 'ai', step: 'understand', head: 'The AI is reading “Desk booking assistant”', of: [3, 7], secs: 12 });
+    expect(n.sub).toMatch(/pain points, capabilities and systems/);
+  });
+  it('a reply: the AI reads the file about its idea; a picture: the AI looks at it; an app step says what the app does', async () => {
+    const { nowLine } = await import('./inboxHelpers');
+    const reply = nowLine({ type: 'email', triage: { ideaId: 'CAFE-2026-002' } as any, steps: [{ id: 'understand', status: 'running', at, detail: 'Asking the AI…' }] }, t0, () => 'Desk booking assistant')!;
+    expect(reply.head).toBe('The AI is reading this file');
+    expect(reply.sub).toMatch(/about “Desk booking assistant”/);
+    const pic = nowLine({ type: 'note', steps: [{ id: 'read', status: 'running', at, detail: 'Picture: the AI is reading it…' }] }, t0)!;
+    expect(pic).toMatchObject({ who: 'ai', head: 'The AI is looking at the picture' });
+    const scr = nowLine({ type: 'email', steps: [{ id: 'screen', status: 'running', at, detail: '' }] }, t0)!;
+    expect(scr).toMatchObject({ who: 'app', head: 'Checking for personal data' });
+    expect(nowLine({ type: 'email', steps: [{ id: 'screen', status: 'done', at, detail: '' }] }, t0)).toBeNull();
+  });
+});

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { inboxPost } from '../api';
 import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
-  STEP_ORDER, STEP_WORDS, RULE_WORDS, stepGlyph, heldChoices, groupActions, applyableIds, canUndo, askCandidates, isAsking, typeWord, dayOf,
+  STEP_ORDER, STEP_WORDS, STEP_WHAT, stepWho, nowLine, summaryLine, RULE_WORDS, stepGlyph, heldChoices, groupActions, applyableIds, canUndo, askCandidates, isAsking, typeWord, dayOf,
   confidenceWord, handProblems, needsHand, itemHeadline, shownKind, type ActionRecord, type InboxItemView, type Step,
 } from './inboxHelpers';
 
@@ -35,6 +35,17 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
   const go = <T,>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null) => run(label, fn, ok, setMsg);
 
   const steps = item.steps ?? [];
+  // A second hand for the Now strip while something runs (the Import polls the data; this only moves the clock).
+  const live = steps.some((x) => x.status === 'running');
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    setClock(Date.now());
+    const t = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [live]);
+  const now = nowLine(item, clock, ideaTitle);
+  const trail = steps.find((x) => x.id === 'understand')?.trail ?? [];
   const current: Step | undefined = steps.find((s) => s.status === 'running') ?? [...steps].reverse().find((s) => s.status !== 'skipped') ?? steps.at(-1);
   const g = groupActions(item.actions);
   const heldActs = (item.actions ?? []).filter((a) => a.status === 'pending' && !!a.held);
@@ -84,17 +95,57 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
         <>
           <ol className="ib-steps" aria-label="Steps">
             {STEP_ORDER.map((id) => {
-              const s = steps.find((x) => x.id === id);
-              const st = s?.status ?? 'todo';
+              const st0 = steps.find((x) => x.id === id);
+              const st = st0?.status ?? 'todo';
+              const who = stepWho(id, item);
               return (
-                <li key={id} className={`ib-step st-${stepGlyph(st)}`} data-step={id} data-status={st} title={s ? `${STEP_WORDS[id]}: ${s.detail}` : STEP_WORDS[id]}>
-                  <i className="dot" /><span className="w">{STEP_WORDS[id]}</span>
-                  {id === 'understand' && s?.ms ? <span className="ms">{secs(s.ms)}</span> : null}
+                <li key={id} className={`ib-step st-${stepGlyph(st)} who-${who}`} data-step={id} data-status={st} data-who={who}
+                  title={`${STEP_WORDS[id]} (${who === 'ai' ? 'AI' : 'app'}): ${STEP_WHAT[id]}${st0?.detail ? `\n${st0.detail}` : ''}`}>
+                  <i className="dot" />
+                  <span className="w">{STEP_WORDS[id]}</span>
+                  {who === 'ai' ? <span className="ai-tag">AI</span> : null}
+                  {id === 'understand' && st0?.ms ? <span className="ms">{secs(st0.ms)}</span> : null}
                 </li>
               );
             })}
           </ol>
-          {current && <div className="ib-detail" data-testid="step-detail">{current.detail}{current.id === 'understand' && current.ms ? ` · ${secs(current.ms)}` : ''}</div>}
+          {now ? (
+            <div className={`ib-now who-${now.who}`} data-testid="ai-now" data-who={now.who} role="status" aria-live="polite">
+              <span className="ib-orb" aria-hidden="true"><i /><b /></span>
+              <div className="ib-now-t">
+                <div className="ib-now-who">{now.who === 'ai' ? 'The AI is working' : 'The app is working'}</div>
+                <div className="ib-now-h" data-testid="ai-now-head">{now.head}</div>
+                <div className="ib-now-s">{now.sub}</div>
+                {now.of ? <div className="ib-prog" aria-hidden="true"><i style={{ width: `${Math.round((trail.length / now.of[1]) * 100)}%` }} /></div> : null}
+              </div>
+              <div className="ib-now-m">
+                {now.of ? <b>{Math.min(now.of[0], now.of[1])} of {now.of[1]}</b> : null}
+                <span>{now.secs} s</span>
+              </div>
+            </div>
+          ) : summaryLine(item) && !heldFile ? (
+            <div className="ib-detail ib-sum" data-testid="step-detail">{summaryLine(item)}</div>
+          ) : current ? (
+            <div className="ib-detail" data-testid="step-detail">{current.detail}{current.id === 'understand' && current.ms ? ` · ${secs(current.ms)}` : ''}</div>
+          ) : null}
+          {trail.length > 0 && (
+            <details className="ib-trail-box" open={live || expanded} data-testid="ai-trail">
+              <summary>What the AI found <span className="sec-n">{trail.length}</span></summary>
+              <ol className="ib-trail">
+                {[...trail].reverse().map((e, i) => (
+                  <li key={`${e.title}-${trail.length - i}`} className={e.failed ? 'bad' : ''}>
+                    <span className="ib-trail-t">{e.title}</span>
+                    <span className="ib-trail-c">
+                      {e.failed ? <span className="tchip bad">couldn’t read it</span>
+                        : e.found.length ? e.found.map((w) => <span key={w} className="tchip">+ {w}</span>)
+                        : <span className="tchip dim">nothing new</span>}
+                      {e.held ? <span className="tchip you">{e.held} wait{e.held === 1 ? 's' : ''} for you</span> : null}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
         </>
       )}
 

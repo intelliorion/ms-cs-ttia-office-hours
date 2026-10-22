@@ -63,7 +63,12 @@ describe('/api/inbox: exports', () => {
     expect(step(item, 'understand').status).toBe('running');
     await ideaReads.get(item.id);
     const after = (await s.inbox()).items.find((i: any) => i.id === item.id);
-    expect(step(after, 'understand')).toMatchObject({ status: 'done', detail: 'Read all 3 new ideas' });
+    expect(step(after, 'understand')).toMatchObject({ status: 'done', detail: 'Read all 3 new ideas', of: [3, 3] });
+    // The trail says, idea by idea, what the AI found (new stars by kind), so the card can show it as it lands.
+    const trail = step(after, 'understand').trail;
+    expect(trail.map((e: any) => e.title)).toHaveLength(3);
+    expect(trail[0].found.some((w: string) => /capabilit|pain point|system|link/.test(w))).toBe(true);
+    expect(trail.every((e: any) => !e.failed)).toBe(true);
     const links = after.actions.filter((r: any) => r.action.t === 'graph_links');
     expect(links.map((r: any) => r.action.ideaId).sort()).toEqual(['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']);
     expect(links.every((r: any) => r.status === 'applied')).toBe(true);
@@ -102,6 +107,7 @@ describe('/api/inbox: exports', () => {
     const u = after.steps.find((x: any) => x.id === 'understand');
     expect(u.status).toBe('done');
     expect(u.detail).toBe("Read 2 of 3 new ideas; the AI couldn't read CAFE-2026-002 (use AI suggest links on it)");
+    expect(u.trail.map((e: any) => !!e.failed)).toEqual([false, true, false]);
     expect(after.actions.filter((r: any) => r.action.t === 'graph_links' && r.status === 'applied')).toHaveLength(2);
   });
 

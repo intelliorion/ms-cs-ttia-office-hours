@@ -34,7 +34,30 @@ describe('InboxCard', () => {
     expect(el.querySelectorAll('.ib-step.st-ok').length).toBe(4);
     expect(el.querySelectorAll('.ib-step.st-run').length).toBe(1);
     expect(el.querySelectorAll('.ib-step.st-todo').length).toBe(3);
-    expect(el.querySelector('[data-testid="step-detail"]')?.textContent).toBe('Asking the AI…');
+    // While the AI works, the Now strip says what it is doing in a sentence; the AI's step carries an AI tag.
+    expect(el.querySelector('[data-testid="ai-now"]')?.getAttribute('data-who')).toBe('ai');
+    expect(el.querySelector('[data-testid="ai-now-head"]')?.textContent).toBe('The AI is reading this file');
+    expect([...el.querySelectorAll('.ib-step.who-ai')].map((x) => x.getAttribute('data-step'))).toEqual(['understand']);
+  });
+
+  it('a form export being read: progress, the idea now being read, and a trail of what the AI found, newest first', () => {
+    const el = mount(base({ type: 'export', name: 'subs.csv', steps: [
+      s('receive', 'done'), s('read', 'done'), s('screen', 'done'), s('match', 'done'),
+      { id: 'understand', status: 'running', at, since: at, detail: 'Reading Travel policy assistant', of: [3, 3],
+        trail: [{ title: 'Desk booking assistant', found: ['2 pain points', '1 system'] }, { title: 'Expense anomaly finder', found: [], failed: true }] },
+      s('context', 'done'), s('graph', 'running', '7 stars and 9 links from the form'), s('check', 'running', 'Waiting'),
+    ] }));
+    expect(el.querySelector('[data-testid="ai-now-head"]')?.textContent).toBe('The AI is reading “Travel policy assistant”');
+    expect(el.querySelector('.ib-now-m b')?.textContent).toBe('3 of 3');
+    const rows = [...el.querySelectorAll('.ib-trail li')].map((li) => li.textContent);
+    expect(rows).toEqual(['Expense anomaly finder' + 'couldn’t read it', 'Desk booking assistant' + '+ 2 pain points+ 1 system']);
+    expect((el.querySelector('[data-testid="ai-trail"]') as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('nothing running: no Now strip, the last step\'s detail instead', () => {
+    const el = mount(base({ steps: [s('receive', 'done'), s('read', 'done'), s('screen', 'done'), s('match', 'done'), s('understand', 'done', 'A reply on the desk idea'), s('context', 'done'), s('graph', 'done'), s('check', 'done', 'Done')] }));
+    expect(el.querySelector('[data-testid="ai-now"]')).toBeNull();
+    expect(el.querySelector('[data-testid="step-detail"]')?.textContent).toBe('AI: A reply on the desk idea · Universe: graph · Done');
   });
 
   it('a near-duplicate star offers three choices; "Use the existing star" applies with use-existing', async () => {

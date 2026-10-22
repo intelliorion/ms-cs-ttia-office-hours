@@ -7,7 +7,17 @@ import { getItem, updateItem, type InboxItem } from './store';
  */
 export type StepId = 'receive' | 'read' | 'screen' | 'match' | 'understand' | 'context' | 'graph' | 'check';
 export type StepStatus = 'running' | 'done' | 'skipped' | 'needs-you' | 'failed';
-export interface Step { id: StepId; status: StepStatus; at: string; detail: string; ms?: number }
+/** One line of what the AI found while a step ran (a form export's ideas, one entry each). */
+export interface TrailEntry { title: string; found: string[]; held?: number; failed?: true }
+export interface Step {
+  id: StepId; status: StepStatus; at: string; detail: string; ms?: number;
+  /** Progress through a list (the 3rd of 7 ideas is [3, 7]). */
+  of?: [number, number];
+  /** What the AI found so far, newest last. */
+  trail?: TrailEntry[];
+  /** When a running step began (at is refreshed while it runs). */
+  since?: string;
+}
 
 export const STEP_ORDER: StepId[] = ['receive', 'read', 'screen', 'match', 'understand', 'context', 'graph', 'check'];
 export const STEP_WORDS: Record<StepId, string> = {

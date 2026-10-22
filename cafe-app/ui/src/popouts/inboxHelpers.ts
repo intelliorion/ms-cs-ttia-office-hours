@@ -199,9 +199,75 @@ export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok'
 /** Mirrors the server's step log (src/inbox/steps.ts). */
 export type StepId = 'receive' | 'read' | 'screen' | 'match' | 'understand' | 'context' | 'graph' | 'check';
 export type StepStatus = 'running' | 'done' | 'skipped' | 'needs-you' | 'failed';
-export interface Step { id: StepId; status: StepStatus; at: string; detail: string; ms?: number }
+export interface TrailEntry { title: string; found: string[]; held?: number; failed?: true }
+export interface Step { id: StepId; status: StepStatus; at: string; detail: string; ms?: number; of?: [number, number]; trail?: TrailEntry[]; since?: string }
 export const STEP_ORDER: StepId[] = ['receive', 'read', 'screen', 'match', 'understand', 'context', 'graph', 'check'];
-export const STEP_WORDS: Record<StepId, string> = { receive: 'Receive', read: 'Read', screen: 'Screen', match: 'Match', understand: 'Understand', context: 'Update context', graph: 'Build the graph', check: 'Check' };
+/** What each step is called on the card: what it does, in plain words. */
+export const STEP_WORDS: Record<StepId, string> = {
+  receive: 'Save', read: 'Read', screen: 'Privacy check', match: 'Find the idea', understand: 'AI reads', context: 'Update the idea', graph: 'Grow the universe', check: 'Anything for you',
+};
+/** One sentence per step: what happens there and who does it (shown on hover). */
+export const STEP_WHAT: Record<StepId, string> = {
+  receive: 'The app keeps a copy of the file.',
+  read: 'The app pulls the text out of the file. For a picture or a scanned PDF, the AI reads it instead.',
+  screen: 'The app looks for names with ids, phones or emails. If it finds them it stops here, and the AI never sees the file.',
+  match: 'The app works out which idea this is about: by Café ID, the title in the subject, or the sender.',
+  understand: 'The AI reads the text and says what it is about, and which facts and stars it holds. It proposes; the app decides.',
+  context: 'The app writes the facts into the idea: answers, builder, flags.',
+  graph: 'The app adds the new stars and links to the universe.',
+  check: 'The app holds anything that clashes with what is already known, and tells you.',
+};
+
+/** Who does a step on this item: the AI only reads (step 5, and step 2 for a picture); the app does the rest. */
+export function stepWho(id: StepId, item: Pick<InboxItemView, 'meta' | 'steps'>): 'ai' | 'app' {
+  if (id === 'understand') return 'ai';
+  if (id === 'read') {
+    const d = item.steps?.find((x) => x.id === 'read')?.detail ?? '';
+    return item.meta?.readBy === 'ai' || /the AI/.test(d) ? 'ai' : 'app';
+  }
+  return 'app';
+}
+
+const APP_NOW: Record<StepId, [string, string]> = {
+  receive: ['Saving a copy', 'The file is kept as it came, so nothing is lost.'],
+  read: ['Pulling the text out', 'Opening the file and reading its text and tables.'],
+  screen: ['Checking for personal data', 'Before any AI sees it: names with ids, phone numbers, emails.'],
+  match: ['Finding the idea', 'By Café ID, the title in the subject, or the sender.'],
+  understand: ['Reading', ''],
+  context: ['Updating the idea', 'Writing the answers and facts into the idea.'],
+  graph: ['Growing the universe', 'Adding the new stars and links.'],
+  check: ['Checking for clashes', 'Comparing what came in with what the app already knows.'],
+};
+
+export interface NowLine { who: 'ai' | 'app'; step: StepId; head: string; sub: string; of?: [number, number]; secs: number }
+
+/**
+ * The sentence for the card's Now strip: what is happening this moment, and who is doing it. The AI's step wins over
+ * the app's waiting steps (a form export's check waits while the AI reads). null when nothing runs.
+ */
+export function nowLine(item: Pick<InboxItemView, 'steps' | 'meta' | 'type' | 'triage'>, now: number, ideaTitle?: (id: string) => string): NowLine | null {
+  const running = (item.steps ?? []).filter((x) => x.status === 'running');
+  if (!running.length) return null;
+  const s = running.find((x) => x.id === 'understand') ?? running.find((x) => stepWho(x.id, item) === 'ai') ?? running[0];
+  const secs = Math.max(0, Math.round((now - Date.parse(s.since ?? s.at)) / 1000));
+  const who = stepWho(s.id, item);
+  if (s.id === 'understand') {
+    if (s.of) {
+      const title = s.detail.startsWith('Reading ') ? s.detail.slice(8) : '';
+      return {
+        who, step: s.id, of: s.of, secs,
+        head: title ? `The AI is reading “${title}”` : `The AI is reading the new ideas`,
+        sub: 'Finding the pain points, capabilities and systems in its challenge, current process and outcomes.',
+      };
+    }
+    if (item.type === 'export') return { who, step: s.id, secs, head: 'The AI is getting ready to read the new ideas', sub: 'One idea at a time; each one lands in the universe as it is read.' };
+    const idea = item.triage?.ideaId && ideaTitle ? ideaTitle(item.triage.ideaId) : '';
+    return { who, step: s.id, secs, head: 'The AI is reading this file', sub: `Working out what it says${idea ? ` about “${idea}”` : ''}, and which facts and stars it holds.` };
+  }
+  if (s.id === 'read' && who === 'ai') return { who, step: s.id, secs, head: 'The AI is looking at the picture', sub: 'Writing out every line of text it can see, then saying in two sentences what it shows.' };
+  const [head, sub] = APP_NOW[s.id];
+  return { who, step: s.id, secs, head, sub };
+}
 /** The CSS suffix of a step's dot. */
 export const stepGlyph = (s: StepStatus | 'todo') => ({ running: 'run', done: 'ok', skipped: 'skip', 'needs-you': 'you', failed: 'bad', todo: 'todo' } as const)[s];
 
@@ -308,3 +374,18 @@ export const RULE_WORDS: Record<string, string> = {
   'contradicts-fact': 'Contradiction', 'person-star': 'A person', 'near-duplicate-star': 'Looks the same', 'low-confidence': 'Not sure',
   'two-ideas': 'Two ideas', 'duplicate-idea': 'Duplicate idea', screened: 'Screened',
 };
+
+/**
+ * The finished card's one line: what the AI did and what the universe gained, then whether anything waits.
+ * "AI: Read all 7 new ideas · Universe: 30 stars and 41 links from the form; 15 links added · Done"
+ */
+export function summaryLine(item: Pick<InboxItemView, 'steps'>): string | null {
+  const st = (id: StepId) => item.steps?.find((x) => x.id === id);
+  if (!item.steps?.length || item.steps.some((x) => x.status === 'running')) return null;
+  const u = st('understand'); const g = st('graph'); const c = st('check');
+  const parts: string[] = [];
+  if (u && u.status !== 'skipped' && u.detail) parts.push(`AI: ${u.detail}`);
+  if (g && g.status === 'done' && g.detail) parts.push(`Universe: ${g.detail}`);
+  if (c?.detail) parts.push(c.detail);
+  return parts.length ? parts.join(' · ') : null;
+}

@@ -402,9 +402,10 @@ async function agenticShots(p, restart) {
   await p.setInputFiles('[data-testid="inbox-file"]', path.join(kit, '14-whiteboard.png'));
   await p.waitForSelector('.ib-card .ib-step[data-step="read"][data-status="running"]', { timeout: 20000 });
   await sleep(300);
-  const reading = await p.textContent('.ib-flight [data-testid="step-detail"]');
+  // The Now strip says in a sentence what the AI is doing (other in-flight cards have no running step).
+  const reading = await p.textContent('.ib-flight [data-testid="ai-now"][data-who="ai"] [data-testid="ai-now-head"]');
   console.log(`  picture mid-read: "${reading}"`);
-  assert(/^Picture: the AI is reading it/.test(reading ?? ''), 'the picture card did not say the AI is reading it');
+  assert(reading === 'The AI is looking at the picture', 'the picture card did not say the AI is looking at it');
   await shot(p, '65-picture-reading.png');
   await p.waitForSelector('.ib-open [data-testid="ai-read"]', { timeout: 60000 });
   await sleep(600);

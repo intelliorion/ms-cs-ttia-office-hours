@@ -16,11 +16,32 @@ export async function readYaml<T>(file: string): Promise<T | undefined> {
   return text === undefined ? undefined : (YAML.parse(text) as T);
 }
 
-export async function writeFileAtomic(file: string, content: string | Uint8Array): Promise<void> {
+/** Windows refuses a rename while another program has the file open: antivirus scanning a file just written, or OneDrive syncing it. */
+const HELD = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Moves a file. A rename Windows refuses for a moment is tried again for up to `retryMs`, backing off; if it is
+ * still refused, the file is copied over and the original removed (best effort), so the operator never has to.
+ */
+export async function moveFile(from: string, to: string, opts: { retryMs?: number } = {}): Promise<void> {
+  const until = Date.now() + (opts.retryMs ?? 3000);
+  for (let wait = 25; ; wait = Math.min(wait * 2, 500)) {
+    try { await fs.rename(from, to); return; } catch (e) {
+      if (!HELD.has((e as NodeJS.ErrnoException).code ?? '')) throw e;
+      if (Date.now() >= until) break;
+      await pause(wait);
+    }
+  }
+  await fs.copyFile(from, to);
+  await fs.rm(from, { force: true }).catch(() => {});
+}
+
+export async function writeFileAtomic(file: string, content: string | Uint8Array, opts: { retryMs?: number } = {}): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await fs.writeFile(tmp, content);
-  await fs.rename(tmp, file);
+  try { await moveFile(tmp, file, opts); } catch (e) { await fs.rm(tmp, { force: true }).catch(() => {}); throw e; }
 }
 
 export async function writeYaml(file: string, data: unknown): Promise<void> {

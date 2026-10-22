@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { paths } from '../workspace/paths';
-import { readText, writeFileAtomic } from '../workspace/files';
+import { moveFile, readText, writeFileAtomic } from '../workspace/files';
 import { slugify } from '../ideas/store';
 import { systemClock, type Clock } from '../clock';
 import { typeOfName, type InboxMeta, type InboxType } from './parse';
@@ -165,7 +165,7 @@ export async function holdItem(root: string, id: string, reasons: string[], read
   };
   await writeItem(root, next);
   if (heldFrom && !(await exists(abs(root, file))) && (await exists(abs(root, heldFrom)))) {
-    await fs.rename(abs(root, heldFrom), abs(root, file));
+    await moveFile(abs(root, heldFrom), abs(root, file));
   }
   return next;
 }

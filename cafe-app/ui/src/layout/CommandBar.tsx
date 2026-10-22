@@ -9,7 +9,10 @@ import { EXAMPLES, KIND_WORD, STATUS_WORD, canUndo, waitingCount, type ChatEntry
  * The agent keeps no conversation, so the panel shows only the current command: a new one replaces it.
  */
 export function CommandBar() {
-  const { refresh, ai, highlight, setHighlight } = useStore();
+  const { refresh, ai, highlight, setHighlight, leftView, selectedId, graph } = useStore();
+  // What "this" means: the idea open on the left, else the star clicked in the universe.
+  const focus = leftView.kind === 'idea' ? `idea:${leftView.id}` : selectedId;
+  const focusLabel = focus ? graph?.nodes.find((n: any) => n.id === focus)?.label : undefined;
   const [current, setCurrent] = useState<ChatEntryView | null>(null);
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -33,7 +36,7 @@ export function CommandBar() {
     const t = text.trim();
     if (!t || thinking) return;
     setOpen(true); setThinking(t); setText(''); setError(null); setHighlight(null);
-    try { const e = await chatSend(t); setCurrent(e); setHighlight(e.highlight ?? null); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
+    try { const e = await chatSend(t, focusLabel ? focus : null); setCurrent(e); setHighlight(e.highlight ?? null); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
   };
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     setBusy(true); setError(null);
@@ -46,12 +49,13 @@ export function CommandBar() {
     <div className={`cmd${open ? ' open' : ''}${thinking ? ' thinking' : ''}`} ref={wrap}>
       <div className="cmd-bar">
         <span className="cmd-spark" aria-hidden="true">✦</span>
+        {focusLabel && <span className="cmd-about" data-testid="command-about" title={`"This" and "it" mean ${focusLabel}`}>About: {focusLabel}</span>}
         <input ref={input} value={text} onChange={(e) => setText(e.target.value)} onFocus={() => setOpen(true)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') { e.preventDefault(); void send(); }
             if (e.key === 'Escape') { e.preventDefault(); setOpen(false); input.current?.blur(); }
           }}
-          placeholder="Tell the Café what to do…" aria-label="Command" data-testid="command-input" maxLength={600} disabled={!!thinking} />
+          placeholder={focusLabel ? 'Ask or tell about this…' : 'Tell the Café what to do…'} aria-label="Command" data-testid="command-input" maxLength={600} disabled={!!thinking} />
         {waiting > 0 && !open && <span className="cmd-badge" title="Actions waiting for you">{waiting}</span>}
         {highlight && (
           <button className="cmd-lit" data-action="command-clear-lit" title="Clear the highlight" onClick={() => setHighlight(null)}>
@@ -71,7 +75,7 @@ export function CommandBar() {
             )}
             {entries.map((e) => (
               <div key={e.id} className="cmd-entry" data-entry={e.id}>
-                <div className="cmd-me">{e.text}</div>
+                <div className="cmd-me">{e.about && <span className="cmd-me-about">About {e.about}</span>}{e.text}</div>
                 <div className={`cmd-ai k-${e.kind ?? 'command'}`}>
                   {e.kind && <div className="cmd-kind">{KIND_WORD[e.kind]}</div>}
                   {e.error ? <div className="cmd-err">{e.error}</div> : <div className="cmd-reply">{e.reply}</div>}

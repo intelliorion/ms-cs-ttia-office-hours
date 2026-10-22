@@ -26,6 +26,7 @@ import {
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
+import { growIdea } from '../ai/grow';
 import { readChat, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
@@ -78,8 +79,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // The command bar: the operator's own instructions. The AI proposes; nothing changes until the operator says "Do it".
   // Only the latest command: the agent keeps no conversation, so the panel shows none (the log keeps the record).
   add('GET', '/api/chat', async () => ({ entries: (await readChat(root)).slice(-1) }));
-  add('POST', '/api/chat', async ({ body }) => runCommand(root, String(body.text ?? ''), ai, clock));
-  add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock));
+  add('POST', '/api/chat', async ({ body }) => runCommand(root, String(body.text ?? ''), ai, clock, body.focus ? String(body.focus) : undefined));
+  add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock, ai));
   add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));
   add('POST', '/api/chat/:id/undo', async ({ params, body }) => undoChatAction(root, params.id, String(body.actionId ?? ''), clock));
 
@@ -140,25 +141,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const { provider, label } = await ai.runWith(pingTask, {}, { timeoutMs: 30_000 });
     return { ok: true, provider, label, ms: Date.now() - t0 };
   })());
-  add('POST', '/api/ai/extract', async ({ body }) => byHand(async () => {
-    const idea = await loadIdea(root, String(body.id));
-    const before = await rebuildGraph(root);
-    const { provider, output } = await ai.runWith(extractTask, extractInput(idea, before.nodes));
-    const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
-    const { ideas } = await listIdeas(root);
-    const ctx: ConflictContext = {
-      idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),
-      match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [],
-    };
-    const { apply, hold } = checkProposals(ctx, [{ t: 'graph_links', ideaId: idea.id, links: planned.links }]);
-    for (const a of apply) if (a.t === 'graph_links') for (const l of a.links) await appendAiLink(root, l);
-    // A person never becomes a star, not even a pending one: a person-star hold stays in the answer only.
-    for (const h of hold) if (h.action.t === 'graph_links' && h.rule !== 'person-star') for (const l of h.action.links) await appendAiLink(root, { ...l, status: 'pending' });
-    const after = await rebuildGraph(root);
-    const ids = new Set(planned.links.map((l) => edgeId(l.from, l.rel, l.to)));
-    const added = after.edges.filter((e) => ids.has(e.id));
-    return { added: added.filter((e) => e.confirmed).length, held: hold.map(({ action: _a, ...h }) => h), links: added, suggestions: { newNodes: planned.newNodes } };
-  })());
+  add('POST', '/api/ai/extract', async ({ body }) => byHand(() => growIdea(root, ai, String(body.id)))());
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(async () => {
     const idea = await loadIdea(root, String(body.id));
     const { provider, output } = await ai.runWith(reviewSuggestTask, { idea: extractInput(idea, []).idea });

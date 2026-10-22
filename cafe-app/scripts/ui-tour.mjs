@@ -242,12 +242,15 @@ async function aiShots(p) {
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector('[data-testid="idea-details"]');
   await sleep(3000);
-  // Links and Grow live in the right-hand Connections panel now.
-  await p.click('[data-testid="ctx-connections"] [data-action="ai-grow"]');
-  await p.waitForSelector('[data-testid="ctx-connections"] .pop-notice:has-text("Added")', { timeout: 60000 });
+  // Growing an idea is a command now: with the idea open, "grow it" in the command bar, then Do it.
+  await p.fill('[data-testid="command-input"]', 'grow it');
+  await p.press('[data-testid="command-input"]', 'Enter');
+  await p.waitForSelector('[data-action="command-do"]', { timeout: 60000 });
+  await p.click('[data-action="command-do"]');
+  await p.waitForSelector('.cmd-card.s-done', { timeout: 60000 });
   await sleep(3500);
-  await p.locator('[data-testid="ctx-connections"] [data-action="ai-grow"]').scrollIntoViewIfNeeded();
   await shot(p, '14-grown.png');
+  await p.mouse.click(960, 1070);
   // A confirmed AI link still has Remove.
   const row = p.locator('[data-testid="ctx-connections"] li[data-edge]').first();
   await row.scrollIntoViewIfNeeded();
@@ -392,7 +395,6 @@ async function agenticShots(p, restart) {
   await p.waitForSelector(D);
   await sleep(3000);
   const C = '[data-testid="ctx-connections"]';
-  await p.locator(`${C} [data-action="ai-grow"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await sleep(500);
   const waiting = await p.locator(`${C} ul.links .tag:has-text("Waiting on you")`).count();
   const aiRows = await p.locator(`${C} ul.links [data-action="remove-link"]`).count();

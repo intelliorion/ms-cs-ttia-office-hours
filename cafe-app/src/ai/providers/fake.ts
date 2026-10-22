@@ -247,6 +247,8 @@ function commandFor(prompt: string) {
   if (/\?\s*$/.test(cmd)) {
     return { kind: 'question', reply: 'You asked a question.', actions: [], ...(codes.length ? { queries: [{ steps: [{ op: 'stars', codes: [codes[0]] }, { op: 'follow' }] }] } : {}) };
   }
+  const focus = /"focus":\s*"([A-Z]\d+)"/.exec(prompt)?.[1];
+  if (/^\s*grow/i.test(cmd) && (a ?? focus)) return say(`You asked to grow [${a ?? focus}].`, [{ op: 'grow', a: a ?? focus }]);
   if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return say(`Remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
   if (/^\s*link/i.test(cmd) && a && b) return say(`Link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
   if (/^\s*put/i.test(cmd)) {

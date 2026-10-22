@@ -27,7 +27,7 @@ describe('CommandBar', () => {
   let refresh: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     refresh = vi.fn(async () => {});
-    useStore.setState({ refresh, ai: { provider: 'claude', label: 'Claude Code' } as any });
+    useStore.setState({ refresh, ai: { provider: 'claude', label: 'Claude Code' } as any, leftView: { kind: 'list' } as any, selectedId: null, graph: { nodes: [{ id: 'idea:CAFE-2026-001', type: 'Idea', label: 'Vendor contract summariser' }, { id: 'team:gss', type: 'Team', label: 'GSS' }], edges: [] } });
     vi.mocked(getChat).mockResolvedValue({ entries: [] });
   });
 
@@ -38,7 +38,7 @@ describe('CommandBar', () => {
     const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
     await act(async () => { input.focus(); type(input, 'link Zainab Okafor to BSI'); });
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
-    expect(chatSend).toHaveBeenCalledWith('link Zainab Okafor to BSI');
+    expect(chatSend).toHaveBeenCalledWith('link Zainab Okafor to BSI', null);
     expect(el.querySelector('[data-testid="command-thinking"]')?.textContent).toBe('Claude Code is reading your command…');
     await act(async () => { finish(proposed); });
     expect(el.querySelector('[data-testid="command-thinking"]')).toBeNull();
@@ -93,6 +93,21 @@ describe('CommandBar', () => {
     expect(el.querySelector('[data-action="command-clear-lit"]')?.textContent).toMatch(/3 stars lit/);
     await act(async () => { (el.querySelector('[data-action="command-clear-lit"]') as HTMLButtonElement).click(); });
     expect(useStore.getState().highlight).toBeNull();
+    act(() => root.unmount()); el.remove();
+  });
+
+  it('knows what is on screen: the open idea (or the clicked star) is shown as About and sent with the message', async () => {
+    vi.mocked(chatSend).mockResolvedValue({ id: 'c4', at: '2026-10-22', text: 'grow it', about: 'Vendor contract summariser', kind: 'command', reply: 'You asked to grow Vendor contract summariser.', problems: [], actions: [] });
+    useStore.setState({ leftView: { kind: 'idea', id: 'CAFE-2026-001' } as any });
+    const { el, root } = await mount();
+    expect(el.querySelector('[data-testid="command-about"]')?.textContent).toBe('About: Vendor contract summariser');
+    const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
+    await act(async () => { input.focus(); type(input, 'grow it'); });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(chatSend).toHaveBeenLastCalledWith('grow it', 'idea:CAFE-2026-001');
+    expect(el.querySelector('.cmd-me-about')?.textContent).toBe('About Vendor contract summariser');
+    await act(async () => { useStore.setState({ leftView: { kind: 'list' } as any, selectedId: 'team:gss' }); });
+    expect(el.querySelector('[data-testid="command-about"]')?.textContent).toBe('About: GSS');
     act(() => root.unmount()); el.remove();
   });
 

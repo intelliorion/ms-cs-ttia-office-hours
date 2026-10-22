@@ -223,6 +223,30 @@ describe('the command bar', () => {
     expect(entry).toMatchObject({ kind: 'unclear', reply: 'Say it as a change or a question.', actions: [], problems: [] });
   });
 
+  it('"grow it" with an idea on screen: the AI gets that idea as the focus, Do it reads it again and adds links, Undo takes them back', async () => {
+    const focusOf = (p: string) => JSON.parse(p.slice(p.indexOf('<<<DATA') + 7, p.indexOf('DATA>>>'))).focus;
+    const { root, prompts, ai } = await setup((p) => (p.startsWith('TASK: extract')
+      ? { nodes: [{ type: 'Capability', label: 'Clause finding' }], links: [{ from: 'idea', to: 'Clause finding', rel: 'NEEDS', description: 'Finds clauses', confidence: 0.9 }] }
+      : { reply: 'You asked to grow [' + focusOf(p) + '].', actions: [{ op: 'grow', a: focusOf(p) }] }));
+    const entry = await runCommand(root, 'grow it', ai, clock, 'idea:CAFE-2026-002');
+    expect(focusOf(prompts[0])).toMatch(/^I\d+$/);
+    expect(entry.about).toBe('Procurement FAQ bot');
+    expect(entry.reply).toBe('You asked to grow Procurement FAQ bot.');
+    expect(entry.actions[0].label).toBe('Read Procurement FAQ bot again with the AI and add the pain points, capabilities and systems it finds');
+    const done = await doActions(root, entry.id, undefined, clock, ai);
+    expect(done.actions[0]).toMatchObject({ status: 'done', note: '1 link added, 1 new star' });
+    expect((await rels(root))).toContain('idea:CAFE-2026-002 NEEDS capability:clause-finding');
+    await undoChatAction(root, entry.id, 'a1', clock);
+    expect((await rels(root))).not.toContain('idea:CAFE-2026-002 NEEDS capability:clause-finding');
+  });
+
+  it('a person on screen is still only a code', async () => {
+    const { root, prompts, ai } = await setup(() => ({ kind: 'unclear', reply: 'Say more.', actions: [] }));
+    await runCommand(root, 'what about them?', ai, clock, 'person:zainab-okafor');
+    expect(prompts[0]).not.toMatch(/Zainab|Okafor/);
+    expect(prompts[0]).toMatch(/"focus":"P\d+"/);
+  });
+
   it('a new command cancels what the last one left waiting, saying so', async () => {
     const { root, ai } = await setup(() => ({ reply: 'Link.', actions: [{ op: 'link', a: 'P1', b: 'T1' }] }));
     const first = await runCommand(root, 'link Zainab Okafor to BSI', ai, clock);

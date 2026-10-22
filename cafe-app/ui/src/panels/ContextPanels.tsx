@@ -6,7 +6,6 @@ import { StageChart, SupportChart, FunctionChart, Waiting } from './Charts';
 import { LinkTable } from '../popouts/LinkTable';
 import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
-import { extractNotice, NO_AI_TIP } from '../popouts/aiUi';
 import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
 import { ideasAround, rightContext, type RightContext } from './contextHelpers';
@@ -73,29 +72,21 @@ function IdeaSubmission({ id }: { id: string }) {
   );
 }
 
-/** An idea in the universe: its links (with Grow) and its history, as two tabs. */
+/** An idea in the universe: its links and its history, as two tabs. To grow it, ask the command bar ("grow it"). */
 function IdeaConnections({ id }: { id: string }) {
-  const { graph, state, refresh, ai } = useStore();
+  const { graph, state, refresh } = useStore();
   const [tab, setTab] = useState<'links' | 'history'>('links');
   const [busy, setBusy] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   // Re-read the history whenever the workspace changes, so it follows what the left panel does.
   useEffect(() => { let live = true; getHistory(id).then((h) => { if (live) setHistory(h); }, () => { if (live) setHistory(null); }); return () => { live = false; }; }, [id, state]);
   useEffect(() => { setMsg(null); setTab('links'); }, [id]);
   const links = ideaLinks(graph, id);
-  const noAi = !ai?.provider;
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     setBusy(true);
     try { await fn(); setMsg({ text: ok, kind: 'ok' }); } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
     await refresh(); setBusy(false);
-  };
-  const grow = async () => {
-    if (aiBusy || noAi) return;
-    setAiBusy(true); setMsg(null);
-    try { setMsg({ text: extractNotice(await post('/api/ai/extract', { id })), kind: 'ok' }); } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
-    await refresh(); setAiBusy(false);
   };
   return (
     <div className="ctx-scroll" data-testid="ctx-connections">
@@ -105,11 +96,6 @@ function IdeaConnections({ id }: { id: string }) {
       </div>
       {msg && <div className={`pop-notice ${msg.kind}`} role="status">{msg.text}</div>}
       {tab === 'links' ? <>
-        <div className="ai-row">
-          <button className="btn" data-action="ai-grow" disabled={noAi || aiBusy || busy} title={noAi ? NO_AI_TIP : undefined} onClick={() => void grow()}>
-            {aiBusy ? 'Working…' : 'Grow the universe from this idea'}</button>
-          {aiBusy && <span className="ai-busy" role="status">Asking the AI, this can take a minute…</span>}
-        </div>
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
           onRemove={(edgeId) => act(() => post('/api/graph/remove', { edgeId }), 'Link removed.')} />

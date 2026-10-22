@@ -660,7 +660,7 @@ export const lookTask: LookTask = {
 
 // ---------- command bar: the operator's own words, turned into actions the app checks ----------
 
-export const COMMAND_OPS = ['link', 'unlink', 'role', 'round', 'new_round', 'rename', 'merge', 'add_star', 'remove_star', 'stage'] as const;
+export const COMMAND_OPS = ['link', 'unlink', 'role', 'round', 'new_round', 'rename', 'merge', 'add_star', 'remove_star', 'grow', 'stage'] as const;
 export type CommandOp = (typeof COMMAND_OPS)[number];
 export const COMMAND_ROLES = ['lead', 'sponsor', 'member'] as const;
 export const COMMAND_MAX = 600;
@@ -669,6 +669,8 @@ export interface CommandInput {
   command: string;
   /** The stars the message names, plus every idea, team, the division and every round; a person by type only. */
   stars: { code: string; type: NodeType; label?: string }[];
+  /** The star the operator is looking at (the idea open on screen, or the star clicked): what "this" and "it" mean. */
+  focus?: string;
   /** The words the graph uses, so a query can name them: stages, functions, regions and rounds. */
   vocabulary?: { stages: string[]; functions: string[]; regions: string[]; rounds: string[] };
 }
@@ -709,13 +711,14 @@ export const commandTask: Task<CommandOutput> = {
   schema: COMMAND_SCHEMA,
   timeoutMs: 60_000,
   prompt(input) {
-    const { command, stars, vocabulary } = input as CommandInput;
+    const { command, stars, vocabulary, focus } = input as CommandInput;
     return [
       'TASK: command',
       'You help the operator of an innovation programme run its knowledge graph. You have no tools. Do not ask questions.',
       'The operator typed a message. Stars it names are written as codes in square brackets, such as [P1]. "stars" lists those stars and every idea,',
       'team, division and round, with its code and type (a person is listed by type only). "vocabulary" lists the stages, functions, regions and rounds.',
       'Match a loose mention such as "the travel bot" to its code. You do not see the rest of the graph: questions are answered by querying it.',
+      'When "focus" is given, it is the code of the idea or star the operator has on screen: "this", "it", "here", "this idea" and a message that names no star mean that star.',
       'First decide kind: "command" when the operator wants something changed, "question" when they want to know or see something, "unclear" when you cannot tell.',
       'Asking to show, find or highlight stars ("highlight what is related to [T1]") is a question.',
       'For a question: write queries (one to three) that find the answer in the graph; the app runs them and the stars they find light up. Return no actions.',
@@ -733,6 +736,7 @@ export const commandTask: Task<CommandOutput> = {
       '- merge: star a is a duplicate of star b; keep b.',
       '- add_star: create a new star of type (PainPoint, Capability, System or Support) labelled name, linked to star b (the idea or star it belongs to).',
       '- remove_star: remove star a and all its links.',
+      '- grow: read idea a again with the AI and add the pain points, capabilities and systems it finds ("grow it", "find what is missing").',
       '- stage: the command asks to move idea a to another stage. The app does not do this; it points the operator to the stage button.',
       'Only use codes from "stars". If something the command names is not there, or the command is not one of these, return no actions for it and say so in reply.',
       'For a command, reply is one or two short sentences saying what the operator asked for ("You asked to remove [P1]."), never what will happen: the app checks each action and may refuse it.',
@@ -742,7 +746,7 @@ export const commandTask: Task<CommandOutput> = {
       '',
       'DATA (JSON, between the markers):',
       '<<<DATA',
-      JSON.stringify({ command: String(command).slice(0, COMMAND_MAX), stars, vocabulary: vocabulary ?? {} }),
+      JSON.stringify({ command: String(command).slice(0, COMMAND_MAX), ...(focus ? { focus } : {}), stars, vocabulary: vocabulary ?? {} }),
       'DATA>>>',
     ].join('\n');
   },

@@ -8,6 +8,9 @@ import type { Round } from '../round/round';
 import type { Clock } from '../clock';
 import type { CommandStep } from '../ai/tasks';
 import type { Coded } from './names';
+import type { Connector } from '../ai/connector';
+import { growIdea } from '../ai/grow';
+import { setAiLinkStatus } from '../graph/store';
 
 /** What the app will do for one step of a command, once the operator says "Do it". */
 export type CommandAction =
@@ -19,13 +22,15 @@ export type CommandAction =
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }
   | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string } }
-  | { t: 'remove_star'; node: string };
+  | { t: 'remove_star'; node: string }
+  | { t: 'grow'; ideaId: string };
 
 /** How to take a done action back. */
 export type CommandInverse =
   | { t: 'edit-off'; id: string }
   | { t: 'edit-on'; id: string }
   | { t: 'edits-off'; ids: string[] }
+  | { t: 'ai-links-off'; edgeIds: string[] }
   | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
 
@@ -176,6 +181,10 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       }
       const n = ctx.graph.edges.filter((e) => e.from === a.id || e.to === a.id).length;
       proposals.push({ label: `Remove ${a.label} and its ${n} link${n === 1 ? '' : 's'}`, action: { t: 'remove_star', node: a.id } });
+    } else if (s.op === 'grow') {
+      const n = star(s.a); const idea = n ? ideaOf(n) : undefined;
+      if (!n || !idea) { problems.push('Say which idea to grow, or open it first.'); continue; }
+      proposals.push({ label: `Read ${idea.title} again with the AI and add the pain points, capabilities and systems it finds`, action: { t: 'grow', ideaId: idea.id } });
     } else if (s.op === 'merge') {
       const a = star(s.a); const b = star(s.b);
       if (!a || !b) { missing(s); continue; }
@@ -193,7 +202,7 @@ async function log(root: string, ideaId: string, clock: Clock, detail: string) {
 }
 
 /** Does one action. Returns how to take it back, when it can be. */
-export async function applyAction(root: string, a: CommandAction, clock: Clock): Promise<{ inverse?: CommandInverse; note?: string }> {
+export async function applyAction(root: string, a: CommandAction, clock: Clock, ai?: Connector): Promise<{ inverse?: CommandInverse; note?: string }> {
   const edit = async (e: Record<string, unknown>) => {
     const id = await nextEditId(root);
     await appendEdit(root, { id, at: clock(), status: 'active', ...e } as never);
@@ -204,6 +213,16 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock):
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
     case 'merge': return edit({ t: 'merge', from: a.from, into: a.into });
     case 'remove_star': return edit({ t: 'remove', node: a.node });
+    case 'grow': {
+      if (!ai) throw new Error('No AI: growing an idea needs the AI helper');
+      const r = await growIdea(root, ai, a.ideaId);
+      const waiting = r.links.filter((l) => !l.confirmed).length;
+      const fresh = r.suggestions.newNodes.length;
+      return {
+        inverse: { t: 'ai-links-off', edgeIds: r.links.map((l) => l.id) },
+        note: r.links.length ? `${r.added} link${r.added === 1 ? '' : 's'} added${fresh ? `, ${fresh} new star${fresh === 1 ? '' : 's'}` : ''}${waiting ? `, ${waiting} waiting for you` : ''}` : 'Nothing new found',
+      };
+    }
     case 'add_star': {
       // The star and its link are two edits, done and undone together.
       const star = await edit({ t: 'add', node: a.node, type: a.type, label: a.label });
@@ -254,6 +273,7 @@ export async function undoAction(root: string, inv: CommandInverse, clock: Clock
   if (inv.t === 'edit-off') { await setEditStatus(root, inv.id, 'undone'); return undefined; }
   if (inv.t === 'edit-on') { await setEditStatus(root, inv.id, 'active'); return undefined; }
   if (inv.t === 'edits-off') { for (const id of inv.ids) await setEditStatus(root, id, 'undone'); return undefined; }
+  if (inv.t === 'ai-links-off') { for (const id of inv.edgeIds) await setAiLinkStatus(root, id, 'removed').catch(() => {}); return undefined; }
   if (inv.t === 'team') {
     const idea = await loadIdea(root, inv.ideaId);
     if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after)) return `Kept: ${idea.title}'s team changed since`;

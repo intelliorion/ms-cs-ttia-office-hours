@@ -20,6 +20,8 @@ export interface ChatAction {
 /** One command and what came of it. The operator's own words stay here, on this machine; the AI only saw them with names coded. */
 export interface ChatEntry {
   id: string; at: string; text: string; reply: string; provider?: string;
+  /** The idea or star on screen when the message was sent. */
+  about?: string;
   /** How the agent read the message: a change to make, a question to answer, or neither. */
   kind?: 'command' | 'question' | 'unclear';
   /** For a question: every star the queries passed through, lit in the universe. */
@@ -59,7 +61,7 @@ const ANSWER_STARS = 60;
 /** How many stars light up at most. */
 const LIT_MAX = 150;
 
-export async function runCommand(root: string, text: string, ai: Connector, clock: Clock): Promise<ChatEntry> {
+export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, focusId?: string): Promise<ChatEntry> {
   const command = text.trim().slice(0, COMMAND_MAX);
   if (!command) throw new Error('Type a command first');
   const all = await readChat(root);
@@ -71,9 +73,17 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
   };
-  const entry: ChatEntry = { id, at: clock(), text: command, reply: '', actions: [], problems: [] };
+  // What the operator has on screen, so "this" and "it" mean something; a person stays a code.
+  const focusNode = focusId ? graph.nodes.find((n) => n.id === focusId) : undefined;
+  let focus: string | undefined;
+  if (focusNode) {
+    const known = [...hidden.codes].find(([, v]) => v.id === focusNode.id)?.[0];
+    focus = known ?? codeFor(hidden.codes, focusNode);
+    if (!known) hidden.legend.push(focusNode.type === 'Person' ? { code: focus, type: focusNode.type } : { code: focus, type: focusNode.type, label: focusNode.label });
+  }
+  const entry: ChatEntry = { id, at: clock(), text: command, reply: '', actions: [], problems: [], ...(focusNode ? { about: focusNode.label } : {}) };
   try {
-    const { provider, output } = await ai.runWith(commandTask, { command: hidden.text, stars: hidden.legend, vocabulary });
+    const { provider, output } = await ai.runWith(commandTask, { command: hidden.text, stars: hidden.legend, vocabulary, ...(focus ? { focus } : {}) });
     entry.provider = provider;
     entry.kind = output.kind;
     entry.reply = showNames(output.reply, hidden.codes);
@@ -127,12 +137,12 @@ async function entryOf(root: string, id: string): Promise<ChatEntry> {
 }
 
 /** Does one proposed action, or all of them when no action id is given. */
-export async function doActions(root: string, id: string, actionId: string | undefined, clock: Clock): Promise<ChatEntry> {
+export async function doActions(root: string, id: string, actionId: string | undefined, clock: Clock, ai?: Connector): Promise<ChatEntry> {
   const entry = await entryOf(root, id);
   for (const a of entry.actions) {
     if (a.status !== 'proposed' || (actionId && a.id !== actionId)) continue;
     try {
-      const r = await applyAction(root, a.action, clock);
+      const r = await applyAction(root, a.action, clock, ai);
       a.status = 'done'; a.inverse = r.inverse; if (r.note) a.note = r.note;
     } catch (e) { a.status = 'failed'; a.note = (e as Error).message; }
   }

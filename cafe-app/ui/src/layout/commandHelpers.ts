@@ -3,7 +3,7 @@ export interface ChatActionView {
 }
 export interface ChatEntryView {
   id: string; at: string; text: string; reply: string; actions: ChatActionView[]; problems: string[]; error?: string;
-  kind?: 'command' | 'question' | 'unclear'; highlight?: string[]; trace?: { text: string; size: number }[][];
+  kind?: 'command' | 'question' | 'unclear'; highlight?: string[]; about?: string; trace?: { text: string; size: number }[][];
 }
 
 export const STATUS_WORD: Record<ChatActionView['status'], string> = {
@@ -21,6 +21,7 @@ export const EXAMPLES = [
   'Make Zainab Okafor sponsor of the procurement FAQ bot',
   'Put the travel and procurement bots in round 2026 Q4',
   'Add a capability Contract clause finding to the vendor contract summariser',
+  'Open an idea, then: grow it',
   'Remove the star Shared mailbox',
   'Which ideas need a policy Q&A capability?',
   'Highlight what is related to GSS',

@@ -70,23 +70,23 @@ export default function App() {
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
         {cardFor && <NodeCard nodeId={cardFor} />}
         {!focus && <>
-        <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 968 }}>
+        <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 'calc(var(--sh) - 112px)' }}>
           <IdeasPane />
         </Panel>
-        <Panel title="Pipeline" side="right" style={{ left: 1460, top: 92, width: 440, height: 460 }}>
+        <Panel title="Pipeline" side="right" style={{ left: 'calc(var(--sw) - 460px)', top: 92, width: 440, height: 460 }}>
           <div className="sub-h">Ideas by stage</div>
           <StageChart />
           <div className="sub-h">Waiting on you</div>
           <Waiting />
         </Panel>
-        <Panel title="Demand" side="right" style={{ left: 1460, top: 572, width: 440, height: 488 }}>
+        <Panel title="Demand" side="right" style={{ left: 'calc(var(--sw) - 460px)', top: 572, width: 440, height: 'calc(var(--sh) - 592px)' }}>
           <div className="sub-h">Support requested</div>
           <SupportChart />
           <div className="sub-h">Function · region</div>
           <FunctionChart />
         </Panel>
         </>}
-        <div className="abs" style={{ left: 480, top: 1010, width: 960, display: 'flex', justifyContent: 'center', gap: 16 }}>
+        <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>

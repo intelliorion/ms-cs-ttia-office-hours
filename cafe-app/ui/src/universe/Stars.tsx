@@ -176,7 +176,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
       const left: Box = [x - off - 2 - wh[0], top, x - off + 4, bottom];
       // Not under the side panels (unless Focus hides them, or the window is narrow and they are drawers).
       const panels = !focus && !narrowNow;
-      const free = (b: Box) => labelSpotVisible(b[0], b[2], size.width, panels) && !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+      const free = (b: Box) => labelSpotVisible(b[0], b[2], size.width, panels, size.width) && !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
       const box = tmpV.z > 1 ? null : free(right) ? right : free(left) ? left : null;
       el.style.visibility = box ? 'visible' : 'hidden';
       el.classList.toggle('left', box === left);

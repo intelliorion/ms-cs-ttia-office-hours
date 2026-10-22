@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useStageSize } from '../layout/Stage';
 import { DIM, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelAlways, neighbourhood, ringColour, starSize, type Graph, type Vec3 } from './graphView';
 
 interface Props {
@@ -11,13 +12,16 @@ interface Props {
   onHover: (id: string | null) => void;
 }
 
-// The centre gap of the 1920×1080 stage, below the title bar and above the pills.
-const BOX = { x: 500, y: 100, w: 760, h: 880 }; // leaves room on the right for labels
+// The centre gap of the frame, below the title bar and above the pills; on a 1920×1080 frame x 500..1260, y 100..980.
+// It leaves room on the right for labels and grows with the window.
+const boxFor = (w: number, h: number) => ({ x: 500, y: 100, w: w - 1160, h: h - 200 });
 const PAD = 50;
 const RANK: Record<string, number> = { Idea: 0, Team: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Person: 7 };
 
 /** No WebGL: the same graph drawn flat in SVG, using x and y of the layout. */
 export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, onHover }: Props) {
+  const { w: stageW, h: stageH } = useStageSize();
+  const BOX = boxFor(stageW, stageH);
   const { pts } = useMemo(() => {
     const ids = graph.nodes.map((n) => n.id).filter((id) => layout[id]);
     const box = extent(ids.map((id) => layout[id]));
@@ -27,7 +31,7 @@ export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, o
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const pts = new Map(ids.map((id) => [id, [BOX.x + BOX.w / 2 + (layout[id][0] - cx) * k, BOX.y + BOX.h / 2 - (layout[id][1] - cy) * k] as [number, number]]));
     return { pts, k };
-  }, [graph.nodes, layout]);
+  }, [graph.nodes, layout, BOX.w, BOX.h]);
   const deg = useMemo(() => degrees(graph), [graph]);
   const hood = selectedId ? neighbourhood(graph, selectedId) : null;
   const lit = (id: string) => !hood || hood.has(id);
@@ -47,7 +51,7 @@ export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, o
   }
   if (!pts.size) return <div className="flat2d-empty" data-testid="flat2d">Import an export to light up the universe</div>;
   return (
-    <svg className="flat2d" viewBox="0 0 1920 1080" width={1920} height={1080} onClick={() => onSelect(null)} data-testid="flat2d">
+    <svg className="flat2d" viewBox={`0 0 ${stageW} ${stageH}`} width={stageW} height={stageH} onClick={() => onSelect(null)} data-testid="flat2d">
       <defs>
         <radialGradient id="halo"><stop offset="0" stopColor="#fff" stopOpacity="0.9" /><stop offset="0.3" stopColor="#fff" stopOpacity="0.25" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></radialGradient>
         {Object.entries(NODE_COLOURS).map(([t, c]) => (

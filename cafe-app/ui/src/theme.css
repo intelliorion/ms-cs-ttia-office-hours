@@ -722,3 +722,25 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .cmd-trace ol{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
 .cmd-trace li{display:flex;gap:10px;justify-content:space-between}
 .cmd-trace li b{font-family:var(--mono);font-weight:500;color:var(--cream)}
+/* The right side follows what you look at: an idea's submission and connections, a star and the ideas around it. */
+.ctx-scroll{height:100%;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
+.ctx-title{font-size:15px;font-weight:600;color:#fff;line-height:1.35}
+.ctx-title .iid{margin-right:6px}
+.ctx-flags{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.ctx-flags li{font-size:13px;color:var(--amber);padding-left:10px;border-left:2px solid rgba(245,179,107,.5)}
+.ctx-scroll .sec{margin:0;padding:0;border:0}
+.ctx-scroll .sec>h3{display:none}
+.ctx-tabs{display:flex;gap:6px}
+.ctx-tabs button{border:1px solid var(--panel-border);background:rgba(10,14,14,.5);color:var(--muted);border-radius:999px;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
+.ctx-tabs button.on{border-color:var(--teal);color:#fff;box-shadow:0 0 10px rgba(125,211,207,.2) inset}
+.ctx-star-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ctx-star-t{font-size:20px;font-weight:700;color:#fff;margin:2px 0 4px;line-height:1.25}
+.ctx-star-h .x{width:30px;height:30px;font-size:13px}
+.ctx-stages{display:flex;flex-wrap:wrap;gap:8px}
+.ctx-stage{font-size:12.5px;color:var(--muted);border:1px solid rgba(160,190,185,.25);border-radius:999px;padding:3px 10px}
+.ctx-stage b{color:#fff;font-family:var(--mono);margin-right:2px}
+.ctx-ideas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ctx-idea{width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;padding:8px 10px;border-radius:8px;border:1px solid rgba(160,190,185,.2);background:rgba(10,14,14,.45);color:var(--text);font:inherit;font-size:13.5px;cursor:pointer}
+.ctx-idea:hover{border-color:var(--teal)}
+.ctx-idea-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+.ctx-via{display:block;font-size:11.5px;color:var(--muted);margin:2px 0 0 10px}

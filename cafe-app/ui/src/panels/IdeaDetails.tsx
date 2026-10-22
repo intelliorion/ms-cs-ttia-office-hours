@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store';
-import { copyText, getHistory, ideaGet, ideaPost, post } from '../api';
-import { extractNotice, NO_AI_TIP, providerName, type ReviewSuggestion } from '../popouts/aiUi';
-import { LinkTable } from '../popouts/LinkTable';
-import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel, ideaLinks, type HistoryEntry } from '../popouts/ideaHelpers';
-import { Details, Emails, History, Review, RoundChip, StageButton } from '../popouts/IdeaSections';
+import { copyText, ideaGet, ideaPost, post } from '../api';
+import { NO_AI_TIP, providerName, type ReviewSuggestion } from '../popouts/aiUi';
+import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel } from '../popouts/ideaHelpers';
+import { Emails, Review, RoundChip, StageButton } from '../popouts/IdeaSections';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
 import { sectionsFor, type SectionKey } from './stageGate';
 import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
 
 /**
- * One idea, in the left panel in place of the list: Back, its ID and stage, then (one column) the suggestion strip,
- * the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3; cards for
- * the earlier ones after that), Emails, Graph links, Details and History. The universe beside it stays focused on its star.
+ * One idea, in the left panel in place of the list: what to do now. Back, its ID, round and stage, then the suggestion
+ * strip, the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3;
+ * cards for the earlier ones after that) and Emails. What was submitted, its links and its history are on the right
+ * (ContextPanels); the universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
   const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
@@ -21,7 +21,6 @@ export function IdeaDetails({ id }: { id: string }) {
   const [aiReview, setAiReview] = useState<ReviewSuggestion | null>(null);
   const idea = state?.ideas.find((i: any) => i.id === id);
   const [busy, setBusy] = useState(false);
-  const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [fallback, setFallback] = useState<string | null>(null);
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -37,7 +36,6 @@ export function IdeaDetails({ id }: { id: string }) {
   const inFlight = useRef(false);
   idRef.current = id;
 
-  const loadHistory = useCallback(() => getHistory(id).then(setHistory, () => setHistory(null)), [id]);
   const loadDesign = useCallback(async () => {
     const [d, p] = await Promise.all([ideaGet(id, 'design').catch(() => null), ideaGet(id, 'plan').catch(() => null)]);
     if (idRef.current !== id) return; // another idea opened meanwhile
@@ -49,10 +47,10 @@ export function IdeaDetails({ id }: { id: string }) {
     setDesign(null); setPlan(null); void loadDesign();
   }, [loadDesign]);
   useEffect(() => {
-    setNotice(null); setFallback(null); setAiReview(null); setEditing([]); void loadHistory();
+    setNotice(null); setFallback(null); setAiReview(null); setEditing([]);
     scroller.current?.scrollTo({ top: 0 });
     backBtn.current?.focus({ preventScroll: true });
-  }, [id, loadHistory, setNotice]);
+  }, [id, setNotice]);
   useEffect(() => { if (fallback) { fallbackRef.current?.focus(); fallbackRef.current?.select(); } }, [fallback]);
 
   /** Runs one change, says what happened in plain words, then refreshes state, graph and history. */
@@ -68,7 +66,7 @@ export function IdeaDetails({ id }: { id: string }) {
     } catch (e) {
       setNotice({ text: (e as Error).message, kind: 'error' });
     }
-    await Promise.all([refresh(), loadHistory()]);
+    await refresh();
     setBusy(false);
   };
 
@@ -79,7 +77,7 @@ export function IdeaDetails({ id }: { id: string }) {
     setAiBusy(true); setNotice(null);
     try { onOk(await post(url, { id })); }
     catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
-    await Promise.all([refresh(), loadHistory()]);
+    await refresh();
     setAiBusy(false);
   };
   /** One design-series call: busy (or the AI wait) while it runs, a notice, the CSIC suggestion, then everything re-read. */
@@ -102,13 +100,12 @@ export function IdeaDetails({ id }: { id: string }) {
     } catch (e) {
       if (idRef.current === id) setNotice({ text: (e as Error).message, kind: 'error' });
     }
-    try { await Promise.all([refresh(), loadHistory(), loadDesign()]); } finally {
+    try { await Promise.all([refresh(), loadDesign()]); } finally {
       inFlight.current = false;
       if (o.ai) { setAiBusy(false); setAiFor(null); } else setBusy(false);
     }
     return out;
   };
-  const grow = () => runAi('/api/ai/extract', (r) => setNotice({ text: extractNotice(r), kind: 'ok' }));
   const suggestReview = () => runAi('/api/ai/review-suggest', (r) => {
     setAiReview(r);
     setNotice({ text: `Review suggested by ${providerName(r.provider, ai)}. Nothing is saved until you press Save.`, kind: 'ok' });
@@ -146,12 +143,11 @@ export function IdeaDetails({ id }: { id: string }) {
   const gates = sectionsFor(idea, design?.state, editing, plan);
   const edit = (k: SectionKey) => (idea.closed ? undefined : () => setEditing((xs) => (xs.includes(k) ? xs : [...xs, k])));
   const mine = suggest && suggest.id === id ? suggest : null;
-  const links = ideaLinks(graph, id);
 
   return (
     <div className="idea-detail" data-testid="idea-details" role="region" aria-label={`${idea.id} ${idea.title}`}>
       {head(<>
-        <RoundChip ideaId={id} round={idea.round ?? ''} onDone={() => void loadHistory()} />
+        <RoundChip ideaId={id} round={idea.round ?? ''} onDone={() => void refresh()} />
         <StageButton state={state} value={stageValue} label={m.stageLabel} colour={m.stageColour} busy={busy} onPick={setStage} />
       </>)}
       <h3 className="id-title">{idea.title || 'Untitled idea'}</h3>
@@ -223,19 +219,6 @@ export function IdeaDetails({ id }: { id: string }) {
           }, (r: any) => APPROVED_NOTICE(r.template))}
           onCopy={async (mm) => { const text = clipText(mm.view); if (await copyText(text)) setNotice({ text: `${mm.template} copied again.`, kind: 'ok' }); else setFallback(text); }}
           onSent={(key) => act(() => post('/api/outbox/sent', { key }), (r: any) => `${r.template} marked sent.`)} />
-        <section className="sec">
-          <h3>Graph <span className="sec-n">{links.length} links</span></h3>
-          <div className="ai-row">
-            <button className="btn" data-action="ai-grow" disabled={noAi || aiBusy || busy} title={noAi ? NO_AI_TIP : undefined} onClick={() => void grow()}>
-              {aiBusy && !aiFor ? 'Working…' : 'Grow the universe from this idea'}</button>
-            {aiBusy && !aiFor && <span className="ai-busy" role="status">Asking the AI, this can take a minute…</span>}
-          </div>
-          <LinkTable rows={links} busy={busy} compact
-            onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), () => 'Link confirmed.')}
-            onRemove={(edgeId) => act(() => post('/api/graph/remove', { edgeId }), () => 'Link removed.')} />
-        </section>
-        <Details idea={idea} />
-        <History history={history} steps={state.steps} />
       </div>
     </div>
   );

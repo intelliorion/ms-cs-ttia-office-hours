@@ -29,6 +29,7 @@ cafe-app/src/clock.ts
 cafe-app/src/command/actions.ts
 cafe-app/src/command/chat.ts
 cafe-app/src/command/names.ts
+cafe-app/src/command/query.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
@@ -92,6 +93,7 @@ cafe-app/tests/ai.test.ts
 cafe-app/tests/checklist.test.ts
 cafe-app/tests/clock.test.ts
 cafe-app/tests/command-names.test.ts
+cafe-app/tests/command-query.test.ts
 cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-brainstorm.test.ts
@@ -215,8 +217,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-DKXVBA80.js
-cafe-app/web/assets/index-RaiEVxwM.css
+cafe-app/web/assets/index-D-oFYgOP.js
+cafe-app/web/assets/index-DPOv4OuX.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

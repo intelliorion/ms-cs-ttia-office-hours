@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
+import { RightPanels } from './panels/ContextPanels';
 import { Welcome } from './layout/Welcome';
 import { Drawers } from './layout/Drawers';
 import { relatedGraph } from './universe/graphView';
 import { useStore } from './state/store';
 import { IdeasPane } from './panels/IdeasPane';
-import { StageChart, SupportChart, FunctionChart, Waiting } from './panels/Charts';
 import { Universe } from './universe/Universe';
 import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
@@ -70,23 +70,13 @@ export default function App() {
         <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
-        {cardFor && <NodeCard nodeId={cardFor} />}
+        {/* Any other star's links show in the right panels; an idea's star keeps its small card with Open idea. */}
+        {cardFor?.startsWith('idea:') && <NodeCard nodeId={cardFor} />}
         {!focus && <>
         <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 'calc(var(--sh) - 112px)' }}>
           <IdeasPane />
         </Panel>
-        <Panel title="Pipeline" side="right" style={{ left: 'calc(var(--sw) - 460px)', top: 92, width: 440, height: 460 }}>
-          <div className="sub-h">Ideas by stage</div>
-          <StageChart />
-          <div className="sub-h">Waiting on you</div>
-          <Waiting />
-        </Panel>
-        <Panel title="Demand" side="right" style={{ left: 'calc(var(--sw) - 460px)', top: 572, width: 440, height: 'calc(var(--sh) - 592px)' }}>
-          <div className="sub-h">Support requested</div>
-          <SupportChart />
-          <div className="sub-h">Function · region</div>
-          <FunctionChart />
-        </Panel>
+        <RightPanels />
         </>}
         <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>

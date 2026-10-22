@@ -1,6 +1,6 @@
 import { useStore } from '../state/store';
 import { IdeasPane } from '../panels/IdeasPane';
-import { StageChart, SupportChart, FunctionChart, Waiting } from '../panels/Charts';
+import { ContextStack } from '../panels/ContextPanels';
 
 /**
  * Below 1000px wide (see theme.css) the side panels are hidden and these edge tabs open them as drawers
@@ -22,16 +22,7 @@ export function Drawers() {
           {drawer === 'ideas' ? (
             <div className="panel-body"><IdeasPane /></div>
           ) : (
-            <div className="panel-body drawer-scroll">
-              <div className="sub-h">Ideas by stage</div>
-              <StageChart />
-              <div className="sub-h">Waiting on you</div>
-              <Waiting />
-              <div className="sub-h">Support requested</div>
-              <SupportChart />
-              <div className="sub-h">Function · region</div>
-              <FunctionChart />
-            </div>
+            <div className="panel-body drawer-scroll"><ContextStack /></div>
           )}
         </section>
       )}

@@ -143,8 +143,10 @@ async function popoutShots(p) {
   await p.waitForSelector(DETAILS, { state: 'detached' });
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
   await sleep(1500);
-  await p.evaluate(() => window.__cafe.click('capability:agent-design-guidance'));
-  await p.waitForSelector('[data-testid="nodecard"]');
+  // A star's links and the ideas around it show in the right panels.
+  await p.evaluate(() => window.__cafe.click('support:agent-design-guidance'));
+  await p.waitForSelector('[data-testid="ctx-star"]');
+  await p.waitForSelector('[data-testid="ctx-around"]');
   await sleep(3500);
   await shot(p, '08-nodecard.png');
   await p.evaluate(() => window.__cafe.select(null));
@@ -240,13 +242,14 @@ async function aiShots(p) {
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector('[data-testid="idea-details"]');
   await sleep(3000);
-  await p.click('[data-testid="idea-details"] [data-action="ai-grow"]');
-  await p.waitForSelector('[data-testid="idea-details"] .pop-notice:has-text("Added")', { timeout: 60000 });
+  // Links and Grow live in the right-hand Connections panel now.
+  await p.click('[data-testid="ctx-connections"] [data-action="ai-grow"]');
+  await p.waitForSelector('[data-testid="ctx-connections"] .pop-notice:has-text("Added")', { timeout: 60000 });
   await sleep(3500);
-  await p.locator('[data-testid="idea-details"] [data-action="ai-grow"]').scrollIntoViewIfNeeded();
+  await p.locator('[data-testid="ctx-connections"] [data-action="ai-grow"]').scrollIntoViewIfNeeded();
   await shot(p, '14-grown.png');
   // A confirmed AI link still has Remove.
-  const row = p.locator('[data-testid="idea-details"] li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]');
+  const row = p.locator('[data-testid="ctx-connections"] li[data-edge]').first();
   await row.scrollIntoViewIfNeeded();
   await row.evaluate((el) => { el.style.outline = '1px solid #f5b36b'; });
   await sleep(500);
@@ -388,10 +391,11 @@ async function agenticShots(p, restart) {
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-001'));
   await p.waitForSelector(D);
   await sleep(3000);
-  await p.locator(`${D} [data-action="ai-grow"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  const C = '[data-testid="ctx-connections"]';
+  await p.locator(`${C} [data-action="ai-grow"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await sleep(500);
-  const waiting = await p.locator(`${D} ul.links .tag:has-text("Waiting on you")`).count();
-  const aiRows = await p.locator(`${D} ul.links [data-action="remove-link"]`).count();
+  const waiting = await p.locator(`${C} ul.links .tag:has-text("Waiting on you")`).count();
+  const aiRows = await p.locator(`${C} ul.links [data-action="remove-link"]`).count();
   console.log(`  idea links: ${waiting} waiting on you, ${aiRows} AI links with Remove`);
   await shot(p, '64-link-waiting.png');
   await p.click(`${D} [data-action="back"]`);

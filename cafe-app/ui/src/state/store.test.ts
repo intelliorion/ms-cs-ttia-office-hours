@@ -212,3 +212,15 @@ describe('clicking a star', () => {
     expect(useStore.getState()).toMatchObject({ selectedId: null, highlight: ['a'] });
   });
 });
+
+describe('clicking a star in focus mode', () => {
+  it('only selects it: no idea opens, the list stays, focus mode stays on', async () => {
+    const { useStore } = await import('./store');
+    useStore.setState({ leftView: { kind: 'list' }, selectedId: null, highlight: ['x'], focus: true, drawer: null } as any);
+    useStore.getState().clickStar('idea:CAFE-2026-001');
+    expect(useStore.getState()).toMatchObject({ focus: true, leftView: { kind: 'list' }, selectedId: 'idea:CAFE-2026-001', highlight: null, drawer: null });
+    useStore.getState().clickStar('team:gss');
+    expect(useStore.getState()).toMatchObject({ focus: true, leftView: { kind: 'list' }, selectedId: 'team:gss' });
+    useStore.setState({ focus: false });
+  });
+});

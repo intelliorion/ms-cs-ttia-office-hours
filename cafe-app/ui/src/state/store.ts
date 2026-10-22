@@ -120,7 +120,10 @@ export interface AppState {
   leftView: LeftView;
   /** Show an idea's details in the left panel (and select its star). */
   openIdea: (id: string) => void;
-  /** A click on a star: an idea opens; any other star shows on the right with the list on the left; a lit answer ends. */
+  /**
+   * A click on a star: an idea opens; any other star shows on the right with the list on the left; a lit answer ends.
+   * In focus mode the panels stay hidden: the click only selects the star (its neighbourhood shows in the universe).
+   */
   clickStar: (id: string | null) => void;
   backToList: () => void;
   notice: Notice | null;
@@ -165,7 +168,8 @@ export const useStore = create<AppState>((set) => ({
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
-  toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
+  // Entering focus starts clean; leaving it keeps the star clicked in focus mode, so the panels show it.
+  toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
   cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),
   autoPickQuality: (renderer) => {
@@ -183,7 +187,8 @@ export const useStore = create<AppState>((set) => ({
   backToList: () => set(backPatch()),
   clickStar: (id) => set((s) => {
     if (!id) return { selectedId: null };
-    if (id.startsWith('idea:')) { if (s.focus) writeFocus(false); return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null }; }
+    if (s.focus) return { selectedId: id, highlight: null };
+    if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null };
     return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, highlight: null };
   }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
 import { chipText } from '../popouts/aiUi';
-import { baseName, titleSub, unsentCount } from '../popouts/titleHelpers';
+import { baseName, unsentCount } from '../popouts/titleHelpers';
 import { inboxCount } from '../popouts/inboxHelpers';
 import { AssistantLauncher } from './Assistant';
 
@@ -21,7 +21,7 @@ export function TitleBar() {
   };
   return (
     <header className="titlebar">
-      <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
+      <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span></div>
       <div className="btns">
         <AssistantLauncher />
         <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, Word, PDF and pictures" onClick={() => openPopout({ kind: 'inbox' })}>

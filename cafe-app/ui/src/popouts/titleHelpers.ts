@@ -47,10 +47,6 @@ export const baseName = (p: string) => String(p).split(/[\\/]/).filter(Boolean).
 /** Unsent emails: drafts and approved ones. */
 export const unsentCount = (outbox: { status: string }[] | undefined) => (outbox ?? []).filter((m) => m.status !== 'sent').length;
 
-/** The title bar's subtitle: the newest round's name and today's date. */
-export const titleSub = (state: { today?: string; rounds?: { id?: string; name?: string }[] } | null | undefined): string =>
-  ['Operator console', state?.rounds?.[0]?.name, state?.today].filter(Boolean).join(' · ');
-
 /**
  * The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4", numbered on when a round
  * already has it ("2026 Q4 (2)"). Same rule as the server.

@@ -16,5 +16,6 @@ export const EXAMPLES = [
   'Link Avery Chen to BSI',
   'Make Zainab Okafor sponsor of the procurement FAQ bot',
   'Put the travel and procurement bots in round 2026 Q4',
-  'Merge Policy Q&A into Natural-language policy Q&A',
+  'Add a capability Contract clause finding to the vendor contract summariser',
+  'Remove the star Shared mailbox',
 ];

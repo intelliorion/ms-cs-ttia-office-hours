@@ -35,7 +35,11 @@ export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone'
   | { t: 'unlink'; from: string; rel: Relation; to: string }
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }
+  | { t: 'add'; node: string; type: NodeType; label: string }
+  | { t: 'remove'; node: string }
 );
+/** Stars the operator can create or remove from the command bar. The rest come from the form, the rounds or the tool picker. */
+export const OPERATOR_STARS: NodeType[] = ['PainPoint', 'Capability', 'System', 'Support'];
 /** Star types that can be merged: never ideas, rounds or the division. */
 export const MERGEABLE: NodeType[] = ['Team', 'Person', 'PainPoint', 'Capability', 'System', 'Support', 'Tool'];
 

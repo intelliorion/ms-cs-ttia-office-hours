@@ -111,7 +111,12 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
 function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits: OperatorEdit[]): void {
   for (const e of edits) {
     if (e.status !== 'active') continue;
-    if (e.t === 'rename') {
+    if (e.t === 'add') {
+      if (!nodes.has(e.node) && e.label.trim()) nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
+    } else if (e.t === 'remove') {
+      if (!nodes.delete(e.node)) continue;
+      for (const [id, x] of [...edges]) if (x.from === e.node || x.to === e.node) edges.delete(id);
+    } else if (e.t === 'rename') {
       const n = nodes.get(e.node);
       if (n && e.label.trim()) nodes.set(n.id, { ...n, label: e.label.trim() });
     } else if (e.t === 'unlink') {

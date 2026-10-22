@@ -149,6 +149,10 @@ What it can do:
 - Set a person's role on an idea: "make Avery Chen sponsor of the procurement FAQ bot" (this changes the idea's team).
 - Put ideas in a round, or create one: "put the travel and procurement bots in a new round called 2026 Q4".
 - Rename a star, or merge a duplicate into another: "merge Policy Q&A into Natural-language policy Q&A".
+- Create a star, always with its link: "add a capability Contract clause finding to the vendor contract summariser".
+  Pain points, capabilities, systems and support requests can be created; a system links to a capability.
+- Remove a star with all its links: "remove the star Shared mailbox" (the card says how many links go with it).
+  The same four kinds; people, ideas, teams, rounds and tools come from elsewhere, and the agent says where.
 
 The AI proposes; the app checks every action against the universe before it shows a card, and explains anything it
 left out. Stages still move only by your hand (the agent points you to the stage button), tools are still picked in

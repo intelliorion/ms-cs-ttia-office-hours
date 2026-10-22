@@ -1,4 +1,4 @@
-import { ALLOWED, MERGEABLE, edgeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALLOWED, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -17,12 +17,15 @@ export type CommandAction =
   | { t: 'round'; ideaIds: string[]; roundId?: string; newName?: string }
   | { t: 'new_round'; name: string }
   | { t: 'rename'; node: string; label: string }
-  | { t: 'merge'; from: string; into: string };
+  | { t: 'merge'; from: string; into: string }
+  | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string } }
+  | { t: 'remove_star'; node: string };
 
 /** How to take a done action back. */
 export type CommandInverse =
   | { t: 'edit-off'; id: string }
   | { t: 'edit-on'; id: string }
+  | { t: 'edits-off'; ids: string[] }
   | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
 
@@ -35,6 +38,14 @@ const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor'
 /** Labels the form owns: ideas and people are renamed in their own files, rounds in the Rounds pop-out. */
 const RENAMEABLE: NodeType[] = ['Team', 'Entity', 'Capability', 'PainPoint', 'System', 'Support', 'Tool'];
 const ROLE_OF_REL: Partial<Record<Relation, PersonRole>> = { SPONSORS: 'sponsor', RELATED: 'member' };
+/** Where a star the command bar can't create or remove comes from. */
+const OWNED_ELSEWHERE: Partial<Record<NodeType, (label: string) => string>> = {
+  Tool: () => 'Tools are picked in the tool picker.',
+  Team: () => "Teams come from the ideas' CS Function.",
+  Entity: () => "The division comes from the ideas' submitters.",
+  Round: () => 'Rounds are made in the Rounds pop-out.',
+};
+const word = (t: NodeType) => (t === 'Support' ? 'support request' : NODE_LABELS[t].toLowerCase());
 
 export interface ResolveContext {
   codes: Map<string, Coded>;
@@ -132,6 +143,39 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!a || !name) { missing(s); continue; }
       if (!RENAMEABLE.includes(a.type)) { problems.push(a.type === 'Round' ? 'Rename rounds in the Rounds pop-out.' : `${a.label} comes from the form, so its name changes there.`); continue; }
       proposals.push({ label: `Rename ${a.label} to ${name}`, action: { t: 'rename', node: a.id, label: name } });
+    } else if (s.op === 'add_star') {
+      const name = s.name?.trim(); const type = s.type;
+      if (!name || !type) { problems.push("I couldn't tell what kind of star to create, or its name."); continue; }
+      if (!OPERATOR_STARS.includes(type)) {
+        problems.push(OWNED_ELSEWHERE[type]?.(name) ?? (type === 'Person' ? "People come from the ideas' teams: add someone with a role, such as \"make X a member of Y\"." : 'Ideas come from the submissions.'));
+        continue;
+      }
+      const home = star(s.b);
+      if (!home) { problems.push(`Say which idea or star ${name} belongs to, so it is not left floating.`); continue; }
+      const same = ctx.graph.nodes.find((n) => n.label.toLowerCase() === name.toLowerCase());
+      if (same) { problems.push(`${same.label} is already a star: ask me to link it to ${home.label} instead.`); continue; }
+      const rel = (Object.keys(ALLOWED) as Relation[]).find((r) => { const [f, t] = ALLOWED[r]; return (f === home.type && t === type) || (f === type && t === home.type); });
+      if (!rel) {
+        problems.push(type === 'System' && home.type === 'Idea'
+          ? `A system links to a capability, not to an idea: say which capability uses ${name}.`
+          : `A ${word(type)} can't be linked to a ${word(home.type)}.`);
+        continue;
+      }
+      const node = nodeId(type, name);
+      const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
+      const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
+      proposals.push({ label: `New ${word(type)}: ${name}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label: name, link: { from, rel, to } } });
+    } else if (s.op === 'remove_star') {
+      const a = star(s.a);
+      if (!a) { missing(s); continue; }
+      if (!OPERATOR_STARS.includes(a.type)) {
+        problems.push(a.type === 'Person' ? `People come from the ideas' teams: take ${a.label} off a team instead.`
+          : a.type === 'Idea' ? `Ideas are not removed: close ${a.label} with its stage button.`
+            : OWNED_ELSEWHERE[a.type]!(a.label));
+        continue;
+      }
+      const n = ctx.graph.edges.filter((e) => e.from === a.id || e.to === a.id).length;
+      proposals.push({ label: `Remove ${a.label} and its ${n} link${n === 1 ? '' : 's'}`, action: { t: 'remove_star', node: a.id } });
     } else if (s.op === 'merge') {
       const a = star(s.a); const b = star(s.b);
       if (!a || !b) { missing(s); continue; }
@@ -159,6 +203,13 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock):
     case 'link': return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to });
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
     case 'merge': return edit({ t: 'merge', from: a.from, into: a.into });
+    case 'remove_star': return edit({ t: 'remove', node: a.node });
+    case 'add_star': {
+      // The star and its link are two edits, done and undone together.
+      const star = await edit({ t: 'add', node: a.node, type: a.type, label: a.label });
+      const link = await edit({ t: 'link', ...a.link });
+      return { inverse: { t: 'edits-off', ids: [star.inverse.id, link.inverse.id] } };
+    }
     case 'unlink': {
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
       if (a.source === 'operator') {
@@ -202,6 +253,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock):
 export async function undoAction(root: string, inv: CommandInverse, clock: Clock): Promise<string | undefined> {
   if (inv.t === 'edit-off') { await setEditStatus(root, inv.id, 'undone'); return undefined; }
   if (inv.t === 'edit-on') { await setEditStatus(root, inv.id, 'active'); return undefined; }
+  if (inv.t === 'edits-off') { for (const id of inv.ids) await setEditStatus(root, id, 'undone'); return undefined; }
   if (inv.t === 'team') {
     const idea = await loadIdea(root, inv.ideaId);
     if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after)) return `Kept: ${idea.title}'s team changed since`;

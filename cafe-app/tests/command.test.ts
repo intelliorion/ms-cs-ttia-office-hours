@@ -112,6 +112,58 @@ describe('the command bar', () => {
     expect(g.edges.map((e) => e.id)).toContain('team:gss|HAS_MEMBER|person:avery-chen');
   });
 
+  it('create a star: it arrives with its link, never alone; Undo takes both away', async () => {
+    const { root, ai } = await setup(() => ({ reply: 'Add it.', actions: [{ op: 'add_star', type: 'Capability', name: 'Contract clause finding', b: 'I1' }] }));
+    const entry = await runCommand(root, 'add a capability Contract clause finding to the desk booking assistant', ai, clock);
+    expect(entry.actions.map((a) => a.label)).toEqual(['New capability: Contract clause finding, linked from Desk booking assistant (needs)']);
+    await doActions(root, entry.id, undefined, clock);
+    const g = await rebuildGraph(root);
+    expect(g.nodes.find((n) => n.id === 'capability:contract-clause-finding')).toMatchObject({ type: 'Capability', label: 'Contract clause finding' });
+    expect(g.edges.map((e) => e.id)).toContain('idea:CAFE-2026-001|NEEDS|capability:contract-clause-finding');
+    await undoChatAction(root, entry.id, 'a1', clock);
+    expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'capability:contract-clause-finding')).toBe(false);
+  });
+
+  it('create: no home, a kind that comes from elsewhere, a pair that cannot link, or a star already there each get a reason', async () => {
+    const { root, ai } = await setup(() => ({ reply: 'Add.', actions: [
+      { op: 'add_star', type: 'Capability', name: 'Floating thing' },
+      { op: 'add_star', type: 'Tool', name: 'Power Apps', b: 'I1' },
+      { op: 'add_star', type: 'System', name: 'Expense export', b: 'I1' },
+      { op: 'add_star', type: 'Team', name: 'GSS', b: 'I1' },
+    ] }));
+    const entry = await runCommand(root, 'add things', ai, clock);
+    expect(entry.actions).toEqual([]);
+    expect(entry.problems).toEqual([
+      'Say which idea or star Floating thing belongs to, so it is not left floating.',
+      'Tools are picked in the tool picker.',
+      'A system links to a capability, not to an idea: say which capability uses Expense export.',
+      'Teams come from the ideas\' CS Function.',
+    ]);
+  });
+
+  it('remove a star with all its links; Undo brings both back; form-owned stars get a pointer instead', async () => {
+    const { root, ai } = await setup((p) => (/"command": "remove the star/.test(p)
+      ? { reply: 'Remove.', actions: [{ op: 'remove_star', a: 'U1' }] }
+      : { reply: 'Remove.', actions: [{ op: 'remove_star', a: 'P1' }, { op: 'remove_star', a: 'I1' }, { op: 'remove_star', a: 'T1' }] }));
+    await saveIdea(root, { ...IDEAS[0], support: ['Agent Design Guidance'] });
+    const entry = await runCommand(root, 'remove the star Agent Design Guidance', ai, clock);
+    expect(entry.actions.map((a) => a.label)).toEqual(['Remove Agent Design Guidance and its 1 link']);
+    await doActions(root, entry.id, undefined, clock);
+    let g = await rebuildGraph(root);
+    expect(g.nodes.some((n) => n.id === 'support:agent-design-guidance')).toBe(false);
+    expect(g.edges.some((e) => e.to === 'support:agent-design-guidance')).toBe(false);
+    await undoChatAction(root, entry.id, 'a1', clock);
+    g = await rebuildGraph(root);
+    expect(g.edges.map((e) => e.id)).toContain('idea:CAFE-2026-001|ASKS_FOR|support:agent-design-guidance');
+    const other = await runCommand(root, 'drop Avery Chen, the desk booking assistant and BSI', ai, clock);
+    expect(other.actions).toEqual([]);
+    expect(other.problems).toEqual([
+      'People come from the ideas\' teams: take Avery Chen off a team instead.',
+      'Ideas are not removed: close Desk booking assistant with its stage button.',
+      'Teams come from the ideas\' CS Function.',
+    ]);
+  });
+
   it('a new command cancels what the last one left waiting, saying so', async () => {
     const { root, ai } = await setup(() => ({ reply: 'Link.', actions: [{ op: 'link', a: 'P1', b: 'T1' }] }));
     const first = await runCommand(root, 'link Zainab Okafor to BSI', ai, clock);

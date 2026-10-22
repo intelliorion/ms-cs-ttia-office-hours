@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// End-to-end acceptance run of the Inbox against the synthetic kit in test-data/.
+// End-to-end acceptance run of the Import against the synthetic kit in test-data/.
 // Starts its own server (in this process, on a free port, never 4100) on a fresh scratch workspace,
 // drives it only through the HTTP API, and prints file → expected → actual → PASS/FAIL.
 //
@@ -82,7 +82,21 @@ function scriptedTriage(prompt) {
       });
     }
     graph.nodes = []; graph.links = [];
-    if (item.type === 'transcript') {
+    if (/Duplicate claim spotting/.test(text)) {
+      // 12-text.pdf: the memo on 004 (data source, a capability, a weekly digest).
+      graph.nodes.push({ type: 'Capability', label: 'Duplicate claim spotting' }, { type: 'System', label: 'Expense system export' });
+      graph.links.push(
+        { from: 'idea', to: 'Duplicate claim spotting', rel: 'NEEDS', description: 'Spots duplicate claims', confidence: 0.9 },
+        { from: 'Duplicate claim spotting', to: 'Expense system export', rel: 'USES_DATA', description: 'Reads the monthly expense export', confidence: 0.8 },
+      );
+    } else if (/DESK BOOKING/.test(text)) {
+      // 14-whiteboard.png and 15-scanned.pdf, as the AI transcribed them.
+      graph.nodes.push({ type: 'Capability', label: 'Desk finding' }, { type: 'System', label: 'Floor plan system' });
+      graph.links.push(
+        { from: 'idea', to: 'Desk finding', rel: 'NEEDS', description: 'Finds a free desk', confidence: 0.9 },
+        { from: 'Desk finding', to: 'Floor plan system', rel: 'USES_DATA', description: 'Reads the floor plan', confidence: 0.8 },
+      );
+    } else if (item.type === 'transcript') {
       graph.nodes.push({ type: 'PainPoint', label: 'Desks checked by hand in a spreadsheet' });
       graph.links.push({ from: 'idea', to: 'Desks checked by hand in a spreadsheet', rel: 'REPLACES', description: 'Removes the hand check of free desks', confidence: 0.75 });
     } else if (answers.length && /shared spreadsheet/i.test(text)) {
@@ -197,6 +211,7 @@ async function main() {
   if (!REAL) {
     try { await agenticPass(clock); } catch (e) { check('(agentic run)', 'no crash', String(e.stack ?? e).slice(0, 300), false); }
   }
+  try { await roundsPass(clock); } catch (e) { check('(rounds run)', 'no crash', String(e.stack ?? e).slice(0, 300), false); }
   print();
 }
 
@@ -280,8 +295,8 @@ async function run() {
       && acts(d.item).filter((r) => ['suggest_stage', 'add_flag', 'record_answers'].includes(r.action.t)).every((r) => r.kind === 'ok' && r.status === 'pending')
       && (REAL || (pendingTypes.includes('suggest_stage') && pendingTypes.includes('record_answers'))));
 
-  // 06, 11, 12: held, never reach the AI.
-  for (const [name, why] of [['06-tracker.eml', /name|id|phone/i], ['11-held-tracker.csv', /people|name/i], ['12-cannot-read.pdf', /can't read/i]]) {
+  // 06, 11: held, never reach the AI.
+  for (const [name, why] of [['06-tracker.eml', /name|id|phone/i], ['11-held-tracker.csv', /people|name/i]]) {
     const n = (await state()).ideas.length;
     d = await drop(name);
     const heldFile = d.item.file?.startsWith('inbox/held/') && await fs.access(path.join(workspace, d.item.file)).then(() => true, () => false);
@@ -539,12 +554,67 @@ async function agenticPass(clock) {
     check(A('11-held-tracker.csv'), 'screen needs-you, the rest skipped, held', `${stepLine(d.item)}; ${d.item.status}`,
       st.screen?.status === 'needs-you' && d.item.status === 'held' && ['match', 'understand', 'context', 'graph', 'check'].every((k) => st[k]?.status === 'skipped'));
 
+    // 12: a text PDF, read as a document, matched by its Café id to 004, its facts applied.
+    d = await drop('12-text.pdf');
+    st = stepsOf(d.item);
+    const gNow = await graph();
+    const memoStar = gNow.nodes.find((n) => n.type === 'Capability' && /^duplicate claim spotting$/i.test(n.label));
+    const memoLink = memoStar && gNow.edges.find((e) => e.from === 'idea:CAFE-2026-004' && e.to === memoStar.id && e.rel === 'NEEDS');
+    check(A('12-text.pdf'), 'document; read "PDF, 1 page, N words"; matched 004 by id; facts applied (star + link, confirmed)',
+      `${d.item.type}; read "${st.read?.detail}"; ${show(d.item)}; star ${!!memoStar}; link ${memoLink ? (memoLink.confirmed ? 'confirmed' : 'waiting') : 'none'}`,
+      d.item.type === 'document' && /^PDF, 1 page, \d+ words$/.test(st.read?.detail ?? '') && d.item.triage?.ideaId === 'CAFE-2026-004'
+        && d.item.triage?.match?.how === 'cafe-id' && st.check?.status === 'done' && !!memoStar && memoLink?.confirmed === true);
+
+    // 14: a picture, read by the AI, matched to 002, stars and links added confirmed.
+    const desk = () => graph().then((g) => ({ g, star: g.nodes.find((n) => n.type === 'Capability' && /^desk finding$/i.test(n.label)) }));
+    d = await drop('14-whiteboard.png');
+    st = stepsOf(d.item);
+    const { g: g14, star: deskStar } = await desk();
+    const deskLink = deskStar && g14.edges.find((e) => e.from === 'idea:CAFE-2026-002' && e.to === deskStar.id && e.rel === 'NEEDS');
+    check(A('14-whiteboard.png'), 'Read "Picture read by the AI…"; note read by ai; matched 002; star + link confirmed',
+      `read "${st.read?.detail}"; ${d.item.type}/${d.item.meta?.readBy ?? '-'}; ${show(d.item)}; link ${deskLink ? (deskLink.confirmed ? 'confirmed' : 'waiting') : 'none'}`,
+      /^Picture read by the AI/.test(st.read?.detail ?? '') && d.item.type === 'note' && d.item.meta?.readBy === 'ai'
+        && d.item.triage?.ideaId === 'CAFE-2026-002' && deskLink?.confirmed === true);
+
+    // 15: the same picture inside a PDF with no text layer: the scanned path, same result.
+    d = await drop('15-scanned.pdf');
+    st = stepsOf(d.item);
+    check(A('15-scanned.pdf'), 'Read "Scanned PDF read by the AI…"; matched 002; check done',
+      `read "${st.read?.detail}"; ${d.item.meta?.readBy ?? '-'} p${d.item.meta?.pages ?? '-'}; ${show(d.item)}; check ${st.check?.status}`,
+      /^Scanned PDF read by the AI/.test(st.read?.detail ?? '') && d.item.meta?.readBy === 'ai' && d.item.triage?.ideaId === 'CAFE-2026-002'
+        && ['done', 'needs-you'].includes(st.check?.status));
+
     // 02 again: the same file: one receive step, nothing else.
     d = await drop('02-reply-with-id.eml');
     check(A('02 again'), 'duplicate: true, steps = [receive]', `duplicate ${!!d.duplicate}; ${stepLine(d.item)} "${d.item.steps?.[0]?.detail}"`,
       d.duplicate === true && d.item.steps?.length === 1 && d.item.steps[0].id === 'receive');
   } finally {
     AGENTIC = false;
+    await stopServer(server);
+  }
+}
+
+/* ---------- rounds in the knowledge graph: a fresh workspace, one round, two ideas ---------- */
+
+async function roundsPass(clock) {
+  const ws = `${workspace}-rounds`;
+  await fs.rm(ws, { recursive: true, force: true });
+  await fs.mkdir(ws, { recursive: true });
+  await initWorkspace(ws);
+  const server = await startServer(ws, clock);
+  try {
+    await drop('01-submissions.xlsx');
+    const before = (await graph()).edges.filter((e) => e.rel === 'IN_ROUND').length;
+    const round = await api('POST', '/api/rounds', { name: 'Acceptance round' });
+    await api('POST', `/api/rounds/${round.id}/ideas`, { ideaIds: ['CAFE-2026-001', 'CAFE-2026-002'] });
+    const g = await graph();
+    const star = g.nodes.find((n) => n.type === 'Round' && n.attrs?.roundId === round.id);
+    const inRound = g.edges.filter((e) => e.rel === 'IN_ROUND');
+    const from = inRound.map((e) => e.from.replace(/^idea:/, '')).sort();
+    check('(rounds)', 'create a round, put 001 and 002 in it: exactly two IN_ROUND edges onto its star',
+      `${round.id} "${round.name}"; star ${star?.label ?? 'none'}; IN_ROUND ${before}→${inRound.length} from ${from.join(', ')}`,
+      before === 0 && !!star && inRound.length === 2 && inRound.every((e) => e.to === star.id) && from.join() === 'CAFE-2026-001,CAFE-2026-002');
+  } finally {
     await stopServer(server);
   }
 }

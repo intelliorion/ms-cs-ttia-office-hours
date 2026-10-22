@@ -25,8 +25,11 @@ panels, large white titles and pill buttons at the bottom.
   and History. **← Back** (or Esc) returns to the list where you left it (same search, filters and scroll); the
   star stays selected. Opening an idea turns Focus off so the panel shows.
 - **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
-- **Pop-outs.** Import, Round, Outbox, Inbox and AI open in front of the universe; close them with the X or Esc.
-  Ideas never open in a pop-out: an idea link in the Inbox or the late list opens it in the left panel.
+- **Pop-outs.** Import, Rounds, Outbox and AI open in front of the universe; close them with the X or Esc.
+  (Import with a report opens from a link inside the Import.) Ideas never open in a pop-out: an idea link in the
+  Import or the late list opens it in the left panel.
+- **First run.** With no ideas yet, a card in the middle of the universe says "Nothing here but dark matter." and
+  its one button, **Start: import submissions**, opens the Import. It goes away as soon as the first idea exists.
 - **Narrow windows.** Below 1000px wide the side panels become drawers: tap the "Ideas" tab on the left or
   "Charts" on the right; close with the X or Esc. The universe stays behind them. The Ideas drawer shows an idea's details the
   same way, with Back; Esc goes Back first, then closes the drawer.
@@ -41,8 +44,8 @@ panels, large white titles and pill buttons at the bottom.
   says so; in Full, if the first few seconds draw under 20 fps it switches to Lite once and says so. The choice is
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
-- **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack (this writes the file),
-  and the AI chip (which shows who is answering).
+- **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
+  Rounds, Outbox, Review pack (this writes the file), and the AI chip (which shows who is answering).
 
 ## Run it
 
@@ -68,7 +71,7 @@ npm run cafe -- import export.csv --workspace ~/cafe-workspace
 
 ```
 rounds/       one folder per round you make (ROUND-001, ...): its name and dates; the review pack
-inbox/        dropped files and exports (see Inbox: drop anything); inbox/held/ keeps files the app will not read
+inbox/        dropped files and exports (see Import: drop anything); inbox/held/ keeps files the app will not read
 ideas/        one folder per idea: the submission, its emails, its history
 cohorts/  roadshows/
 graph/        the universe: nodes.jsonl, edges.jsonl, ai-links.jsonl (AI suggestions and your Yes or No),
@@ -98,12 +101,29 @@ npm run cafe -- start --workspace ~/cafe-workspace    # the API on 4100
 npm run dev:ui                                        # the UI with hot reload; it talks to the API on 4100
 ```
 
+## Rounds
+
+A round is something you make, when you want it: nothing makes one for you, and you never need to run anything
+first. Open **Rounds** in the title bar, give the new round a name (it offers the quarter, for example `2026 Q4`) and
+press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, `ROUND-002`, and so on.
+
+- **Its ideas.** Imported ideas start in no round. Tick them under **Unassigned ideas**, pick a round and press
+  **Put N ideas in …**; **Take out** sends one back. The idea head has a round chip too (the round's name, or
+  "No round") to move one idea at a time. Each change is logged on the idea.
+- **Its dates.** Each round keeps its own dates (opens, deadline, decisions by, design series, roadshow). An email
+  for an idea in no round still drafts, with the dates left blank and the note "Put this idea in a round to fill the
+  dates".
+- **In the universe.** Every round is a cream star with its name, and each of its ideas links to it (`IN_ROUND`),
+  so you can see which ideas are in which round. A round with no ideas yet is a star on its own. Click a round's
+  star and switch **Only related** on to see just its ideas. The AI never adds or moves rounds.
+- **The review pack** groups ideas by round, newest first, with ideas in no round under "No round yet".
+
 ## A round, by hand
 
-1. **Round** (pop-out): set the dates, the links and your name. Draft E0 (call for ideas) and E0B (deadline
-   reminder).
+1. **Rounds** (pop-out): create the round, set its dates, the links and your name. Draft E0 (call for ideas) and E0B
+   (deadline reminder).
 2. **Import** (pop-out): drop the SharePoint or Forms export. Re-dropping it only adds new rows. New ideas
-   appear as stars and in the left list.
+   appear as stars and in the left list; put them in the round from **Rounds**.
 3. **Idea** (click it in the list or the universe): read it, draft E1, and set the stage forward or back, or
    close it. Every change is logged and nothing is ever blocked.
 4. **Review** (in the idea's details, left panel): tick the five criteria, pick a decision, give a reason. Saving drafts
@@ -116,25 +136,40 @@ npm run dev:ui                                        # the UI with hot reload; 
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
 6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
-## Inbox: drop anything
+## Import: drop anything
 
-Open **Inbox** in the title bar (it shows how many things wait on you). Drop files on it, or paste a note,
+Open **Import** in the title bar (it shows how many things wait on you). Drop files on it, or paste a note,
 and the app works out which idea each one belongs to and what it changes. Everything dropped is read as
 **data, never as instructions**.
 
 **What you can drop**
 
-- Café exports: `.csv` and `.xlsx`. These are imported the same way as in Import.
+- Café exports: `.csv` and `.xlsx`. These are imported the same way as in Import with a report.
 - Emails: `.eml` and `.msg`.
 - Teams meeting transcripts: `.vtt`.
 - Word files: `.docx`.
+- PDFs: `.pdf`, with text or scanned.
+- Pictures: `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`, up to 10 MB (a whiteboard photo, a screenshot, a scan).
 - Notes and pasted text.
-- Dropping a file anywhere on the Inbox pop-out works, not only on the dashed zone.
-- Want something to try? `test-data/` holds synthetic files (exports, emails, a transcript, a Word file, a held tracker, a PDF, and a reply that clashes with what the app holds) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
+- Dropping a file anywhere on the Import pop-out works, not only on the dashed zone.
+- Want something to try? `test-data/` holds synthetic files (exports, emails, a transcript, a Word file, a held tracker, a text PDF, a whiteboard picture, a scanned PDF, and a reply that clashes with what the app holds) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
 
-**What is held.** PDFs and images show "can't read this yet". Lists of people (for example a tracker with
-names, phone numbers or employee ids) are held too. A held file moves to `inbox/held/`, is not read any
-further and is never copied into an idea. You can delete it, or draft a reply asking the sender for counts
+**PDFs and pictures.** A PDF with text is read by the app itself, page by page, like a Word file (the Read step says
+"PDF, 3 pages, 1,240 words"). A picture, or a scanned PDF with no text in it, is read by the AI: the app copies the
+file alone into an empty temp folder and asks Claude Code to open it with its Read tool (that one file only), write
+out all the text in it line by line, and say in two sentences what the picture shows; the folder is deleted after.
+The Read step says "Picture: the AI is reading it…", then "Picture read by the AI, 4.2 s, 86 words". From there the
+transcription goes through Screen, Match, Understand and the rest exactly like a pasted note, and the card shows it
+under **What the AI read**. **Pictures are read by the AI before the personal-data check; a held picture's text is not
+kept** (the held card says "The text was not kept"). Reading pictures needs Claude Code as the AI helper; with Copilot
+CLI or the VS Code helper a picture is held with "Reading pictures needs Claude Code (AI helper → provider)", and with
+no AI it is held too. **Run again** reads the picture again.
+
+**What is held.** Lists of people (for example a tracker with names, phone numbers or employee ids) are held,
+including a list the AI found in a picture. So are a protected or broken PDF ("Can't open this PDF (it may be
+protected)"), a blank or unreadable picture, and picture formats the app does not take (`.bmp`, `.tif`, `.tiff`,
+`.heic`: "This picture format isn't supported; save it as PNG or JPG"). A held file moves to `inbox/held/`, is not
+read any further and is never copied into an idea. You can delete it, or draft a reply asking the sender for counts
 instead of names.
 
 **How an idea is matched**
@@ -145,14 +180,14 @@ instead of names.
 - The title only in the body is unsure (0.6), so the app asks "Which idea?" and you pick.
 - Anything below 0.7 asks. The AI can lower a confidence, and so make the app ask, but it never raises one.
 
-**What happens to each file: eight steps.** Every drop runs the same eight steps, and the Inbox shows them as
+**What happens to each file: eight steps.** Every drop runs the same eight steps, and the Import shows them as
 dots on the file's card while it runs (a pulsing dot is the step in progress). Each step is recorded with what it
 found, so you can look back later.
 
 | Step | What it does |
 |---|---|
 | Receive | Stores the file. The same file twice is noticed here and nothing else runs. |
-| Read | Reads the text out of the email, transcript, Word file, note or export. |
+| Read | Reads the text out of the email, transcript, Word file, PDF, note or export; a picture or a scanned PDF is read by the AI. |
 | Screen | Checks for lists of people and files it can't read. A hit stops here and the file is held. |
 | Match | Works out which idea it belongs to (see above). If it can't tell, it asks "Which idea?". |
 | Understand | Asks the AI what the file says: answers, a builder, attendance, flags, stars and links. Exports skip it. |
@@ -167,7 +202,7 @@ on the card repeats steps 4 to 8, and what was already applied stays applied and
 **The graph rule.** What the AI finds goes into the universe at once, confirmed, new stars included; there is no
 Confirm step. The only links that wait are the ones a conflict rule below holds. You can remove any AI link later
 from the idea's details. A held link from **Grow the universe** shows dashed, with "Waiting on you" and **Add it
-anyway**; a held link from the Inbox waits on the file's card instead.
+anyway**; a held link from the Import waits on the file's card instead.
 
 **What waits for you: the conflict rules.** Code, not the AI, decides. Only the item that clashes waits; the rest
 of the same file is applied.
@@ -188,8 +223,8 @@ and changes nothing. Some changes are never held but still wait for an OK on the
 the first time or an answer to a question we didn't send; they sit under **Needs your OK** with **Apply**. What
 was applied sits under **Applied**, each with **Undo**.
 
-**History.** Below the cards in flight, the Inbox keeps every file it has seen, newest first, grouped by day.
-The chips filter it: **All**, **Needs you**, **Held**, **Done**, **Failed**, **Dismissed**, and the search box finds
+**History.** Below the cards in flight, the Import keeps every file it has seen, newest first, grouped by day.
+The chips filter it: **All**, **Needs you**, **Held**, **Done**, **Failed**, **Dismissed**, **Pictures**, and the search box finds
 a file by its name, its idea's ID or the idea's title. Click a row to open its card again.
 
 If the AI can't be reached, the item says "Working by hand", explains why, and nothing is applied on its
@@ -219,8 +254,9 @@ second time. If the first drop was never sorted (the app stopped part way), drop
 before they are sent.
 
 **Tests.** `CAFE_AI_FAKE=1` also makes the fake provider answer `TASK: understand` with fixed facts (a reply, a
-transcript, or, for text that mentions "a second builder", a reply that clashes), so the Inbox can be tested without
-a real AI. See Test hook below.
+transcript, or, for text that mentions "a second builder", a reply that clashes), and reads pictures by their file name
+(`whiteboard` or `scanned` in the name gives the kit's whiteboard text, `tracker` a list of people, anything else
+"A blank picture"), so the Import can be tested without a real AI. See Test hook below.
 
 New folders in the workspace:
 
@@ -274,7 +310,7 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 - The answer is **checked against a schema** before anything is used. Anything else is thrown away and the
   app says it is working by hand.
 - **What the AI finds is added at once, confirmed, new stars included; only a link a conflict rule holds waits
-  for you; you can remove any AI link from the idea's details.** The rules are in the Inbox section above (a star
+  for you; you can remove any AI link from the idea's details.** The rules are in the Import section above (a star
   that looks like one you have, a person, a link the AI was less than 50% sure of). A held link shows dashed with
   "Waiting on you" and **Add it anyway**. After "Grow the universe" the app says how many links were added and how
   many wait for you. A link you removed is not proposed again.
@@ -324,7 +360,7 @@ nothing is saved until you press a button, and you can do everything except plan
 2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
    input it needs, who builds it, and so on. Each question comes with a reason and suggested answers. Pick
    one, type your own, or press **I don't know → ask the team**: the question goes into the idea's E2 draft
-   in the Outbox, and when the team's reply comes in through the Inbox, it fills the answer. The live
+   in the Outbox, and when the team's reply comes in through the Import, it fills the answer. The live
    design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
    flags, each "Clean" or listed.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
@@ -380,7 +416,7 @@ cd ui && npm test        # the UI helpers
 node scripts/ui-tour.mjs --workspace /tmp/cafe-tour-ws --out /tmp/cafe-tour-shots
 ```
 
-**Acceptance run of the Inbox.** `npm run acceptance` drops the whole `test-data/` kit (01 to 12) through the API on its own
+**Acceptance run of the Import.** `npm run acceptance` drops the `test-data/` kit (01 to 11) through the API on its own
 server (a free port, never 4100) and a fresh workspace, sends an E2 for CAFE-2026-002 first, then applies one Needs-OK
 action, undoes one Safe one and checks that no AI link waits in the universe, and prints file → expected → actual → PASS/FAIL (non-zero exit on a
 FAIL). It runs with `--fake`: a scripted, deterministic triage (which obeys the injection in 05, to show the code holds
@@ -391,8 +427,11 @@ questions with the second answered "I don't know" (an E2 draft with that questio
 CSIC suggestion for the custom app), and write the plan (plan.md and the custom app kit). Last, an agentic pass on a second
 fresh workspace (`<workspace>-agentic`): 02 runs all eight steps to "Done" with its AI links confirmed; 13 (the
 conflicting reply) holds the second builder and the "Slot findings" star (a "Slot finding" star is seeded first) and is
-then settled; 08 builds one pain-point star; 07 is only filed; 11 stops at the screen; and 02 dropped again records
-only Receive.
+then settled; 08 builds one pain-point star; 07 is only filed; 11 stops at the screen; 12-text.pdf is read as a
+document, matched to CAFE-2026-004 by its id and its facts applied; 14-whiteboard.png is read by the (fake) AI and
+matched to CAFE-2026-002 with its star and link confirmed; 15-scanned.pdf takes the scanned path; and 02 dropped again
+records only Receive. Then a rounds pass on a third fresh workspace (`<workspace>-rounds`): one round made, two ideas
+put in it, and exactly two `IN_ROUND` links in the universe.
 
 **Scale test of the universe.** `npm run scale -- --out /tmp/cafe-scale` generates a 60-idea export and 150 synthetic
 AI links (`--links 300` for about 300 stars), imports them into a fresh workspace, times `GET /api/graph`, and in
@@ -402,8 +441,10 @@ the fly-to lands, and saves `scale-universe.png` and `scale-report.json`. Nothin
 The tour starts its own server on port 4103 (never 4100) against a scratch workspace that it wipes, drives
 Chrome with Playwright, and saves screenshots. It needs Google Chrome installed. WebGL runs in software, so
 a full tour takes several minutes. `--only=panels|hover|panel|popouts2|ai|inbox|inboxhand|agentic|drawers|focus|ideacard|empty` runs one part (`panel`, also `popout`, clicks a list item and checks the idea opens in the left panel with no dialog, Back, and the star card's Open idea); `--only=ai`, `--only=inbox` and `--only=agentic`
-need `CAFE_AI_FAKE=1` (`agentic` also needs `npm run test-data`: it drops 02 and 13 from the kit with the fake slowed to
-2.5 s, and saves 60 to 64: the drop well, a card running, Needs you, the history, and the idea's links); `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
+need `CAFE_AI_FAKE=1` (`agentic` also needs `npm run test-data`: it drops 02, 13 and 14 from the kit with the fake slowed to
+2.5 s, and saves 60 to 68: the drop well, a card running, Needs you, the history, the idea's links, a picture mid-read,
+the picture done with "What the AI read" open, the welcome card on an empty workspace, and the Rounds pop-out with one
+round and two ideas); `inboxhand` restarts the server without it, and a full tour includes the AI shots only when it is set. The tour reports any console error and exits non-zero.
 
 ## Before the first round
 

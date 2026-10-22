@@ -22,7 +22,7 @@ export function TitleBar() {
     <header className="titlebar">
       <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
-        <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: Café form exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>
+        <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, Word, PDF and pictures" onClick={() => openPopout({ kind: 'inbox' })}>
           <span className="ib-icon" aria-hidden="true">⤓</span>Import{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Rounds</button>
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>

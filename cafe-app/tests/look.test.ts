@@ -80,3 +80,12 @@ describe('Claude Code look', () => {
     expect((await readdir(path.dirname(file))).sort()).toEqual(['note.png', 'other.txt']);
   });
 });
+
+describe("the fake understands the kit's text PDF", () => {
+  it('a memo naming "Duplicate claim spotting" is about CAFE-2026-004, with its capability and data source', async () => {
+    vi.stubEnv('CAFE_AI_FAKE', '1');
+    const out = JSON.parse(await fakeProvider().complete('TASK: understand\n<<<DATA {"text":"Memo on CAFE-2026-004\\nCapability: Duplicate claim spotting"} DATA>>>', { timeoutMs: 1000 }));
+    expect(out.ideaId).toBe('CAFE-2026-004');
+    expect(out.facts.graph.nodes.map((n: { label: string }) => n.label)).toEqual(['Duplicate claim spotting', 'Expense system export']);
+  });
+});

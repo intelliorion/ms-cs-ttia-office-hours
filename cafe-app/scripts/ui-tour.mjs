@@ -341,10 +341,12 @@ async function inboxHandShots(p, restart) {
 // The agentic Inbox with the fake AI slowed to 2.5 s an answer (CAFE_AI_FAKE_DELAY, so a running step can be seen):
 // the drop well, a card mid-run, the kit's conflicting reply held under Needs you (a "Slot finding" star is seeded
 // first, so "Slot findings" looks the same), the full history, then the idea's links after the held one is settled.
+// Then a picture (the kit's whiteboard) mid-read and done with "What the AI read" open, the Rounds pop-out with one
+// round and two ideas in it, and last the welcome card on an empty workspace.
 async function agenticShots(p, restart) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`agentic: ${msg}`); };
   const kit = path.join(APP, 'test-data');
-  for (const f of ['02-reply-with-id.eml', '13-conflicting-reply.eml']) {
+  for (const f of ['02-reply-with-id.eml', '13-conflicting-reply.eml', '14-whiteboard.png']) {
     await fs.access(path.join(kit, f)).catch(() => { throw new Error(`agentic: test-data/${f} is missing; run npm run test-data first`); });
   }
   await restart({ CAFE_AI_FAKE_DELAY: '2500' });
@@ -393,6 +395,51 @@ async function agenticShots(p, restart) {
   console.log(`  idea links: ${waiting} waiting on you, ${aiRows} AI links with Remove`);
   await shot(p, '64-link-waiting.png');
   await p.click(`${D} [data-action="back"]`);
+
+  // A picture: the Read step runs while the (slowed) fake AI looks at it, then the card shows what the AI read.
+  await p.click('.titlebar [data-action="inbox"]');
+  await p.waitForSelector('[data-testid="inbox-drop"]');
+  await p.setInputFiles('[data-testid="inbox-file"]', path.join(kit, '14-whiteboard.png'));
+  await p.waitForSelector('.ib-card .ib-step[data-step="read"][data-status="running"]', { timeout: 20000 });
+  await sleep(300);
+  const reading = await p.textContent('.ib-flight [data-testid="step-detail"]');
+  console.log(`  picture mid-read: "${reading}"`);
+  assert(/^Picture: the AI is reading it/.test(reading ?? ''), 'the picture card did not say the AI is reading it');
+  await shot(p, '65-picture-reading.png');
+  await p.waitForSelector('.ib-open [data-testid="ai-read"]', { timeout: 60000 });
+  await sleep(600);
+  const read = p.locator('.ib-open [data-testid="ai-read"]');
+  assert(await read.evaluate((el) => el.open), '"What the AI read" is not open on the finished card');
+  assert(/CAFE-2026-002 DESK BOOKING/.test(await read.textContent()), '"What the AI read" does not show the transcription');
+  await read.scrollIntoViewIfNeeded();
+  await sleep(300);
+  await shot(p, '66-picture-read.png');
+  await p.keyboard.press('Escape');
+
+  // Rounds: the round made at set-up, with two ideas put in it.
+  const { ideas } = await (await fetch(`${base}/api/state`)).json();
+  const { rounds } = await (await fetch(`${base}/api/rounds`)).json();
+  assert(rounds?.length === 1, `expected one round, found ${rounds?.length}`);
+  await post(`/api/rounds/${rounds[0].id}/ideas`, { ideaIds: ideas.slice(0, 2).map((i) => i.id) });
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('canvas');
+  await sleep(1500);
+  await p.click('.titlebar [data-action="round"]');
+  await p.waitForSelector(`.rnd[data-round="${rounds[0].id}"] .rnd-ideas li:nth-child(2)`);
+  await sleep(800);
+  await shot(p, '68-rounds.png');
+  await p.keyboard.press('Escape');
+
+  // The welcome card: a fresh workspace with no ideas.
+  const empty = `${workspace}-welcome`;
+  if (!safeToDelete(empty)) throw new Error(`Refusing to delete ${empty}`);
+  await fs.rm(empty, { recursive: true, force: true });
+  await restart({}, empty);
+  await p.reload({ waitUntil: 'networkidle' });
+  await p.waitForSelector('[data-testid="welcome"]');
+  await sleep(1500);
+  await shot(p, '67-welcome.png');
+  await fs.rm(empty, { recursive: true, force: true });
 }
 
 // The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the brainstorm one question at a time

@@ -33,7 +33,6 @@ cafe-app/src/design/cafecheck.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/store.ts
 cafe-app/src/design/tools.ts
-cafe-app/src/exports/status.ts
 cafe-app/src/graph/build.ts
 cafe-app/src/graph/d3-force-3d.d.ts
 cafe-app/src/graph/layout.ts
@@ -51,6 +50,7 @@ cafe-app/src/inbox/conflicts.ts
 cafe-app/src/inbox/flow.ts
 cafe-app/src/inbox/match.ts
 cafe-app/src/inbox/parse.ts
+cafe-app/src/inbox/pdf.ts
 cafe-app/src/inbox/question.ts
 cafe-app/src/inbox/screen.ts
 cafe-app/src/inbox/steps.ts
@@ -92,7 +92,7 @@ cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-store.test.ts
 cafe-app/tests/design-tools.test.ts
-cafe-app/tests/due-status.test.ts
+cafe-app/tests/due.test.ts
 cafe-app/tests/e2e.test.ts
 cafe-app/tests/files.test.ts
 cafe-app/tests/fixtures/inbox/LICENSE-NOTICE.md
@@ -113,8 +113,11 @@ cafe-app/tests/inbox-routes.test.ts
 cafe-app/tests/inbox-steps.test.ts
 cafe-app/tests/inbox-triage.test.ts
 cafe-app/tests/inbox-understand.test.ts
+cafe-app/tests/look.test.ts
 cafe-app/tests/outbox.test.ts
+cafe-app/tests/pdf.test.ts
 cafe-app/tests/review.test.ts
+cafe-app/tests/rounds.test.ts
 cafe-app/tests/rules.test.ts
 cafe-app/tests/server-graph.test.ts
 cafe-app/tests/server.test.ts
@@ -131,8 +134,11 @@ cafe-app/ui/src/App.tsx
 cafe-app/ui/src/api.ts
 cafe-app/ui/src/layout/Drawers.tsx
 cafe-app/ui/src/layout/Panel.tsx
+cafe-app/ui/src/layout/Stage.test.ts
 cafe-app/ui/src/layout/Stage.tsx
 cafe-app/ui/src/layout/TitleBar.tsx
+cafe-app/ui/src/layout/Welcome.test.tsx
+cafe-app/ui/src/layout/Welcome.tsx
 cafe-app/ui/src/main.tsx
 cafe-app/ui/src/panels/Charts.test.tsx
 cafe-app/ui/src/panels/Charts.tsx
@@ -198,8 +204,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-BIcP_gxC.js
-cafe-app/web/assets/index-ClzXdaIR.css
+cafe-app/web/assets/index-ByGc1Rwl.css
+cafe-app/web/assets/index-UQ4C8mAy.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md
@@ -209,9 +215,11 @@ docs/superpowers/plans/2026-10-19-cafe-inbox.md
 docs/superpowers/plans/2026-10-19-cafe-universe-ui.md
 docs/superpowers/plans/2026-10-20-cafe-design-series.md
 docs/superpowers/plans/2026-10-21-cafe-agentic-inbox.md
+docs/superpowers/plans/2026-10-22-cafe-rounds-pictures.md
 docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 docs/superpowers/specs/2026-10-21-cafe-agentic-inbox-design.md
+docs/superpowers/specs/2026-10-22-cafe-rounds-pictures-design.md
 scripts/build-github-agent.sh
 scripts/build.sh
 scripts/fetch-without-zip.ps1

@@ -182,3 +182,36 @@ describe('agentic inbox helpers', () => {
     expect(heldChoices({ rule: 'person-star', why: 'x' })).toEqual([{ label: 'No', kind: 'drop' }]);
   });
 });
+
+import { isPicture, kindOf, CHIPS as ALL_CHIPS } from './inboxHelpers';
+
+describe('pictures in the Import (Task 4)', () => {
+  const at = '2026-10-21T10:00:00Z';
+  const pic = { id: 'p', file: 'inbox/14-whiteboard.png', name: '14-whiteboard.png', type: 'note', receivedAt: at, status: 'applied', meta: { readBy: 'ai', notes: 'A whiteboard photo' } } as InboxItemView;
+  const note = { id: 'n', file: 'inbox/n.txt', name: 'n.txt', type: 'note', receivedAt: at, status: 'applied' } as InboxItemView;
+  const doc = { id: 'd', file: 'inbox/12-text.pdf', name: '12-text.pdf', type: 'document', receivedAt: at, status: 'applied', meta: { pages: 1, words: 30 } } as InboxItemView;
+
+  it('a note read by the AI is a picture; a plain note and a PDF are not', () => {
+    expect(isPicture(pic)).toBe(true);
+    expect(isPicture(note)).toBe(false);
+    expect(isPicture(doc)).toBe(false);
+    expect(kindOf(pic)).toBe('picture');
+    expect(kindOf(note)).toBe('note');
+    expect(typeWord('picture')).toBe('Picture');
+  });
+
+  it('the history has a picture chip that keeps only pictures', () => {
+    expect(ALL_CHIPS.find((c) => c.id === 'picture')?.label).toBe('Pictures');
+    expect(filterItems([pic, note, doc], 'picture', '').map((i) => i.name)).toEqual(['14-whiteboard.png']);
+  });
+});
+
+describe('a picture still being read', () => {
+  it('shows as a picture before the AI has read it; any other unknown file stays a file', () => {
+    const at = '2026-10-21T10:00:00Z';
+    const reading = { id: 'r', file: 'inbox/b.png', name: 'b.PNG', type: 'unknown', receivedAt: at, status: 'new' } as InboxItemView;
+    const other = { id: 'o', file: 'inbox/x.bin', name: 'x.bin', type: 'unknown', receivedAt: at, status: 'new' } as InboxItemView;
+    expect(kindOf(reading)).toBe('picture');
+    expect(kindOf(other)).toBe('unknown');
+  });
+});

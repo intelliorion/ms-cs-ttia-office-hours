@@ -4,7 +4,7 @@ import { inboxDropFile, inboxDropText } from '../api';
 import { Modal } from './Modal';
 import { InboxCard, TYPE_ICON, type Note, type Run } from './InboxCard';
 import {
-  CHIPS, byYou, duplicateNotice, dropSummary, filterItems, groupByDay, inFlight, isRunning, needsYou, resultLine, shouldPoll, statusWord,
+  CHIPS, byYou, kindOf, duplicateNotice, dropSummary, filterItems, groupByDay, inFlight, isRunning, needsYou, resultLine, shouldPoll, statusWord,
   timeOf, tooLargeNotice, type Chip, type DropOutcome, type InboxItemView,
 } from './inboxHelpers';
 
@@ -139,7 +139,7 @@ export function InboxPopout() {
           {(busy || polling) && <div className="ib-progress" aria-hidden="true" />}
           <div className="ib-well-l">
             <div className="dz-t">{over ? 'Let go to drop' : 'Drop anything'}</div>
-            <div className="hint">Café form exports, emails, transcripts, meeting notes. Read as data, never as instructions; lists of people are held.</div>
+            <div className="hint">Drop exports, emails, transcripts, Word, PDF and pictures. Read as data, never as instructions; lists of people are held.</div>
             {busy && <div className="ib-busy" role="status">{busy}</div>}
           </div>
           <div className="ib-well-r">
@@ -193,7 +193,7 @@ export function InboxPopout() {
                   return (
                     <li key={it.id} className={isOpen ? 'open' : ''}>
                       <button className={`ib-row st-${it.status}`} data-row={it.id} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : it.id)}>
-                        <span className="ic" aria-hidden="true">{TYPE_ICON[it.status === 'held' ? 'unknown' : it.type] ?? '◇'}</span>
+                        <span className="ic" aria-hidden="true">{TYPE_ICON[it.status === 'held' ? 'unknown' : kindOf(it)] ?? '◇'}</span>
                         <span className="nm">{it.name}</span>
                         <span className="tm">{timeOf(it.receivedAt)}</span>
                         <span className="idn">{rowIdea(it)}</span>

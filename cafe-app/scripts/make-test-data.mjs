@@ -1,10 +1,11 @@
-// Writes cafe-app/test-data/: realistic but entirely synthetic files to drop into the Inbox.
+// Writes cafe-app/test-data/: realistic but entirely synthetic files to drop into the Import.
 // Run: npm run test-data   (deterministic: same output every run)
 import { mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
 import { zipSync, strToU8 } from 'fflate';
+import { deflateSync } from 'node:zlib';
 
 // Fictional names only; any resemblance to real people is coincidental.
 const NAMES = ['Avery Chen', 'Priya Nair', 'Tomasz Wiśniewski', 'Noor El-Sayed', 'Mateo Álvarez', 'Ingrid Solberg', 'Kwame Mensah', 'Hana Kobayashi',
@@ -229,21 +230,101 @@ await put('11-held-tracker.csv', ['Name,Employee ID,Phone,Client',
     return `${who(n)},${String.fromCharCode(67 + (i % 20))}${String.fromCharCode(68 + ((i * 7) % 20))}${String(20100 + i * 137).padStart(5, '0')},+44 20 7946 0${String(200 + i * 11).padStart(3, '0')},${clients[i % 5]}`;
   })].join('\n') + '\n');
 
-// ---------- 12 pdf ----------
+// ---------- PDF, bitmap and PNG writers (no dependencies; same bytes every run) ----------
+/** A PDF from its objects (strings or Buffers, numbered from 1; object 1 is the catalog), with byte-exact xref offsets. */
+function pdfFile(objs) {
+  const parts = [Buffer.from('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n', 'latin1')];
+  let size = parts[0].length; const offs = [];
+  objs.forEach((o, i) => {
+    const b = Buffer.concat([Buffer.from(`${i + 1} 0 obj\n`), Buffer.isBuffer(o) ? o : Buffer.from(o, 'latin1'), Buffer.from('\nendobj\n')]);
+    offs.push(size); parts.push(b); size += b.length;
+  });
+  parts.push(Buffer.from(`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${size}\n%%EOF\n`));
+  return Buffer.concat(parts);
+}
+const pdfStream = (dict, data) => Buffer.concat([Buffer.from(`<< ${dict} /Length ${data.length} >>\nstream\n`), data, Buffer.from('\nendstream')]);
+
+/** 5×7 block letters: seven rows of five pixels per character. */
+const FONT = {
+  A: '01110 10001 10001 11111 10001 10001 10001', B: '11110 10001 10001 11110 10001 10001 11110', C: '01110 10001 10000 10000 10000 10001 01110',
+  D: '11110 10001 10001 10001 10001 10001 11110', E: '11111 10000 10000 11110 10000 10000 11111', F: '11111 10000 10000 11110 10000 10000 10000',
+  G: '01110 10001 10000 10111 10001 10001 01111', H: '10001 10001 10001 11111 10001 10001 10001', I: '01110 00100 00100 00100 00100 00100 01110',
+  J: '00111 00010 00010 00010 00010 10010 01100', K: '10001 10010 10100 11000 10100 10010 10001', L: '10000 10000 10000 10000 10000 10000 11111',
+  M: '10001 11011 10101 10101 10001 10001 10001', N: '10001 10001 11001 10101 10011 10001 10001', O: '01110 10001 10001 10001 10001 10001 01110',
+  P: '11110 10001 10001 11110 10000 10000 10000', Q: '01110 10001 10001 10001 10101 10010 01101', R: '11110 10001 10001 11110 10100 10010 10001',
+  S: '01111 10000 10000 01110 00001 00001 11110', T: '11111 00100 00100 00100 00100 00100 00100', U: '10001 10001 10001 10001 10001 10001 01110',
+  V: '10001 10001 10001 10001 10001 01010 00100', W: '10001 10001 10001 10101 10101 10101 01010', X: '10001 10001 01010 00100 01010 10001 10001',
+  Y: '10001 10001 10001 01010 00100 00100 00100', Z: '11111 00001 00010 00100 01000 10000 11111',
+  0: '01110 10001 10011 10101 11001 10001 01110', 1: '00100 01100 00100 00100 00100 00100 01110', 2: '01110 10001 00001 00010 00100 01000 11111',
+  3: '11111 00010 00100 00010 00001 10001 01110', 4: '00010 00110 01010 10010 11111 00010 00010', 5: '11111 10000 11110 00001 00001 10001 01110',
+  6: '00110 01000 10000 11110 10001 10001 01110', 7: '11111 00001 00010 00100 01000 01000 01000', 8: '01110 10001 10001 01110 10001 10001 01110',
+  9: '01110 10001 10001 01111 00001 00010 01100',
+  ' ': '00000 00000 00000 00000 00000 00000 00000', ':': '00000 01100 01100 00000 01100 01100 00000', ',': '00000 00000 00000 00000 01100 00100 01000',
+  '-': '00000 00000 00000 11111 00000 00000 00000', '/': '00001 00001 00010 00100 01000 10000 10000',
+};
+/** Lines of block letters, black on white, as RGB pixels: scale 4, one blank column between letters, 24 px between lines, centred. */
+function renderText(lines, { scale = 4, gap = 24, width = 1440, height = 600 } = {}) {
+  const adv = 6 * scale, lineH = 7 * scale;
+  const rgb = Buffer.alloc(width * height * 3, 255);
+  const top = Math.floor((height - (lines.length * lineH + (lines.length - 1) * gap)) / 2);
+  lines.forEach((line, li) => {
+    const left = Math.floor((width - (line.length * adv - scale)) / 2);
+    [...line].forEach((ch, ci) => {
+      const g = FONT[ch];
+      if (!g) throw new Error(`No glyph for "${ch}"`);
+      g.split(' ').forEach((row, y) => [...row].forEach((bit, x) => {
+        if (bit !== '1') return;
+        for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) {
+          const px = left + ci * adv + x * scale + dx, py = top + li * (lineH + gap) + y * scale + dy;
+          rgb.fill(0, (py * width + px) * 3, (py * width + px) * 3 + 3);
+        }
+      }));
+    });
+  });
+  return { width, height, rgb };
+}
+const CRC = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc32 = (buf) => { let c = 0xffffffff; for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+const pngChunk = (type, data) => {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([len, body, crc]);
+};
+/** An 8-bit RGB PNG: IHDR, one IDAT (every row with filter 0), IEND. */
+function png({ width, height, rgb }) {
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr.set([8, 2, 0, 0, 0], 8);
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) rgb.copy(raw, y * (width * 3 + 1) + 1, y * width * 3, (y + 1) * width * 3);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), pngChunk('IHDR', ihdr), pngChunk('IDAT', deflateSync(raw, { level: 9 })), pngChunk('IEND', Buffer.alloc(0))]);
+}
+
+// ---------- 12 text PDF: a short memo on CAFE-2026-004 ----------
 {
-  const stream = 'BT /F1 18 Tf 72 720 Td (Synthetic test PDF: the Cafe app cannot read PDFs yet.) Tj ET';
-  const objs = [
+  const lines = ['Memo on CAFE-2026-004 Expense anomaly finder', 'Data: the monthly expense system export', 'Capability: Duplicate claim spotting', 'Finance wants a weekly digest of flagged claims'];
+  const text = `BT /F1 16 Tf 72 720 Td 24 TL ${lines.map((l) => `(${l.replace(/[\\()]/g, (c) => `\\${c}`)}) Tj T*`).join(' ')} ET`;
+  await put('12-text.pdf', pdfFile([
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    pdfStream('', Buffer.from(text, 'latin1')),
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  let pdf = '%PDF-1.4\n'; const offs = [];
-  objs.forEach((o, i) => { offs.push(pdf.length); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
-  const xref = pdf.length;
-  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  await put('12-cannot-read.pdf', pdf);
+  ]));
+}
+
+// ---------- 14 whiteboard picture and 15 the same picture as a scanned PDF (no text layer) ----------
+const WHITEBOARD = ['CAFE-2026-002 DESK BOOKING', 'NEEDS: FIND A FREE DESK, SWAP A BOOKING, RELEASE NO-SHOWS', 'TOOL: COPILOT STUDIO', 'DATA: FLOOR PLAN SYSTEM'];
+const board = renderText(WHITEBOARD);
+await put('14-whiteboard.png', png(board));
+{
+  const w = 540, h = Math.round((540 * board.height) / board.width);
+  await put('15-scanned.pdf', pdfFile([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>',
+    pdfStream('', Buffer.from(`q ${w} 0 0 ${h} 36 ${792 - 72 - h} cm /Im1 Do Q`, 'latin1')),
+    pdfStream(`/Type /XObject /Subtype /Image /Width ${board.width} /Height ${board.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode`, deflateSync(board.rgb, { level: 9 })),
+  ]));
 }
 
 // A real Outlook .msg (msgreader test fixture, Apache-2.0; see tests/fixtures/inbox/LICENSE-NOTICE.md)
@@ -267,7 +348,7 @@ ${who(1)}`,
 }));
 
 // A reply on CAFE-2026-001 that clashes with what the app already holds: a different builder, and a star
-// ("Slot findings") that looks like one already in the universe. The Inbox holds just those two for the operator.
+// ("Slot findings") that looks like one already in the universe. The Import holds just those two for the operator.
 await put('13-conflicting-reply.eml', eml({
   from: 'Vendor contract team <team@example.test>', subject: 'RE: CAFE-2026-001: Vendor contract summariser', date: 'Tue, 27 Oct 2026 15:10:00 +0000', id: 'conflict-001',
   body: `Hi Café team,
@@ -281,12 +362,13 @@ The vendor contract team`,
 }));
 
 // ---------- README ----------
-await put('README.md', `# Test data for the Inbox
+await put('README.md', `# Test data for the Import
 
 Everything here is **synthetic**: all names ("${who(1)}" to "${who(39)}"), employee ids, phone numbers and figures are made up.
 Regenerate with \`npm run test-data\` (from \`cafe-app/\`); the output is the same every time. Do not edit these files by hand.
+Pictures are read by the AI before the personal-data check; a held picture's text is not kept.
 
-Suggested order: drop **01** first (so the ideas and their Café IDs exist), then **02-07**, then **08-12** (12-first-builder.eml before 13), and **13-conflicting-reply.eml** last (it shows what the Inbox holds for you).
+Suggested order: drop **01** first (so the ideas and their Café IDs exist), then **02-07**, then **08-11**, **12-text.pdf**, **13-outlook.msg**, **12-first-builder.eml**, **13-conflicting-reply.eml** (it shows what the Import holds for you), then **14** and **15**.
 
 | File | What it is | What to expect |
 |---|---|---|
@@ -301,9 +383,11 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 | 09-minutes.docx | Word minutes: heading, 3 paragraphs, an actions table | Read as a document; the table is kept as rows. |
 | 10-note.txt | Pasted-style note with no Café ID | Asks which idea it belongs to. |
 | 11-held-tracker.csv | Name, Employee ID, Phone, Client for 15 people | HELD, not imported as ideas. |
-| 12-cannot-read.pdf | One-page valid PDF | HELD: "can't read this yet". |
+| 12-text.pdf | One-page text PDF: a short memo on CAFE-2026-004 (Expense anomaly finder) with three facts: the data is the monthly expense system export, a "Duplicate claim spotting" capability, finance wants a weekly digest | Read as a document (Read: "PDF, 1 page, … words"), matched by Café ID to 004, facts applied. |
 | 12-first-builder.eml | ${who(1)} answers on CAFE-2026-001: names ${who(20)} as the builder, a "Slot finding" capability and the Contract Repository system | Nothing clashes, so it all applies on its own: builder named, new stars and links added confirmed. Sets up the conflict demo in 13. |
 | 13-outlook.msg | A real Outlook .msg (Apache-2.0 sample, 3 image attachments) | Read as an email; expect it to ask which idea, since it has no Café ID. |
-| 13-conflicting-reply.eml | A reply on CAFE-2026-001 from team@example.test: "a second builder now", and "slot findings across time zones" | The Inbox holds only what clashes, under Needs you: the new builder (the idea names one already) and the "Slot findings" star when a "Slot finding" star exists. The filing still happens on its own. |
+| 13-conflicting-reply.eml | A reply on CAFE-2026-001 from team@example.test: "a second builder now", and "slot findings across time zones" | The Import holds only what clashes, under Needs you: the new builder (the idea names one already) and the "Slot findings" star when a "Slot finding" star exists. The filing still happens on its own. |
+| 14-whiteboard.png | A generated whiteboard picture (block letters, black on white): CAFE-2026-002 DESK BOOKING / NEEDS: FIND A FREE DESK, SWAP A BOOKING, RELEASE NO-SHOWS / TOOL: COPILOT STUDIO / DATA: FLOOR PLAN SYSTEM | Read by the AI (Read: "Picture read by the AI, … s, … words"), matched to 002, stars and links added confirmed. The card shows "What the AI read". Needs Claude Code as the AI helper. |
+| 15-scanned.pdf | The same picture inside a one-page PDF with no text layer | The scanned-PDF path (Read: "Scanned PDF read by the AI, …"); same result as 14. |
 `);
 console.log(`Wrote test data to ${OUT}`);

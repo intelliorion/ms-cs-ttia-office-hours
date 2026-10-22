@@ -4,10 +4,10 @@ import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
   STEP_ORDER, STEP_WORDS, RULE_WORDS, stepGlyph, heldChoices, groupActions, applyableIds, canUndo, askCandidates, isAsking, typeWord, dayOf,
-  confidenceWord, handProblems, needsHand, itemHeadline, type ActionRecord, type InboxItemView, type Step,
+  confidenceWord, handProblems, needsHand, itemHeadline, kindOf, type ActionRecord, type InboxItemView, type Step,
 } from './inboxHelpers';
 
-export const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇' };
+export const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇', picture: '▣' };
 export type Note = { text: string; kind?: 'ok' | 'error' };
 export type Run = <T>(label: string, fn: () => Promise<T>, ok?: (r: T) => string | null, say?: (n: Note | null) => void) => Promise<void>;
 
@@ -59,7 +59,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
   return (
     <li className={`ib-card ib-item st-${item.status}${expanded ? ' open' : ''}`} data-item={item.id} data-status={item.status}>
       <div className="ib-r1">
-        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[heldFile ? 'unknown' : item.type] ?? '◇'}</span> {typeWord(heldFile ? 'unknown' : item.type)}</span>
+        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[heldFile ? 'unknown' : kindOf(item)] ?? '◇'}</span> {typeWord(heldFile ? 'unknown' : kindOf(item))}</span>
         <span className="ib-file">{item.name}</span>
         {matched && (
           <button className="ib-idea" data-action="open-idea" title="Open the idea" onClick={() => openIdea(matched)}>
@@ -103,6 +103,14 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
       {hand && handProblems(item).length > 0 && (
         <ul className="ib-problems">{handProblems(item).map((p, i) => <li key={i}>{p}</li>)}</ul>
       )}
+
+      {item.meta?.readBy === 'ai' && !heldFile && (item.preview || item.meta.notes) ? (
+        <details className="ib-understood ib-read" data-testid="ai-read" open={expanded}>
+          <summary>What the AI read</summary>
+          {item.meta.notes ? <div className="ib-read-notes">{item.meta.notes}</div> : null}
+          {item.preview ? <pre className="ib-read-text">{item.preview}</pre> : null}
+        </details>
+      ) : null}
 
       {ai?.understood?.length ? (
         <details className="ib-understood" open={expanded}>

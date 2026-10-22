@@ -99,8 +99,26 @@ const UNDERSTAND_WHITEBOARD = {
   },
   uncertain: [],
 };
+/** The kit's 12-text.pdf: a memo on CAFE-2026-004. */
+const UNDERSTAND_MEMO = {
+  what: 'A memo on the expense anomaly finder: its data, a capability and what finance wants',
+  understood: ['The data is the monthly expense system export', 'It needs duplicate claim spotting', 'Finance wants a weekly digest of flagged claims'],
+  kind: 'update', ideaId: 'CAFE-2026-004', matchConfidence: 0.95,
+  facts: {
+    answers: [], replyReceived: false, builderNamed: null, newFlags: [], stageHint: null,
+    graph: {
+      nodes: [{ type: 'Capability', label: 'Duplicate claim spotting' }, { type: 'System', label: 'Expense system export' }],
+      links: [
+        { from: 'idea', to: 'Duplicate claim spotting', rel: 'NEEDS', description: 'Spots duplicate claims', confidence: 0.9 },
+        { from: 'Duplicate claim spotting', to: 'Expense system export', rel: 'USES_DATA', description: 'Reads the monthly expense export', confidence: 0.8 },
+      ],
+    },
+  },
+  uncertain: [],
+};
 function understandFor(prompt: string) {
   if (prompt.includes('DESK BOOKING')) return UNDERSTAND_WHITEBOARD;
+  if (prompt.includes('Duplicate claim spotting')) return UNDERSTAND_MEMO;
   if (/second builder/i.test(prompt)) return UNDERSTAND_CONFLICT;
   if (/"type":"transcript"|-->/.test(prompt)) return UNDERSTAND_TRANSCRIPT;
   return UNDERSTAND_REPLY;

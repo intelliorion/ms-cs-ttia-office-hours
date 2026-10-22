@@ -80,3 +80,27 @@ describe('InboxCard', () => {
     useStore.setState({ graph: null });
   });
 });
+
+describe('InboxCard: what the AI read (pictures)', () => {
+  it('a picture shows "What the AI read" with the transcription and the notes', () => {
+    const el = mount(base({
+      name: '14-whiteboard.png', type: 'note', status: 'applied',
+      meta: { readBy: 'ai', notes: 'A whiteboard photo with a bulleted list' },
+      preview: 'CAFE-2026-002 DESK BOOKING\nTOOL: COPILOT STUDIO',
+      steps: [s('read', 'done', 'Picture read by the AI, 4.2 s, 8 words')],
+    }));
+    const read = el.querySelector('[data-testid="ai-read"]')!;
+    expect(read).not.toBeNull();
+    expect(read.querySelector('summary')?.textContent).toBe('What the AI read');
+    expect(read.textContent).toContain('CAFE-2026-002 DESK BOOKING');
+    expect(read.textContent).toContain('TOOL: COPILOT STUDIO');
+    expect(read.textContent).toContain('A whiteboard photo with a bulleted list');
+    expect(el.querySelector('.ib-type')?.textContent).toContain('Picture');
+  });
+
+  it('a normal note has no "What the AI read" block', () => {
+    const el = mount(base({ name: 'n.txt', type: 'note', preview: 'Hello there', steps: [s('read', 'done')] }));
+    expect(el.querySelector('[data-testid="ai-read"]')).toBeNull();
+    expect(el.querySelector('.ib-type')?.textContent).toContain('Note');
+  });
+});

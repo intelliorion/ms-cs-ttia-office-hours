@@ -30,7 +30,7 @@ export interface InboxItemView {
   type: InboxType;
   receivedAt: string;
   status: InboxStatus;
-  meta?: { from?: string; subject?: string; date?: string; speakers?: string[]; attachments?: string[] };
+  meta?: { from?: string; subject?: string; date?: string; speakers?: string[]; attachments?: string[]; pages?: number; words?: number; readBy?: 'ai'; notes?: string };
   preview?: string;
   hold?: { reasons: string[] };
   steps?: Step[];
@@ -76,10 +76,18 @@ export const canUndo = (r: ActionRecord) => r.status === 'applied' && !!r.invers
 /** The ids the Apply all button sends: pending or failed, never "Which idea?". */
 export const applyableIds = (records: ActionRecord[] | undefined) => groupActions(records).ok.map((r) => r.id);
 
-const TYPE_WORDS: Record<InboxType, string> = {
-  export: 'Export', email: 'Email', transcript: 'Transcript', document: 'Document', note: 'Note', unknown: 'File',
+const TYPE_WORDS: Record<InboxType | 'picture', string> = {
+  export: 'Export', email: 'Email', transcript: 'Transcript', document: 'Document', note: 'Note', unknown: 'File', picture: 'Picture',
 };
 export const typeWord = (t: string | undefined) => TYPE_WORDS[t as InboxType] ?? 'File';
+
+/** The picture formats the AI reads (a picture still being read has no type yet). */
+const PICTURE_EXT = /\.(png|jpe?g|gif|webp)$/i;
+/** A picture (or a scanned PDF) the AI read: stored as a note whose text the AI transcribed. */
+export const isPicture = (i: Pick<InboxItemView, 'type' | 'meta'>) => i.type === 'note' && i.meta?.readBy === 'ai';
+/** The kind shown on a card or a history row: 'picture' for a picture the AI read, else the item's type. */
+export const kindOf = (i: Pick<InboxItemView, 'type' | 'meta' | 'name'>): InboxType | 'picture' =>
+  isPicture(i) || (i.type === 'unknown' && PICTURE_EXT.test(i.name ?? '')) ? 'picture' : i.type;
 
 const oneLine = (s: unknown, max = 160) => {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -210,10 +218,10 @@ export const inFlight = (i: InboxItemView) => isRunning(i) || needsYou(i) || i.s
 export const hasFailed = (i: Pick<InboxItemView, 'steps' | 'actions'>) =>
   !!i.steps?.some((s) => s.status === 'failed') || (i.actions ?? []).some((a) => a.status === 'failed');
 
-export type Chip = 'all' | 'needs-you' | 'held' | 'done' | 'failed' | 'dismissed';
+export type Chip = 'all' | 'needs-you' | 'held' | 'done' | 'failed' | 'dismissed' | 'picture';
 export const CHIPS: { id: Chip; label: string }[] = [
   { id: 'all', label: 'All' }, { id: 'needs-you', label: 'Needs you' }, { id: 'held', label: 'Held' },
-  { id: 'done', label: 'Done' }, { id: 'failed', label: 'Failed' }, { id: 'dismissed', label: 'Dismissed' },
+  { id: 'done', label: 'Done' }, { id: 'failed', label: 'Failed' }, { id: 'dismissed', label: 'Dismissed' }, { id: 'picture', label: 'Pictures' },
 ];
 
 /** The history filter: a chip, then a search over the file name, the idea's id and title, and the headline. */
@@ -223,6 +231,7 @@ export function filterItems(items: InboxItemView[], chip: Chip, q: string, ideaT
     : chip === 'held' ? i.status === 'held'
     : chip === 'done' ? i.status === 'applied'
     : chip === 'failed' ? hasFailed(i)
+    : chip === 'picture' ? isPicture(i)
     : i.status === 'dismissed');
   const k = q.trim().toLowerCase();
   const title = (i: InboxItemView) => (i.triage?.ideaId && ideaTitle ? ideaTitle(i.triage.ideaId) : '');

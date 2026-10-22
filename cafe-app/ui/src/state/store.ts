@@ -97,6 +97,10 @@ export interface AppState {
   setHighlight: (ids: string[] | null) => void;
   /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Back to 80% when something new comes into view. */
   hideUnlit: number;
+  /** Kinds of star switched off in the picture only (the bottom bar's Show filter). Not remembered. */
+  hiddenTypes: string[];
+  toggleType: (type: string) => void;
+  showAllTypes: () => void;
   setHideUnlit: (v: number) => void;
   hoverId: string | null;
   /** Show every label in the universe, not only ideas, teams, tools and entities. */
@@ -149,7 +153,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -203,6 +207,8 @@ export const useStore = create<AppState>((set) => ({
   setNotice: (n) => set({ notice: n }),
   setHighlight: (ids) => set({ highlight: ids?.length ? ids : null, ...(ids?.length ? FRESH : {}) }),
   setHideUnlit: (v) => set({ hideUnlit: clampHide(v) }),
+  toggleType: (type) => set((s) => ({ hiddenTypes: s.hiddenTypes.includes(type) ? s.hiddenTypes.filter((t) => t !== type) : [...s.hiddenTypes, type] })),
+  showAllTypes: () => set({ hiddenTypes: [] }),
   setSuggest: (x) => set({ suggest: x }),
 }));
 

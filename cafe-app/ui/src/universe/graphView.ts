@@ -20,6 +20,18 @@ export const LINK_IN_VIEW = 0.42;
 export const UNCONFIRMED_COLOUR = '#f5b36b';
 export const DIM = 0.12;
 
+/**
+ * The graph as drawn with some kinds of star switched off. Only the picture changes: the panels, the chat and
+ * everything else keep the whole graph. Stars in keep (the ones picked) stay in view whatever their kind.
+ */
+export function visibleGraph<G extends Graph>(graph: G, hidden: readonly string[], keep: readonly string[] = []): G {
+  if (!hidden.length) return graph;
+  const off = new Set(hidden); const kept = new Set(keep);
+  const nodes = graph.nodes.filter((n) => !off.has(n.type) || kept.has(n.id));
+  const ids = new Set(nodes.map((n) => n.id));
+  return { ...graph, nodes, edges: graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+}
+
 export function ringColour(node: GNode): string {
   if (node.attrs?.closed) return STAGE_RING.closed;
   return STAGE_RING[String(node.attrs?.stage ?? 1)] ?? STAGE_RING[1];

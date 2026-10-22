@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
+import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
+  it('hides kinds of star from the picture with their links, keeps picked stars, and changes nothing when none are hidden', () => {
+    expect(visibleGraph(g, [])).toBe(g);
+    const v = visibleGraph(g, ['Tool']);
+    expect(v.nodes.map((n: any) => n.id)).toEqual(['a', 'b']);
+    expect(v.edges.map((e: any) => e.id)).toEqual(['b|RELATED|a']);
+    expect(visibleGraph(g, ['Tool'], ['c']).nodes.map((n: any) => n.id)).toEqual(['a', 'b', 'c']);
+    expect(g.nodes).toHaveLength(3);
+  });
   it('finds the neighbourhood', () => expect([...neighbourhood(g, 'a')].sort()).toEqual(['a', 'b', 'c']));
   it('sizes stars by type and links, capped', () => {
     expect(starSize({ type: 'Person' } as any, 0)).toBe(1);

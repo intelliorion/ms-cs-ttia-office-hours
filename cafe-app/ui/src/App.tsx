@@ -16,6 +16,8 @@ import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
+import { TypeFilter } from './layout/TypeFilter';
+import { visibleGraph } from './universe/graphView';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
@@ -29,7 +31,9 @@ export default function App() {
   const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
   // A star selected without its idea open: Esc deselects it.
   const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
-  const shown = graph;
+  const hiddenTypes = useStore((s) => s.hiddenTypes);
+  // The Show filter thins the picture only; everything else reads the whole graph from the store.
+  const shown = useMemo(() => graph && visibleGraph(graph, hiddenTypes, [selectedId, ...selectedIds].filter(Boolean) as string[]), [graph, hiddenTypes, selectedId, selectedIds]);
   useEffect(() => { void refresh(); }, [refresh]);
   // Lite drops the panels' backdrop blur too (theme.css), so the quality is on the root element.
   useEffect(() => { document.documentElement.dataset.quality = quality; }, [quality]);
@@ -84,6 +88,7 @@ export default function App() {
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
           <button className="pill" data-action="quality" data-quality={quality} title="Cycle Full → Lite → Flat" onClick={cycleQuality}>{qualityLabel(quality)}</button>
+          <TypeFilter />
         </div>
         <Assistant />
         {popout?.kind === 'import' && <ImportPopout />}

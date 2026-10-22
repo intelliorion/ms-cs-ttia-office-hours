@@ -32,6 +32,8 @@ export function planAiLinks(
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
+  // The AI never picks a tool: a Tool star comes only from the operator's tool pick (approach.md), later in the app.
+  out = { ...out, nodes: out.nodes.filter((n) => n.type !== 'Tool'), links: out.links.filter((l) => l.rel !== 'BUILT_WITH') };
   for (const n of out.nodes) {
     const raw = n.label.trim();
     if (!raw || proposed.has(key(raw))) continue;

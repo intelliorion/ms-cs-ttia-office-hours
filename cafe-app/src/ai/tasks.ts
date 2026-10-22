@@ -101,10 +101,10 @@ export const extractTask: Task<ExtractOutput> = {
     const { idea, existing } = input as ExtractInput;
     return build('extract', [
       "Read the idea's challenge, current process and outcomes.",
-      'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint), the systems or data it uses (System) and tools (Tool).',
-      'Approved tools: Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath, custom app. When the text means one of these, use exactly that label for the Tool. Any other tool is not on the approved list.',
+      'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint) and the systems or data it uses (System).',
+      'Never propose a tool or product to build it with: the tool is chosen later, in the app, by the operator.',
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
-      'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System, Capability BUILT_WITH Tool.',
+      'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System.',
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
     ], EXTRACT_SCHEMA, { idea: ideaData(idea), existing });
   },
@@ -302,7 +302,7 @@ export const understandTask: Task<Understanding> = {
       '"what": one line on what this file is. "understood": 1 to 6 plain lines on what it says that matters for the idea. "uncertain": up to 4 lines on what you could not tell. Never name people in "what", "understood" or "uncertain"; say "the team" or a role.',
       ...(data.knownStars ? ['"knownStars" are stars already in the universe. Reuse a label from knownStars when the same thing is meant; a new label only for a new thing.'] : []),
       ...(data.teamAnswers ? ['"teamAnswers" were already recorded from earlier replies: do not extract them again.'] : []),
-      'Approved tools: Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath, custom app. When the text means one of these, use exactly that label for the Tool. facts.graph: capabilities (Capability), pain points (PainPoint), systems or data (System) and tools (Tool) the text shows the idea needs, as in the extract task. Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System, Capability BUILT_WITH Tool. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
+      'facts.graph: capabilities (Capability), pain points (PainPoint) and systems or data (System) the text shows the idea needs, as in the extract task. Never propose a tool or product to build it with, even when the text names one: the operator picks the tool later in the app (a named tool stays in the text, where the tool picker reads it). Links: "from" is "idea" or a node label; allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System. Never propose people, teams, ideas, emails, dates or stages. Use empty lists if there is nothing.',
     ], UNDERSTAND_SCHEMA, data, 'something the operator imported');
   },
   parse: parseUnderstanding,

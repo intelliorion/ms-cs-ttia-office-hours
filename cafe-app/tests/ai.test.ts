@@ -372,10 +372,11 @@ describe('/api/ai routes', () => {
     await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
     expect(await (await fetch(`${s.base}/api/ai/status`)).json()).toMatchObject({ provider: 'fake', label: 'Fake (test)' });
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
-    expect(ex.added).toBe(4);
+    // The fake proposes a Planner tool too; the AI never picks a tool, so only the 3 other links land.
+    expect(ex.added).toBe(3);
     expect(ex.held).toEqual([]);
-    expect(ex.suggestions.newNodes).toHaveLength(4);
-    expect(ex.suggestions.newNodes.find((n: any) => n.label === "Microsoft Planner")?.attrs).toEqual({ approved: false });
+    expect(ex.suggestions.newNodes).toHaveLength(3);
+    expect(ex.suggestions.newNodes.some((n: any) => n.type === 'Tool')).toBe(false);
     const sug = await (await post(s.base, '/api/ai/review-suggest', { id: 'CAFE-2026-001' })).json() as any;
     expect(Object.keys(sug.criteria)).toHaveLength(5);
     expect(await (await post(s.base, '/api/ai/test', {})).json()).toMatchObject({ ok: true, provider: 'fake' });

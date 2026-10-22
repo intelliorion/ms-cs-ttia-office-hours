@@ -16,7 +16,7 @@ describe('the focus bar', () => {
     expect(el.querySelector('[data-testid="highlight-bar"]')).toBeNull();
     await act(async () => { useStore.setState({ highlight: ['team:gss', 'entity:cs'] }); });
     expect(el.querySelector('.hl-n')?.textContent).toBe('✦2 stars lit');
-    expect(el.querySelector('.hl-slide b')?.textContent).toBe('90%');
+    expect(el.querySelector('.hl-slide b')?.textContent).toBe('80%');
     expect((el.querySelector('[data-testid="highlight-hide"]') as HTMLInputElement).min).toBe('50');
     const range = el.querySelector('[data-testid="highlight-hide"]') as HTMLInputElement;
     await act(async () => {
@@ -43,8 +43,8 @@ describe('the focus bar', () => {
     act(() => root.unmount()); el.remove();
   });
 
-  it('hide maps to the brightness of the rest: 90% by default, 100% hides stars and links, never below 50%', () => {
-    expect(dimFromHide(DEFAULT_HIDE)).toBeCloseTo(0.1);
+  it('hide maps to the brightness of the rest: 80% by default, 100% hides stars and links, never below 50%', () => {
+    expect(dimFromHide(DEFAULT_HIDE)).toBeCloseTo(0.2);
     expect(dimFromHide(1)).toBe(0);
     expect(clampHide(0)).toBe(0.5);
     expect(clampHide(0.3)).toBe(0.5);
@@ -52,5 +52,16 @@ describe('the focus bar', () => {
     const lit = new Set(['a', 'b']);
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit, 0).opacity).toBe(0);
     expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit, 0).opacity).toBe(0.85);
+  });
+  it('each new thing in view starts at 80% again: the level is not carried from one click to the next', () => {
+    useStore.setState({ highlight: null, selectedId: null, selectedIds: [], leftView: { kind: 'list' } as any, focus: false });
+    useStore.getState().clickStar('team:gss');
+    useStore.getState().setHideUnlit(1);
+    expect(useStore.getState().hideUnlit).toBe(1);
+    useStore.getState().clickStar('entity:cs');
+    expect(useStore.getState().hideUnlit).toBe(0.8);
+    useStore.getState().setHideUnlit(0.5);
+    useStore.getState().setHighlight(['team:gss']);
+    expect(useStore.getState().hideUnlit).toBe(0.8);
   });
 });

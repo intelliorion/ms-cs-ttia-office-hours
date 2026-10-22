@@ -50,14 +50,12 @@ export function detectSoftwareGl(renderer: string | null): boolean {
 export const SOFTWARE_NOTICE = 'Lite quality picked for this browser (software graphics). Change it with the Quality button.';
 export const SLOW_NOTICE = 'Switched to Lite quality: this browser was drawing under 20 fps.';
 
-const HIDE_KEY = 'cafe.hideUnlit.v2'; // v2: the default moved to 90% and the floor to 50%, so an older saved level is not carried over
-/** The rest of the universe starts 90% hidden; it can go from 50% (half there) to 100% (only what is in view). */
-export const DEFAULT_HIDE = 0.9;
+/** The rest of the universe starts 80% hidden each time something new comes into view; 50% at least, 100% only what is in view. */
+export const DEFAULT_HIDE = 0.8;
 export const MIN_HIDE = 0.5;
 export const clampHide = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(MIN_HIDE, Math.round(v * 100) / 100)) : DEFAULT_HIDE);
-export function readHideUnlit(): number {
-  try { const v = localStorage.getItem(HIDE_KEY); return v === null ? DEFAULT_HIDE : clampHide(Number(v)); } catch { return DEFAULT_HIDE; }
-}
+/** Something new in view (a click, a pick, a lit answer): the slider starts again at the default. */
+const FRESH = { hideUnlit: DEFAULT_HIDE };
 
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
@@ -97,7 +95,7 @@ export interface AppState {
   /** The stars a command-bar answer rests on, lit in the universe until cleared. */
   highlight: string[] | null;
   setHighlight: (ids: string[] | null) => void;
-  /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Remembered in this browser. */
+  /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Back to 80% when something new comes into view. */
   hideUnlit: number;
   setHideUnlit: (v: number) => void;
   hoverId: string | null;
@@ -151,7 +149,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -167,7 +165,7 @@ export const useStore = create<AppState>((set) => ({
       }));
     } catch (e) { set({ notice: { text: (e as Error).message, kind: 'error' } }); }
   },
-  select: (id) => set({ selectedId: id, selectedIds: [] }),
+  select: (id) => set({ selectedId: id, selectedIds: [], ...FRESH }),
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, selectedIds: [], viewNonce: s.viewNonce + 1 })),
@@ -186,24 +184,25 @@ export const useStore = create<AppState>((set) => ({
     return { quality: 'lite', notice: { text: SLOW_NOTICE, kind: 'ok' } };
   }),
   openPopout: (p) => set({ popout: p, drawer: null }),
-  openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return openIdeaPatch(id, isNarrow()); }),
+  openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return { ...openIdeaPatch(id, isNarrow()), ...FRESH }; }),
   backToList: () => set(backPatch()),
   clickStar: (id, additive = false) => set((s) => {
     if (!id) return { selectedId: null, selectedIds: [] };
+    // Something new in view: the slider starts again at the default.
     if (additive) {
       const now = s.selectedIds.length ? s.selectedIds : s.selectedId ? [s.selectedId] : [];
       const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
-      if (next.length >= 2) return { ...(s.leftView.kind === 'idea' && !s.focus ? backPatch() : {}), selectedIds: next, selectedId: next[next.length - 1], highlight: null };
-      return { selectedIds: [], selectedId: next[0] ?? null, highlight: null };
+      if (next.length >= 2) return { ...(s.leftView.kind === 'idea' && !s.focus ? backPatch() : {}), selectedIds: next, selectedId: next[next.length - 1], highlight: null, ...FRESH };
+      return { selectedIds: [], selectedId: next[0] ?? null, highlight: null, ...FRESH };
     }
-    if (s.focus) return { selectedId: id, selectedIds: [], highlight: null };
-    if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null };
-    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, selectedIds: [], highlight: null };
+    if (s.focus) return { selectedId: id, selectedIds: [], highlight: null, ...FRESH };
+    if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null, ...FRESH };
+    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, selectedIds: [], highlight: null, ...FRESH };
   }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
-  setHighlight: (ids) => set({ highlight: ids?.length ? ids : null }),
-  setHideUnlit: (v) => { const x = clampHide(v); try { localStorage.setItem(HIDE_KEY, String(x)); } catch { /* not remembered */ } set({ hideUnlit: x }); },
+  setHighlight: (ids) => set({ highlight: ids?.length ? ids : null, ...(ids?.length ? FRESH : {}) }),
+  setHideUnlit: (v) => set({ hideUnlit: clampHide(v) }),
   setSuggest: (x) => set({ suggest: x }),
 }));
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import http from 'node:http';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, FIXTURE } from './helpers';
 
@@ -204,5 +204,15 @@ describe('api', () => {
     const bad = await post(base, '/api/ideas/CAFE-2026-001/round', { round: 'ROUND-404' });
     expect(bad.status).toBe(400);
     expect((await j(bad)).error).toContain('Unknown round');
+  });
+
+  it('a round.yaml that cannot be read is named in the state, and the other rounds still load', async () => {
+    const { base, root } = await boot();
+    await post(base, '/api/rounds', { name: 'Good' });
+    await mkdir(path.join(root, 'rounds', 'ROUND-002'), { recursive: true });
+    await writeFile(path.join(root, 'rounds', 'ROUND-002', 'round.yaml'), 'id: [unclosed\n');
+    const state = await j(await fetch(`${base}/api/state`));
+    expect(state.rounds.map((r: { id: string }) => r.id)).toEqual(['ROUND-001']);
+    expect(state.roundProblems.map((p: { folder: string }) => p.folder)).toEqual(['ROUND-002']);
   });
 });

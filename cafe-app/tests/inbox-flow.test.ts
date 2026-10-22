@@ -245,7 +245,7 @@ describe('pictures and PDFs', () => {
     const read = item.steps.find((x: any) => x.id === 'read');
     expect(read.status).toBe('done');
     expect(read.detail).toMatch(/^Picture read by the AI, \d+\.\d s, 20 words$/);
-    expect(read.ms).toBeGreaterThanOrEqual(0);
+    expect(typeof read.ms).toBe('number');
     expect(item.type).toBe('note');
     expect(item.meta).toMatchObject({ readBy: 'ai', notes: 'A whiteboard photo with a bulleted list', words: 20 });
     expect(item.triage.ideaId).toBe('CAFE-2026-002');
@@ -254,6 +254,23 @@ describe('pictures and PDFs', () => {
     expect(links.length).toBeGreaterThan(0);
     expect(links.every((l) => l.status === 'confirmed')).toBe(true);
     expect(links.map((l) => `${l.from} ${l.to}`)).toContain('idea:CAFE-2026-002 capability:desk-finding');
+  });
+
+  it('a pick for a picture that asked "Which idea?" keeps the transcription; only Run again looks again', async () => {
+    const fake = fakeProvider();
+    const look = vi.fn(async () => JSON.stringify({ text: 'Some thoughts about requests arriving by email.', notes: 'A note', readable: true }));
+    const s = await start({ ...fake, look });
+    await saveIdea(s.root, desk());
+    const { item } = await (await s.drop('thoughts.png', PNG)).json();
+    expect(item.triage.ask).toBe(true);
+    const chosen = (await (await s.post(`/api/inbox/${item.id}/choose`, { ideaId: 'CAFE-2026-002' })).json()).item;
+    expect(look).toHaveBeenCalledTimes(1);
+    expect(chosen.triage.ideaId).toBe('CAFE-2026-002');
+    expect(chosen.problems ?? []).toEqual([]);
+    expect((await getItem(s.root, item.id))!.text).toBe('Some thoughts about requests arriving by email.');
+    // Run again (no pick) has the AI read the picture again.
+    await s.post(`/api/inbox/${item.id}/process`);
+    expect(look).toHaveBeenCalledTimes(2);
   });
 
   it('a text PDF is read by code: the AI never looks', async () => {

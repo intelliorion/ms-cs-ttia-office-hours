@@ -51,10 +51,17 @@ export const unsentCount = (outbox: { status: string }[] | undefined) => (outbox
 export const titleSub = (state: { today?: string; rounds?: { id?: string; name?: string }[] } | null | undefined): string =>
   ['Operator console', state?.rounds?.[0]?.name, state?.today].filter(Boolean).join(' · ');
 
-/** The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4" (same rule as the server). */
-export function defaultRoundName(iso: string | undefined): string {
+/**
+ * The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4", numbered on when a round
+ * already has it ("2026 Q4 (2)"). Same rule as the server.
+ */
+export function defaultRoundName(iso: string | undefined, taken: string[] = []): string {
   const [year, month] = String(iso ?? '').split('-').map(Number);
-  return year && month ? `${year} Q${Math.ceil(month / 3)}` : '';
+  const base = year && month ? `${year} Q${Math.ceil(month / 3)}` : '';
+  const used = new Set(taken.map((t) => t.trim().toLowerCase()));
+  let name = base;
+  for (let n = 2; base && used.has(name.toLowerCase()); n++) name = `${base} (${n})`;
+  return name;
 }
 
 /** "1 idea", "2 ideas". */

@@ -37,6 +37,11 @@ describe('rounds', () => {
     expect(stored).toEqual({ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-22' });
     expect((await createRound(root, '  Spring pilots ', clock))).toMatchObject({ id: 'ROUND-002', name: 'Spring pilots' });
     expect(await currentRoundId(root)).toBe('ROUND-002');
+    // A second round with a name already used (any case) is refused, and nothing is written.
+    await expect(createRound(root, '2026 q4', clock)).rejects.toThrow('There is already a round called 2026 Q4 (ROUND-001)');
+    expect((await listRounds(root)).map((r) => r.id)).toEqual(['ROUND-002', 'ROUND-001']);
+    // No name given when the default is taken: it is numbered on.
+    expect((await createRound(root, '', clock)).name).toBe('2026 Q4 (2)');
   });
 
   it('reads a legacy round folder and leaves it out of the numbering', async () => {
@@ -64,6 +69,9 @@ describe('rounds', () => {
     expect((await loadRound(root, 'ROUND-002')).deadline).toBeUndefined();
     await expect(saveRound(root, 'ROUND-001', { deadline: '1/11/2026' })).rejects.toThrow('Submission deadline must be a date');
     await expect(saveRound(root, 'ROUND-404', { deadline: '2026-11-01' })).rejects.toThrow('Unknown round');
+    // Saving an empty date clears it.
+    await saveRound(root, 'ROUND-001', { deadline: '' });
+    expect(await loadRound(root, 'ROUND-001')).toEqual({ id: 'ROUND-001', name: 'A', created: '2026-10-22' });
   });
 
   it('skips a round.yaml it cannot read and reports the folder', async () => {

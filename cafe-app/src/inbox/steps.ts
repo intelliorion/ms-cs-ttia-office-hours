@@ -18,7 +18,7 @@ const now = () => new Date().toISOString();
 
 async function load(root: string, id: string): Promise<InboxItem> {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   return item;
 }
 

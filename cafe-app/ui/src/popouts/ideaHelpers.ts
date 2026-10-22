@@ -80,9 +80,13 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
       return `Reviewed: ${DECISION_SHORT[k] ?? k}${rest.length ? `. ${rest.join(': ')}` : ''}`;
     }
     case 'stage': {
-      const to = String(h.detail ?? '').split(' → ').pop() ?? '';
+      const detail = String(h.detail ?? '');
+      // A stage put back by an undo in the Import has no arrow: it reads as written ("Undone in the Import").
+      if (!detail.includes(' → ')) return detail || 'Stage changed';
+      const to = detail.split(' → ').pop() ?? '';
       return to.startsWith('Closed · ') ? `Closed: ${to.slice('Closed · '.length)}` : `Moved to ${to}`;
     }
+    case 'round': { const d = String(h.detail ?? ''); return d ? d[0].toUpperCase() + d.slice(1) : 'Round changed'; }
     case 'inbox': return `Import: ${baseNames(h.detail)}${h.source ? ` (from ${String(h.source).split(/[\\/]/).pop()})` : ''}`;
     case 'inbox-undo': return `Import: ${baseNames(h.detail)}`;
     default: return [h.action, h.detail].filter(Boolean).join(': ');

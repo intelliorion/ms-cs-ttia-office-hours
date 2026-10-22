@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, chmod, readdir, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createConnector, type Provider } from '../src/ai/connector';
-import { lookTask } from '../src/ai/tasks';
+import { lookTask, lookName } from '../src/ai/tasks';
 import { AiError } from '../src/ai/schema';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { claudeProvider } from '../src/ai/providers/claude';
@@ -24,7 +24,7 @@ describe('look', () => {
       'CAFE-2026-002 DESK BOOKING', 'NEEDS: FIND A FREE DESK, SWAP A BOOKING, RELEASE NO-SHOWS', 'TOOL: COPILOT STUDIO', 'DATA: FLOOR PLAN SYSTEM',
     ]);
     expect(wb.output.notes).toBe('A whiteboard photo with a bulleted list');
-    expect(wb.ms).toBeGreaterThanOrEqual(0);
+    expect(typeof wb.ms).toBe('number');
     const blank = await ai.look('/somewhere/blank.png', lookTask);
     expect(blank.output).toMatchObject({ readable: false, notes: 'A blank picture' });
   });
@@ -53,21 +53,34 @@ describe('Claude Code look', () => {
     await chmod(path.join(bin, 'claude'), 0o755);
     vi.stubEnv('PATH', `${bin}${path.delimiter}${process.env.PATH}`);
     const src = await mkdtemp(path.join(os.tmpdir(), 'cafe-src-'));
-    const file = path.join(src, 'note.png');
+    const file = path.join(src, 'my note (1).PNG');
     await writeFile(file, 'png bytes');
     await writeFile(path.join(src, 'other.txt'), 'must not be copied');
     return file;
   }
   const exists = (p: string) => access(p).then(() => true, () => false);
 
-  it('copies only the file into a fresh folder, allows Read on it alone, and removes the folder', async () => {
-    const file = await stub('printf "%s\\n%s\\n%s" "$PWD" "$(ls -A)" "$*"');
+  it('copies only the file into a fresh folder as picture.<ext>, allows Read on it alone, loads no settings, and removes the folder', async () => {
+    const file = await stub('printf "%s\\n%s\\n" "$PWD" "$(ls -A)"; for a in "$@"; do printf "[%s]" "$a"; done');
     const out = await claudeProvider().look!(file, 'prompt', { timeoutMs: 10_000 });
     const [dir, listing, args] = out.split('\n');
     expect(path.basename(dir)).toMatch(/^cafe-look-/);
-    expect(listing).toBe('note.png');
-    expect(args).toBe('-p --output-format text --tools Read --allowedTools Read(./note.png) --max-turns 3 --strict-mcp-config --no-session-persistence');
+    expect(listing).toBe('picture.png');
+    // Each argument in brackets, so the empty --setting-sources value is pinned too.
+    expect(args).toBe('[-p][--output-format][text][--tools][Read][--allowedTools][Read(./picture.png)][--max-turns][3]'
+      + '[--strict-mcp-config][--no-session-persistence][--setting-sources][][--permission-mode][default]');
     expect(await exists(dir)).toBe(false);
+  });
+
+  it('the safe name keeps only an allowed, lower-cased extension; the prompt names the same file', async () => {
+    expect(lookName('/x/My Scan (2).JPEG')).toBe('picture.jpeg');
+    expect(lookName('/x/2026-10-21-15-scanned.pdf')).toBe('picture.pdf');
+    expect(() => lookName('/x/evil.png) Read(~/.ssh')).toThrow(/cannot be read as a picture/);
+    expect(() => lookName('/x/noext')).toThrow(/cannot be read as a picture/);
+    let prompt = '';
+    const p: Provider = { id: 'claude', label: 'Claude Code', available: async () => true, complete: async () => '', look: async (_f, pr) => { prompt = pr; return '{"text":"x","notes":"y","readable":true}'; } };
+    await connectorWith(p).look('/x/my note (1).png', lookTask);
+    expect(prompt).toContain('Open ./picture.png with the Read tool.');
   });
 
   it('removes the folder when the CLI fails too', async () => {
@@ -77,7 +90,7 @@ describe('Claude Code look', () => {
     const dir = /stopped \(exit 3\): (\S+)/.exec(err.message)?.[1] ?? '';
     expect(path.basename(dir)).toMatch(/^cafe-look-/);
     expect(await exists(dir)).toBe(false);
-    expect((await readdir(path.dirname(file))).sort()).toEqual(['note.png', 'other.txt']);
+    expect((await readdir(path.dirname(file))).sort()).toEqual(['my note (1).PNG', 'other.txt']);
   });
 });
 

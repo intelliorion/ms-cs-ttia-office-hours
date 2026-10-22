@@ -1,10 +1,9 @@
-import path from 'node:path';
 import { paths } from '../workspace/paths';
 import { writeYaml } from '../workspace/files';
 import { loadSettings } from '../round/store';
 import { AI_CHOICES, type AiChoice, type Settings } from '../round/round';
 import { AiError } from './schema';
-import type { Task, LookTask, LookOutput } from './tasks';
+import { lookName, type Task, type LookTask, type LookOutput } from './tasks';
 import { claudeProvider } from './providers/claude';
 import { copilotProvider } from './providers/copilot';
 import { vscodeProvider } from './providers/vscode';
@@ -92,7 +91,7 @@ export function createConnector(opts: {
     if (!p.look) throw new AiError(CANNOT_LOOK);
     const ms = Math.min(run.timeoutMs ?? task.timeoutMs ?? timeoutMs, ceiling);
     const t0 = Date.now();
-    const raw = await withTimeout(p.look(file, task.prompt({ name: path.basename(file) }), { timeoutMs: ms }), ms, p.label);
+    const raw = await withTimeout(p.look(file, task.prompt({ name: lookName(file) }), { timeoutMs: ms }), ms, p.label);
     if (typeof raw !== 'string') throw new AiError('invalid output: the reply was not text');
     return { provider: p.id, label: p.label, output: task.parse(raw), ms: Date.now() - t0 };
   }

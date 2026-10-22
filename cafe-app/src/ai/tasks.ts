@@ -607,6 +607,19 @@ export const designPlanTask: Task<DesignPlanOutput> = {
 /* ---------- Import: pictures and scanned PDFs ---------- */
 
 export interface LookInput { name: string }
+
+/** The kinds of file the AI may look at. */
+export const LOOK_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'] as const;
+
+/**
+ * The fixed safe name a looked-at file is copied under and named by in the prompt: `picture.<ext>`, the extension
+ * lower-cased from the original and one of LOOK_EXTS. Anything else is refused, so no odd character reaches a rule.
+ */
+export function lookName(file: string): string {
+  const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase();
+  if (!file.includes('.') || !(LOOK_EXTS as readonly string[]).includes(ext)) throw new Error('This kind of file cannot be read as a picture');
+  return `picture.${ext}`;
+}
 export interface LookOutput { text: string; notes: string; readable: boolean }
 export type LookTask = Task<LookOutput>;
 

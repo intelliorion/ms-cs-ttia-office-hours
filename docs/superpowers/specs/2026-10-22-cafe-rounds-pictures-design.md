@@ -65,16 +65,20 @@ all of this in one go and waived the spec review; rulings below are mine and are
 - Encrypted or broken PDFs are held: "Can't open this PDF (it may be protected)".
 
 ### 3.2 Pictures and scanned PDFs: the AI looks
-- Supported: `.png .jpg .jpeg .gif .webp` and scanned `.pdf`, up to 10 MB. `.bmp .tif .tiff .heic` stay held with
+- Supported: `.png .jpg .jpeg .gif .webp` and scanned `.pdf`, up to 10 MB. (The 10 MB limit holds every PDF, text ones
+  too: it is checked before pdf.js runs, which has no page cap; the held reason reads "Pictures and PDFs up to 10 MB only".) `.bmp .tif .tiff .heic` stay held with
   "This picture format isn't supported; save it as PNG or JPG".
 - A new provider ability `look(file, prompt, opts)`:
-  - Claude Code: the file is copied alone into a fresh temp folder (its name kept, no other file). The CLI runs with
-    `--tools Read --allowedTools "Read(./<name>)" --max-turns 3 --strict-mcp-config --no-session-persistence`,
-    cwd = that folder, prompt on stdin. Verified on Claude Code 2.1.304 with a PNG. The folder is deleted after.
+  - Claude Code: the file is copied alone into a fresh temp folder under the fixed safe name `picture.<ext>` (the
+    extension lower-cased, one of png/jpg/jpeg/gif/webp/pdf; no other file). The CLI runs with
+    `--tools Read --allowedTools "Read(./picture.<ext>)" --max-turns 3 --strict-mcp-config --no-session-persistence
+    --setting-sources "" --permission-mode default`, cwd = that folder, prompt on stdin, so none of the operator's own
+    Claude Code settings widen what Read can open. Verified on Claude Code 2.1.304 with a PNG (and a read outside the
+    folder refused). The folder is deleted after.
   - Copilot CLI and the VS Code helper: `look` is absent; the item is held with "Reading pictures needs Claude Code
     (AI helper → provider)".
   - Fake: returns a canned transcription chosen by the file name (see 3.4).
-- Task LOOK: "Open ./<name> with the Read tool. Transcribe all text in it verbatim, line by line, tables one row per
+- Task LOOK: "Open ./picture.<ext> with the Read tool. Transcribe all text in it verbatim, line by line, tables one row per
   line. Then describe what the picture shows in at most two sentences." Output schema `{ text: string, notes: string,
   readable: boolean }`. `readable: false` (blank, unreadable, not a document) holds the item with the AI's note.
 - Where it sits: the **Read** step. For a picture the Read step is timed and its detail reads
@@ -85,7 +89,8 @@ all of this in one go and waived the spec review; rulings below are mine and are
   (the sidecar keeps only the hold reasons), and the detail says so: "Held: names and ids in the picture. The text was
   not kept." The operator asked for pictures to be read; the AI seeing them before the screen is the cost, and the
   README says so in one line.
-- Undo and Run again behave as for any other file. Run again re-reads the picture (the AI looks again).
+- Undo and Run again behave as for any other file. Run again re-reads the picture (the AI looks again). Answering
+  "Which idea?" does not: the pick reuses the stored transcription the operator was shown.
 
 ### 3.3 Import surface
 - The drop well's hint lists "exports, emails, transcripts, Word, PDF and pictures".

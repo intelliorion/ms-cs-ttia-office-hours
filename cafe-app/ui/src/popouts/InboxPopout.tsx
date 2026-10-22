@@ -4,7 +4,7 @@ import { inboxDropFile, inboxDropText } from '../api';
 import { Modal } from './Modal';
 import { InboxCard, TYPE_ICON, type Note, type Run } from './InboxCard';
 import {
-  CHIPS, byYou, kindOf, duplicateNotice, dropSummary, filterItems, groupByDay, inFlight, isRunning, needsYou, resultLine, shouldPoll, statusWord,
+  CHIPS, byYou, shownKind, duplicateNotice, dropSummary, filterItems, groupByDay, inFlight, isRunning, needsYou, resultLine, shouldPoll, statusWord,
   timeOf, tooLargeNotice, type Chip, type DropOutcome, type InboxItemView,
 } from './inboxHelpers';
 
@@ -193,7 +193,7 @@ export function InboxPopout() {
                   return (
                     <li key={it.id} className={isOpen ? 'open' : ''}>
                       <button className={`ib-row st-${it.status}`} data-row={it.id} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : it.id)}>
-                        <span className="ic" aria-hidden="true">{TYPE_ICON[it.status === 'held' ? 'unknown' : kindOf(it)] ?? '◇'}</span>
+                        <span className="ic" aria-hidden="true">{TYPE_ICON[shownKind(it)] ?? '◇'}</span>
                         <span className="nm">{it.name}</span>
                         <span className="tm">{timeOf(it.receivedAt)}</span>
                         <span className="idn">{rowIdea(it)}</span>

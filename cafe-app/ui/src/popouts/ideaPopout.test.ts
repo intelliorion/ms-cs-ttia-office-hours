@@ -30,6 +30,9 @@ describe('historyLine', () => {
   it('says where a stage change went', () => {
     expect(historyLine({ at: '2026-10-19', action: 'stage', detail: 'Review and Select → Design series' })).toBe('Moved to Design series');
     expect(historyLine({ at: '2026-10-19', action: 'stage', detail: 'Review and Select → Closed · Reuse' })).toBe('Closed: Reuse');
+    expect(historyLine({ at: '2026-10-19', action: 'stage', detail: 'Undone in the Import' })).toBe('Undone in the Import');
+    expect(historyLine({ at: '2026-10-19', action: 'round', detail: 'round set to Autumn' })).toBe('Round set to Autumn');
+    expect(historyLine({ at: '2026-10-19', action: 'round', detail: 'round cleared' })).toBe('Round cleared');
   });
   it('says which email was sent or drafted', () => {
     expect(historyLine({ at: '2026-10-19', action: 'sent', detail: 'E1' })).toBe('E1 marked sent');

@@ -11,9 +11,10 @@ import type { Understanding } from '../src/ai/tasks';
 import { appendAiLink, rebuildGraph, readAiLinks, setAiLinkStatus } from '../src/graph/store';
 import { setStage } from '../src/ideas/stage';
 import { kindOf, sameQuestion, directionOf, type Action, type ActionRecord } from '../src/inbox/actions';
-import { processDrop, applyRecords, undoRecord } from '../src/inbox/flow';
+import { processDrop, applyRecords, undoRecord, viewOf } from '../src/inbox/flow';
 import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
 import { saveSettings } from '../src/round/store';
+import { readHistory } from '../src/workspace/files';
 import type { AiLink } from '../src/graph/ontology';
 
 const FIX = (name: string) => fileURLToPath(new URL(`./fixtures/inbox/${name}`, import.meta.url));
@@ -309,6 +310,8 @@ describe('Needs your OK: applied only on Apply', () => {
     expect((after.actions as ActionRecord[]).find((x) => x.id === r.id)!.status).toBe('applied');
     await undoRecord(root, item.id, r.id, clock);
     expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(1);
+    const stage = (await readHistory(await ideaDir(root, 'CAFE-2026-001'))).filter((h) => h.action === 'stage').at(-1);
+    expect(stage).toMatchObject({ detail: 'Undone in the Import' });
   });
 
   it('suggest_stage: closing as CSIC then Undo puts stage, closed and route back exactly', async () => {
@@ -453,6 +456,15 @@ describe('processDrop and filing (final review 6, 7)', () => {
     expect(item.meta?.quoted).toBeUndefined();
     expect(item.meta?.subject).toMatch(/CAFE-2026-001/);
     expect((item as any).preview).toMatch(/About 40 a week/);
+    expect((item as any).previewCut).toBeUndefined();
+  });
+
+  it('a long text is shown as its first 400 characters, marked as cut', () => {
+    const base = { id: 'x', file: 'inbox/x.txt', name: 'x.txt', type: 'note', receivedAt: '2026-10-19', status: 'triaged' } as InboxItem;
+    const long = viewOf({ ...base, text: 'a'.repeat(500) });
+    expect(long.preview).toHaveLength(400);
+    expect(long.previewCut).toBe(true);
+    expect(viewOf({ ...base, text: 'a'.repeat(400) }).previewCut).toBeUndefined();
   });
 
   it('an email from the operator is filed under out, anyone else under in', async () => {

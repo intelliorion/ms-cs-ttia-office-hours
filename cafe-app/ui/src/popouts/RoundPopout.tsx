@@ -34,7 +34,7 @@ export function RoundPopout() {
   useEffect(() => {
     setNotice(null);
     if (!state) return;
-    setNewName(defaultRoundName(state.today));
+    setNewName(defaultRoundName(state.today, (state.rounds ?? []).map((r: RoundRow) => r.name)));
     setSettings(Object.fromEntries(settingFields.map(([k]) => [k, state.settings?.[k] ?? ''])));
     setCapacity({ ideasPerRound: String(state.settings?.capacity?.ideasPerRound ?? 3), sessionsPerWeek: String(state.settings?.capacity?.sessionsPerWeek ?? 2) });
     // Load once per opening; later refreshes must not overwrite what is being typed.
@@ -82,6 +82,9 @@ export function RoundPopout() {
           <section className="sec">
             <h3>Rounds <span className="sec-n">newest first</span></h3>
             <p className="hint lead">Emails stay in draft until the dates they quote are set.</p>
+            {(state?.roundProblems ?? []).map((p: { folder: string }) => (
+              <div key={p.folder} className="hint warn" data-testid="round-problem">Could not read rounds/{p.folder}/round.yaml</div>
+            ))}
             {!rounds.length && <div className="hint">No rounds yet. Make the first one below.</div>}
             {rounds.map((r, n) => {
               const mine = ideas.filter((i) => i.round === r.id);
@@ -146,7 +149,7 @@ export function RoundPopout() {
                 {rounds.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
               <button className="btn primary" data-action="assign" disabled={busy || !picked.length || !pickTarget} onClick={() => void assign()}>
-                {`Put ${ideaCount(picked.length)} in ${targetName || 'a round'}`}</button>
+                {picked.length ? `Put ${ideaCount(picked.length)} in ${targetName || 'a round'}` : `Pick ideas to put in ${targetName || 'a round'}`}</button>
             </div>
           </section>
           <form onSubmit={(e) => { e.preventDefault(); void saveSettings(); }}>

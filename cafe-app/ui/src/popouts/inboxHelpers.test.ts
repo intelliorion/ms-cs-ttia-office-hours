@@ -183,7 +183,7 @@ describe('agentic inbox helpers', () => {
   });
 });
 
-import { isPicture, kindOf, CHIPS as ALL_CHIPS } from './inboxHelpers';
+import { isPicture, kindOf, shownKind, CHIPS as ALL_CHIPS } from './inboxHelpers';
 
 describe('pictures in the Import (Task 4)', () => {
   const at = '2026-10-21T10:00:00Z';
@@ -207,11 +207,22 @@ describe('pictures in the Import (Task 4)', () => {
 });
 
 describe('a picture still being read', () => {
-  it('shows as a picture before the AI has read it; any other unknown file stays a file', () => {
-    const at = '2026-10-21T10:00:00Z';
-    const reading = { id: 'r', file: 'inbox/b.png', name: 'b.PNG', type: 'unknown', receivedAt: at, status: 'new' } as InboxItemView;
-    const other = { id: 'o', file: 'inbox/x.bin', name: 'x.bin', type: 'unknown', receivedAt: at, status: 'new' } as InboxItemView;
-    expect(kindOf(reading)).toBe('picture');
-    expect(kindOf(other)).toBe('unknown');
+  const at = '2026-10-21T10:00:00Z';
+  const reading = { id: 'r', file: 'inbox/b.png', name: 'b.PNG', type: 'unknown', receivedAt: at, status: 'new' } as InboxItemView;
+  const held = { id: 'h', file: 'inbox/x.png', name: 'x.png', type: 'unknown', receivedAt: at, status: 'held', meta: { readBy: 'ai' } } as InboxItemView;
+  const other = { id: 'o', file: 'inbox/x.bin', name: 'x.bin', type: 'unknown', receivedAt: at, status: 'held' } as InboxItemView;
+
+  it('is not a picture yet: no Picture chip and not under Pictures, until the AI has read it', () => {
+    expect(kindOf(reading)).toBe('unknown');
+    expect(filterItems([reading], 'picture', '')).toEqual([]);
+    const read = { ...reading, type: 'note', meta: { readBy: 'ai' } } as InboxItemView;
+    expect(kindOf(read)).toBe('picture');
+    expect(filterItems([read], 'picture', '')).toEqual([read]);
+  });
+
+  it('a picture held at the screen is still a picture, in the chip and under Pictures; another held file is a file', () => {
+    expect(shownKind(held)).toBe('picture');
+    expect(filterItems([held, other], 'picture', '').map((i) => i.id)).toEqual(['h']);
+    expect(shownKind(other)).toBe('unknown');
   });
 });

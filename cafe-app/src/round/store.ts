@@ -65,7 +65,15 @@ export async function currentRoundId(root: string): Promise<string | null> {
 export async function createRound(root: string, name: string, clock: Clock): Promise<Round> {
   const highest = Math.max(0, ...(await roundFolders(root)).map((n) => Number(NUMBERED.exec(n)?.[1] ?? 0)));
   const created = clock();
-  const round: Round = { id: `ROUND-${String(highest + 1).padStart(3, '0')}`, name: String(name ?? '').trim() || defaultRoundName(created), created };
+  const existing = await listRounds(root);
+  const taken = new Set(existing.map((r) => r.name.trim().toLowerCase()));
+  // No name given: the default, numbered on when it is taken ("2026 Q4 (2)").
+  let auto = defaultRoundName(created);
+  for (let n = 2; taken.has(auto.toLowerCase()); n++) auto = `${defaultRoundName(created)} (${n})`;
+  const round: Round = { id: `ROUND-${String(highest + 1).padStart(3, '0')}`, name: String(name ?? '').trim() || auto, created };
+  // Two rounds with one name would read the same on every chip and star.
+  const same = existing.find((r) => r.name.trim().toLowerCase() === round.name.toLowerCase());
+  if (same) throw new Error(`There is already a round called ${same.name} (${same.id}); give this one another name`);
   await writeYaml(roundFile(root, round.id), round);
   return round;
 }

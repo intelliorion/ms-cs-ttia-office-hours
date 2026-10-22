@@ -179,12 +179,16 @@ async function readPending(
  * Steps 2 and 3: read a fresh parse of the stored file and screen it. Nothing is written.
  * A picture or a scanned PDF is read by the AI (ai.look); when the screen then holds it, its reasons say the text was not kept.
  */
-export async function readAndScreen(root: string, id: string, ai: Connector | null | undefined, onStep?: (detail: string) => unknown) {
+export async function readAndScreen(
+  root: string, id: string, ai: Connector | null | undefined, onStep?: (detail: string) => unknown, opts: { reuseRead?: boolean } = {},
+) {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   const file = path.join(root, ...item.file.split('/'));
   const bytes = new Uint8Array(await fs.readFile(file));
-  const { parsed, aiMs } = await readPending(file, parseDrop(path.basename(item.file), bytes), bytes, ai, onStep);
+  // A pick ("Which idea?") keeps the transcription the operator was shown; only Run again has the AI look again.
+  const stored = opts.reuseRead && item.meta?.readBy === 'ai' && item.text ? { type: 'note' as const, text: item.text, meta: item.meta } : null;
+  const { parsed, aiMs } = stored ? { parsed: stored as ParsedDrop, aiMs: undefined } : await readPending(file, parseDrop(path.basename(item.file), bytes), bytes, ai, onStep);
   const screened = screenDrop(item.name, parsed, await knownParticipants(root));
   if (!screened.hold && parsed.type === 'export' && parsed.screenText === undefined && TRACKER_NAME.test(item.name)) {
     screened.hold = true;

@@ -43,7 +43,7 @@ const ID = /^in-[0-9a-f]{12}$/;
 
 export const itemsDir = (root: string) => path.join(paths(root).inbox, '.items');
 const sidecar = (root: string, id: string) => {
-  if (!ID.test(id)) throw new Error(`Not an inbox item: ${id}`);
+  if (!ID.test(id)) throw new Error(`Not an import: ${id}`);
   return path.join(itemsDir(root), `${id}.json`);
 };
 const abs = (root: string, rel: string) => path.join(root, ...rel.split('/'));
@@ -115,7 +115,7 @@ export async function getItem(root: string, id: string): Promise<InboxItem | und
 
 export async function updateItem(root: string, id: string, patch: Partial<InboxItem>): Promise<InboxItem> {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   const next: InboxItem = { ...item, ...patch, id: item.id, hash: item.hash };
   await writeItem(root, next);
   return next;
@@ -128,7 +128,7 @@ export async function updateItem(root: string, id: string, patch: Partial<InboxI
  */
 export async function holdItem(root: string, id: string, reasons: string[], read?: InboxMeta): Promise<InboxItem> {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   let file = item.file;
   let heldFrom = item.heldFrom;
   if (!file.startsWith('inbox/held/')) {
@@ -173,7 +173,7 @@ export async function holdItem(root: string, id: string, reasons: string[], read
 /** Delete a held item's file and its sidecar. Only held items can be deleted. */
 export async function deleteHeld(root: string, id: string): Promise<void> {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   if (item.status !== 'held') throw new Error('Only held items can be deleted');
   await fs.rm(abs(root, item.file), { force: true });
   await fs.rm(sidecar(root, id), { force: true });

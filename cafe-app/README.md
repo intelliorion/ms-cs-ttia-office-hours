@@ -148,7 +148,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 - Emails: `.eml` and `.msg`.
 - Teams meeting transcripts: `.vtt`.
 - Word files: `.docx`.
-- PDFs: `.pdf`, with text or scanned.
+- PDFs: `.pdf`, with text or scanned, up to 10 MB.
 - Pictures: `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`, up to 10 MB (a whiteboard photo, a screenshot, a scan).
 - Notes and pasted text.
 - Dropping a file anywhere on the Import pop-out works, not only on the dashed zone.

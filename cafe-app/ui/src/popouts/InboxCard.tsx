@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
   STEP_ORDER, STEP_WORDS, RULE_WORDS, stepGlyph, heldChoices, groupActions, applyableIds, canUndo, askCandidates, isAsking, typeWord, dayOf,
-  confidenceWord, handProblems, needsHand, itemHeadline, kindOf, type ActionRecord, type InboxItemView, type Step,
+  confidenceWord, handProblems, needsHand, itemHeadline, shownKind, type ActionRecord, type InboxItemView, type Step,
 } from './inboxHelpers';
 
 export const TYPE_ICON: Record<string, string> = { export: '▦', email: '✉', transcript: '☰', document: '▤', note: '✎', unknown: '◇', picture: '▣' };
@@ -59,7 +59,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
   return (
     <li className={`ib-card ib-item st-${item.status}${expanded ? ' open' : ''}`} data-item={item.id} data-status={item.status}>
       <div className="ib-r1">
-        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[heldFile ? 'unknown' : kindOf(item)] ?? '◇'}</span> {typeWord(heldFile ? 'unknown' : kindOf(item))}</span>
+        <span className="ib-type" title={item.name}><span aria-hidden="true">{TYPE_ICON[shownKind(item)] ?? '◇'}</span> {typeWord(shownKind(item))}</span>
         <span className="ib-file">{item.name}</span>
         {matched && (
           <button className="ib-idea" data-action="open-idea" title="Open the idea" onClick={() => openIdea(matched)}>
@@ -108,7 +108,8 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
         <details className="ib-understood ib-read" data-testid="ai-read" open={expanded}>
           <summary>What the AI read</summary>
           {item.meta.notes ? <div className="ib-read-notes">{item.meta.notes}</div> : null}
-          {item.preview ? <pre className="ib-read-text">{item.preview}</pre> : null}
+          {item.preview ? <pre className="ib-read-text">{item.previewCut ? `${item.preview}…` : item.preview}</pre> : null}
+          {item.preview && item.previewCut ? <div className="ib-read-more hint">Open the file to read all of it</div> : null}
         </details>
       ) : null}
 

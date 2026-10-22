@@ -32,6 +32,8 @@ export interface InboxItemView {
   status: InboxStatus;
   meta?: { from?: string; subject?: string; date?: string; speakers?: string[]; attachments?: string[]; pages?: number; words?: number; readBy?: 'ai'; notes?: string };
   preview?: string;
+  /** The text is longer than the preview: the rest is in the file. */
+  previewCut?: true;
   hold?: { reasons: string[] };
   steps?: Step[];
   triage?: {
@@ -81,13 +83,16 @@ const TYPE_WORDS: Record<InboxType | 'picture', string> = {
 };
 export const typeWord = (t: string | undefined) => TYPE_WORDS[t as InboxType] ?? 'File';
 
-/** The picture formats the AI reads (a picture still being read has no type yet). */
-const PICTURE_EXT = /\.(png|jpe?g|gif|webp)$/i;
-/** A picture (or a scanned PDF) the AI read: stored as a note whose text the AI transcribed. */
-export const isPicture = (i: Pick<InboxItemView, 'type' | 'meta'>) => i.type === 'note' && i.meta?.readBy === 'ai';
+/**
+ * A picture (or a scanned PDF) the AI read: meta.readBy is set only once the read is done, so a picture still being
+ * read is not one yet, and a picture held at the screen (its text not kept) still is. The chip and the filter agree.
+ */
+export const isPicture = (i: Pick<InboxItemView, 'meta'>) => i.meta?.readBy === 'ai';
 /** The kind shown on a card or a history row: 'picture' for a picture the AI read, else the item's type. */
-export const kindOf = (i: Pick<InboxItemView, 'type' | 'meta' | 'name'>): InboxType | 'picture' =>
-  isPicture(i) || (i.type === 'unknown' && PICTURE_EXT.test(i.name ?? '')) ? 'picture' : i.type;
+export const kindOf = (i: Pick<InboxItemView, 'type' | 'meta'>): InboxType | 'picture' => (isPicture(i) ? 'picture' : i.type);
+/** As kindOf, but a held file reads as a plain file unless it is a picture the AI read. */
+export const shownKind = (i: Pick<InboxItemView, 'type' | 'meta' | 'status'>): InboxType | 'picture' =>
+  i.status === 'held' && !isPicture(i) ? 'unknown' : kindOf(i);
 
 const oneLine = (s: unknown, max = 160) => {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim();

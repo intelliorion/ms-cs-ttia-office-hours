@@ -26,7 +26,7 @@ const recordsOf = (item: InboxItem) => (item.actions ?? []) as ActionRecord[];
 
 async function load(root: string, id: string): Promise<InboxItem> {
   const item = await getItem(root, id);
-  if (!item) throw new Error(`No inbox item ${id}`);
+  if (!item) throw new Error(`No such import ${id}`);
   return item;
 }
 
@@ -139,13 +139,13 @@ export async function processItem(
     return updateItem(root, id, { status: 'triaged', problems: had.includes(msg) ? had : [...had, msg] });
   };
 
-  // 2 read, 3 screen (not recorded again on a re-run from match; a picture is looked at again)
+  // 2 read, 3 screen (not recorded again on a re-run from match; Run again looks at a picture again, a pick does not)
   // While the AI looks at a picture, the running Read step says so.
   const reading = (detail: string) => markStep(root, id, { id: 'read', status: 'running', detail });
   let rs: Awaited<ReturnType<typeof readAndScreen>>;
   try {
     rs = opts.from === 'match'
-      ? await readAndScreen(root, id, connector)
+      ? await readAndScreen(root, id, connector, undefined, { reuseRead: !!opts.ideaId })
       : await timed(root, id, 'read', 'Reading the file…', async () => {
         const r = await readAndScreen(root, id, connector, reading);
         return { value: r, detail: readDetail(r.parsed, r.aiMs) };
@@ -390,7 +390,7 @@ async function roundDraft(root: string, item: InboxItem, clock: Clock): Promise<
 }
 
 export interface InboxView {
-  items: (InboxItem & { preview?: string })[];
+  items: (InboxItem & { preview?: string; previewCut?: true })[];
   counts: { new: number; ok: number; held: number; applied: number };
   problems: string[];
 }
@@ -412,9 +412,16 @@ export async function inboxView(root: string): Promise<InboxView> {
 /** A step still "running" after this long was cut off (the server stopped mid-run): it is reported as failed. */
 export const STRANDED_MS = 180_000;
 
+/** How much of an item's text the Import shows; previewCut says there is more in the file. */
+export const PREVIEW_CHARS = 400;
+
 /** An item without its full text (a short preview instead) or the quoted thread; a stranded running step reads as failed (report only). */
-export function viewOf({ text, meta, ...rest }: InboxItem, now = Date.now()): InboxItem & { preview?: string } {
+export function viewOf({ text, meta, ...rest }: InboxItem, now = Date.now()): InboxItem & { preview?: string; previewCut?: true } {
   const { quoted: _q, ...m } = meta ?? {};
   const steps = rest.steps?.map((s) => (s.status === 'running' && now - Date.parse(s.at) > STRANDED_MS ? { ...s, status: 'failed' as const, detail: 'interrupted' } : s));
-  return { ...rest, ...(steps ? { steps } : {}), ...(meta ? { meta: m } : {}), ...(text ? { preview: text.slice(0, 400) } : {}) };
+  const cut = !!text && text.length > PREVIEW_CHARS;
+  return {
+    ...rest, ...(steps ? { steps } : {}), ...(meta ? { meta: m } : {}),
+    ...(text ? { preview: text.slice(0, PREVIEW_CHARS) } : {}), ...(cut ? { previewCut: true as const } : {}),
+  };
 }

@@ -38,6 +38,13 @@ describe('Welcome', () => {
     expect(el.querySelector('[data-testid="welcome"]')).toBeNull();
   });
 
+  it('vanishes when the first idea arrives', () => {
+    show();
+    expect(el.querySelector('[data-testid="welcome"]')).not.toBeNull();
+    act(() => useStore.setState({ state: { ideas: [{ id: 'CAFE-2026-001', title: 'One' }] } as any }));
+    expect(el.querySelector('[data-testid="welcome"]')).toBeNull();
+  });
+
   it('hides before the state is read', () => {
     useStore.setState({ state: null });
     show();

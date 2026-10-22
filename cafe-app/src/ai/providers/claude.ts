@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Provider } from '../connector';
 import { onPath, runCli } from './cli';
+import { lookName } from '../tasks';
 
 /**
  * Claude Code in headless mode. Verified against Claude Code 2.1.301:
@@ -15,9 +16,15 @@ export const CLAUDE_ARGS = ['-p', '--output-format', 'text', '--tools', '', '--m
 
 /**
  * Reading one picture (verified on Claude Code 2.1.304 with a PNG): only the Read tool, allowed on that one file,
- * which sits alone in a fresh temp folder that is the working directory. Nothing else is reachable.
+ * which sits alone, as `picture.<ext>`, in a fresh temp folder that is the working directory.
+ * `--setting-sources ""` loads none of the operator's own settings files (user, project, local), and
+ * `--permission-mode default` pins the mode, so no allow rule, extra directory or bypass mode of theirs widens Read:
+ * a read outside the folder is refused (checked on 2.1.304).
  */
-export const lookArgs = (name: string) => ['-p', '--output-format', 'text', '--tools', 'Read', '--allowedTools', `Read(./${name})`, '--max-turns', '3', '--strict-mcp-config', '--no-session-persistence'];
+export const lookArgs = (name: string) => [
+  '-p', '--output-format', 'text', '--tools', 'Read', '--allowedTools', `Read(./${name})`, '--max-turns', '3',
+  '--strict-mcp-config', '--no-session-persistence', '--setting-sources', '', '--permission-mode', 'default',
+];
 
 export function claudeProvider(): Provider {
   return {
@@ -28,7 +35,7 @@ export function claudeProvider(): Provider {
     async look(file, prompt, { timeoutMs }) {
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cafe-look-'));
       try {
-        const name = path.basename(file);
+        const name = lookName(file);
         await fs.copyFile(file, path.join(dir, name));
         return await runCli('claude', lookArgs(name), { stdin: prompt, timeoutMs, cwd: dir });
       } finally {

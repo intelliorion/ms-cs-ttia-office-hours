@@ -579,10 +579,13 @@ async function agenticPass(clock) {
     // 15: the same picture inside a PDF with no text layer: the scanned path, same result.
     d = await drop('15-scanned.pdf');
     st = stepsOf(d.item);
-    check(A('15-scanned.pdf'), 'Read "Scanned PDF read by the AI…"; matched 002; check done',
-      `read "${st.read?.detail}"; ${d.item.meta?.readBy ?? '-'} p${d.item.meta?.pages ?? '-'}; ${show(d.item)}; check ${st.check?.status}`,
-      /^Scanned PDF read by the AI/.test(st.read?.detail ?? '') && d.item.meta?.readBy === 'ai' && d.item.triage?.ideaId === 'CAFE-2026-002'
-        && ['done', 'needs-you'].includes(st.check?.status));
+    const { g: g15, star: deskStar15 } = await desk();
+    const deskLink15 = deskStar15 && g15.edges.find((e) => e.from === 'idea:CAFE-2026-002' && e.to === deskStar15.id && e.rel === 'NEEDS');
+    check(A('15-scanned.pdf'), 'Read "Scanned PDF read by the AI…"; note read by ai; matched 002 by id; star + link confirmed; check done',
+      `read "${st.read?.detail}"; ${d.item.type}/${d.item.meta?.readBy ?? '-'} p${d.item.meta?.pages ?? '-'}; ${show(d.item)}; link ${deskLink15 ? (deskLink15.confirmed ? 'confirmed' : 'waiting') : 'none'}; check ${st.check?.status}`,
+      /^Scanned PDF read by the AI/.test(st.read?.detail ?? '') && d.item.type === 'note' && d.item.meta?.readBy === 'ai' && d.item.meta?.pages === 1
+        && d.item.triage?.ideaId === 'CAFE-2026-002' && d.item.triage?.match?.how === 'cafe-id' && !!deskStar15 && deskLink15?.confirmed === true
+        && st.check?.status === 'done');
 
     // 02 again: the same file: one receive step, nothing else.
     d = await drop('02-reply-with-id.eml');

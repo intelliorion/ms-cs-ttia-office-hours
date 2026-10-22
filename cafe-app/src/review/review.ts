@@ -139,7 +139,6 @@ export async function saveReview(
 /** The open ideas of every round, grouped by round (newest first); ideas not yet in a round come last. */
 export async function writeReviewPack(root: string, clock: Clock): Promise<string> {
   const rounds = await listRounds(root);
-  if (!rounds.length) throw new Error(NO_ROUND);
   const today = clock();
   const open = (await listIdeas(root)).ideas.filter((i) => !i.closed && i.stage <= 2);
   const known = new Set(rounds.map((r) => r.id));
@@ -150,12 +149,14 @@ export async function writeReviewPack(root: string, clock: Clock): Promise<strin
   const lines = [
     '# Review pack', '',
     `Written ${formatDate(today)} for the TTIA review meeting. ${open.length} idea${open.length === 1 ? '' : 's'} to decide.`, '',
+    // With no rounds at all the pack still builds (one group) and says what to do first.
+    ...(rounds.length ? [] : [`${NO_ROUND}.`, '']),
   ];
   for (const g of groups) {
     lines.push(`## ${g.heading}`, '');
     for (const i of g.ideas) lines.push(...packEntry(i));
   }
-  const file = path.join(paths(root).rounds, rounds[0].id, `review-pack-${today}.md`);
+  const file = path.join(rounds.length ? path.join(paths(root).rounds, rounds[0].id) : paths(root).exports, `review-pack-${today}.md`);
   await writeFileAtomic(file, lines.join('\n'));
   return file;
 }

@@ -74,10 +74,10 @@ describe('InboxCard', () => {
       steps: [s('check', 'needs-you')],
       actions: [{ id: 'a2', action: { t: 'graph_links' }, kind: 'ok', status: 'pending', label: 'Add star Slot finder', held: { rule: 'near-duplicate-star', existing, why: 'Looks the same' } }],
     });
-    useStore.setState({ graph: { nodes: [{ id: 'capability:slot-finding', type: 'Capability', label: 'Slot finding' }], edges: [] } as any });
+    act(() => useStore.setState({ graph: { nodes: [{ id: 'capability:slot-finding', type: 'Capability', label: 'Slot finding' }], edges: [] } as any }));
     expect(mount(held('capability:slot-finding')).querySelector('[data-testid="existing-star"]')?.textContent).toBe('Existing star: Slot finding');
     expect(mount(held('capability:room-booking')).querySelector('[data-testid="existing-star"]')?.textContent).toBe('Existing star: room booking');
-    useStore.setState({ graph: null });
+    act(() => useStore.setState({ graph: null }));
   });
 });
 
@@ -96,6 +96,30 @@ describe('InboxCard: what the AI read (pictures)', () => {
     expect(read.textContent).toContain('TOOL: COPILOT STUDIO');
     expect(read.textContent).toContain('A whiteboard photo with a bulleted list');
     expect(el.querySelector('.ib-type')?.textContent).toContain('Picture');
+  });
+
+  it('a long transcription is marked as cut and says where the rest is', () => {
+    const el = mount(base({
+      name: 'board.png', type: 'note', status: 'applied', meta: { readBy: 'ai', notes: 'A board' },
+      preview: 'x'.repeat(400), previewCut: true, steps: [s('read', 'done')],
+    }));
+    const read = el.querySelector('[data-testid="ai-read"]')!;
+    expect(read.querySelector('.ib-read-text')?.textContent).toBe(`${'x'.repeat(400)}…`);
+    expect(read.textContent).toContain('Open the file to read all of it');
+  });
+
+  it('a short transcription has no cut sign', () => {
+    const el = mount(base({ name: 'board.png', type: 'note', status: 'applied', meta: { readBy: 'ai' }, preview: 'Short', steps: [s('read', 'done')] }));
+    expect(el.querySelector('.ib-read-text')?.textContent).toBe('Short');
+    expect(el.textContent).not.toContain('Open the file to read all of it');
+  });
+
+  it('a held picture (its text not kept) has no "What the AI read" block', () => {
+    const el = mount(base({
+      name: 'tracker.png', type: 'unknown', status: 'held', meta: { readBy: 'ai' }, hold: { reasons: ['Lists 3 people by name. The text was not kept.'] },
+      steps: [s('read', 'done'), s('screen', 'needs-you')],
+    }));
+    expect(el.querySelector('[data-testid="ai-read"]')).toBeNull();
   });
 
   it('a normal note has no "What the AI read" block', () => {

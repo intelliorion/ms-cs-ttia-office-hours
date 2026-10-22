@@ -547,6 +547,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ib-understood ul.unsure{color:var(--muted)}
 .ib-read .ib-read-notes{margin:4px 0 0;color:var(--muted);font-style:italic}
 .ib-read .ib-read-text{margin:6px 0 0;padding:8px 10px;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--mono);color:var(--cream);background:rgba(125,211,207,.06);border:1px solid rgba(125,211,207,.2);border-radius:8px}
+.ib-read .ib-read-more{margin:4px 0 0}
 .g-needs{border-left-color:var(--amber);background:rgba(245,179,107,.07)}
 .g-needs .ib-g-k{color:var(--amber)}
 .ib-rule{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);margin-right:8px}

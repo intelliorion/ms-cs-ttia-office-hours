@@ -164,8 +164,13 @@ describe('writeReviewPack', () => {
     expect(md).not.toMatch(/ of 25/);
   });
 
-  it('asks for a round when there is none', async () => {
+  it('with no round at all it still builds: one "No round yet" group and a notice to create a round', async () => {
     const root = await setup();
-    await expect(writeReviewPack(root, clock)).rejects.toThrow('Create a round first (Rounds button)');
+    const file = await writeReviewPack(root, clock);
+    expect(path.relative(root, file)).toBe(path.join('exports', 'review-pack-2026-10-19.md'));
+    const md = await readFile(file, 'utf8');
+    expect(md.split('\n').filter((l) => /^##? /.test(l))).toEqual(['# Review pack', '## No round yet']);
+    expect(md).toContain('\nCreate a round first (Rounds button).\n');
+    for (const id of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) expect(md).toContain(`\n### ${id} `);
   });
 });

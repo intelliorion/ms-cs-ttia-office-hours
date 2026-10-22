@@ -5,7 +5,7 @@ import type { AddRoute } from './server';
 import { paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
-import { listRounds, listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
+import { listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
 import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
@@ -52,12 +52,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   };
 
   add('GET', '/api/state', async () => {
-    const [rounds, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
-      listRounds(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
+    const [{ rounds, problems: roundProblems }, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
+      listRoundsChecked(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
     ]);
     const today = clock();
     return {
-      today, rounds, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
+      today, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
         return {

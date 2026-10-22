@@ -461,7 +461,7 @@ async function replay(root: string, _item: InboxItem, inv: Inverse, clock: Clock
       const { closed: _c, route: _r, ...rest } = idea;
       const prev: Idea = { ...rest, stage: inv.value.stage, ...(inv.value.closed ? { closed: inv.value.closed } : {}), ...(inv.value.route !== undefined ? { route: inv.value.route } : {}) };
       const dir = await saveIdea(root, prev);
-      await appendHistory(dir, { at: clock(), action: 'stage', by: 'operator', detail: 'Undone in Import' });
+      await appendHistory(dir, { at: clock(), action: 'stage', by: 'operator', detail: 'Undone in the Import' });
       const handoff = path.join(dir, 'csic-handoff.md');
       if ((await readText(handoff)) !== undefined) await writeFileAtomic(handoff, renderHandoff(prev, await loadSettings(root)));
       out.did++;

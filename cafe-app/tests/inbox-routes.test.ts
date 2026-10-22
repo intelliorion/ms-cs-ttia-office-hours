@@ -172,6 +172,13 @@ describe('/api/inbox: emails and notes', () => {
     expect(await readdir(path.join(s.root, 'ideas', (await ideaFolders(s.root)).find((f) => f.startsWith('CAFE-2026-002'))!))).not.toContain('emails');
   });
 
+  it('a card for an import that is gone gets a plain answer, not "inbox"', async () => {
+    const s = await server();
+    const r = await s.post('/api/inbox/in-000000000000/process');
+    expect(r.status).toBe(400);
+    expect((await json(r)).error).toBe('No such import in-000000000000');
+  });
+
   it('"Which idea?": choose re-triages with how: chosen and then acts on that idea', async () => {
     const s = await server();
     await s.drop('export.csv', await readFile(FIXTURE));

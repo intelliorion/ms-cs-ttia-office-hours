@@ -164,10 +164,17 @@ describe('title bar and the Rounds pop-out', () => {
     expect([...el.querySelectorAll('.rnd-free [data-idea]')].map((x) => x.getAttribute('data-idea'))).toEqual(['CAFE-2026-002', 'CAFE-2026-003']);
   });
 
+  it('names a round.yaml it could not read', () => {
+    useStore.setState({ state: { ...fixture(), roundProblems: [{ folder: 'ROUND-003', message: 'bad yaml' }] } as any });
+    act(() => root.render(createElement(RoundPopout)));
+    expect(q('[data-testid="round-problem"]').textContent).toBe('Could not read rounds/ROUND-003/round.yaml');
+  });
+
   it('creates a round with the typed name', async () => {
     act(() => root.render(createElement(RoundPopout)));
     const name = q<HTMLInputElement>('[data-field="round-name"]');
-    expect(name.value).toBe('2026 Q4');
+    // "2026 Q4" is taken by ROUND-001, so the name offered is numbered on.
+    expect(name.value).toBe('2026 Q4 (2)');
     act(() => typeInto(name, 'Winter clinic'));
     act(() => q<HTMLButtonElement>('[data-action="create-round"]').click());
     await flush();
@@ -180,6 +187,7 @@ describe('title bar and the Rounds pop-out', () => {
     act(() => root.render(createElement(RoundPopout)));
     const assign = () => q<HTMLButtonElement>('[data-action="assign"]');
     expect(assign().disabled).toBe(true);
+    expect(assign().textContent).toBe('Pick ideas to put in Spring pilots');
     act(() => { q<HTMLInputElement>('.rnd-free input[value="CAFE-2026-002"]').click(); q<HTMLInputElement>('.rnd-free input[value="CAFE-2026-003"]').click(); });
     act(() => typeInto(q<HTMLSelectElement>('[data-field="assign-round"]'), 'ROUND-001'));
     expect(assign().textContent).toBe('Put 2 ideas in 2026 Q4');

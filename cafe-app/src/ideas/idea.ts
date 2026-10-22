@@ -50,6 +50,11 @@ export interface Idea {
   current_process?: string;
   support: string[];
   experimented?: string;
+  maturity?: string;
+  business_impact?: string;
+  beneficiaries: string[];
+  use_case_category: string[];
+  additional_context?: string;
   people: { submitter?: string; team: Person[] };
   checklist: Record<string, StepState>;
   /** step id → ISO due date */
@@ -82,6 +87,8 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     stage: ([1, 2, 3, 4].includes(stage) ? stage : 1) as StageNo,
     outcomes: arr(raw.outcomes),
     support: arr(raw.support),
+    beneficiaries: arr(raw.beneficiaries),
+    use_case_category: arr(raw.use_case_category),
     people: { ...obj(raw.people), team: arr(raw.people?.team) },
     checklist: raw.checklist ?? {},
     due: raw.due ?? {},

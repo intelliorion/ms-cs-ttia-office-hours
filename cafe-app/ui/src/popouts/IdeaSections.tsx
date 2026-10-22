@@ -162,7 +162,14 @@ export function Details({ idea }: { idea: any }) {
       <Field label="Business challenge">{idea.challenge || <span className="none">Not given</span>}</Field>
       <Field label="Current process">{idea.current_process || <span className="none">Not given</span>}</Field>
       <Field label="Desired outcomes">{tags(idea.outcomes)}</Field>
+      <Field label="Business impact">{idea.business_impact || <span className="none">Not given</span>}</Field>
+      <Field label="Beneficiaries">{tags(idea.beneficiaries)}</Field>
+      <div className="field-row">
+        <Field label="Use case category">{tags(idea.use_case_category)}</Field>
+        <Field label="Solution maturity">{idea.maturity || <span className="none">Not given</span>}</Field>
+      </div>
       <Field label="Support requested">{tags(idea.support, 'teal')}</Field>
+      {idea.additional_context && <Field label="Additional context">{idea.additional_context}</Field>}
       <div className="field-row">
         <Field label="Team">
           {team.length

@@ -6,7 +6,11 @@ import type { ExtractInput, ExtractOutput } from './tasks';
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
   const labels = (t: NodeType) => nodes.filter((n) => n.type === t).map((n) => n.label).slice(0, 200);
   return {
-    idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
+    idea: {
+      id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes,
+      // Maturity and use case category are the form's labels for the idea, not text to find pain points or capabilities in.
+      business_impact: idea.business_impact, beneficiaries: idea.beneficiaries, additional_context: idea.additional_context,
+    },
     existing: { capabilities: labels('Capability'), systems: labels('System'), painPoints: labels('PainPoint') },
   };
 }

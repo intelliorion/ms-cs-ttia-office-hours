@@ -19,7 +19,9 @@ export interface ImportReport {
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 const CUT_OFF = /…|\.{3}/;
 const opt = (v: string) => (v ? v : undefined);
-const MULTI = new Set<Field>(['outcomes', 'support']);
+const MULTI = new Set<Field>(['outcomes', 'support', 'beneficiaries', 'use_case_category']);
+/** A text answer that arrived as SharePoint multi-choice (";#A;#B;#") reads "A; B". */
+const text = (v: string) => opt(v.includes(';#') ? splitMulti(v).join('; ') : v);
 
 export async function importExport(
   root: string, file: string, opts: { clock: Clock; steps: StepDef[] },
@@ -87,6 +89,11 @@ export async function importExport(
       current_process: opt(get('current_process')),
       support: splitMulti(get('support')),
       experimented: opt(get('experimented')),
+      maturity: text(get('maturity')),
+      business_impact: text(get('business_impact')),
+      beneficiaries: splitMulti(get('beneficiaries')),
+      use_case_category: splitMulti(get('use_case_category')),
+      additional_context: text(get('additional_context')),
       people: { submitter: submitter.name, team },
       flags,
       source: { file: name, row: rowNo },

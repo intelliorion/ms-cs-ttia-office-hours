@@ -196,6 +196,7 @@ describe('store and layout', () => {
 
 import { APPROVED_TOOLS, canonicalTool, isApprovedTool } from '../src/graph/ontology';
 import { extractInput, planAiLinks } from '../src/ai/apply';
+import { extractTask } from '../src/ai/tasks';
 
 describe('approved tools', () => {
   it('maps variants to canonical labels and detects unapproved tools', () => {
@@ -235,6 +236,14 @@ describe('approved tools', () => {
     expect(links.map((l) => l.to)).toEqual(['capability:clause-finding']);
     const input = extractInput(rfx, graph.nodes);
     expect(input.existing.capabilities).not.toContain('Agent Design Guidance');
+  });
+
+  it('gives the AI the business impact, beneficiaries and additional context, but not the use case category or maturity', () => {
+    const idea = { ...rfx, business_impact: 'Saves 2 hours a week', beneficiaries: ['Office managers'], additional_context: 'Pilot first.', maturity: 'Prototype', use_case_category: ['Workplace'] };
+    const { idea: sent } = extractInput(idea, []);
+    expect(sent).toMatchObject({ business_impact: 'Saves 2 hours a week', beneficiaries: ['Office managers'], additional_context: 'Pilot first.' });
+    expect(sent).not.toHaveProperty('maturity');
+    expect(extractTask.prompt({ idea: sent, existing: { capabilities: [], systems: [], painPoints: [] } })).toMatch(/Saves 2 hours a week/);
   });
 });
 

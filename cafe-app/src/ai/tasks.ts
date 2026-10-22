@@ -12,7 +12,10 @@ export interface Task<T> {
   timeoutMs?: number;
 }
 
-export interface IdeaText { id: string; title: string; challenge?: string; current_process?: string; outcomes?: string[] }
+export interface IdeaText {
+  id: string; title: string; challenge?: string; current_process?: string; outcomes?: string[];
+  business_impact?: string; beneficiaries?: string[]; additional_context?: string;
+}
 export interface ExtractInput {
   idea: IdeaText;
   existing: { capabilities: string[]; systems: string[]; painPoints: string[] };
@@ -76,6 +79,9 @@ function ideaData(idea: IdeaText) {
   return {
     title: s(idea.title, 200), challenge: s(idea.challenge), current_process: s(idea.current_process),
     outcomes: (Array.isArray(idea.outcomes) ? idea.outcomes : []).slice(0, 20).map((o) => s(o, 500)),
+    ...(idea.business_impact ? { business_impact: s(idea.business_impact) } : {}),
+    ...(idea.beneficiaries?.length ? { beneficiaries: idea.beneficiaries.slice(0, 20).map((b) => s(b, 200)) } : {}),
+    ...(idea.additional_context ? { additional_context: s(idea.additional_context) } : {}),
   };
 }
 
@@ -100,7 +106,7 @@ export const extractTask: Task<ExtractOutput> = {
   prompt(input) {
     const { idea, existing } = input as ExtractInput;
     return build('extract', [
-      "Read the idea's challenge, current process and outcomes.",
+      "Read the idea's challenge, current process, outcomes and, when given, its business impact, beneficiaries and additional context.",
       'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint) and the systems or data it uses (System).',
       'Never propose a tool or product to build it with: the tool is chosen later, in the app, by the operator.',
       'A capability is something the solution does. Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form.',

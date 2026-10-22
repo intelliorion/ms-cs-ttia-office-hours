@@ -2,7 +2,8 @@ import type { Person, PersonRole } from '../ideas/idea';
 
 export type Field =
   | 'title' | 'submitter' | 'function' | 'region' | 'participation' | 'team'
-  | 'challenge' | 'outcomes' | 'current_process' | 'support' | 'experimented';
+  | 'challenge' | 'outcomes' | 'current_process' | 'support' | 'experimented'
+  | 'maturity' | 'business_impact' | 'beneficiaries' | 'use_case_category' | 'additional_context';
 
 export const COLUMNS: { prefix: string; field: Field; label: string }[] = [
   { prefix: 'title', field: 'title', label: 'Title' },
@@ -16,13 +17,27 @@ export const COLUMNS: { prefix: string; field: Field; label: string }[] = [
   { prefix: 'current process', field: 'current_process', label: 'Current Process' },
   { prefix: 'support requested', field: 'support', label: 'Support Requested' },
   { prefix: 'have you already experimented', field: 'experimented', label: 'Have you already experimented' },
+  { prefix: 'solution maturity', field: 'maturity', label: 'Solution Maturity' },
+  { prefix: 'business impact', field: 'business_impact', label: 'Business Impact' },
+  { prefix: 'beneficiar', field: 'beneficiaries', label: 'Beneficiaries' },
+  { prefix: 'use case category', field: 'use_case_category', label: 'Use Case Category' },
+  { prefix: 'additional context', field: 'additional_context', label: 'Additional Context' },
 ];
+
+/** Columns SharePoint adds to every list export. They say nothing about the idea, so they are skipped without a mention. */
+const SHAREPOINT_OWN = new Set([
+  'id', 'item type', 'path', 'created', 'modified', 'created by', 'modified by', 'content type', 'attachments',
+  'compliance asset id', 'version', 'app created by', 'app modified by', 'label applied', 'retention label',
+  'item child count', 'folder child count',
+]);
 
 export function mapHeader(header: string[]): { index: Partial<Record<Field, number>>; unknown: string[] } {
   const index: Partial<Record<Field, number>> = {};
   const unknown: string[] = [];
   header.forEach((h, i) => {
-    const col = COLUMNS.find((c) => h.trim().toLowerCase().startsWith(c.prefix));
+    const name = h.trim().toLowerCase();
+    if (SHAREPOINT_OWN.has(name)) return;
+    const col = COLUMNS.find((c) => name.startsWith(c.prefix));
     if (!col) unknown.push(h);
     else if (index[col.field] === undefined) index[col.field] = i;
   });

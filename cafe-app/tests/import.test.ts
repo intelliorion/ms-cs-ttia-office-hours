@@ -41,7 +41,8 @@ describe('importExport', () => {
     const r = await importExport(root, FIXTURE, opts);
     expect(r.created.map((c) => c.id)).toEqual(['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']);
     expect(r.errors).toEqual([{ row: 5, message: 'Title is empty' }]);
-    expect(r.ignoredColumns).toEqual(['ID']);
+    // ID is SharePoint's own column: skipped without a mention.
+    expect(r.ignoredColumns).toEqual([]);
     expect(r.flags.filter((f) => f.id === 'CAFE-2026-003').map((f) => f.message)).toEqual([
       'Cut off in the export, check the full text: Desired Outcomes "Save time; Imp…"',
       'Participation is Individual but 6 people are listed',
@@ -125,6 +126,40 @@ describe('importExport', () => {
     const r = await importExport(root, file, opts);
     expect(r.errors).toEqual([{ row: 4, message: 'Title is empty' }]);
     expect((await loadIdea(root, r.created[1].id)).source).toEqual({ file: 'gap.csv', row: 5 });
+  });
+});
+
+describe('the newer form columns', () => {
+  const csv = (header: string[], row: string[]) => [header, row].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
+  it('keeps solution maturity, business impact, beneficiaries, use case category and additional context; skips SharePoint\'s own columns', async () => {
+    const root = await tmpWorkspace();
+    const file = path.join(root, 'inbox', 'newer.csv');
+    await writeFile(file, csv(
+      ['ID', 'Title', 'Submitter Name', 'Solution Maturity', 'Business Impact', 'Beneficiaries', 'Use Case Category', 'Additional Context', 'Item Type', 'Path', 'Created', 'Modified', 'Created By', 'Content Type', 'Favourite colour'],
+      ['4', 'Desk finder', 'Person 1 (CS)', 'Prototype', 'Saves about 2 hours a week per office manager', 'Employees;#Office managers', 'Workplace services', 'Pilot runs in one office first.', 'Item', 'sites/cafe/Lists/Submissions', '2026-10-01', '2026-10-02', 'Person 1', 'Item', 'Teal'],
+    ));
+    const r = await importExport(root, file, opts);
+    expect(r.ignoredColumns).toEqual(['Favourite colour']);
+    const idea = await loadIdea(root, r.created[0].id);
+    expect(idea).toMatchObject({
+      maturity: 'Prototype',
+      business_impact: 'Saves about 2 hours a week per office manager',
+      beneficiaries: ['Employees', 'Office managers'],
+      use_case_category: ['Workplace services'],
+      additional_context: 'Pilot runs in one office first.',
+    });
+  });
+
+  it('a multi-choice answer in a text column reads "A; B", and a missing column leaves the field out', async () => {
+    const root = await tmpWorkspace();
+    const file = path.join(root, 'inbox', 'multi.csv');
+    await writeFile(file, csv(['Title', 'Solution Maturity', 'Business Impact'], ['Desk finder', ';#Idea;#Prototype;#', '']));
+    const r = await importExport(root, file, opts);
+    const idea = await loadIdea(root, r.created[0].id);
+    expect(idea.maturity).toBe('Idea; Prototype');
+    expect(idea.business_impact).toBeUndefined();
+    expect(idea.beneficiaries).toEqual([]);
+    expect(idea.use_case_category).toEqual([]);
   });
 });
 

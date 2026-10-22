@@ -28,7 +28,8 @@ const put = (name, data) => writeFile(path.join(OUT, name), data);
 
 // ---------- 01 submissions (xlsx + csv, identical rows) ----------
 const HEADER = ['ID', 'Title', 'Submitter Name', 'CS Function', 'Region', 'Participation Type', 'Team Members and Lead',
-  'Business Challenge', 'Desired Outcomes', 'Current Process', 'Support Requested', 'Have you already experimented with AI for this idea?'];
+  'Business Challenge', 'Desired Outcomes', 'Current Process', 'Support Requested', 'Have you already experimented with AI for this idea?',
+  'Solution Maturity', 'Business Impact', 'Beneficiaries', 'Use Case Category', 'Additional Context', 'Item Type', 'Path'];
 // Shaped like the real SharePoint export: "Last, First (CS)", CS Function as a code (BSI, GSS), multi-select joined by
 // ";#" with no ends, team lists one per line in the styles people type ("Lead: Name", "Name (Lead)", pronouns),
 // participation and the experimented answer sometimes blank, and long challenges and numbered processes.
@@ -79,6 +80,19 @@ const ROWS = [
     '1) A requester emails the procurement mailbox or a buyer directly.\n2) The buyer searches the FAQ document and past emails for an answer.\n3) If it is not there, the buyer asks the category lead and replies days later.\n4) The FAQ document is updated when someone remembers.',
     ms('Agent Design Guidance', 'Workflow Automation Guidance'), 'No'],
 ].map((r, i) => [i + 1, ...r]);
+// The newer columns, row by row: Solution Maturity, Business Impact, Beneficiaries, Use Case Category, Additional Context.
+// Some are blank, as in the real export. Item Type and Path are SharePoint's own and the importer skips them.
+const NEWER = [
+  ['Idea', 'Avoids unplanned renewals worth about 250k a year and frees roughly 2 days a month of paralegal time.', ms('Legal Team', 'Procurement Team'), ms('Document Processing'), 'Contracts are stored in two places today; the newer ones are in the contract library.'],
+  ['Proof of Concept', 'Coordinators spend about 10 hours a week on desk requests; occupancy reporting takes 2 days a month.', ms('Employees', 'Workplace Team'), ms('Scheduling & Booking', 'Workflow Automation'), 'Floor plans change each quarter, so the desk list must be easy to update.'],
+  ['Idea', '', ms('New Joiners', 'Managers'), ms('Workflow Automation'), ''],
+  ['Pilot', 'Reviews 100% of claims instead of 5%, and finds issues within a week instead of at the annual audit.', ms('Finance Team'), ms('Analytics & Insights'), 'A small rules spreadsheet is already used for the sample review.'],
+  ['Idea', 'Actions reach their owners the same day.', ms('Employees'), ms('Productivity'), ''],
+  ['', 'About 150 emails a month answered without the travel desk.', ms('Travellers', 'Travel Desk'), ms('Knowledge & Q&A'), 'The policy is updated every January.'],
+  ['Idea', '', '', '', ''],
+  ['Proof of Concept', 'Around 400 questions a month answered the same way every time.', ms('Business Teams', 'Procurement Team'), ms('Knowledge & Q&A'), 'The FAQ document has not been reviewed for two years.'],
+];
+ROWS.forEach((r, i) => r.push(...NEWER[i], 'Item', 'sites/cafe/Lists/Submissions'));
 
 const wb = new ExcelJS.Workbook();
 const ws = wb.addWorksheet('Submissions');
@@ -387,7 +401,7 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 
 | File | What it is | What to expect |
 |---|---|---|
-| 01-submissions.xlsx / .csv | The same 8 submissions in both formats, shaped like the real SharePoint export: "Last, First (CS)", CS Function as BSI or GSS, multi-select joined by ";#", team lists one per line in mixed styles ("Lead: Name(she/her)", "Name (Lead)"), some blank cells, long challenges and numbered processes | Import creates CAFE-2026-001 to 007 (the 7th data row has no title, so the import reports it; the report counts the header as row 1). Names are stored first name first. Rows 2, 4 and 8 are teams with a lead and a sponsor. Row 1 says Individual but lists 5 people, so it is flagged. Dropping both files shows dedupe (the second adds nothing new). |
+| 01-submissions.xlsx / .csv | The same 8 submissions in both formats, shaped like the real SharePoint export: "Last, First (CS)", CS Function as BSI or GSS, multi-select joined by ";#", team lists one per line in mixed styles ("Lead: Name(she/her)", "Name (Lead)"), some blank cells, long challenges and numbered processes, plus the newer columns (Solution Maturity, Business Impact, Beneficiaries, Use Case Category, Additional Context) and SharePoint's own Item Type and Path | Import creates CAFE-2026-001 to 007 (the 7th data row has no title, so the import reports it; the report counts the header as row 1). Names are stored first name first. Rows 2, 4 and 8 are teams with a lead and a sponsor. Row 1 says Individual but lists 5 people, so it is flagged. The newer columns show in each idea's Details; Item Type, Path and ID are skipped without a mention. Dropping both files shows dedupe (the second adds nothing new). |
 | 02-reply-with-id.eml | ${who(2)} answers our three questions; subject has CAFE-2026-002 | Sure match to Desk booking assistant. Our quoted E2 is split off below "-----Original Message-----". |
 | 03-reply-no-id.eml | Reply whose subject is only the idea title | Likely match to Desk booking assistant (title in subject). |
 | 04-sender-only.eml | ${who(5)} writes "Quick update" | No ID or title, so a sender match (submitter, 0.8) or a question to you. |

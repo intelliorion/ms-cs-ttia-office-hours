@@ -17,19 +17,13 @@ function useFocus() {
   return node ? { id: node.id as string, label: node.label as string, type: node.type as string } : null;
 }
 
-/** The title-bar AI button: opens the assistant (also Ctrl/⌘+K), counts the changes waiting, and clears a highlight. */
+/** The title-bar AI button: opens the assistant (also Ctrl/⌘+K) and counts the changes waiting. The highlight has its own bar at the bottom. */
 export function AssistantLauncher() {
   const { open, setOpen, entries } = useChat();
-  const { highlight, setHighlight } = useStore();
   const waiting = waitingCount(entries);
   const mac = /Mac/i.test(typeof navigator !== 'undefined' ? navigator.platform : '');
   return (
     <>
-      {highlight && (
-        <button className="cmd-lit" data-action="command-clear-lit" title="Clear the highlight" onClick={() => setHighlight(null)}>
-          {highlight.length} star{highlight.length === 1 ? '' : 's'} lit <span aria-hidden="true">✕</span>
-        </button>
-      )}
       <button className={`pill ai-pill${open ? ' on' : ''}`} data-action="assistant-open" aria-expanded={open}
         title={`Café assistant (${mac ? '⌘K' : 'Ctrl+K'}): ask about the programme, or tell it what to change`} onClick={() => setOpen(!open)}>
         <span className="cmd-spark" aria-hidden="true">✦</span>AI{waiting > 0 && <span className="cmd-badge" title="Changes waiting for you">{waiting}</span>}

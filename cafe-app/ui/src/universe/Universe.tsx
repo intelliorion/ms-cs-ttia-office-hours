@@ -10,7 +10,7 @@ import { Flat2D } from './Flat2D';
 import { useFlyTo } from './useFlyTo';
 import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
-import { bounds, degrees, neighbourhood, type Graph, type Vec3 } from './graphView';
+import { DIM, bounds, degrees, dimFromHide, neighbourhood, type Graph, type Vec3 } from './graphView';
 
 export interface UniverseProps {
   graph: Graph;
@@ -18,6 +18,8 @@ export interface UniverseProps {
   selectedId: string | null;
   /** Stars an answer rests on: lit, with the links between them, the rest dimmed. A selected star wins. */
   highlight?: string[] | null;
+  /** How much of the universe outside a highlight is hidden, 0.1 to 1 (1: only the lit stars show). */
+  hideUnlit?: number;
   hoverId: string | null;
   labels: boolean;
   /** Focus mode: the graph fits the whole stage instead of the centre gap. */
@@ -95,7 +97,7 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, highlight = null, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
+function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
   const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
   const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
@@ -111,6 +113,8 @@ function Scene({ graph, layout, selectedId, highlight = null, hoverId, labels, f
   const deg = useMemo(() => degrees(graph), [graph]);
   const lit = useMemo(() => (highlight?.length ? new Set(highlight) : null), [highlight]);
   const hood = useMemo(() => (selectedId ? neighbourhood(graph, selectedId) : lit), [graph, selectedId, lit]);
+  // The slider applies to a highlight only; a selected star keeps the usual dim.
+  const dim = lit && !selectedId && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
 
   const spin = useRef<Group>(null);
   const lastDown = useRef(-Infinity);
@@ -168,8 +172,8 @@ function Scene({ graph, layout, selectedId, highlight = null, hoverId, labels, f
       <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
       <ambientLight intensity={0.2} />
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lit={selectedId ? null : lit} lite={lite} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
+        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lit={selectedId ? null : lit} dim={dim} lite={lite} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}

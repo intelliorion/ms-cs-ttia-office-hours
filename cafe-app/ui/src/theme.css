@@ -814,3 +814,11 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ai-pill{display:inline-flex;align-items:center;gap:7px;font-weight:600}
 .ai-pill.on{border-color:var(--teal);color:#fff;box-shadow:0 0 14px rgba(125,211,207,.3)}
 .titlebar .btns{align-items:center}
+/* While stars are lit: how much of the rest to hide, above the bottom buttons. */
+.hl-bar{left:50%;transform:translateX(-50%);top:calc(var(--sh) - 128px);display:flex;align-items:center;gap:16px;padding:9px 18px;border-radius:999px;border:1px solid rgba(231,216,177,.45);background:rgba(16,22,22,.86);backdrop-filter:blur(8px);box-shadow:0 0 18px rgba(231,216,177,.15);z-index:20;white-space:nowrap;font-size:13.5px;color:var(--text)}
+.hl-n{display:inline-flex;align-items:center;gap:6px;color:var(--cream);font-weight:600}
+.hl-slide{display:inline-flex;align-items:center;gap:10px;color:var(--muted)}
+.hl-slide input{width:180px;accent-color:var(--teal);cursor:pointer}
+.hl-slide b{min-width:72px;color:#fff;font-weight:600;font-family:var(--mono);font-size:12.5px}
+.hl-note{font-size:12px;color:var(--muted)}
+[data-quality="lite"] .hl-bar{backdrop-filter:none;background:rgba(26,35,35,.95)}

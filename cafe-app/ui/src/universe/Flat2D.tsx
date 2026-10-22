@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import { useStageSize } from '../layout/Stage';
-import { DIM, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelAlways, neighbourhood, ringColour, starSize, type Graph, type Vec3 } from './graphView';
+import { DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelAlways, neighbourhood, ringColour, starSize, type Graph, type Vec3 } from './graphView';
 
 interface Props {
   graph: Graph;
   layout: Record<string, Vec3>;
   selectedId: string | null;
   highlight?: string[] | null;
+  hideUnlit?: number;
   hoverId: string | null;
   labels: boolean;
   onSelect: (id: string | null) => void;
@@ -20,7 +21,7 @@ const PAD = 50;
 const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Person: 7 };
 
 /** No WebGL: the same graph drawn flat in SVG, using x and y of the layout. */
-export function Flat2D({ graph, layout, selectedId, highlight = null, hoverId, labels, onSelect, onHover }: Props) {
+export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId, labels, onSelect, onHover }: Props) {
   const { w: stageW, h: stageH } = useStageSize();
   const BOX = boxFor(stageW, stageH);
   const { pts } = useMemo(() => {
@@ -36,12 +37,13 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hoverId, l
   const deg = useMemo(() => degrees(graph), [graph]);
   const litSet = !selectedId && highlight?.length ? new Set(highlight) : null;
   const hood = selectedId ? neighbourhood(graph, selectedId) : litSet;
+  const dim = litSet && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
   const lit = (id: string) => !hood || hood.has(id);
   // Labels never overlap: place them in priority order, skip any that would collide.
   const shown = new Set<string>();
   {
     const placed: number[][] = [];
-    const want = graph.nodes.filter((n) => pts.has(n.id) && (labels || labelAlways(n) || n.id === hoverId || n.id === selectedId || hood?.has(n.id)));
+    const want = graph.nodes.filter((n) => pts.has(n.id) && (lit(n.id) || dim > 0) && (labels || labelAlways(n) || n.id === hoverId || n.id === selectedId || hood?.has(n.id)));
     const score = (id: string, t: string) => (id === selectedId || id === hoverId ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (RANK[t] ?? 9);
     for (const n of want.sort((a, b) => score(a.id, a.type) - score(b.id, b.type))) {
       const p = pts.get(n.id)!; const r = starSize(n, deg.get(n.id) ?? 0) * 3.2;
@@ -63,14 +65,15 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hoverId, l
       <g>
         {graph.edges.map((e) => {
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
-          const s = edgeStyle(e, selectedId, litSet);
+          const s = edgeStyle(e, selectedId, litSet, dim);
           return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR} strokeOpacity={s.pulse ? 0.9 : s.opacity * 1.6} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>
       {graph.nodes.map((n) => {
         const p = pts.get(n.id); if (!p) return null;
         const r = starSize(n, deg.get(n.id) ?? 0) * 3.2;
-        const o = lit(n.id) ? 1 : DIM;
+        const o = lit(n.id) ? 1 : dim;
+        if (o <= 0) return null;
         const hot = n.id === hoverId || n.id === selectedId;
         const showLabel = shown.has(n.id);
         return (

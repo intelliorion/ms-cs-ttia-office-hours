@@ -19,6 +19,8 @@ export interface StarsProps {
   focus?: boolean;
   /** Lite quality: no bloom, so the halos carry the glow (larger, with a pulse on the selected star). */
   lite?: boolean;
+  /** How bright stars outside the lit set are (0 hides them, with their labels and rings). */
+  dim?: number;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }
@@ -57,13 +59,15 @@ interface InstanceSink { setMatrixAt(i: number, m: Matrix4): void; setColorAt(i:
 export function writeHalos(h: InstanceSink, f: {
   nodes: GNode[]; pos: Map<string, Vec3>; sizes: number[]; base: Color[]; bright: number[]; hood: Set<string> | null;
   selectedId: string | null; hoverIndex: number; lite: boolean; t: number; facing: Quaternion; glint?: InstanceSink | null;
+  /** Stars outside the lit set are hidden: their halos take no space. */
+  hide?: boolean;
 }): number {
   for (let i = 0; i < f.nodes.length; i++) {
     const id = f.nodes[i].id;
     const lit = !f.hood || f.hood.has(id);
     const p = f.pos.get(id)!;
     h.setColorAt(i, tmpC.copy(f.base[i]).multiplyScalar(f.bright[i] * (lit ? 0.85 : 0.5)));
-    tmpS.setScalar(haloDiameter(f.sizes[i], { lite: f.lite, selected: id === f.selectedId, hovered: i === f.hoverIndex, t: f.t }));
+    tmpS.setScalar(f.hide && !lit ? 0 : haloDiameter(f.sizes[i], { lite: f.lite, selected: id === f.selectedId, hovered: i === f.hoverIndex, t: f.t }));
     h.setMatrixAt(i, tmpM.compose(tmpP.set(p[0], p[1], p[2]), f.facing, tmpS));
     if (f.glint) {
       f.glint.setColorAt(i, tmpC.copy(f.base[i]).lerp(WHITE, 0.4).multiplyScalar(f.bright[i] * (lit ? 0.9 : 0.4)));
@@ -94,7 +98,7 @@ function emissiveByInstance(m: Material) {
 }
 
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
-export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, lite = false, onSelect, onHover }: StarsProps) {
+export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focus = false, lite = false, dim = DIM, onSelect, onHover }: StarsProps) {
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
   const glint = useRef<InstancedMesh>(null);
@@ -111,13 +115,16 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
   const bright = useRef<number[]>([]);
   const size = useThree((st) => st.size);
 
+  // Hidden at 100%: stars outside the lit set take no space, no click and no label.
+  const hidden = (id: string) => dim <= 0 && !!hood && !hood.has(id);
   useLayoutEffect(() => {
     nodes.forEach((d, i) => {
       const p = pos.get(d.id) ?? [0, 0, 0];
+      const gone = hidden(d.id);
       dummy.position.set(...p); dummy.quaternion.identity();
-      dummy.scale.setScalar(sizes[i]); dummy.updateMatrix();
+      dummy.scale.setScalar(gone ? 0 : sizes[i]); dummy.updateMatrix();
       core.current!.setMatrixAt(i, dummy.matrix); core.current!.setColorAt(i, base[i]);
-      dummy.scale.setScalar(Math.max(sizes[i] * 2.2, 4)); dummy.updateMatrix();
+      dummy.scale.setScalar(gone ? 0 : Math.max(sizes[i] * 2.2, 4)); dummy.updateMatrix();
       hit.current!.setMatrixAt(i, dummy.matrix);
       halo.current!.setMatrixAt(i, dummy.matrix); halo.current!.setColorAt(i, base[i]);
     });
@@ -125,7 +132,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
       m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere();
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
-  }, [nodes, pos, sizes, base]);
+  }, [nodes, pos, sizes, base, hood, dim]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(({ clock, camera }) => {
     const c = core.current, h = halo.current; if (!c || !h || !n) return; // no stars yet: nothing to light
@@ -137,11 +144,11 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
       const id = nodes[i].id;
       const lit = !hood || hood.has(id);
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
-      b[i] = (lit ? 1 : DIM) * (i === hoverIndex || id === selectedId ? 1.4 : 1) * twinkle;
+      b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId ? 1.4 : 1) * twinkle;
       c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
     }
     const g = lite ? glint.current : null;
-    writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g });
+    writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g, hide: dim <= 0 });
     c.instanceColor!.needsUpdate = true; h.instanceColor!.needsUpdate = true; h.instanceMatrix.needsUpdate = true;
     if (g) { g.instanceColor!.needsUpdate = true; g.instanceMatrix.needsUpdate = true; }
     if (frame.current++ % 3 === 0) placeLabels(camera);
@@ -215,19 +222,19 @@ export function Stars({ nodes, pos, deg, hood, selectedId, hoverId, labels, focu
         <Billboard key={d.id} position={pos.get(d.id)}>
           <mesh>
             <ringGeometry args={[sizes[i] * 1.75, sizes[i] * 1.75 + 0.32, 64]} />
-            <meshBasicMaterial color={ringColour(d)} transparent opacity={!hood || hood.has(d.id) ? 0.9 : DIM} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color={ringColour(d)} transparent opacity={!hood || hood.has(d.id) ? 0.9 : dim} visible={!hidden(d.id)} depthWrite={false} toneMapped={false} />
           </mesh>
         </Billboard>
       ))}
       {nodes.map((d, i) => d.type === 'Tool' && d.attrs?.approved === false && (
         <Billboard key={`na-${d.id}`} position={pos.get(d.id)}>
-          <Line points={RING_PTS} color="#f59e0b" lineWidth={1} dashed dashSize={0.12} gapSize={0.1} transparent opacity={!hood || hood.has(d.id) ? 0.95 : DIM} scale={sizes[i] * 1.75} />
+          <Line points={RING_PTS} color="#f59e0b" lineWidth={1} dashed dashSize={0.12} gapSize={0.1} transparent opacity={!hood || hood.has(d.id) ? 0.95 : dim} visible={!hidden(d.id)} scale={sizes[i] * 1.75} />
         </Billboard>
       ))}
       {nodes.map((d) => {
         const lit = !hood || hood.has(d.id);
         const show = labels || labelAlways(d) || d.id === hoverId || (hood !== null && hood.has(d.id));
-        if (!show) return null;
+        if (!show || hidden(d.id)) return null;
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }} {...(lite ? LITE_LABEL : {})}>
             <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId ? ' hot' : ''}`}>

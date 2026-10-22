@@ -71,15 +71,19 @@ export const LABEL_MAX = 40;
 export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
 
 /** A selected star wins; otherwise a lit set (the stars an answer rests on) shows the links between them. */
-export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null, lit?: Set<string> | null) {
+export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null, lit?: Set<string> | null, dim = DIM) {
   const dashed = !edge.confirmed;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
     return { opacity: touches ? 0.9 : 0.04, dashed, pulse: touches };
   }
-  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? 0.85 : 0.03, dashed, pulse: false };
+  // The rest fade with the stars: at the default dim a faint 0.03, gone entirely when the rest are hidden.
+  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? 0.85 : 0.25 * dim, dashed, pulse: false };
   return { opacity: dashed ? 0.35 : 0.18, dashed, pulse: false };
 }
+
+/** How bright the stars outside a highlight are, from how much of them is hidden (0.1 to 1). */
+export const dimFromHide = (hide: number) => Math.max(0, Math.min(1, 1 - hide));
 
 /** Centre and radius (to the 95th percentile, so one stray star does not shrink the view). */
 export function bounds(layout: Record<string, Vec3>): { centre: Vec3; radius: number } {

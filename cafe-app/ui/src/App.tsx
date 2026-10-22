@@ -4,6 +4,7 @@ import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
 import { RightPanels } from './panels/ContextPanels';
 import { Assistant } from './layout/Assistant';
+import { HighlightBar } from './layout/HighlightBar';
 import { useChat } from './state/chat';
 import { Welcome } from './layout/Welcome';
 import { Drawers } from './layout/Drawers';
@@ -22,7 +23,7 @@ import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from '
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, highlight, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
     leftView, openIdea, backToList, onlyRelated, toggleOnlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
@@ -66,7 +67,7 @@ export default function App() {
     <>
       <Stage focus={focus}>
         {shown && (
-          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} highlight={highlight} hoverId={hoverId} labels={labels} focus={focus}
+          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} highlight={highlight} hideUnlit={hideUnlit} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
             quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}
@@ -82,6 +83,7 @@ export default function App() {
         {/* The assistant docks in the right column while open; the context panels come back when it closes. */}
         {!chatOpen && <RightPanels />}
         </>}
+        <HighlightBar />
         <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>

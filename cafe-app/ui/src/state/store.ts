@@ -50,6 +50,14 @@ export function detectSoftwareGl(renderer: string | null): boolean {
 export const SOFTWARE_NOTICE = 'Lite quality picked for this browser (software graphics). Change it with the Quality button.';
 export const SLOW_NOTICE = 'Switched to Lite quality: this browser was drawing under 20 fps.';
 
+const HIDE_KEY = 'cafe.hideUnlit';
+/** 88% hidden matches the universe's usual dim (stars outside the set at 12%). */
+export const DEFAULT_HIDE = 0.88;
+export const clampHide = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0.1, Math.round(v * 100) / 100)) : DEFAULT_HIDE);
+export function readHideUnlit(): number {
+  try { const v = localStorage.getItem(HIDE_KEY); return v === null ? DEFAULT_HIDE : clampHide(Number(v)); } catch { return DEFAULT_HIDE; }
+}
+
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
 /** What the left (Ideas) panel shows: the list, or one idea's details with a Back button. */
@@ -86,6 +94,9 @@ export interface AppState {
   /** The stars a command-bar answer rests on, lit in the universe until cleared. */
   highlight: string[] | null;
   setHighlight: (ids: string[] | null) => void;
+  /** While stars are lit: how much of the rest is hidden, 0.1 to 1 (1 shows only the lit stars). Remembered in this browser. */
+  hideUnlit: number;
+  setHideUnlit: (v: number) => void;
   hoverId: string | null;
   /** Show every label in the universe, not only ideas, teams, tools and entities. */
   labels: boolean;
@@ -133,7 +144,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, highlight: null, hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -173,6 +184,7 @@ export const useStore = create<AppState>((set) => ({
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
   setHighlight: (ids) => set({ highlight: ids?.length ? ids : null }),
+  setHideUnlit: (v) => { const x = clampHide(v); try { localStorage.setItem(HIDE_KEY, String(x)); } catch { /* not remembered */ } set({ hideUnlit: x }); },
   setSuggest: (x) => set({ suggest: x }),
 }));
 

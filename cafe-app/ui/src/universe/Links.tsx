@@ -2,7 +2,7 @@ import { memo, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import { AdditiveBlending, Sprite, Vector3 } from 'three';
-import { edgeStyle, LINK_COLOUR, UNCONFIRMED_COLOUR, type GEdge, type Vec3 } from './graphView';
+import { DIM, edgeStyle, LINK_COLOUR, UNCONFIRMED_COLOUR, type GEdge, type Vec3 } from './graphView';
 import { haloTexture } from './haloTexture';
 
 const PULSE_SECONDS = 1.2;
@@ -12,7 +12,7 @@ const LITE_LINK_BOOST = 2.2;
 /** Faint teal links; unconfirmed dashed amber; the selection's links bright with travelling pulses. */
 // memo: hover changes never re-render the links (their style depends only on the selection).
 // Lite (no bloom): the selection's links get a second, wider, faint additive line under them as their glow.
-export const Links = memo(function Links({ edges, pos, selectedId, lit = null, lite = false }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null; lit?: Set<string> | null; lite?: boolean }) {
+export const Links = memo(function Links({ edges, pos, selectedId, lit = null, dim = DIM, lite = false }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null; lit?: Set<string> | null; dim?: number; lite?: boolean }) {
   // One stable points array per edge, so drei Line keeps its geometry across renders.
   const points = useMemo(() => {
     const m = new Map<string, [Vec3, Vec3]>();
@@ -25,7 +25,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, l
   const drawn = useMemo(() => edges.filter((e) => points.has(e.id)), [edges, points]);
   const pulses = selectedId ? drawn.filter((e) => edgeStyle(e, selectedId).pulse) : [];
   // Lite: the quiet links go in a few batches (one draw call per look) instead of one line each.
-  const batches = useMemo(() => (lite ? linkBatches(drawn, points, selectedId, lit) : []), [lite, drawn, points, selectedId, lit]);
+  const batches = useMemo(() => (lite ? linkBatches(drawn, points, selectedId, lit, dim) : []), [lite, drawn, points, selectedId, lit, dim]);
   const single = lite ? pulses : drawn;
   return (
     <group>
@@ -46,7 +46,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, l
         />
       ))}
       {single.map((e) => {
-        const s = edgeStyle(e, selectedId, lit);
+        const s = edgeStyle(e, selectedId, lit, dim);
         const bright = s.pulse;
         return (
           <Line
@@ -55,7 +55,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, l
             color={s.dashed ? UNCONFIRMED_COLOUR : bright ? '#a8f0ea' : LINK_COLOUR}
             lineWidth={bright ? 1.6 : 1}
             transparent
-            opacity={Math.min(1, (lite ? LITE_LINK_BOOST : 1) * linkOpacity(e, selectedId, lit))}
+            opacity={Math.min(1, (lite ? LITE_LINK_BOOST : 1) * linkOpacity(e, selectedId, lit, dim))}
             dashed={s.dashed}
             dashSize={2.5}
             gapSize={2}
@@ -84,18 +84,19 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, l
   );
 });
 
-const linkOpacity = (e: GEdge, selectedId: string | null, lit?: Set<string> | null) => {
-  const s = edgeStyle(e, selectedId, lit);
+const linkOpacity = (e: GEdge, selectedId: string | null, lit?: Set<string> | null, dim = DIM) => {
+  const s = edgeStyle(e, selectedId, lit, dim);
   return !selectedId && !lit && e.rel === 'HAS_MEMBER' ? s.opacity * 0.6 : s.opacity;
 };
 
 /** The links that are not the selection's, grouped by look (dashed, opacity) as flat segment lists. */
-export function linkBatches(edges: GEdge[], points: Map<string, [Vec3, Vec3]>, selectedId: string | null, lit?: Set<string> | null) {
+export function linkBatches(edges: GEdge[], points: Map<string, [Vec3, Vec3]>, selectedId: string | null, lit?: Set<string> | null, dim = DIM) {
   const m = new Map<string, { key: string; dashed: boolean; opacity: number; points: Vec3[] }>();
   for (const e of edges) {
-    const s = edgeStyle(e, selectedId, lit);
+    const s = edgeStyle(e, selectedId, lit, dim);
     const ab = points.get(e.id); if (s.pulse || !ab) continue;
-    const opacity = linkOpacity(e, selectedId, lit);
+    const opacity = linkOpacity(e, selectedId, lit, dim);
+    if (opacity <= 0) continue;
     const key = `${s.dashed ? 'd' : 's'}-${opacity}`;
     let b = m.get(key);
     if (!b) m.set(key, (b = { key, dashed: s.dashed, opacity, points: [] }));

@@ -27,7 +27,8 @@ all of this in one go and waived the spec review; rulings below are mine and are
   so in words, never throw a stack:
   - outbox drafting for an idea with no round: the draft still renders; date fields are blank and the Outbox row shows
     the note "Put this idea in a round to fill the dates" (the existing fields-missing mechanism).
-  - the review pack with no round: builds for the ideas that have a round, grouped by round; none at all → the notice
+  - the review pack groups ideas by round, newest round first, with ideas in no round under a final group
+    "No round yet"; with no rounds at all it still builds (one group) and carries the notice
     "Create a round first (Rounds button)".
 - Settings (`settings.yaml`) are unchanged and remain workspace-wide.
 

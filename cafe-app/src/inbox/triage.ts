@@ -1,3 +1,4 @@
+import { parse as parseCsv } from 'csv-parse/sync';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
@@ -128,9 +129,15 @@ export function readDetail(parsed: ParsedDrop, aiMs?: number): string {
 }
 
 /** Data rows of a CSV export (the header not counted); undefined when the file can't be counted here (xlsx). */
+/** Data rows in a CSV export (records, not lines: a real form cell often spans several lines). */
 export function exportRows(parsed: ParsedDrop): number | undefined {
   if (parsed.type !== 'export' || parsed.screenText === undefined) return undefined;
-  return Math.max(0, parsed.screenText.split('\n').filter((l) => l.trim()).length - 1);
+  try {
+    const records = parseCsv(parsed.screenText, { relax_column_count: true, relax_quotes: true, skip_empty_lines: true }) as string[][];
+    return Math.max(0, records.filter((r) => r.some((c) => c.trim())).length - 1);
+  } catch {
+    return Math.max(0, parsed.screenText.split('\n').filter((l) => l.trim()).length - 1);
+  }
 }
 
 export const HOW_WORDS: Record<MatchHow, string> = { 'cafe-id': 'Café ID', title: 'title', sender: 'sender', chosen: 'your pick', none: 'nothing' };

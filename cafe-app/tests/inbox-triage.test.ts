@@ -445,3 +445,11 @@ describe('sender match in either name order', () => {
     expect(matchIdea(item('Jane Doe <jane.doe@example.com>'), [idea('CAFE-2026-001', 'Doe, Jane'), idea('CAFE-2026-002', 'Sam Roe')]).ideaId).toBe('CAFE-2026-001');
   });
 });
+
+describe('export row count', () => {
+  it('counts records, not lines: a cell that spans lines is one row', async () => {
+    const { exportRows } = await import('../src/inbox/triage');
+    const csv = 'Title,Team Members and Lead\nA,"Lead: Person 1\nSponsor: Person 2\nTeam Member: Person 3"\nB,\n';
+    expect(exportRows({ type: 'export', text: '', meta: {}, screenText: csv } as any)).toBe(2);
+  });
+});

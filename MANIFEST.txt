@@ -26,6 +26,9 @@ cafe-app/src/ai/schema.ts
 cafe-app/src/ai/tasks.ts
 cafe-app/src/checklist/checklist.ts
 cafe-app/src/clock.ts
+cafe-app/src/command/actions.ts
+cafe-app/src/command/chat.ts
+cafe-app/src/command/names.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
@@ -37,6 +40,7 @@ cafe-app/src/graph/build.ts
 cafe-app/src/graph/d3-force-3d.d.ts
 cafe-app/src/graph/layout.ts
 cafe-app/src/graph/ontology.ts
+cafe-app/src/graph/operator.ts
 cafe-app/src/graph/store.ts
 cafe-app/src/ideas/idea.ts
 cafe-app/src/ideas/stage.ts
@@ -87,6 +91,8 @@ cafe-app/test-data/README.md
 cafe-app/tests/ai.test.ts
 cafe-app/tests/checklist.test.ts
 cafe-app/tests/clock.test.ts
+cafe-app/tests/command-names.test.ts
+cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-kits.test.ts
@@ -114,6 +120,7 @@ cafe-app/tests/inbox-steps.test.ts
 cafe-app/tests/inbox-triage.test.ts
 cafe-app/tests/inbox-understand.test.ts
 cafe-app/tests/look.test.ts
+cafe-app/tests/operator-edits.test.ts
 cafe-app/tests/outbox.test.ts
 cafe-app/tests/pdf.test.ts
 cafe-app/tests/review.test.ts
@@ -132,6 +139,8 @@ cafe-app/ui/package-lock.json
 cafe-app/ui/package.json
 cafe-app/ui/src/App.tsx
 cafe-app/ui/src/api.ts
+cafe-app/ui/src/layout/CommandBar.test.tsx
+cafe-app/ui/src/layout/CommandBar.tsx
 cafe-app/ui/src/layout/Drawers.tsx
 cafe-app/ui/src/layout/Panel.tsx
 cafe-app/ui/src/layout/Stage.test.ts
@@ -139,6 +148,7 @@ cafe-app/ui/src/layout/Stage.tsx
 cafe-app/ui/src/layout/TitleBar.tsx
 cafe-app/ui/src/layout/Welcome.test.tsx
 cafe-app/ui/src/layout/Welcome.tsx
+cafe-app/ui/src/layout/commandHelpers.ts
 cafe-app/ui/src/main.tsx
 cafe-app/ui/src/panels/Charts.test.tsx
 cafe-app/ui/src/panels/Charts.tsx
@@ -205,8 +215,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-BOCPrRLZ.js
-cafe-app/web/assets/index-BvKyKmUD.css
+cafe-app/web/assets/index-BvkvN65J.css
+cafe-app/web/assets/index-Dhbo3kp6.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

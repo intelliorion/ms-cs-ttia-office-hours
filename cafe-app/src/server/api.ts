@@ -76,7 +76,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
 
   // The command bar: the operator's own instructions. The AI proposes; nothing changes until the operator says "Do it".
-  add('GET', '/api/chat', async () => ({ entries: (await readChat(root)).slice(-50) }));
+  // Only the latest command: the agent keeps no conversation, so the panel shows none (the log keeps the record).
+  add('GET', '/api/chat', async () => ({ entries: (await readChat(root)).slice(-1) }));
   add('POST', '/api/chat', async ({ body }) => runCommand(root, String(body.text ?? ''), ai, clock));
   add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock));
   add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));

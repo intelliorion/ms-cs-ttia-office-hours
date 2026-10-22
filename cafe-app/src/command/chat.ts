@@ -64,6 +64,9 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   } catch (e) {
     entry.error = `The AI couldn't read that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
+  // Only the latest command is shown, so nothing earlier may sit waiting out of sight.
+  for (const old of all) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A newer command replaced it'; }
+  await writeChat(root, all);
   return save(root, entry);
 }
 

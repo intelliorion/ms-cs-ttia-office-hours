@@ -155,7 +155,9 @@ left out. Stages still move only by your hand (the agent points you to the stage
 the tool picker, and who submitted an idea stays as the form says. **Before the AI sees a command, every name the app
 knows (people, teams, ideas, rounds, stars) is swapped for a code such as [P1]**, so a person's name never leaves your
 machine; a name the app has never seen is sent as typed. Links you make are kept in `graph/operator.jsonl` and drawn
-over what the form and the AI drew; the chat is kept in `chat/log.jsonl`.
+over what the form and the AI drew. The agent keeps no conversation, so the panel shows only the command you are
+working on: a new command replaces it, and anything the last one left waiting is cancelled with a note. Every command
+is still recorded in `chat/log.jsonl`.
 
 ## Import: drop anything
 

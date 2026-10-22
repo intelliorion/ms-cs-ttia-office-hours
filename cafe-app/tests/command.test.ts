@@ -112,6 +112,14 @@ describe('the command bar', () => {
     expect(g.edges.map((e) => e.id)).toContain('team:gss|HAS_MEMBER|person:avery-chen');
   });
 
+  it('a new command cancels what the last one left waiting, saying so', async () => {
+    const { root, ai } = await setup(() => ({ reply: 'Link.', actions: [{ op: 'link', a: 'P1', b: 'T1' }] }));
+    const first = await runCommand(root, 'link Zainab Okafor to BSI', ai, clock);
+    await runCommand(root, 'link Zainab Okafor to GSS', ai, clock);
+    const old = (await readChat(root)).find((e) => e.id === first.id)!;
+    expect(old.actions[0]).toMatchObject({ status: 'cancelled', note: 'A newer command replaced it' });
+  });
+
   it('rounds already there are found by name', async () => {
     const { root, ai } = await setup(() => ({ reply: 'Put it in [R1].', actions: [{ op: 'round', ideas: ['I1'], b: 'R1' }] }));
     const r = await createRound(root, '2026 Q4', clock);

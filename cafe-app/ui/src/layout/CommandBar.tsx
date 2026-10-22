@@ -6,10 +6,11 @@ import { EXAMPLES, STATUS_WORD, canUndo, waitingCount, type ChatEntryView } from
 /**
  * The command bar: the operator tells the Café what to do in their own words. The AI reads the command with every
  * name the app knows replaced by a code, proposes actions, and the app checks them; nothing changes until "Do it".
+ * The agent keeps no conversation, so the panel shows only the current command: a new one replaces it.
  */
 export function CommandBar() {
   const { refresh, ai } = useStore();
-  const [entries, setEntries] = useState<ChatEntryView[]>([]);
+  const [current, setCurrent] = useState<ChatEntryView | null>(null);
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
   const [thinking, setThinking] = useState<string | null>(null);
@@ -19,27 +20,27 @@ export function CommandBar() {
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { getChat().then((r) => setEntries(r.entries)).catch(() => {}); }, []);
+  // After a reload, the last command comes back only while it still has something waiting for you.
+  useEffect(() => { getChat().then((r) => { const last = r.entries.at(-1); if (last && waitingCount([last])) setCurrent(last); }).catch(() => {}); }, []);
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => { if (!thinking && wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', away);
     return () => document.removeEventListener('mousedown', away);
   }, [open, thinking]);
-  useEffect(() => { list.current?.scrollTo?.({ top: list.current.scrollHeight }); }, [entries.length, thinking, open]);
 
-  const put = (e: ChatEntryView) => setEntries((xs) => (xs.some((x) => x.id === e.id) ? xs.map((x) => (x.id === e.id ? e : x)) : [...xs, e]));
   const send = async () => {
     const t = text.trim();
     if (!t || thinking) return;
     setOpen(true); setThinking(t); setText(''); setError(null);
-    try { put(await chatSend(t)); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
+    try { setCurrent(await chatSend(t)); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
   };
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     setBusy(true); setError(null);
-    try { put(await chatPost(id, what, actionId)); if (what !== 'cancel') void refresh(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    try { setCurrent(await chatPost(id, what, actionId)); if (what !== 'cancel') void refresh(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
-  const waiting = waitingCount(entries);
+  const waiting = current ? waitingCount([current]) : 0;
+  const entries = thinking || !current ? [] : [current];
 
   return (
     <div className={`cmd${open ? ' open' : ''}${thinking ? ' thinking' : ''}`} ref={wrap}>
@@ -57,7 +58,7 @@ export function CommandBar() {
       {open && (
         <div className="cmd-panel" role="dialog" aria-label="Command chat" data-testid="command-panel">
           <div className="cmd-list" ref={list}>
-            {!entries.length && !thinking && (
+            {!current && !thinking && (
               <div className="cmd-empty">
                 <div className="cmd-empty-h">Tell the Café what to do</div>
                 {EXAMPLES.map((x) => <button key={x} className="cmd-eg" onClick={() => { setText(x); input.current?.focus(); }}>{x}</button>)}

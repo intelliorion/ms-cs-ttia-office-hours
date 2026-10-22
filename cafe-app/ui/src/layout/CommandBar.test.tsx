@@ -61,6 +61,23 @@ describe('CommandBar', () => {
     act(() => root.unmount()); el.remove();
   });
 
+  it('shows only the current command: a new one replaces it, and a finished one is not brought back after a reload', async () => {
+    vi.mocked(getChat).mockResolvedValue({ entries: [proposed] });
+    vi.mocked(chatSend).mockResolvedValue({ id: 'c2', at: '2026-10-22', text: 'put the bots in 2026 Q4', reply: 'Put them in 2026 Q4.', problems: [], actions: [] });
+    const { el, root } = await mount();
+    const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
+    await act(async () => { input.focus(); type(input, 'put the bots in 2026 Q4'); });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect([...el.querySelectorAll('.cmd-me')].map((x) => x.textContent)).toEqual(['put the bots in 2026 Q4']);
+    act(() => root.unmount()); el.remove();
+    vi.mocked(getChat).mockResolvedValue({ entries: [{ ...proposed, actions: [{ ...proposed.actions[0], status: 'done' }] }] });
+    const m = await mount();
+    await act(async () => { (m.el.querySelector('[data-testid="command-input"]') as HTMLInputElement).focus(); });
+    expect(m.el.querySelector('.cmd-entry')).toBeNull();
+    expect(m.el.querySelectorAll('.cmd-eg').length).toBeGreaterThan(2);
+    act(() => m.root.unmount()); m.el.remove();
+  });
+
   it('the empty panel offers examples; a waiting action shows a badge when closed', async () => {
     const { el, root } = await mount();
     await act(async () => { (el.querySelector('[data-testid="command-input"]') as HTMLInputElement).focus(); });

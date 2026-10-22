@@ -146,6 +146,7 @@ cafe-app/ui/src/layout/Assistant.test.tsx
 cafe-app/ui/src/layout/Assistant.tsx
 cafe-app/ui/src/layout/Drawers.tsx
 cafe-app/ui/src/layout/FocusBar.test.tsx
+cafe-app/ui/src/layout/FocusBar.tsx
 cafe-app/ui/src/layout/Panel.tsx
 cafe-app/ui/src/layout/Stage.test.ts
 cafe-app/ui/src/layout/Stage.tsx
@@ -223,8 +224,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CncB5kUM.css
-cafe-app/web/assets/index-DfrnrqJ0.js
+cafe-app/web/assets/index-B9UxlXk8.css
+cafe-app/web/assets/index-B9n-Md_m.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

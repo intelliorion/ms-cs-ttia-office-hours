@@ -3,12 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { useStore, clampHide, DEFAULT_HIDE } from '../state/store';
 import { FocusBar } from './FocusBar';
-import { dimFromHide, edgeStyle, DIM } from '../universe/graphView';
+import { dimFromHide, edgeStyle } from '../universe/graphView';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('the focus bar', () => {
-  it('shows only while stars are lit; the slider sets how much of the rest is hidden, 10% to 100%; Clear ends it', async () => {
+  it('shows only while stars are lit; the slider sets how much of the rest is hidden, 50% to 100%; Clear ends it', async () => {
     useStore.setState({ highlight: null, hideUnlit: DEFAULT_HIDE, selectedId: null, graph: { nodes: [{ id: 'team:gss', type: 'Team', label: 'GSS' }, { id: 'entity:cs', type: 'Entity', label: 'CS' }], edges: [{ id: 'e', from: 'entity:cs', to: 'team:gss', rel: 'HAS_TEAM', confirmed: true }] } });
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
@@ -16,7 +16,8 @@ describe('the focus bar', () => {
     expect(el.querySelector('[data-testid="highlight-bar"]')).toBeNull();
     await act(async () => { useStore.setState({ highlight: ['team:gss', 'entity:cs'] }); });
     expect(el.querySelector('.hl-n')?.textContent).toBe('✦2 stars lit');
-    expect(el.querySelector('.hl-slide b')?.textContent).toBe('88%');
+    expect(el.querySelector('.hl-slide b')?.textContent).toBe('90%');
+    expect((el.querySelector('[data-testid="highlight-hide"]') as HTMLInputElement).min).toBe('50');
     const range = el.querySelector('[data-testid="highlight-hide"]') as HTMLInputElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(range, '100');
@@ -42,10 +43,11 @@ describe('the focus bar', () => {
     act(() => root.unmount()); el.remove();
   });
 
-  it('hide maps to the brightness of the rest: 88% is the usual dim, 100% hides stars and links, never below 10%', () => {
-    expect(dimFromHide(DEFAULT_HIDE)).toBeCloseTo(DIM);
+  it('hide maps to the brightness of the rest: 90% by default, 100% hides stars and links, never below 50%', () => {
+    expect(dimFromHide(DEFAULT_HIDE)).toBeCloseTo(0.1);
     expect(dimFromHide(1)).toBe(0);
-    expect(clampHide(0)).toBe(0.1);
+    expect(clampHide(0)).toBe(0.5);
+    expect(clampHide(0.3)).toBe(0.5);
     expect(clampHide(2)).toBe(1);
     const lit = new Set(['a', 'b']);
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit, 0).opacity).toBe(0);

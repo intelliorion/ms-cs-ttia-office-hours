@@ -18,7 +18,7 @@ export interface UniverseProps {
   selectedId: string | null;
   /** Stars an answer rests on: lit, with the links between them, the rest dimmed. A selected star wins. */
   highlight?: string[] | null;
-  /** How much of the universe outside a highlight is hidden, 0.1 to 1 (1: only the lit stars show). */
+  /** How much of the universe outside a highlight is hidden, 0.5 to 1 (1: only what is in view shows). */
   hideUnlit?: number;
   hoverId: string | null;
   labels: boolean;

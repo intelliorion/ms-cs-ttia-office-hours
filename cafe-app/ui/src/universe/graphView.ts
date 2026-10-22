@@ -68,7 +68,7 @@ export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, select
   return { opacity: dashed ? 0.35 : 0.18, dashed, pulse: false };
 }
 
-/** How bright the stars outside a highlight are, from how much of them is hidden (0.1 to 1). */
+/** How bright the stars outside a highlight are, from how much of them is hidden (0.5 to 1). */
 export const dimFromHide = (hide: number) => Math.max(0, Math.min(1, 1 - hide));
 
 /** Centre and radius (to the 95th percentile, so one stray star does not shrink the view). */

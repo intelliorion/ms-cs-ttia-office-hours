@@ -50,10 +50,11 @@ export function detectSoftwareGl(renderer: string | null): boolean {
 export const SOFTWARE_NOTICE = 'Lite quality picked for this browser (software graphics). Change it with the Quality button.';
 export const SLOW_NOTICE = 'Switched to Lite quality: this browser was drawing under 20 fps.';
 
-const HIDE_KEY = 'cafe.hideUnlit';
-/** 88% hidden matches the universe's usual dim (stars outside the set at 12%). */
-export const DEFAULT_HIDE = 0.88;
-export const clampHide = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0.1, Math.round(v * 100) / 100)) : DEFAULT_HIDE);
+const HIDE_KEY = 'cafe.hideUnlit.v2'; // v2: the default moved to 90% and the floor to 50%, so an older saved level is not carried over
+/** The rest of the universe starts 90% hidden; it can go from 50% (half there) to 100% (only what is in view). */
+export const DEFAULT_HIDE = 0.9;
+export const MIN_HIDE = 0.5;
+export const clampHide = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(MIN_HIDE, Math.round(v * 100) / 100)) : DEFAULT_HIDE);
 export function readHideUnlit(): number {
   try { const v = localStorage.getItem(HIDE_KEY); return v === null ? DEFAULT_HIDE : clampHide(Number(v)); } catch { return DEFAULT_HIDE; }
 }
@@ -94,7 +95,7 @@ export interface AppState {
   /** The stars a command-bar answer rests on, lit in the universe until cleared. */
   highlight: string[] | null;
   setHighlight: (ids: string[] | null) => void;
-  /** While stars are lit: how much of the rest is hidden, 0.1 to 1 (1 shows only the lit stars). Remembered in this browser. */
+  /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Remembered in this browser. */
   hideUnlit: number;
   setHideUnlit: (v: number) => void;
   hoverId: string | null;

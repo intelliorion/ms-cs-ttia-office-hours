@@ -29,40 +29,55 @@ const put = (name, data) => writeFile(path.join(OUT, name), data);
 // ---------- 01 submissions (xlsx + csv, identical rows) ----------
 const HEADER = ['ID', 'Title', 'Submitter Name', 'CS Function', 'Region', 'Participation Type', 'Team Members and Lead',
   'Business Challenge', 'Desired Outcomes', 'Current Process', 'Support Requested', 'Have you already experimented with AI for this idea?'];
-const ms = (...xs) => `;#${xs.join(';#')};#`;
+// Shaped like the real SharePoint export: "Last, First (CS)", CS Function as a code (BSI, GSS), multi-select joined by
+// ";#" with no ends, team lists one per line in the styles people type ("Lead: Name", "Name (Lead)", pronouns),
+// participation and the experimented answer sometimes blank, and long challenges and numbered processes.
+const ms = (...xs) => xs.join(';#');
+const lastFirst = (n) => { const [f, ...rest] = who(n).split(' '); return `${rest.join(' ')}, ${f}`; };
 const ROWS = [
-  ['Vendor contract summariser', `${who(1)} (CS)`, 'Legal Ops', 'EMEA', 'Individual', '',
-    'Vendor contracts run to dozens of pages and renewal terms are easy to miss.',
-    ms('Save time', 'Reduce risk'), 'A paralegal reads each contract and copies the key dates and clauses into a sheet.',
-    ms('Agent Design Guidance', 'Data Access Guidance'), 'No'],
-  ['Desk booking assistant', `${who(2)} (CS)`, 'Workplace', 'AMER', 'Team', `${who(2)} (Lead); ${who(3)} (Sponsor); ${who(9)}`,
-    'Staff cannot easily see which desks are free and often book ones that are already taken.',
-    ms('Improve experience', 'Improve visibility'), 'People email the floor team, who check a spreadsheet and reply by hand.',
-    ms('Agent Design Guidance', 'Prompt Coaching'), 'Yes'],
-  ['Onboarding checklist helper', `${who(5)} (CS)`, 'BSI', 'APAC', 'Individual', '',
-    'New joiners receive checklists from several teams and nobody sees what is still open.',
-    ms('Save time', 'Improve quality'), 'Each team sends its own checklist by email and the manager chases the gaps.',
-    ms('AI Solution Brainstorming'), 'No'],
-  ['Expense anomaly finder', `${who(6)} (CS)`, 'GSS', 'EMEA', 'Team', `${who(6)} (Lead); ${who(4)} (Sponsor); ${who(8)}`,
-    'Unusual expense claims are only spotted when a reviewer happens to notice them.',
-    ms('Reduce risk', 'Improve quality'), 'Reviewers sample a few claims each week and compare them with the policy by eye.',
-    ms('Data Access Guidance', 'AI Solution Brainstorming'), 'Yes'],
-  ['Meeting notes to actions', `${who(10)} (CS)`, 'BSI', 'AMER', 'Individual', '',
-    'Actions agreed in meetings are lost because nobody writes them up the same day.',
-    ms('Save time', 'Improve visibility'), 'Someone types up notes afterwards and emails the actions to each owner.',
-    ms('Prompt Coaching', 'Collaboration Tooling Guidance'), 'Yes'],
-  ['Travel policy assistant', `${who(11)} (CS)`, 'Workplace', 'APAC', 'Individual', '',
-    'Travellers keep asking the same questions about what the travel policy allows.',
-    ms('Save time', 'Improve experience'), 'The travel desk answers each question by email and links to the policy PDF.',
+  ['Vendor contract summariser', `${lastFirst(1)} (CS)`, 'GSS', 'EMEA', 'Individual',
+    `${who(1)} (Lead)\n${who(13)}\n${who(14)}\n${who(15)}\n${who(16)}`,
+    'An AI based assistant that reads third party vendor contracts, finds the renewal date, notice period, auto-renewal clause and termination terms, and raises them before the notice window closes. Contracts run to 40-80 pages, arrive as scanned PDFs or Word files, and the key terms sit in different sections for every vendor. Last year 6 renewals rolled over automatically because nobody saw the notice date in time.',
+    ms('Reduce Manual Effort', 'Create Reusable Solution'),
+    'A paralegal opens each contract when it arrives, reads it end to end and copies the renewal date, notice period and termination terms into the Contract Register spreadsheet. Reminders are set by hand in personal calendars, so when someone is away the reminder is missed.',
+    ms('AI Solution Brainstorming'), 'Yes'],
+  ['Desk booking assistant', `${lastFirst(2)} (CS)`, 'BSI', 'AMER', 'Team',
+    `Lead: ${who(2)}(she/her)\nSponsor: ${who(3)}\nTeam Member: ${who(9)}`,
+    'Our workplace team runs desk booking for 3 floors and about 300 people across the AMER offices. Staff cannot see which desks are free, so they email deskbooking@example.com or walk the floor, and double bookings happen most mornings. We want an assistant that answers "find me a desk near my team on Thursday", swaps bookings and releases no-shows, so we can evidence our occupancy KPIs (utilisation above 70%, no-show release within 30 minutes) without rebuilding the numbers by hand every month.',
+    ms('Reduce Manual Effort', 'Save Time', 'Explore New AI Capability'),
+    '1) Staff email deskbooking@example.com (or a floor captain directly) asking for a desk.\n2) A coordinator checks the floor plan spreadsheet and replies with a desk number.\n3) Changes and cancellations arrive by email or Teams chat and are re-keyed into the spreadsheet.\n4) No-shows are only spotted when someone walks the floor at 10:00.\n5) Utilisation for the monthly report is counted by hand from the spreadsheet.',
+    ms('Agent Design Guidance', 'Workflow Automation Guidance'), 'No'],
+  ['Onboarding checklist helper', `${lastFirst(5)} (CS)`, 'BSI', 'APAC', '', '',
+    'I would like to create an agent that pulls the onboarding checklists from each team into one list for the new joiner and their manager.',
+    ms('Save Time'),
+    'Each team emails its own checklist to the manager, who chases the gaps.',
+    ms('Agent Design Guidance', 'AI Solution Brainstorming'), ''],
+  ['Expense anomaly finder', `${lastFirst(6)} (CS)`, 'GSS', 'EMEA', 'Team',
+    `${who(6)} (Lead)\n${who(4)} (Sponsor)\n${who(8)}`,
+    'Unusual expense claims (duplicates, split claims just under the approval limit, weekend spend on weekday policies) are only caught when a reviewer happens to notice them in a sample. We review about 5% of roughly 12,000 claims a month, so most anomalies are never looked at, and the findings from the annual audit arrive months after the money has gone.',
+    ms('Reduce Manual Effort', 'Improve Quality'),
+    '1) Each week a reviewer pulls a sample of claims from the expense system export.\n2) They compare each claim with the travel and expense policy by eye.\n3) Questions go to the claimant by email and the answers are pasted into a tracker.\n4) A monthly summary is built by hand for the controls committee.',
+    ms('AI Solution Brainstorming', 'Workflow Automation Guidance'), 'Yes'],
+  ['Meeting notes to actions', `${lastFirst(10)} (CS)`, 'BSI', 'AMER', 'Individual', '',
+    'Actions agreed in our weekly project meetings get lost because nobody writes them up the same day, and owners only find out what they agreed to when the next meeting starts.',
+    ms('Save Time', 'Reduce Manual Effort'),
+    'Someone volunteers to take notes, types them up afterwards (often days later) and emails the actions to each owner. Nobody tracks whether the actions are done.',
+    ms('Collaboration Tooling Guidance'), 'Yes'],
+  ['Travel policy assistant', `${lastFirst(11)} (CS)`, 'GSS', 'APAC', 'Individual', '',
+    'Travellers keep asking the travel desk the same questions about what the travel policy allows: hotel caps by city, when business class is allowed, and which expenses need a receipt. The policy is a 30 page PDF and the answers depend on the region.',
+    ms('Save Time', 'Create Reusable Solution'),
+    'The travel desk answers each question by email and links to the policy PDF, about 150 questions a month.',
     ms('Agent Design Guidance'), 'No'],
-  ['', `${who(12)} (CS)`, 'Workplace', 'EMEA', 'Individual', '',
+  ['', `${lastFirst(12)} (CS)`, 'BSI', 'EMEA', '', '',
     'Facilities requests arrive by phone, email and chat and are sorted by hand.',
-    ms('Save time'), 'A coordinator reads each request and forwards it to the right vendor.',
+    ms('Save Time'), 'A coordinator reads each request and forwards it to the right vendor.',
     ms('AI Solution Brainstorming'), 'No'],
-  ['Procurement FAQ bot', `${who(7)} (CS)`, 'GSS', 'AMER', 'Team', `${who(7)} (Lead); ${who(1)} (Sponsor); ${who(10)}`,
-    'Business teams ask procurement the same questions about thresholds and approved suppliers.',
-    ms('Save time', 'Improve experience'), 'Procurement answers each question by email using a shared FAQ document.',
-    ms('Agent Design Guidance', 'Prompt Coaching'), 'No'],
+  ['Procurement FAQ bot', `${lastFirst(7)} (CS)`, 'GSS', 'AMER', 'Team',
+    `Lead: ${who(7)}\nSponsor: ${who(1)}\nTeam Member: ${who(10)}`,
+    'Business teams ask procurement the same questions about spend thresholds, approved suppliers and which form to use, around 400 questions a month. Answers are spread across a shared FAQ document, the procurement policy and old email threads, so the same question gets different answers depending on who replies.',
+    ms('Reduce Manual Effort', 'Save Time', 'Improve Quality'),
+    '1) A requester emails the procurement mailbox or a buyer directly.\n2) The buyer searches the FAQ document and past emails for an answer.\n3) If it is not there, the buyer asks the category lead and replies days later.\n4) The FAQ document is updated when someone remembers.',
+    ms('Agent Design Guidance', 'Workflow Automation Guidance'), 'No'],
 ].map((r, i) => [i + 1, ...r]);
 
 const wb = new ExcelJS.Workbook();
@@ -372,7 +387,7 @@ Suggested order: drop **01** first (so the ideas and their Café IDs exist), the
 
 | File | What it is | What to expect |
 |---|---|---|
-| 01-submissions.xlsx / .csv | The same 8 submissions in both formats | Import creates CAFE-2026-001 to 008 in row order. Row 7 has no title, so the import reports it. Rows 2, 4 and 8 are teams. Dropping both files shows dedupe (the second adds nothing new). |
+| 01-submissions.xlsx / .csv | The same 8 submissions in both formats, shaped like the real SharePoint export: "Last, First (CS)", CS Function as BSI or GSS, multi-select joined by ";#", team lists one per line in mixed styles ("Lead: Name(she/her)", "Name (Lead)"), some blank cells, long challenges and numbered processes | Import creates CAFE-2026-001 to 007 (the 7th data row has no title, so the import reports it; the report counts the header as row 1). Names are stored first name first. Rows 2, 4 and 8 are teams with a lead and a sponsor. Row 1 says Individual but lists 5 people, so it is flagged. Dropping both files shows dedupe (the second adds nothing new). |
 | 02-reply-with-id.eml | ${who(2)} answers our three questions; subject has CAFE-2026-002 | Sure match to Desk booking assistant. Our quoted E2 is split off below "-----Original Message-----". |
 | 03-reply-no-id.eml | Reply whose subject is only the idea title | Likely match to Desk booking assistant (title in subject). |
 | 04-sender-only.eml | ${who(5)} writes "Quick update" | No ID or title, so a sender match (submitter, 0.8) or a question to you. |

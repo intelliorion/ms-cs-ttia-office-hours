@@ -127,3 +127,25 @@ describe('importExport', () => {
     expect((await loadIdea(root, r.created[1].id)).source).toEqual({ file: 'gap.csv', row: 5 });
   });
 });
+
+describe('the real form export: team lists and names as people type them', () => {
+  it('"Lead: Name(he/him)", "Sponsor: Name", "Team Member: Name", one per line: roles kept, pronouns dropped', async () => {
+    const { parseTeam } = await import('../src/import/columns');
+    expect(parseTeam('Lead: Person One(he/him)\nSponsor: Person Two\nTeam Member: Person Three')).toEqual([
+      { name: 'Person One', role: 'lead', note: 'Lead' }, { name: 'Person Two', role: 'sponsor', note: 'Sponsor' }, { name: 'Person Three', role: 'member' },
+    ]);
+  });
+  it('"Name (Lead)" then plain names on their own lines; "Name (she/her) (Sponsor)"; "Doe, Jane" turns to "Jane Doe"', async () => {
+    const { parseTeam } = await import('../src/import/columns');
+    expect(parseTeam('Person Four (Lead)\nPerson Five\nPerson Six')).toEqual([
+      { name: 'Person Four', role: 'lead', note: 'Lead' }, { name: 'Person Five', role: 'member' }, { name: 'Person Six', role: 'member' },
+    ]);
+    expect(parseTeam('Person Seven (she/her) (Sponsor)')).toEqual([{ name: 'Person Seven', role: 'sponsor', note: 'Sponsor' }]);
+    expect(parseTeam('Doe, Jane (Lead)')).toEqual([{ name: 'Jane Doe', role: 'lead', note: 'Lead' }]);
+  });
+  it('the submitter "Doe, Jane (CS)" is stored as "Jane Doe" with entity CS', async () => {
+    const { parseSubmitter } = await import('../src/import/columns');
+    expect(parseSubmitter('Doe, Jane (CS)')).toEqual({ name: 'Jane Doe', entity: 'CS' });
+    expect(parseSubmitter('Person 1 (CS)')).toEqual({ name: 'Person 1', entity: 'CS' });
+  });
+});

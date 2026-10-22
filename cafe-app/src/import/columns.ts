@@ -33,22 +33,42 @@ export function splitMulti(value: string): string[] {
   return value.split(';#').map((s) => s.trim()).filter(Boolean);
 }
 
-export function parseSubmitter(value: string): { name?: string; entity?: string } {
-  const m = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(value.trim());
-  if (m) return { ...(m[1].trim() ? { name: m[1].trim() } : {}), entity: m[2].trim() };
-  return value.trim() ? { name: value.trim() } : {};
+/** "Doe, Jane" (the directory's order) → "Jane Doe", so greetings and sender matching use the first name. */
+export function naturalName(name: string): string {
+  const m = /^([^,]+),\s*([^,]+)$/.exec(name.trim());
+  return m ? `${m[2].trim()} ${m[1].trim()}` : name.trim();
 }
 
+export function parseSubmitter(value: string): { name?: string; entity?: string } {
+  const m = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(value.trim());
+  if (m) return { ...(m[1].trim() ? { name: naturalName(m[1]) } : {}), entity: m[2].trim() };
+  return value.trim() ? { name: naturalName(value) } : {};
+}
+
+const PRONOUNS = /^(he|she|they|ze|xe)\s*\/\s*\w+$/i;
+const ROLE_PREFIX = /^(lead|co-?lead|sponsor|team\s*member|member)\s*:\s*(.+)$/i;
+
+/**
+ * The form's "Team Members and Lead" cell, in any of the styles people type: one per line or split by ";",
+ * "Name (Lead)", "Name - Sponsor", or "Lead: Name" / "Sponsor: Name" / "Team Member: Name". Pronouns such as
+ * "(he/him)" are dropped from the name and are not a role.
+ */
 export function parseTeam(value: string): Person[] {
   return value
     .split(/[;\n]+/)
     .map((s) => s.replace(/^#/, '').trim())
     .filter(Boolean)
     .map((part) => {
-      const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(part) ?? /^(.*?)\s+[-–:]\s+(.+)$/.exec(part);
-      const name = (m ? m[1] : part).trim();
-      const note = m?.[2]?.trim();
+      let text = part; let prefix: string | undefined;
+      const pre = ROLE_PREFIX.exec(text);
+      if (pre) { prefix = pre[1]; text = pre[2].trim(); }
+      // Pronouns in brackets go, wherever they sit: "Name(he/him)" or "Name (she/her) (Lead)".
+      text = text.replace(/\s*\(([^)]*)\)/g, (all, inner: string) => (PRONOUNS.test(inner.trim()) ? '' : all)).trim();
+      const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(text) ?? /^(.*?)\s+[-–]\s+(.+)$/.exec(text);
+      const name = naturalName((m ? m[1] : text).trim());
+      const note = m?.[2]?.trim() ?? prefix;
       const role: PersonRole = /sponsor/i.test(note ?? '') ? 'sponsor' : /lead/i.test(note ?? '') ? 'lead' : 'member';
-      return note ? { name, role, note } : { name, role };
-    });
+      return note && !/^(team\s*)?member$/i.test(note) ? { name, role, note } : { name, role };
+    })
+    .filter((p) => p.name);
 }

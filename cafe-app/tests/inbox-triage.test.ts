@@ -435,3 +435,13 @@ describe('triage reply trimming and timeout', () => {
     expect(seen[0]).toBe(120_000);
   });
 });
+
+describe('sender match in either name order', () => {
+  it('a reply from "Doe, Jane <…>" matches the idea whose submitter is "Jane Doe", and the other way round', async () => {
+    const { matchIdea } = await import('../src/inbox/match');
+    const idea = (id: string, submitter: string) => ({ id, title: `Idea ${id}`, people: { submitter, team: [] } }) as any;
+    const item = (from: string) => ({ id: 'x', name: 'Quick update', type: 'email', text: 'A short update.', meta: { from, subject: 'Quick update' } }) as any;
+    expect(matchIdea(item('Doe, Jane <jane.doe@example.com>'), [idea('CAFE-2026-001', 'Jane Doe'), idea('CAFE-2026-002', 'Sam Roe')]).ideaId).toBe('CAFE-2026-001');
+    expect(matchIdea(item('Jane Doe <jane.doe@example.com>'), [idea('CAFE-2026-001', 'Doe, Jane'), idea('CAFE-2026-002', 'Sam Roe')]).ideaId).toBe('CAFE-2026-001');
+  });
+});

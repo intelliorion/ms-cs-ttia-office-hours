@@ -37,8 +37,13 @@ function senderKeys(from: string | undefined): string[] {
   if (!from) return [];
   const { name, addr: rawAddr } = splitAddress(from);
   const addr = rawAddr.toLowerCase();
-  const keys = [norm(name), addr, norm(addr.split('@')[0] ?? '')];
+  const keys = [norm(name), byWords(name), addr, norm(addr.split('@')[0] ?? '')];
   return [...new Set(keys.filter((k) => k.length > 1))];
+}
+
+/** A name's words in sorted order: "Doe, Jane" and "Jane Doe" give the same key. */
+function byWords(s: string): string {
+  return norm(s).split(' ').filter(Boolean).sort().join(' ');
 }
 
 /** A submitter as written in the form, e.g. "Person 1 (CS)" or an address. */
@@ -46,7 +51,7 @@ function submitterKeys(s: string | undefined): string[] {
   if (!s) return [];
   const plain = s.replace(/\([^)]*\)/g, '').trim();
   if (plain.includes('@')) return [plain.toLowerCase(), norm(plain.split('@')[0])];
-  return [norm(plain)].filter((k) => k.length > 1);
+  return [...new Set([norm(plain), byWords(plain)])].filter((k) => k.length > 1);
 }
 
 /** Deterministic: which idea is this item about, and how sure. The AI may lower this, never raise it. */

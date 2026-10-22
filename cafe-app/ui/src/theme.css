@@ -252,7 +252,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 /* Focus mode: the card sits top-centre, clear of the graph. */
 .stage.focus .nodecard{left:745px}
 
-/* Inbox: drop anything; three groups, Applied (teal), Needs your OK (amber), Held (red). */
+/* Import: drop anything; three groups, Applied (teal), Needs your OK (amber), Held (red). */
 .pill.waiting{border-color:rgba(245,179,107,.6)}
 .ib-paste{display:flex;gap:10px;align-items:flex-end}
 .ib-paste textarea{flex:1;resize:vertical;min-height:42px;box-sizing:border-box}
@@ -483,7 +483,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 [data-quality="lite"] .stage-star .halo{animation:none;opacity:.12}
 [data-quality="lite"] .stage-star .core,[data-quality="lite"] .beam{transition:none}
 
-/* The Inbox is the one way in, so it stands out from the other title-bar pills. */
+/* The Import is the one way in, so it stands out from the other title-bar pills. */
 .pill.inbox{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,rgba(125,211,207,.95),rgba(96,178,174,.95));border-color:transparent;color:#07201f;font-weight:700;box-shadow:0 0 18px rgba(125,211,207,.35)}
 .pill.inbox:hover{box-shadow:0 0 26px rgba(125,211,207,.55)}
 .pill.inbox .ib-icon{font-size:17px;line-height:1}
@@ -492,7 +492,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 @keyframes inbox-glow{0%,100%{box-shadow:0 0 14px rgba(125,211,207,.3)}50%{box-shadow:0 0 30px rgba(245,179,107,.55)}}
 [data-quality="lite"] .pill.inbox{animation:none;box-shadow:none}
 
-/* The Inbox: the drop well, step cards and history, in the universe's language. */
+/* The Import: the drop well, step cards and history, in the universe's language. */
 @property --ib-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 .ib-body{flex:1;min-height:0;overflow-y:auto;padding:14px 24px 22px;display:flex;flex-direction:column;gap:14px}
 .ib-well{position:relative;flex:none;box-sizing:border-box;height:160px;border-radius:10px;border:1px solid transparent;background:linear-gradient(#0e1313,#0e1313) padding-box,conic-gradient(from var(--ib-a),transparent 0 70%,rgba(125,211,207,.9) 85%,transparent 100%) border-box;animation:ib-rim 6s linear infinite;display:grid;grid-template-columns:1fr 300px;grid-template-rows:1fr auto;align-items:center;padding:0 24px;column-gap:20px;box-shadow:0 0 0 1px rgba(125,211,207,.12) inset,0 10px 30px rgba(0,0,0,.35) inset}
@@ -583,3 +583,31 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 [data-quality="lite"] .ib-progress{background:var(--teal);opacity:.6}
 [data-quality="lite"] .ib-step.st-ok .dot,[data-quality="lite"] .ib-step.st-you .dot{box-shadow:none}
 [data-quality="lite"] .ib-paste textarea,[data-quality="lite"] .ib-understood summary::before{transition:none}
+/* Rounds: the round chip in the idea head (beside the stage button) and the Rounds pop-out. */
+.rnd-wrap{position:relative;margin-left:auto}
+.id-head .rnd-wrap+.stg-wrap{margin-left:0}
+.rnd-chip{font:inherit;font-size:12px;color:var(--cream);background:rgba(20,26,26,.6);border:1px solid rgba(231,216,177,.55);border-radius:999px;padding:1px 9px;white-space:nowrap;cursor:pointer;display:inline-flex;align-items:center;gap:4px;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.rnd-chip.none{color:var(--muted);border-style:dashed;border-color:var(--panel-border)}
+.rnd-chip:hover:not(:disabled){background:rgba(231,216,177,.1)}
+.rnd-chip .caret{font-size:10px;opacity:.8}
+.rnd{border:1px solid rgba(160,190,185,.2);border-radius:6px;padding:10px 12px;margin-bottom:12px;background:rgba(10,14,14,.3)}
+.rnd-head{display:flex;align-items:baseline;gap:10px}
+.rnd-name{font-size:16px;font-weight:600;color:#fff}
+.rnd-n{margin-left:auto;font-size:12.5px;color:var(--teal)}
+.rnd-dates{margin-top:6px}
+.rnd-dates summary{cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:2px 0 6px}
+.rnd-ideas{list-style:none;margin:6px 0 0;padding:0}
+.rnd-ideas li{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(160,190,185,.12);font-size:14px}
+.rnd-ideas li label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer}
+.rnd-ideas input{accent-color:var(--teal);width:16px;height:16px;margin:0;flex:none}
+.rnd-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.rnd-assign{display:flex;gap:10px;align-items:center;margin-top:12px}
+.rnd-assign select{flex:1;min-width:0;background:rgba(10,14,14,.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:14px;padding:7px 8px;color-scheme:dark}
+/* First run: the card in the middle of an empty universe; above the canvas, below the pop-outs. */
+.welcome{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:8;max-width:520px;width:calc(100% - 40px);box-sizing:border-box;padding:26px 30px 24px;text-align:center;
+  background:var(--panel);border:1px solid var(--teal);border-radius:8px;backdrop-filter:blur(6px);box-shadow:0 0 40px rgba(125,211,207,.25);animation:welcome-in .4s ease-out both}
+.welcome h2{margin:0 0 10px;font-size:26px;font-weight:700;color:var(--cream);letter-spacing:.01em}
+.welcome p{margin:0 0 18px;color:var(--text);font-size:16px;line-height:1.45}
+@keyframes welcome-in{from{opacity:0}to{opacity:1}}
+[data-quality="lite"] .welcome,[data-quality="flat"] .welcome{animation:none}
+[data-quality="lite"] .welcome{backdrop-filter:none;background:rgba(26,35,35,.94)}

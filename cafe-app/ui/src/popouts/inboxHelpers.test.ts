@@ -122,7 +122,7 @@ describe('tooLargeNotice (final review 5)', () => {
 
 describe('dropSummary: one notice for a multi-file drop', () => {
   it('a single file keeps its own words', () => {
-    expect(dropSummary([{ kind: 'added', name: 'a.eml' }])).toEqual({ text: 'a.eml is in the Inbox.', kind: 'ok' });
+    expect(dropSummary([{ kind: 'added', name: 'a.eml' }])).toEqual({ text: 'a.eml is in the Import.', kind: 'ok' });
     expect(dropSummary([{ kind: 'duplicate', name: 'a.eml', text: 'Already dropped on 20 Oct 2026: a.eml' }])).toEqual({ text: 'Already dropped on 20 Oct 2026: a.eml. Nothing was done again.', kind: 'ok' });
     expect(dropSummary([{ kind: 'failed', name: 'a.eml', text: 'Boom' }])).toEqual({ text: 'Boom', kind: 'error' });
     expect(dropSummary([])).toBeNull();

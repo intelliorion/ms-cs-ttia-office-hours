@@ -103,7 +103,7 @@ export function renderApproachMd(idea: Idea, features: DesignFeature[]): string 
   return out.join('\n');
 }
 
-/** The team's replies so far: answers the Inbox recorded on the idea, then answered design steps. */
+/** The team's replies so far: answers the Import recorded on the idea, then answered design steps. */
 export function teamAnswers(idea: Idea, state: DesignState): { question: string; answer: string }[] {
   const recorded = ((idea as Idea & { answers?: { question: string; answer: string }[] }).answers ?? [])
     .map((a) => ({ question: str(a.question, 200), answer: str(a.answer, 500) }));

@@ -5,7 +5,7 @@ import { filterIdeas, stageKey, emailChips } from './filterIdeas';
 
 /** The list stays mounted while an idea's details show (hidden), so its search, chips and scroll are kept for Back. */
 export function IdeasList({ hidden = false }: { hidden?: boolean }) {
-  const { state, hover, openPopout, openIdea, selectedId } = useStore();
+  const { state, hover, openIdea, selectedId } = useStore();
   const listRef = useRef<HTMLUListElement>(null);
   const scrollTop = useRef(0);
   // A hidden (display:none) list can lose its scroll offset; put it back when the list shows again.
@@ -18,8 +18,7 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
   if (!ideas.length) {
     return (
       <div className="ideas-empty">
-        <p>Import an export to light up the universe</p>
-        <button className="pill" data-action="import-empty" onClick={() => openPopout({ kind: 'import' })}>Import</button>
+        <p>No ideas yet</p>
       </div>
     );
   }

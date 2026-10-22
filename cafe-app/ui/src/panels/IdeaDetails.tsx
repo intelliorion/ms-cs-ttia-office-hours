@@ -4,7 +4,7 @@ import { copyText, getHistory, ideaGet, ideaPost, post } from '../api';
 import { extractNotice, NO_AI_TIP, providerName, type ReviewSuggestion } from '../popouts/aiUi';
 import { LinkTable } from '../popouts/LinkTable';
 import { APPROVED_NOTICE, approveAndCopy, clipText, ideaCardModel, ideaLinks, type HistoryEntry } from '../popouts/ideaHelpers';
-import { Details, Emails, History, Review, StageButton } from '../popouts/IdeaSections';
+import { Details, Emails, History, Review, RoundChip, StageButton } from '../popouts/IdeaSections';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
 import { sectionsFor, type SectionKey } from './stageGate';
@@ -150,7 +150,10 @@ export function IdeaDetails({ id }: { id: string }) {
 
   return (
     <div className="idea-detail" data-testid="idea-details" role="region" aria-label={`${idea.id} ${idea.title}`}>
-      {head(<StageButton state={state} value={stageValue} label={m.stageLabel} colour={m.stageColour} busy={busy} onPick={setStage} />)}
+      {head(<>
+        <RoundChip ideaId={id} round={idea.round ?? ''} onDone={() => void loadHistory()} />
+        <StageButton state={state} value={stageValue} label={m.stageLabel} colour={m.stageColour} busy={busy} onPick={setStage} />
+      </>)}
       <h3 className="id-title">{idea.title || 'Untitled idea'}</h3>
       <div className="pop-sub">
         {[idea.function, idea.region, idea.participation].filter(Boolean).join(' · ') || 'Function and region not given'}

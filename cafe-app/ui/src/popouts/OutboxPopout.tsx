@@ -84,7 +84,7 @@ export function OutboxPopout() {
                     <div className="mr2">
                       <span className="hint">{m.status !== 'sent' && left > 0 ? `${left} placeholder${left > 1 ? 's' : ''} to fill in Outlook` : ''}</span>
                       <span className="acts">
-                        {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Round" onClick={() => openPopout({ kind: 'round' })}>{a.label}</button>}
+                        {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Rounds" onClick={() => openPopout({ kind: 'round' })}>{a.label}</button>}
                         {a.kind === 'approve' && <button className="btn primary sm" data-action="approve" disabled={busy} onClick={() => void approve(m.key)}>{a.label}</button>}
                         {a.kind === 'sent' && (
                           <>

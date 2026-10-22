@@ -228,7 +228,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return { files };
   });
   add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));
-  // Inbox. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
+  // Import. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {
     if (headers['x-filename'] !== undefined) {

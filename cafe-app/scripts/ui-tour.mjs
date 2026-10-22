@@ -676,6 +676,7 @@ async function main() {
   const errors = [];
   try {
     await waitForServer();
+    await post('/api/rounds', { name: '2026 Q4' }); // the round email (E0) is drafted early and needs a round
     await importCsv(flag('fixture', '') ? path.resolve(flag('fixture', '')) : path.join(APP, 'tests/fixtures/sample-export.csv'));
     for (const f of flags('extra')) await importCsv(path.resolve(f));
     // Spread the ideas over the stages so the rings show every colour.

@@ -21,10 +21,10 @@ describe('emailAction', () => {
 });
 
 describe('historyLine', () => {
-  it('shows an Inbox line for a filed email, by file name only', () => {
+  it('shows an Import line for a filed email, by file name only', () => {
     expect(historyLine({ at: '2026-10-20', action: 'inbox', detail: 'Email filed as ideas/CAFE-2026-001-email-scheduler/emails/in/2026-10-20-re-questions.eml', source: 'inbox/2026-10-20-reply.eml' }))
-      .toBe('Inbox: Email filed as 2026-10-20-re-questions.eml (from 2026-10-20-reply.eml)');
-    expect(historyLine({ at: '2026-10-20', action: 'inbox-undo', detail: 'Undone: File it in CAFE-2026-001' })).toBe('Inbox: Undone: File it in CAFE-2026-001');
+      .toBe('Import: Email filed as 2026-10-20-re-questions.eml (from 2026-10-20-reply.eml)');
+    expect(historyLine({ at: '2026-10-20', action: 'inbox-undo', detail: 'Undone: File it in CAFE-2026-001' })).toBe('Import: Undone: File it in CAFE-2026-001');
   });
   const steps = [{ id: 's2a', text: 'Feasibility assessed' }];
   it('says where a stage change went', () => {

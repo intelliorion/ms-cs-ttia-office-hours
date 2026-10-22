@@ -45,7 +45,7 @@ export const APPROVED_NOTICE = (template: string) => `${template} approved and c
 /**
  * Approves one Outbox item and puts "Subject: ...\n\n<body>" on the clipboard.
  * Returns the approved item; `fallback` is the text to show selected when the browser refused to copy.
- * Missing settings become "Set first: ..." so the operator knows to open Round.
+ * Missing settings become "Set first: ..." so the operator knows to open Rounds.
  */
 export async function approveAndCopy(
   key: string,
@@ -56,7 +56,7 @@ export async function approveAndCopy(
     const text = clipText(item);
     return { item, fallback: (await api.copyText(text)) ? null : text };
   } catch (e) {
-    if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Round to fill them in.`);
+    if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Rounds to fill them in.`);
     throw e;
   }
 }
@@ -83,8 +83,8 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
       const to = String(h.detail ?? '').split(' → ').pop() ?? '';
       return to.startsWith('Closed · ') ? `Closed: ${to.slice('Closed · '.length)}` : `Moved to ${to}`;
     }
-    case 'inbox': return `Inbox: ${baseNames(h.detail)}${h.source ? ` (from ${String(h.source).split(/[\\/]/).pop()})` : ''}`;
-    case 'inbox-undo': return `Inbox: ${baseNames(h.detail)}`;
+    case 'inbox': return `Import: ${baseNames(h.detail)}${h.source ? ` (from ${String(h.source).split(/[\\/]/).pop()})` : ''}`;
+    case 'inbox-undo': return `Import: ${baseNames(h.detail)}`;
     default: return [h.action, h.detail].filter(Boolean).join(': ');
   }
 }

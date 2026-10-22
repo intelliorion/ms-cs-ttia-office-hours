@@ -1,4 +1,4 @@
-// Pure helpers for the Inbox pop-out. No React here, so they test in node.
+// Pure helpers for the Import pop-out. No React here, so they test in node.
 // Everything the AI wrote (summary, answers, flags, names) is shown as plain text only.
 
 export type InboxType = 'export' | 'email' | 'transcript' | 'document' | 'note' | 'unknown';
@@ -98,7 +98,7 @@ export function itemHeadline(item: Pick<InboxItemView, 'name' | 'meta' | 'previe
   return start || item.name || 'Untitled';
 }
 
-/** The Inbox (n) count: new, waiting for a Yes, and held. */
+/** The Import (n) count: new, waiting for a Yes, and held. */
 export const inboxCount = (c: InboxCounts | null | undefined) => (c ? c.new + c.ok + c.held : 0);
 
 /** The ideas to offer under "Which idea?": the ask action's candidates, else the triage's. */
@@ -165,7 +165,7 @@ export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok'
   const bad = outcomes.some((o) => o.kind === 'too-large' || o.kind === 'failed');
   if (outcomes.length === 1) {
     const [o] = outcomes;
-    if (o.kind === 'added') return { text: `${o.name} is in the Inbox.`, kind: 'ok' };
+    if (o.kind === 'added') return { text: `${o.name} is in the Import.`, kind: 'ok' };
     return { text: o.kind === 'duplicate' ? `${o.text}. Nothing was done again.` : o.text, kind: bad ? 'error' : 'ok' };
   }
   const of = (k: DropOutcome['kind']) => outcomes.filter((o) => o.kind === k);
@@ -181,7 +181,7 @@ export function dropSummary(outcomes: DropOutcome[]): { text: string; kind: 'ok'
   return { text: `${parts.join(', ')}.`, kind: bad ? 'error' : 'ok' };
 }
 
-// ---- The agentic Inbox: eight recorded steps per item, conflicts held per action, a full history. ----
+// ---- The agentic Import: eight recorded steps per item, conflicts held per action, a full history. ----
 
 /** Mirrors the server's step log (src/inbox/steps.ts). */
 export type StepId = 'receive' | 'read' | 'screen' | 'match' | 'understand' | 'context' | 'graph' | 'check';
@@ -195,7 +195,7 @@ export const stepGlyph = (s: StepStatus | 'todo') => ({ running: 'run', done: 'o
 /** Is any step of this item still running? */
 export const isRunning = (i: Pick<InboxItemView, 'steps'>) => !!i.steps?.some((s) => s.status === 'running');
 
-/** Poll the Inbox only while some item has a step running. */
+/** Poll the Import only while some item has a step running. */
 export const shouldPoll = (v: { items: { steps?: Step[] }[] } | null | undefined) => !!v?.items.some((i) => i.steps?.some((s) => s.status === 'running'));
 
 /** Waits on the operator: a step that needs them, or a held proposal. Held files and dismissed items are counted apart. */

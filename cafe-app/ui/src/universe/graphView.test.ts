@@ -10,7 +10,7 @@ describe('graph view helpers', () => {
     expect(starSize({ type: 'Idea' } as any, 50)).toBe(4);
   });
   it('labels ideas, teams, tools and entities always', () => {
-    expect(labelAlways({ type: 'Idea' } as any)).toBe(true); expect(labelAlways({ type: 'Person' } as any)).toBe(false);
+    expect(labelAlways({ type: 'Idea' } as any)).toBe(true); expect(labelAlways({ type: 'Round' } as any)).toBe(true); expect(labelAlways({ type: 'Person' } as any)).toBe(false);
   });
   it('styles edges by confirmation and selection', () => {
     expect(edgeStyle(g.edges[1], null)).toEqual({ opacity: 0.35, dashed: true, pulse: false });

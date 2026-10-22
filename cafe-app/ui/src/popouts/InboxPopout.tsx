@@ -18,7 +18,7 @@ function rowIdea(i: InboxItemView): string {
 }
 
 /**
- * The Inbox, in three zones: the drop well, the items in flight (running or waiting on the operator),
+ * The Import, in three zones: the drop well, the items in flight (running or waiting on the operator),
  * and the full history. Everything dropped is data, never instructions: the AI's words are rendered as text only.
  */
 export function InboxPopout() {
@@ -38,7 +38,7 @@ export function InboxPopout() {
     return () => { if (dropPoll.current) clearInterval(dropPoll.current); };
   }, [setNotice, refreshInbox]);
 
-  // Live steps: read the Inbox every second while any step runs; when the run ends, read the universe once.
+  // Live steps: read the Import every second while any step runs; when the run ends, read the universe once.
   const polling = shouldPoll(inbox);
   useEffect(() => {
     if (!polling) return;
@@ -72,7 +72,7 @@ export function InboxPopout() {
     try { await Promise.all([refreshInbox(), refresh()]); } finally { going.current = false; setBusy(null); }
   };
 
-  /** One drop. The Inbox is read every 400 ms until the request comes back, so the card shows its steps while the server runs them. */
+  /** One drop. The Import is read every 400 ms until the request comes back, so the card shows its steps while the server runs them. */
   const dropping = async (name: string, fn: () => Promise<any>): Promise<DropOutcome | null> => {
     if (going.current) return null;
     going.current = true;
@@ -130,8 +130,8 @@ export function InboxPopout() {
   );
 
   return (
-    <Modal title={<><div className="pop-id">Inbox</div><h2>{waiting ? `${waiting} waiting on you` : 'Nothing waiting'}</h2></>}
-      label="Inbox" onClose={closePopout} width={1120} height={940} className="inbox-pop"
+    <Modal title={<><div className="pop-id">Import</div><h2>{waiting ? `${waiting} waiting on you` : 'Nothing waiting'}</h2></>}
+      label="Import" onClose={closePopout} width={1120} height={940} className="inbox-pop"
       onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDrop={onDropAnywhere}>
       <div className="ib-body scroll">
         {/* Zone 1: the drop well */}
@@ -143,7 +143,7 @@ export function InboxPopout() {
             {busy && <div className="ib-busy" role="status">{busy}</div>}
           </div>
           <div className="ib-well-r">
-            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files for the Inbox" disabled={!!busy}
+            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files for the Import" disabled={!!busy}
               onChange={(e) => void dropFiles(e.target.files)} />
             <div className="ib-paste">
               <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={1} placeholder="Paste an email or a quick note"
@@ -180,7 +180,7 @@ export function InboxPopout() {
             </div>
             <input className="search ib-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or idea" aria-label="Search the history" />
           </div>
-          {inbox === null && <div className="hint">Reading the Inbox…</div>}
+          {inbox === null && <div className="hint">Reading the Import…</div>}
           {inbox && !items.length && <div className="hint">Nothing dropped yet. Drop a reply, a meeting transcript or a Café export above.</div>}
           {inbox && items.length > 0 && !days.length && <div className="hint">Nothing matches.</div>}
           {days.map((d) => (

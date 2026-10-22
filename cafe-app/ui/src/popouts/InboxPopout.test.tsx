@@ -23,7 +23,7 @@ describe('InboxPopout', () => {
   });
   afterEach(() => { vi.useRealTimers(); });
 
-  it('polls the Inbox every second while a step runs, and stops when closed', () => {
+  it('polls the Import every second while a step runs, and stops when closed', () => {
     useStore.setState({ inbox: view([item('ib1', { steps: [{ id: 'read', status: 'running', at, detail: 'Reading the file…' }] })]) });
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
@@ -63,7 +63,7 @@ describe('InboxPopout', () => {
     el.remove();
   });
 
-  it('reads the Inbox every 400 ms while a drop is on its way, and stops when it comes back', async () => {
+  it('reads the Import every 400 ms while a drop is on its way, and stops when it comes back', async () => {
     useStore.setState({ inbox: view([]) });
     vi.mocked(inboxDropText).mockImplementation(() => new Promise((ok) => setTimeout(() => ok({ item: { id: 'ib9', name: 'Your note' } }), 1000)));
     const el = document.createElement('div'); document.body.appendChild(el);

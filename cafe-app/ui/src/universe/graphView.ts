@@ -9,7 +9,7 @@ export interface Graph { nodes: GNode[]; edges: GEdge[]; layout?: Record<string,
 const BASE_SIZE: Record<NodeType, number> = {
   Idea: 2.6, Team: 2.2, Entity: 2.4, Tool: 1.8, Capability: 1.6, System: 1.6, PainPoint: 1.4, Person: 1.0, Round: 2.4,
 };
-const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity'];
+const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity', 'Round'];
 
 /** Ring colour of an idea star, by stage (1–4) or closed. */
 export const STAGE_RING: Record<string, string> = { 1: '#9fb0ae', 2: '#f5b36b', 3: '#7dd3cf', 4: '#e7d8b1', closed: '#5c6b6a' };

@@ -2,7 +2,7 @@ import { getItem, updateItem, type InboxItem } from './store';
 
 /**
  * The step log of one dropped file: eight fixed steps, each written to the sidecar the moment it ends,
- * so the Inbox screen can show the run live. A step is appended once; writing the same id again replaces it
+ * so the Import screen can show the run live. A step is appended once; writing the same id again replaces it
  * (running → done / failed / needs-you).
  */
 export type StepId = 'receive' | 'read' | 'screen' | 'match' | 'understand' | 'context' | 'graph' | 'check';

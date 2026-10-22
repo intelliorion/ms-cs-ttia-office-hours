@@ -192,9 +192,9 @@ export async function askTeam(root: string, idea: Idea, n: number, clock: Clock)
 }
 
 /**
- * The Inbox hook: answers the team sent back fill the design questions we asked them in an E2
+ * The Import hook: answers the team sent back fill the design questions we asked them in an E2
  * (open steps with askedTeam whose question matches). Returns how many were filled. Never throws,
- * so the Inbox works the same with or without a design.
+ * so the Import works the same with or without a design.
  */
 export async function fillDesignAnswers(
   root: string, idea: Idea, answers: { question: string; answer: string }[], clock: Clock,

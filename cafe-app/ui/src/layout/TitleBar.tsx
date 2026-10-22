@@ -23,11 +23,10 @@ export function TitleBar() {
       <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
       <div className="btns">
         <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: Café form exports, emails, transcripts, notes" onClick={() => openPopout({ kind: 'inbox' })}>
-          <span className="ib-icon" aria-hidden="true">⤓</span>Inbox{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>
-        <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Round</button>
+          <span className="ib-icon" aria-hidden="true">⤓</span>Import{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>
+        <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Rounds</button>
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>
         <button className="pill" data-action="review-pack" onClick={() => void write('/api/review-pack')}>Review pack</button>
-        <button className="pill" data-action="status-csv" onClick={() => void write('/api/status-export')}>status.csv</button>
         <button className="pill" data-action="ai" title="AI helper" onClick={() => openPopout({ kind: 'ai' })}>
           <span className="ai-dot" data-on={ai?.provider ? 'true' : 'false'} aria-hidden="true" />{chipText(ai)}
         </button>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
+import { Welcome } from './layout/Welcome';
 import { Drawers } from './layout/Drawers';
 import { relatedGraph } from './universe/graphView';
 import { useStore } from './state/store';
@@ -66,6 +67,7 @@ export default function App() {
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
             quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}
+        <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
         {cardFor && <NodeCard nodeId={cardFor} />}

@@ -47,6 +47,15 @@ export const baseName = (p: string) => String(p).split(/[\\/]/).filter(Boolean).
 /** Unsent emails: drafts and approved ones. */
 export const unsentCount = (outbox: { status: string }[] | undefined) => (outbox ?? []).filter((m) => m.status !== 'sent').length;
 
-/** The title bar's subtitle: the round and today's date. */
-export const titleSub = (state: { today?: string; round?: { id?: string } } | null | undefined): string =>
-  ['Operator console', state?.round?.id, state?.today].filter(Boolean).join(' · ');
+/** The title bar's subtitle: the newest round's name and today's date. */
+export const titleSub = (state: { today?: string; rounds?: { id?: string; name?: string }[] } | null | undefined): string =>
+  ['Operator console', state?.rounds?.[0]?.name, state?.today].filter(Boolean).join(' · ');
+
+/** The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4" (same rule as the server). */
+export function defaultRoundName(iso: string | undefined): string {
+  const [year, month] = String(iso ?? '').split('-').map(Number);
+  return year && month ? `${year} Q${Math.ceil(month / 3)}` : '';
+}
+
+/** "1 idea", "2 ideas". */
+export const ideaCount = (n: number) => plural(n, 'idea');

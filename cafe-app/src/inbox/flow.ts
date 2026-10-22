@@ -235,7 +235,7 @@ export async function processItem(
 /**
  * Store a drop; a repeat (same bytes) returns the first item with only a "Same file" receive step and does
  * nothing else, unless that item never got past "new" (sorting was interrupted): then it is sorted now.
- * The answer is the item as the Inbox shows it (a preview, never the full text or the quoted thread).
+ * The answer is the item as the Import shows it (a preview, never the full text or the quoted thread).
  */
 export async function processDrop(
   root: string, name: string, data: Uint8Array | string, connector: Connector | null | undefined, clock: Clock,

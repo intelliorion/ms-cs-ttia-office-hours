@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { shortDate } from '../panels/filterIdeas';
+import { post } from '../api';
+import { useStore } from '../state/store';
 import { applySuggestion, type ReviewSuggestion } from './aiUi';
 import {
   DECISION_EMAIL, IDEA_TEMPLATES, reviewKey, shouldResetReview, TEMPLATE_TITLES, emailAction, emailStatus, historyLine, type HistoryEntry,
@@ -58,6 +60,66 @@ export function StageButton({ state, value, label, colour, busy, onPick }: {
           {Object.keys(state.stageNames).map((n) => item(`stage:${n}`, `${n} · ${state.stageNames[n]}`))}
           <li className="stage-h">Close as</li>
           {Object.keys(state.closures).map((c) => item(`close:${c}`, state.closures[c]))}
+        </ul>, document.body)}
+    </div>
+  );
+}
+
+/**
+ * The round chip in the idea head, next to the stage button: the idea's round (or "No round") as a small menu of every
+ * round plus "No round". Picking one writes the idea's round at once, then everything is read again.
+ */
+export function RoundChip({ ideaId, round, onDone }: { ideaId: string; round: string; onDone?: () => void }) {
+  const { state, refresh, setNotice } = useStore();
+  const rounds: { id: string; name: string }[] = state?.rounds ?? [];
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // Pinned to the viewport under the chip, like the stage menu (the panel clips its overflow).
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLUListElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const toggle = () => {
+    if (!open) { const r = btn.current?.getBoundingClientRect(); if (r) setAt({ top: r.bottom + 6, right: window.innerWidth - r.right }); }
+    setOpen((o) => !o);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { const t = e.target as Node; if (!box.current?.contains(t) && !menu.current?.contains(t)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc, true);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc, true); };
+  }, [open]);
+  const pick = async (v: string) => {
+    setOpen(false);
+    if (v === round) return;
+    setBusy(true);
+    try {
+      await post(`/api/ideas/${encodeURIComponent(ideaId)}/round`, { round: v });
+      setNotice({ text: v ? `Put in ${rounds.find((r) => r.id === v)?.name ?? v}.` : 'Taken out of its round.', kind: 'ok' });
+    } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+    await refresh();
+    onDone?.();
+    setBusy(false);
+  };
+  const label = round ? rounds.find((r) => r.id === round)?.name ?? round : 'No round';
+  const item = (v: string, text: string) => (
+    <li key={v || 'none'} role="menuitemradio" aria-checked={v === round}>
+      <button className={`stage-opt${v === round ? ' on' : ''}`} data-action="round-pick" data-value={v} disabled={busy} onClick={() => void pick(v)}>
+        <span className="tick">{v === round ? '✓' : ''}</span>{text}
+      </button>
+    </li>
+  );
+  return (
+    <div className="rnd-wrap" ref={box}>
+      <button ref={btn} className={`rnd-chip${round ? '' : ' none'}`} data-action="round-chip" aria-haspopup="menu" aria-expanded={open}
+        title="Change the round" disabled={busy} onClick={toggle}>{label} <span className="caret">▾</span></button>
+      {open && at && createPortal(
+        <ul ref={menu} className="stage-pop" role="menu" aria-label="Round" data-testid="round-menu" style={{ position: 'fixed', top: at.top, right: at.right }}>
+          <li className="stage-h">Rounds</li>
+          {rounds.map((r) => item(r.id, r.name))}
+          {item('', 'No round')}
         </ul>, document.body)}
     </div>
   );
@@ -231,7 +293,7 @@ export function Emails({ idea, outbox, busy, onDraft, onReply, onSetFirst, onApp
                 <div className="mr2">
                   <span className="hint">{m.status !== 'sent' && left > 0 ? `${left} placeholder${left > 1 ? 's' : ''} to fill in Outlook` : ''}</span>
                   <span className="acts">
-                    {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Round" onClick={onSetFirst}>{a.label}</button>}
+                    {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Rounds" onClick={onSetFirst}>{a.label}</button>}
                     {a.kind === 'approve' && <button className="btn primary sm" data-action="approve" disabled={busy} onClick={() => onApprove(m.key)}>{a.label}</button>}
                     {a.kind === 'sent' && (
                       <>

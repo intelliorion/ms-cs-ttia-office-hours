@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import { ApiError } from '../api';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createElement } from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), post: vi.fn(async () => ({})) }));
+import { ApiError, post } from '../api';
+import { useStore } from '../state/store';
+import { TitleBar } from '../layout/TitleBar';
+import { RoundPopout } from './RoundPopout';
+import { RoundChip } from './IdeaSections';
 import { approveAndCopy } from './ideaHelpers';
 import { importReportLines, roundFieldsUnblock, groupOutbox, baseName, unsentCount, titleSub } from './titleHelpers';
 
@@ -57,7 +66,7 @@ describe('groupOutbox', () => {
 describe('small helpers', () => {
   it('shows only the file name', () => {
     expect(baseName('/Users/me/cafe/exports/review-pack.md')).toBe('review-pack.md');
-    expect(baseName('C:\\x\\status.csv')).toBe('status.csv');
+    expect(baseName('C:\\x\\review-pack.md')).toBe('review-pack.md');
   });
   it('counts unsent emails', () => {
     expect(unsentCount([{ status: 'draft' }, { status: 'approved' }, { status: 'sent' }])).toBe(2);
@@ -79,14 +88,134 @@ describe('approveAndCopy', () => {
   });
   it('turns missing settings into Set first', async () => {
     await expect(approveAndCopy('k', { post: async () => { throw new ApiError('x', ['Teams link']); }, copyText: async () => true } as any))
-      .rejects.toThrow('Set first: Teams link. Open Round to fill them in.');
+      .rejects.toThrow('Set first: Teams link. Open Rounds to fill them in.');
   });
 });
 
 describe('titleSub', () => {
-  it('names the round and today', () => {
-    expect(titleSub({ today: '2026-10-19', round: { id: 'ROUND-2026-Q4' } })).toBe('Operator console · ROUND-2026-Q4 · 2026-10-19');
-    expect(titleSub({ today: '2026-10-19', round: {} })).toBe('Operator console · 2026-10-19');
+  it('names the newest round and today', () => {
+    expect(titleSub({ today: '2026-10-19', rounds: [{ id: 'ROUND-002', name: 'Spring pilots' }, { id: 'ROUND-001', name: '2026 Q4' }] })).toBe('Operator console · Spring pilots · 2026-10-19');
+    expect(titleSub({ today: '2026-10-19', rounds: [] })).toBe('Operator console · 2026-10-19');
     expect(titleSub(null)).toBe('Operator console');
+  });
+});
+
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+const fixture = () => ({
+  today: '2026-10-22',
+  rounds: [
+    { id: 'ROUND-002', name: 'Spring pilots', created: '2026-10-20' },
+    { id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01', deadline: '2026-11-01' },
+  ],
+  ideas: [
+    { id: 'CAFE-2026-001', title: 'Faster onboarding', round: 'ROUND-001' },
+    { id: 'CAFE-2026-002', title: 'Badge kiosk', round: '' },
+    { id: 'CAFE-2026-003', title: 'Desk finder', round: '' },
+  ],
+  outbox: [],
+  fields: { round: [['open', 'Round opens'], ['deadline', 'Submission deadline']], settings: [['operatorName', 'Your name']] },
+  settings: { capacity: { ideasPerRound: 3, sessionsPerWeek: 2 } },
+});
+
+/** Types into a controlled input or select the way React hears it. */
+function typeInto(el: HTMLInputElement | HTMLSelectElement, value: string) {
+  const proto = el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value);
+  el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
+}
+
+describe('title bar and the Rounds pop-out', () => {
+  let el: HTMLDivElement;
+  let root: Root;
+  let refresh: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    vi.mocked(post).mockClear();
+    refresh = vi.fn(async () => {});
+    useStore.setState({ state: fixture() as any, refresh, refreshAi: vi.fn(async () => {}), refreshInbox: vi.fn(async () => {}), inbox: null, ai: null, notice: null, popout: null });
+    el = document.createElement('div'); document.body.appendChild(el);
+    root = createRoot(el);
+  });
+  afterEach(() => { act(() => root.unmount()); el.remove(); });
+  const q = <T extends Element = HTMLElement>(sel: string) => document.body.querySelector(sel) as T;
+  const flush = () => act(async () => { await Promise.resolve(); });
+
+  it('has Import and Rounds buttons and no status.csv', () => {
+    act(() => root.render(createElement(TitleBar)));
+    const labels = [...el.querySelectorAll('.btns button')].map((b) => b.textContent);
+    expect(labels).toContain('⤓Import'); // the icon is kept
+    expect(labels).toContain('Rounds');
+    expect(labels.some((t) => /status\.csv|Inbox/.test(t ?? ''))).toBe(false);
+    expect(el.querySelector('[data-action="status-csv"]')).toBeNull();
+    act(() => q<HTMLButtonElement>('[data-action="round"]').click());
+    expect(useStore.getState().popout).toEqual({ kind: 'round' });
+  });
+
+  it('lists the rounds newest first with their idea counts', () => {
+    act(() => root.render(createElement(RoundPopout)));
+    const rows = [...el.querySelectorAll('[data-round]')];
+    expect(rows.map((r) => r.getAttribute('data-round'))).toEqual(['ROUND-002', 'ROUND-001']);
+    expect(rows.map((r) => r.querySelector('.rnd-name')?.textContent)).toEqual(['Spring pilots', '2026 Q4']);
+    expect(rows.map((r) => r.querySelector('.rnd-n')?.textContent)).toEqual(['0 ideas', '1 idea']);
+    expect(rows[1].querySelector('[data-idea="CAFE-2026-001"]')?.textContent).toContain('Faster onboarding');
+    expect([...el.querySelectorAll('.rnd-free [data-idea]')].map((x) => x.getAttribute('data-idea'))).toEqual(['CAFE-2026-002', 'CAFE-2026-003']);
+  });
+
+  it('creates a round with the typed name', async () => {
+    act(() => root.render(createElement(RoundPopout)));
+    const name = q<HTMLInputElement>('[data-field="round-name"]');
+    expect(name.value).toBe('2026 Q4');
+    act(() => typeInto(name, 'Winter clinic'));
+    act(() => q<HTMLButtonElement>('[data-action="create-round"]').click());
+    await flush();
+    expect(post).toHaveBeenCalledWith('/api/rounds', { name: 'Winter clinic' });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('puts the ticked ideas in the picked round', async () => {
+    act(() => root.render(createElement(RoundPopout)));
+    const assign = () => q<HTMLButtonElement>('[data-action="assign"]');
+    expect(assign().disabled).toBe(true);
+    act(() => { q<HTMLInputElement>('.rnd-free input[value="CAFE-2026-002"]').click(); q<HTMLInputElement>('.rnd-free input[value="CAFE-2026-003"]').click(); });
+    act(() => typeInto(q<HTMLSelectElement>('[data-field="assign-round"]'), 'ROUND-001'));
+    expect(assign().textContent).toBe('Put 2 ideas in 2026 Q4');
+    act(() => assign().click());
+    await flush();
+    expect(post).toHaveBeenCalledWith('/api/rounds/ROUND-001/ideas', { ideaIds: ['CAFE-2026-002', 'CAFE-2026-003'] });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('takes an idea out of its round', async () => {
+    act(() => root.render(createElement(RoundPopout)));
+    act(() => q<HTMLButtonElement>('[data-round="ROUND-001"] [data-action="take-out"][data-idea="CAFE-2026-001"]').click());
+    await flush();
+    expect(post).toHaveBeenCalledWith('/api/ideas/CAFE-2026-001/round', { round: '' });
+  });
+
+  it('saves one round\'s dates to its own route', async () => {
+    act(() => root.render(createElement(RoundPopout)));
+    const box = q('[data-round="ROUND-001"]');
+    expect((box.querySelector('[data-field="deadline"]') as HTMLInputElement).value).toBe('2026-11-01');
+    act(() => (box.querySelector('[data-action="save-round"]') as HTMLButtonElement).click());
+    await flush();
+    expect(post).toHaveBeenCalledWith('/api/rounds/ROUND-001', { open: '', deadline: '2026-11-01' });
+  });
+
+  it('the round chip names the round and moves the idea', async () => {
+    act(() => root.render(createElement(RoundChip, { ideaId: 'CAFE-2026-001', round: 'ROUND-001' })));
+    const chip = q<HTMLButtonElement>('.rnd-wrap [data-action="round-chip"]');
+    expect(chip.textContent).toContain('2026 Q4');
+    act(() => chip.click());
+    expect([...document.querySelectorAll('[data-testid="round-menu"] [data-action="round-pick"]')].map((b) => b.textContent))
+      .toEqual(['Spring pilots', '✓2026 Q4', 'No round']);
+    act(() => q<HTMLButtonElement>('[data-testid="round-menu"] [data-value=""]').click());
+    await flush();
+    expect(post).toHaveBeenCalledWith('/api/ideas/CAFE-2026-001/round', { round: '' });
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it('the round chip says No round when the idea has none', () => {
+    act(() => root.render(createElement(RoundChip, { ideaId: 'CAFE-2026-002', round: '' })));
+    expect(q('.rnd-wrap [data-action="round-chip"]').textContent).toContain('No round');
   });
 });

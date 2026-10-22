@@ -1,5 +1,5 @@
 /**
- * Question matching, shared by the Inbox (answers to questions we sent) and the design brainstorm
+ * Question matching, shared by the Import (answers to questions we sent) and the design brainstorm
  * (answers to design questions asked in an E2). A leaf module: it imports nothing from the app.
  */
 

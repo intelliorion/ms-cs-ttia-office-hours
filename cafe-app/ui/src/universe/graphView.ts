@@ -14,6 +14,8 @@ const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity', 'Round'];
 /** Ring colour of an idea star, by stage (1–4) or closed. */
 export const STAGE_RING: Record<string, string> = { 1: '#9fb0ae', 2: '#f5b36b', 3: '#7dd3cf', 4: '#e7d8b1', closed: '#5c6b6a' };
 export const LINK_COLOUR = '#7dd3cf';
+/** How strong a link in view is (a selected star's links, or links between lit stars): about half, so stars lead. */
+export const LINK_IN_VIEW = 0.42;
 export const UNCONFIRMED_COLOUR = '#f5b36b';
 export const DIM = 0.12;
 
@@ -61,10 +63,11 @@ export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, select
   const dashed = !edge.confirmed;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
-    return { opacity: touches ? 0.9 : dim / 3, dashed, pulse: touches };
+    // Links in view stay quieter than the stars they join: the eye goes to the stars first.
+    return { opacity: touches ? LINK_IN_VIEW : dim / 3, dashed, pulse: touches };
   }
   // The rest fade with the stars: at the default dim a faint 0.03, gone entirely when the rest are hidden.
-  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? 0.85 : 0.25 * dim, dashed, pulse: false };
+  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? LINK_IN_VIEW : 0.25 * dim, dashed, pulse: false };
   return { opacity: dashed ? 0.35 : 0.18, dashed, pulse: false };
 }
 

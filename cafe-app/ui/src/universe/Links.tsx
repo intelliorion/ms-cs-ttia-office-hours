@@ -52,8 +52,8 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           <Line
             key={e.id}
             points={points.get(e.id)!}
-            color={s.dashed ? UNCONFIRMED_COLOUR : bright ? '#a8f0ea' : LINK_COLOUR}
-            lineWidth={bright ? 1.6 : 1}
+            color={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR}
+            lineWidth={bright ? 1.2 : 1}
             transparent
             opacity={Math.min(1, (lite ? LITE_LINK_BOOST : 1) * linkOpacity(e, selectedId, lit, dim))}
             dashed={s.dashed}
@@ -69,9 +69,9 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           key={`glow-${e.id}`}
           points={points.get(e.id)!}
           color={e.confirmed ? '#7dd3cf' : UNCONFIRMED_COLOUR}
-          lineWidth={6}
+          lineWidth={3}
           transparent
-          opacity={0.22}
+          opacity={0.1}
           blending={AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -114,8 +114,8 @@ function Pulse({ from, to, amber }: { from: Vec3; to: Vec3; amber: boolean }) {
     const s = ref.current; if (!s) return;
     s.position.lerpVectors(a, b, t);
     const fade = Math.sin(Math.PI * t);
-    (s.material as { opacity: number }).opacity = 0.95 * fade;
-    s.scale.setScalar(1.4 + fade * 1.3);
+    (s.material as { opacity: number }).opacity = 0.55 * fade;
+    s.scale.setScalar(1.1 + fade * 0.8);
   });
   return (
     <sprite ref={ref}>

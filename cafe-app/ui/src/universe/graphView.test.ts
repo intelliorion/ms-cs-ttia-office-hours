@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
+import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -24,7 +24,7 @@ describe('graph view helpers', () => {
   });
   it('styles edges by confirmation and selection', () => {
     expect(edgeStyle(g.edges[1], null)).toEqual({ opacity: 0.35, dashed: true, pulse: false });
-    expect(edgeStyle(g.edges[0], 'a')).toEqual({ opacity: 0.9, dashed: false, pulse: true });
+    expect(edgeStyle(g.edges[0], 'a')).toEqual({ opacity: LINK_IN_VIEW, dashed: false, pulse: true });
     expect(edgeStyle(g.edges[0], 'c')).toEqual({ opacity: 0.04, dashed: false, pulse: false });
   });
 });
@@ -72,8 +72,8 @@ describe('labelSpotVisible', () => {
 describe('edge styles for what is in view', () => {
   it('a lit set shows the links between lit stars and fades the rest; a selection pulses its own links (the universe passes no selection while stars are lit)', () => {
     const lit = new Set(['a', 'b']);
-    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit)).toMatchObject({ opacity: 0.85, pulse: false });
+    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit)).toMatchObject({ opacity: LINK_IN_VIEW, pulse: false });
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit).opacity).toBe(0.03);
-    expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, 'c', lit)).toMatchObject({ opacity: 0.9, pulse: true });
+    expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, 'c', lit)).toMatchObject({ opacity: LINK_IN_VIEW, pulse: true });
   });
 });

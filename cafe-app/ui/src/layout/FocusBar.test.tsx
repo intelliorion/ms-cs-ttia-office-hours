@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { useStore, clampHide, DEFAULT_HIDE } from '../state/store';
 import { FocusBar } from './FocusBar';
-import { dimFromHide, edgeStyle } from '../universe/graphView';
+import { dimFromHide, edgeStyle, LINK_IN_VIEW } from '../universe/graphView';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -51,7 +51,7 @@ describe('the focus bar', () => {
     expect(clampHide(2)).toBe(1);
     const lit = new Set(['a', 'b']);
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit, 0).opacity).toBe(0);
-    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit, 0).opacity).toBe(0.85);
+    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit, 0).opacity).toBe(LINK_IN_VIEW);
   });
   it('each new thing in view starts at 80% again: the level is not carried from one click to the next', () => {
     useStore.setState({ highlight: null, selectedId: null, selectedIds: [], leftView: { kind: 'list' } as any, focus: false });

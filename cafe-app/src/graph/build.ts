@@ -5,6 +5,9 @@ import { STAGE_NAMES } from '../rules/stages';
 import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type OperatorEdit, type Relation } from './ontology';
 export { nodeId } from './ontology';
 
+/** Longer than this, a choice-column answer is free text, not a choice other ideas could share. */
+export const CHOICE_MAX = 60;
+
 const ROLE_REL: Record<string, Relation> = { lead: 'RELATED', sponsor: 'SPONSORS', member: 'RELATED' };
 
 export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = []): { nodes: GNode[]; edges: GEdge[] } {
@@ -70,6 +73,19 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     for (const s of idea.support) {
       const sid = node({ id: nodeId('Support', s), type: 'Support', label: s });
       edge(ideaId, 'ASKS_FOR', sid, 'Support Requested', `${src}:Support Requested`);
+    }
+    // The form's other choice columns: ideas that picked the same answer share one star. Long free text stays on the idea.
+    for (const [values, type, rel, column] of [
+      [idea.outcomes, 'Outcome', 'WANTS', 'Desired Outcomes'],
+      [idea.beneficiaries, 'Beneficiary', 'BENEFITS', 'Beneficiaries'],
+      [idea.use_case_category, 'Category', 'IN_CATEGORY', 'Use Case Category'],
+    ] as const) {
+      for (const v of values ?? []) {
+        const label = v.trim();
+        if (!label || label.length > CHOICE_MAX) continue;
+        const id = node({ id: nodeId(type, label), type, label });
+        edge(ideaId, rel, id, column, `${src}:${column}`);
+      }
     }
     const tools = idea.tools ?? {};
     for (const [feature, tool] of Object.entries(tools)) {

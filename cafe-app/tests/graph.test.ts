@@ -41,6 +41,20 @@ describe('buildGraph', () => {
     expect(g.nodes.some((n) => n.type === 'Capability')).toBe(false);
   });
 
+  it('turns desired outcomes, beneficiaries and use case categories into shared stars; long free text stays on the idea', () => {
+    const a = sampleIdea({ ...rfx, outcomes: ['Save Time', 'Reduce Manual Effort'], beneficiaries: ['Procurement team'], use_case_category: ['Document processing'] });
+    const b = sampleIdea({ ...inv, outcomes: ['Save Time', 'x'.repeat(61)], beneficiaries: [], use_case_category: ['Document processing'] });
+    const g = buildGraph([a, b], []);
+    const rels = g.edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
+    expect(rels).toContain('idea:CAFE-2026-002 WANTS outcome:save-time');
+    expect(rels).toContain('idea:CAFE-2026-003 WANTS outcome:save-time');
+    expect(rels).toContain('idea:CAFE-2026-002 BENEFITS beneficiary:procurement-team');
+    expect(rels).toContain('idea:CAFE-2026-003 IN_CATEGORY category:document-processing');
+    expect(g.nodes.filter((n) => n.type === 'Outcome').map((n) => n.label).sort()).toEqual(['Reduce Manual Effort', 'Save Time']);
+    expect(g.edges.find((e) => e.rel === 'WANTS')?.source).toBe('form:CAFE-2026-002:Desired Outcomes');
+    for (const r of ['WANTS', 'BENEFITS', 'IN_CATEGORY'] as const) expect(ALLOWED[r][0]).toBe('Idea');
+  });
+
   it('puts a person in a team only through their own submission', () => {
     const bsi = sampleIdea({
       id: 'CAFE-2026-004', slug: 'bsi', title: 'Meeting notes', entity: 'CS', function: 'BSI', region: 'AMER',
@@ -102,7 +116,7 @@ describe('buildGraph', () => {
   });
 
   it('has a colour for every type', () => {
-    for (const t of ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Support'] as const) expect(NODE_COLOURS[t]).toMatch(/^#/);
+    for (const t of ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category'] as const) expect(NODE_COLOURS[t]).toMatch(/^#/);
     expect(nodeId('Team', 'GSS')).toBe('team:gss');
   });
 });
@@ -236,6 +250,19 @@ describe('approved tools', () => {
     expect(links.map((l) => l.to)).toEqual(['capability:clause-finding']);
     const input = extractInput(rfx, graph.nodes);
     expect(input.existing.capabilities).not.toContain('Agent Design Guidance');
+  });
+
+  it('never adds an outcome, beneficiary or category: those come only from the form', () => {
+    const graph = buildGraph([{ ...rfx, outcomes: ['Save Time'] }], []);
+    const out = {
+      nodes: [{ type: 'Capability' as const, label: 'Save Time' }, { type: 'Outcome' as const, label: 'Happier staff' }],
+      links: [
+        { from: 'idea', to: 'Save Time', rel: 'NEEDS' as const, description: 'Copies the outcome', confidence: 0.9 },
+        { from: 'idea', to: 'Happier staff', rel: 'WANTS' as const, description: 'Made up', confidence: 0.9 },
+      ],
+    };
+    const { links } = planAiLinks('CAFE-2026-002', out as any, graph, [], 'fake');
+    expect(links).toEqual([]);
   });
 
   it('gives the AI the business impact, beneficiaries and additional context, but not the use case category or maturity', () => {

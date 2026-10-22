@@ -1,4 +1,4 @@
-import { ALLOWED, NOT_APPROVED_NOTE, canonicalTool, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
 
@@ -37,7 +37,12 @@ export function planAiLinks(
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
   // The AI never picks a tool: a Tool star comes only from the operator's tool pick (approach.md), later in the app.
-  out = { ...out, nodes: out.nodes.filter((n) => n.type !== 'Tool'), links: out.links.filter((l) => l.rel !== 'BUILT_WITH') };
+  // Nor any star or link the form owns (people, support, outcomes, beneficiaries, categories): only what it may suggest.
+  out = {
+    ...out,
+    nodes: out.nodes.filter((n) => n.type !== 'Tool' && AI_NODE_TYPES.includes(n.type)),
+    links: out.links.filter((l) => l.rel !== 'BUILT_WITH' && AI_RELATIONS.includes(l.rel)),
+  };
   for (const n of out.nodes) {
     const raw = n.label.trim();
     if (!raw || proposed.has(key(raw))) continue;

@@ -693,11 +693,11 @@ export const ACTIONS_SCHEMA: JsonSchema = {
     properties: {
       op: { type: 'string', enum: COMMAND_OPS },
       a: CODE, b: CODE,
-      rel: { type: 'string', enum: ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR'] },
+      rel: { type: 'string', enum: ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'] },
       role: { type: 'string', enum: COMMAND_ROLES },
       ideas: { type: 'array', maxItems: 30, items: CODE },
       name: { type: 'string', minLength: 1, maxLength: 60 },
-      type: { type: 'string', enum: ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support'] },
+      type: { type: 'string', enum: ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'] },
     },
   },
 };
@@ -775,7 +775,7 @@ export const agentTask: Task<AgentOutput> = {
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
       '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
       '  A person written as a code in the message but marked new is still a code: use it as a.',
-      '- new_round name · rename star a to name · merge a into b (a is the duplicate) · add_star of type (PainPoint, Capability, System or Support) named name,',
+      '- new_round name · rename star a to name · merge a into b (a is the duplicate) · add_star of type (PainPoint, Capability, System, Support, Outcome, Beneficiary or Category) named name,',
       '  linked to star b · remove_star a with its links · grow idea a (read it again and add what it finds) · stage: a stage move, which the app leaves to',
       '  the operator\'s stage button.',
       'In reply, thought and followups, write each star only as its code in square brackets, never with its label beside it. Never invent names.',

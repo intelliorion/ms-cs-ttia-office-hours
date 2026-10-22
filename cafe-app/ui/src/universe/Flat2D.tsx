@@ -19,7 +19,7 @@ interface Props {
 // It leaves room on the right for labels and grows with the window.
 const boxFor = (w: number, h: number) => ({ x: 500, y: 100, w: w - 1160, h: h - 200 });
 const PAD = 50;
-const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Person: 7 };
+const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Outcome: 6, Beneficiary: 6, Category: 6, Person: 7 };
 
 /** No WebGL: the same graph drawn flat in SVG, using x and y of the layout. */
 export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, onSelect, onHover }: Props) {

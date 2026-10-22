@@ -1,20 +1,23 @@
-export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round' | 'Support';
-export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support'];
+export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round' | 'Support' | 'Outcome' | 'Beneficiary' | 'Category';
+export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
 export const NODE_LABELS: Record<NodeType, string> = {
   Entity: 'Entity', Team: 'Team', Person: 'Person', Idea: 'Idea', PainPoint: 'Pain point',
   Capability: 'Capability', Tool: 'Tool', System: 'System or data', Round: 'Round', Support: 'Support requested',
+  Outcome: 'Desired outcome', Beneficiary: 'Beneficiary', Category: 'Use case category',
 };
 export const NODE_COLOURS: Record<NodeType, string> = {
   Entity: '#6366f1', Team: '#0ea5e9', Person: '#8b5cf6', Idea: '#f97316',
   PainPoint: '#14b8a6', Capability: '#f59e0b', Tool: '#ef4444', System: '#10b981', Round: '#e7d8b1', Support: '#f472b6',
+  Outcome: '#a3e635', Beneficiary: '#facc15', Category: '#93c5fd',
 };
-export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'SPONSORS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR';
+export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'SPONSORS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY';
 export const ALLOWED: Record<Relation, [NodeType, NodeType]> = {
   HAS_TEAM: ['Entity', 'Team'], HAS_MEMBER: ['Team', 'Person'],
   SUBMITTED: ['Person', 'Idea'], SPONSORS: ['Person', 'Idea'], RELATED: ['Person', 'Idea'],
   REPLACES: ['Idea', 'PainPoint'], NEEDS: ['Idea', 'Capability'],
   BUILT_WITH: ['Capability', 'Tool'], USES_DATA: ['Capability', 'System'],
   IN_ROUND: ['Idea', 'Round'], ASKS_FOR: ['Idea', 'Support'],
+  WANTS: ['Idea', 'Outcome'], BENEFITS: ['Idea', 'Beneficiary'], IN_CATEGORY: ['Idea', 'Category'],
 };
 /** Relations the AI may propose. People links come only from the form. */
 export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA'];
@@ -39,9 +42,9 @@ export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone'
   | { t: 'remove'; node: string }
 );
 /** Stars the operator can create or remove from the command bar. The rest come from the form, the rounds or the tool picker. */
-export const OPERATOR_STARS: NodeType[] = ['PainPoint', 'Capability', 'System', 'Support'];
+export const OPERATOR_STARS: NodeType[] = ['PainPoint', 'Capability', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category'];
 /** Star types that can be merged: never ideas, rounds or the division. */
-export const MERGEABLE: NodeType[] = ['Team', 'Person', 'PainPoint', 'Capability', 'System', 'Support', 'Tool'];
+export const MERGEABLE: NodeType[] = ['Team', 'Person', 'PainPoint', 'Capability', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category', 'Tool'];
 
 export interface AiLink {
   from: string; to: string; rel: Relation; description: string; source: string; confidence: number;

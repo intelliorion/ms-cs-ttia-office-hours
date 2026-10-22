@@ -2,7 +2,7 @@ import type { GNode, NodeType } from '../graph/ontology';
 
 /** The code letter for each kind of star, so the AI can tell a person [P1] from a team [T1]. */
 const LETTER: Record<NodeType, string> = {
-  Person: 'P', Team: 'T', Entity: 'D', Idea: 'I', Round: 'R', Capability: 'C', PainPoint: 'K', System: 'S', Support: 'U', Tool: 'X',
+  Person: 'P', Team: 'T', Entity: 'D', Idea: 'I', Round: 'R', Capability: 'C', PainPoint: 'K', System: 'S', Support: 'U', Tool: 'X', Outcome: 'O', Beneficiary: 'B', Category: 'G',
 };
 /** Always listed for the AI, mentioned or not, so "the travel bot" can still be found: none of these are people. */
 const ALWAYS: NodeType[] = ['Idea', 'Team', 'Entity', 'Round'];

@@ -10,8 +10,8 @@ import type { JsonSchema } from '../ai/schema';
 export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by'] as const;
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
-const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support'];
-const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR'];
+const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
+const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'];
 
 export interface QueryStep {
   op: (typeof QUERY_OPS)[number];
@@ -62,7 +62,8 @@ export const QUERY_GUIDE = [
   '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
   '- count_by: count the set by stage, function, region, round or type (the set stays as it is).',
   'Links: Entity HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/SPONSORS/RELATED Idea, Idea REPLACES PainPoint, Idea NEEDS Capability,',
-  'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support.',
+  'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
+  'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
   'Use one query unless the question has separate parts. Examples (codes as in "stars"):',
   '- what is related to [T1]: [{"op":"stars","codes":["T1"]},{"op":"follow"}]',
@@ -72,6 +73,8 @@ export const QUERY_GUIDE = [
   '- ideas that use data from systems named like expense: [{"op":"stars","type":"System","match":"expense"},{"op":"follow","rel":"USES_DATA","type":"Capability"},{"op":"follow","rel":"NEEDS","type":"Idea"}]',
   '- who leads [I1]: [{"op":"stars","codes":["I1"]},{"op":"role","role":"lead"}]',
   '- ideas per stage in round 2026 Q4: [{"op":"stars","type":"Idea","round":"2026 Q4"},{"op":"count_by","by":"stage"}]',
+  '- ideas that want the same outcome as [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"WANTS","type":"Outcome"},{"op":"follow","rel":"WANTS","type":"Idea"}]',
+  '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
   '- how [P1] is connected to [I2]: [{"op":"path","codes":["P1","I2"]}]',
 ];
 
@@ -100,10 +103,12 @@ export interface QueryWorld {
 const PLURAL: Record<NodeType, string> = {
   Entity: 'divisions', Team: 'teams', Person: 'people', Idea: 'ideas', PainPoint: 'pain points', Capability: 'capabilities',
   Tool: 'tools', System: 'systems or data', Round: 'rounds', Support: 'support requests',
+  Outcome: 'desired outcomes', Beneficiary: 'beneficiaries', Category: 'use case categories',
 };
 const SINGULAR: Record<NodeType, string> = {
   Entity: 'division', Team: 'team', Person: 'person', Idea: 'idea', PainPoint: 'pain point', Capability: 'capability',
   Tool: 'tool', System: 'system or data', Round: 'round', Support: 'support request',
+  Outcome: 'desired outcome', Beneficiary: 'beneficiary', Category: 'use case category',
 };
 const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
 const relWord = (r?: Relation) => (r ? r.toLowerCase().replace(/_/g, ' ') : 'any');

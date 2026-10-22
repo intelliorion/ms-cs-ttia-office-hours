@@ -8,6 +8,7 @@ export interface Graph { nodes: GNode[]; edges: GEdge[]; layout?: Record<string,
 
 const BASE_SIZE: Record<NodeType, number> = {
   Idea: 2.6, Team: 2.2, Entity: 2.4, Tool: 1.8, Capability: 1.6, System: 1.6, PainPoint: 1.4, Person: 1.0, Round: 2.4, Support: 1.4,
+  Outcome: 1.4, Beneficiary: 1.4, Category: 1.6,
 };
 const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity', 'Round'];
 

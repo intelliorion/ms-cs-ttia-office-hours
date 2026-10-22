@@ -38,10 +38,11 @@ export interface Proposal { label: string; action: CommandAction }
 
 const REL_WORD: Partial<Record<Relation, string>> = {
   HAS_TEAM: 'has the team', HAS_MEMBER: 'has the member', REPLACES: 'replaces', NEEDS: 'needs', USES_DATA: 'uses the data', ASKS_FOR: 'asks for',
+  WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category',
 };
 const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor', member: 'a team member' };
 /** Labels the form owns: ideas and people are renamed in their own files, rounds in the Rounds pop-out. */
-const RENAMEABLE: NodeType[] = ['Team', 'Entity', 'Capability', 'PainPoint', 'System', 'Support', 'Tool'];
+const RENAMEABLE: NodeType[] = ['Team', 'Entity', 'Capability', 'PainPoint', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category', 'Tool'];
 const ROLE_OF_REL: Partial<Record<Relation, PersonRole>> = { SPONSORS: 'sponsor', RELATED: 'member' };
 /** Where a star the command bar can't create or remove comes from. */
 const OWNED_ELSEWHERE: Partial<Record<NodeType, (label: string) => string>> = {

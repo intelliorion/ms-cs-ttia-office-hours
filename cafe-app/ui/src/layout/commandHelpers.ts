@@ -40,7 +40,7 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 }
 
 export interface StarHit { id: string; type: string; label: string }
-const RANK: Record<string, number> = { Idea: 0, Team: 1, Person: 2, Capability: 3, PainPoint: 4, System: 5, Support: 6, Round: 7, Tool: 8, Entity: 9 };
+const RANK: Record<string, number> = { Idea: 0, Team: 1, Person: 2, Capability: 3, PainPoint: 4, System: 5, Support: 6, Outcome: 6, Beneficiary: 6, Category: 6, Round: 7, Tool: 8, Entity: 9 };
 
 /** Stars whose name (or Café ID) contains the query: names starting with it first, then ideas, teams and people before the rest. */
 export function searchStars(nodes: { id: string; type: string; label: string; attrs?: Record<string, unknown> }[], query: string, limit = 8): StarHit[] {
@@ -70,7 +70,7 @@ export function insertMention(text: string, start: number, caret: number, label:
 }
 
 const KIND_OF: Record<string, string> = {
-  idea: 'Idea', person: 'Person', team: 'Team', capability: 'Capability', pain: 'PainPoint', system: 'System', support: 'Support', round: 'Round', tool: 'Tool', division: 'Entity',
+  idea: 'Idea', person: 'Person', team: 'Team', capability: 'Capability', pain: 'PainPoint', system: 'System', support: 'Support', outcome: 'Outcome', beneficiary: 'Beneficiary', category: 'Category', round: 'Round', tool: 'Tool', division: 'Entity',
 };
 
 /** The / shortcuts: what each does, shown as you type "/". */

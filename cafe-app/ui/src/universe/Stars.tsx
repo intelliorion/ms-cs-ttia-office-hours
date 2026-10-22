@@ -84,7 +84,7 @@ export function writeHalos(h: InstanceSink, f: {
 const tmpM = new Matrix4(); const tmpC = new Color(); const tmpQ = new Quaternion(); const tmpS = new Vector3(); const tmpP = new Vector3();
 const dummy = new Object3D();
 const tmpV = new Vector3(); const tmpW = new Vector3();
-const TYPE_RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Person: 7 };
+const TYPE_RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Outcome: 6, Beneficiary: 6, Category: 6, Person: 7 };
 
 // Per-instance emissive: three multiplies diffuse by instance colour; we also multiply emissive by it.
 function emissiveByInstance(m: Material) {

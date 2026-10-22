@@ -10,7 +10,7 @@ export const FIXTURE = fileURLToPath(new URL('./fixtures/sample-export.csv', imp
 
 export async function tmpWorkspace(today = '2026-10-19'): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'cafe-ws-'));
-  await initWorkspace(root, fixedClock(today));
+  await initWorkspace(root);
   return root;
 }
 

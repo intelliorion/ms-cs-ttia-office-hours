@@ -6,3 +6,4 @@ ui/node_modules/
 test-data/*
 !test-data/README.md
 .acceptance-fake/
+.acceptance-fake-agentic/

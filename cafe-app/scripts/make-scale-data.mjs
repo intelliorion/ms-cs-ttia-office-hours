@@ -112,7 +112,7 @@ async function main() {
   const ws = path.join(out, 'workspace');
   await fs.rm(ws, { recursive: true, force: true });
   const clock = fixedClock('2026-10-20');
-  await initWorkspace(ws, clock);
+  await initWorkspace(ws);
   const report = await importExport(ws, csv, { clock, steps: await loadSteps(ws) });
   const links = makeLinks(report.created.map((c) => c.id));
   for (const l of links) await appendAiLink(ws, l);

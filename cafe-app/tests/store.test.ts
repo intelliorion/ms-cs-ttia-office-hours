@@ -3,7 +3,6 @@ import { mkdir, readdir, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { initWorkspace } from '../src/workspace/init';
-import { fixedClock } from '../src/clock';
 import { slugify, nextId, saveIdea, loadIdea, listIdeas } from '../src/ideas/store';
 import { loadSettings, saveSettings } from '../src/round/store';
 
@@ -20,7 +19,7 @@ describe('workspace', () => {
   it('is safe to run twice and keeps edits', async () => {
     const root = await tmpWorkspace();
     await saveSettings(root, { operatorName: 'Café operator' });
-    expect((await initWorkspace(root, fixedClock('2026-10-19'))).created).toEqual([]);
+    expect((await initWorkspace(root)).created).toEqual([]);
     expect((await loadSettings(root)).operatorName).toBe('Café operator');
   });
 });

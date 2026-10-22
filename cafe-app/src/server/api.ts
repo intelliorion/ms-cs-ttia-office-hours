@@ -5,7 +5,7 @@ import type { AddRoute } from './server';
 import { paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
-import { listRounds, createRound, saveRound, setIdeaRound, loadSettings, saveSettings } from '../round/store';
+import { listRounds, listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
 import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
@@ -75,16 +75,15 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
 
   add('GET', '/api/rounds', async () => {
-    const [rounds, { ideas }] = await Promise.all([listRounds(root), listIdeas(root)]);
-    return { rounds: rounds.map((r) => ({ ...r, ideas: ideas.filter((i) => i.round === r.id).length })) };
+    const [{ rounds, problems }, { ideas }] = await Promise.all([listRoundsChecked(root), listIdeas(root)]);
+    return { rounds: rounds.map((r) => ({ ...r, ideas: ideas.filter((i) => i.round === r.id).length })), problems };
   });
   add('POST', '/api/rounds', async ({ body }) => createRound(root, String(body.name ?? ''), clock));
   add('POST', '/api/rounds/:id', async ({ params, body }) => saveRound(root, params.id, body));
   add('POST', '/api/rounds/:id/ideas', async ({ params, body }) => {
     const ids = body.ideaIds;
     if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) throw new Error('Pick the ideas to put in the round');
-    for (const id of ids) await setIdeaRound(root, id, params.id, clock);
-    return { updated: ids.length };
+    return { updated: await assignIdeas(root, params.id, ids, clock) };
   });
   add('POST', '/api/ideas/:id/round', async ({ params, body }) => setIdeaRound(root, params.id, String(body.round ?? ''), clock));
   add('POST', '/api/settings', async ({ body }) => saveSettings(root, body));

@@ -32,10 +32,28 @@ function asRound(id: string, raw: Partial<Round>): Round {
   return { ...raw, id, name, created };
 }
 
-/** Every round folder, newest first by the day it was made, then by id. A round without a day sorts last. */
+export interface RoundProblem { folder: string; message: string }
+
+/**
+ * Every round folder, newest first by the day it was made, then by id. A round without a day sorts last.
+ * A round.yaml that cannot be read is left out and reported, so one bad file never hides the rest.
+ */
+export async function listRoundsChecked(root: string): Promise<{ rounds: Round[]; problems: RoundProblem[] }> {
+  const rounds: Round[] = [];
+  const problems: RoundProblem[] = [];
+  for (const id of await roundFolders(root)) {
+    try {
+      rounds.push(asRound(id, (await readYaml<Partial<Round>>(roundFile(root, id))) ?? {}));
+    } catch (e) {
+      problems.push({ folder: id, message: (e as Error).message });
+    }
+  }
+  rounds.sort((a, b) => b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
+  return { rounds, problems };
+}
+
 export async function listRounds(root: string): Promise<Round[]> {
-  const rounds = await Promise.all((await roundFolders(root)).map(async (id) => asRound(id, (await readYaml<Partial<Round>>(roundFile(root, id))) ?? {})));
-  return rounds.sort((a, b) => b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
+  return (await listRoundsChecked(root)).rounds;
 }
 
 /** The newest round, or null when the operator has not made one yet. */
@@ -71,6 +89,22 @@ export async function saveRound(root: string, id: string, patch: Record<string, 
   }
   await writeYaml(roundFile(root, round.id), next);
   return next;
+}
+
+/**
+ * Puts several ideas in one round, all or nothing: the round and every idea are checked before anything is written.
+ * Returns how many ideas actually changed round.
+ */
+export async function assignIdeas(root: string, roundId: string, ideaIds: string[], clock: Clock): Promise<number> {
+  await loadRound(root, roundId);
+  const ideas = await Promise.all([...new Set(ideaIds)].map((id) => loadIdea(root, id)));
+  let changed = 0;
+  for (const idea of ideas) {
+    if (idea.round === roundId) continue;
+    await setIdeaRound(root, idea.id, roundId, clock);
+    changed++;
+  }
+  return changed;
 }
 
 /** Puts an idea in a round, or takes it out with ''. The stage never changes; the change is logged. */

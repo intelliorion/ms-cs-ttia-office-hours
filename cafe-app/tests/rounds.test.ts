@@ -7,7 +7,7 @@ import { fixedClock } from '../src/clock';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
 import { readHistory } from '../src/workspace/files';
 import {
-  currentRoundId, createRound, listRounds, loadRound, saveRound, setIdeaRound, defaultRoundName,
+  currentRoundId, createRound, listRounds, listRoundsChecked, loadRound, saveRound, setIdeaRound, assignIdeas, defaultRoundName,
 } from '../src/round/store';
 
 const clock = fixedClock('2026-10-22');
@@ -64,6 +64,28 @@ describe('rounds', () => {
     expect((await loadRound(root, 'ROUND-002')).deadline).toBeUndefined();
     await expect(saveRound(root, 'ROUND-001', { deadline: '1/11/2026' })).rejects.toThrow('Submission deadline must be a date');
     await expect(saveRound(root, 'ROUND-404', { deadline: '2026-11-01' })).rejects.toThrow('Unknown round');
+  });
+
+  it('skips a round.yaml it cannot read and reports the folder', async () => {
+    const root = await tmpWorkspace();
+    await createRound(root, 'Good', clock);
+    await legacyRound(root, 'ROUND-002');
+    await writeFile(path.join(root, 'rounds', 'ROUND-002', 'round.yaml'), 'name: [unclosed\n');
+    expect((await listRounds(root)).map((r) => r.id)).toEqual(['ROUND-001']);
+    const { problems } = await listRoundsChecked(root);
+    expect(problems).toEqual([{ folder: 'ROUND-002', message: expect.any(String) }]);
+  });
+
+  it('puts many ideas in a round all or nothing, and counts only real changes', async () => {
+    const root = await tmpWorkspace();
+    await createRound(root, 'Autumn', clock);
+    await saveIdea(root, sampleIdea({ round: '' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', slug: 'b', round: 'ROUND-001', dedupe_key: 'b' }));
+    await expect(assignIdeas(root, 'ROUND-001', ['CAFE-2026-001', 'CAFE-2026-999'], clock)).rejects.toThrow();
+    expect((await loadIdea(root, 'CAFE-2026-001')).round).toBe('');
+    await expect(assignIdeas(root, 'ROUND-404', ['CAFE-2026-001'], clock)).rejects.toThrow('Unknown round');
+    expect(await assignIdeas(root, 'ROUND-001', ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-001'], clock)).toBe(1);
+    expect((await loadIdea(root, 'CAFE-2026-001')).round).toBe('ROUND-001');
   });
 
   it('puts an idea in a round and takes it out, logging both', async () => {

@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea, loadIdea } from '../src/ideas/store';
-import { createRound, saveRound, saveSettings } from '../src/round/store';
+import { createRound, saveRound, saveSettings, setIdeaRound } from '../src/round/store';
 import { draftEmail, listOutbox, listOutboxChecked, approve, markSent, updateDraft, MissingSettingsError } from '../src/comms/outbox';
 import { readHistory } from '../src/workspace/files';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
@@ -106,6 +106,32 @@ describe('outbox', () => {
     const [item] = await listOutbox(root);
     expect(item.view.body).toContain('[REVIEW DATE]');
     expect(item.missingSettings.map((m) => m.label)).toEqual(['Put this idea in a round to fill the dates', 'Your name (email signature)']);
+  });
+
+  it('fills the dates once the idea is put in a round, and drafting again returns that draft', async () => {
+    const { root } = await setup();
+    await saveIdea(root, sampleIdea({ round: '' }));
+    await saveSettings(root, { operatorName: 'Café operator' });
+    await saveRound(root, 'ROUND-001', { reviewBy: '2026-11-02' });
+    const first = await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
+    expect((await listOutbox(root))[0].missingSettings.map((m) => m.label)).toEqual(['Put this idea in a round to fill the dates']);
+    await setIdeaRound(root, 'CAFE-2026-001', 'ROUND-001', clock);
+    const [item] = await listOutbox(root);
+    expect(item.missingSettings).toEqual([]);
+    expect(item.view.body).toContain('by 2 November 2026');
+    const again = await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
+    expect(again).toMatchObject({ key: first.key, round: 'ROUND-001' });
+    expect((await approve(root, first.key, clock)).status).toBe('approved');
+  });
+
+  it('follows the idea when it moves to another round', async () => {
+    const { root } = await setup();
+    await createRound(root, 'Winter', clock);
+    await saveRound(root, 'ROUND-001', { reviewBy: '2026-11-02' });
+    await saveRound(root, 'ROUND-002', { reviewBy: '2026-12-07' });
+    await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
+    await setIdeaRound(root, 'CAFE-2026-001', 'ROUND-002', clock);
+    expect((await listOutbox(root))[0].view.body).toContain('by 7 December 2026');
   });
 
   it('asks for a round before the call for ideas when there is none', async () => {

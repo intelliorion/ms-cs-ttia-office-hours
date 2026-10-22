@@ -4,10 +4,9 @@ import { paths, BUNDLED_TEMPLATES } from './paths';
 import { readYaml, writeYaml } from './files';
 import { DEFAULT_STEPS } from '../rules/stages';
 import { DEFAULT_SETTINGS } from '../round/round';
-import type { Clock } from '../clock';
 
 /** Creates the folders, rules and templates. It never makes a round: the operator does that. */
-export async function initWorkspace(root: string, _clock: Clock): Promise<{ created: string[] }> {
+export async function initWorkspace(root: string): Promise<{ created: string[] }> {
   const p = paths(root);
   const created: string[] = [];
   for (const dir of [p.rounds, p.inbox, p.held, p.ideas, p.cohorts, p.roadshows, p.graph, p.templates, p.rules, p.exports, p.skills]) {

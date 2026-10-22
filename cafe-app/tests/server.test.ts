@@ -197,6 +197,10 @@ describe('api', () => {
     const state = await j(await fetch(`${base}/api/state`));
     expect(state.rounds.map((r: { id: string }) => r.id)).toEqual(['ROUND-001']);
     expect((await j(await fetch(`${base}/api/rounds`))).rounds[0].ideas).toBe(1);
+    const partial = await post(base, '/api/rounds/ROUND-001/ideas', { ideaIds: ['CAFE-2026-002', 'CAFE-2026-999'] });
+    expect(partial.status).toBe(400);
+    expect((await j(await fetch(`${base}/api/rounds`))).rounds[0].ideas).toBe(1);
+    expect(await j(await post(base, '/api/rounds/ROUND-001/ideas', { ideaIds: ['CAFE-2026-001', 'CAFE-2026-002'] }))).toEqual({ updated: 1 });
     const bad = await post(base, '/api/ideas/CAFE-2026-001/round', { round: 'ROUND-404' });
     expect(bad.status).toBe(400);
     expect((await j(bad)).error).toContain('Unknown round');

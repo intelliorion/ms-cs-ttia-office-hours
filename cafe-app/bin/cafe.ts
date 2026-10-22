@@ -21,12 +21,12 @@ const USAGE = 'Usage: cafe <init | start | import <file>> [--workspace DIR] [--p
 async function main(): Promise<void> {
   switch (command) {
     case 'init': {
-      const { created } = await initWorkspace(root, clock);
+      const { created } = await initWorkspace(root);
       console.log(created.length ? `Created in ${root}:\n  ${created.join('\n  ')}` : `${root} is already set up.`);
       return;
     }
     case 'start': {
-      await initWorkspace(root, clock);
+      await initWorkspace(root);
       const port = Number(flag('port') ?? 4100);
       const server = createApp({ root, clock });
       server.on('error', (e: NodeJS.ErrnoException) => {

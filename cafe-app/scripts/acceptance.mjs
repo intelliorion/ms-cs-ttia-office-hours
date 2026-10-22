@@ -183,7 +183,7 @@ async function main() {
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   const clock = fixedClock('2026-10-20');
-  await initWorkspace(workspace, clock);
+  await initWorkspace(workspace);
   const server = await startServer(workspace, clock);
   console.log(`Acceptance (${REAL ? 'real AI' : 'fake'}) on ${base}, workspace ${workspace}`);
   try {
@@ -439,7 +439,7 @@ async function agenticPass(clock) {
   const ws = `${workspace}-agentic`;
   await fs.rm(ws, { recursive: true, force: true });
   await fs.mkdir(ws, { recursive: true });
-  await initWorkspace(ws, clock);
+  await initWorkspace(ws);
   AGENTIC = true;
   const server = await startServer(ws, clock);
   console.log(`Agentic pass on ${base}, workspace ${ws}`);

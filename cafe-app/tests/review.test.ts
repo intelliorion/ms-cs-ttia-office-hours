@@ -156,8 +156,8 @@ describe('writeReviewPack', () => {
     expect(headings).toEqual(['# Review pack', '## Autumn (ROUND-002)', '## No round yet']);
     expect(md.indexOf('CAFE-2026-001')).toBeLessThan(md.indexOf('## No round yet'));
     expect(md.indexOf('CAFE-2026-003')).toBeGreaterThan(md.indexOf('## No round yet'));
-    expect(md).toContain('## CAFE-2026-001 Email scheduler');
-    expect(md).toContain('## CAFE-2026-003 Third Party Invoice Assessment');
+    expect(md).toContain('\n### CAFE-2026-001 Email scheduler\n');
+    expect(md).toContain('\n### CAFE-2026-003 Third Party Invoice Assessment\n');
     expect(md).not.toContain('CAFE-2026-002');
     expect(md).toContain('Participation is Individual but 6 people are listed');
     expect(md).toContain('- Where it is: Review and Select');

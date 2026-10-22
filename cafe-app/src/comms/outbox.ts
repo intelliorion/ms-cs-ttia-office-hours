@@ -108,7 +108,15 @@ export async function draftEmail(
   const dir = idea ? path.join(await ideaDir(root, idea.id), 'emails') : path.join(paths(root).rounds, round!, 'emails');
   const { records, count } = await recordsIn(root, dir);
   const existing = records.find((r) => r.template === tpl.id && r.status !== 'sent');
-  if (existing) return existing;
+  if (existing) {
+    // An idea may have changed round since this draft was made; the draft follows it.
+    if (idea && existing.status === 'draft' && existing.round !== round) {
+      const moved = { ...existing, round: round ?? '' };
+      await save(root, moved);
+      return moved;
+    }
+    return existing;
+  }
 
   const seq = String(count + 1).padStart(3, '0');
   const r = render(tpl, { idea });
@@ -130,7 +138,14 @@ export async function draftEmail(
 
 export const NO_ROUND_NOTE = 'Put this idea in a round to fill the dates';
 
-async function viewOf(root: string, r: EmailRecord): Promise<OutboxItem> {
+/** The round whose dates fill an email: an idea's draft follows the idea's round now; anything else keeps its own. */
+async function roundOf(root: string, r: EmailRecord): Promise<string> {
+  if (!r.idea || r.status !== 'draft') return r.round;
+  return loadIdea(root, r.idea).then((i) => i.round, () => r.round);
+}
+
+async function viewOf(root: string, stored: EmailRecord): Promise<OutboxItem> {
+  const r = { ...stored, round: await roundOf(root, stored) };
   // No round yet: the round's dates stay as tokens, and the note says how to fill them.
   const round: Partial<Round> = r.round ? await loadRound(root, r.round).catch(() => ({})) : {};
   const ctx = { round, settings: await loadSettings(root) };
@@ -170,7 +185,8 @@ export async function approve(root: string, key: string, clock: Clock): Promise<
   if (r.status !== 'draft') return r;
   const item = await viewOf(root, r);
   if (item.missingSettings.length) throw new MissingSettingsError(item.missingSettings.map((m) => m.label));
-  const next: EmailRecord = { ...r, ...item.view, status: 'approved', approvedAt: clock() };
+  // Approval freezes the text and the round it was filled from.
+  const next: EmailRecord = { ...r, round: item.round, ...item.view, status: 'approved', approvedAt: clock() };
   await save(root, next);
   return next;
 }

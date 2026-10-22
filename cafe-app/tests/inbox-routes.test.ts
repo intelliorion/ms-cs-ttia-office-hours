@@ -87,6 +87,20 @@ describe('/api/inbox: exports', () => {
     expect(empty.edges.filter((e: any) => e.source.startsWith('ai:'))).toEqual([]);
   });
 
+  it('applying the one held item turns "Anything for you" to Done, so the badge stops counting it', async () => {
+    const s = await server(triageConnector({
+      what: 'Invoices need design guidance.', understood: ['Invoices need design guidance.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
+      facts: { graph: { nodes: [{ type: 'Capability', label: 'Invoice reading' }], links: [{ from: 'idea', to: 'Invoice reading', rel: 'NEEDS', description: 'Reads invoices', confidence: 0.4 }] } },
+    }));
+    await s.drop('export.csv', await readFile(FIXTURE));
+    const { item } = await json(await s.post('/api/inbox/drop', { text: 'Update on CAFE-2026-003: they need to read invoices.', name: 'update' }));
+    const check = (it: any) => it.steps.find((x: any) => x.id === 'check');
+    expect(check(item).status).toBe('needs-you');
+    const held = item.actions.find((r: any) => r.held);
+    const after = await json(await s.post(`/api/inbox/${item.id}/apply`, { actionIds: [held.id] }));
+    expect(check(after.item ?? after)).toMatchObject({ status: 'done', detail: 'Done' });
+  });
+
   it('a form export with no AI: ideas imported, understand says how to read them by hand, nothing left running', async () => {
     const s = await server(createConnector({ providers: [], settings: DEFAULT_SETTINGS }));
     const { item } = await s.drop('export.csv', await readFile(FIXTURE));

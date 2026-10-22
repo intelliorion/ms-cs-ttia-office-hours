@@ -42,7 +42,16 @@ function statusOf(item: InboxItem, records: ActionRecord[]): InboxItem['status']
 }
 
 async function save(root: string, item: InboxItem, records: ActionRecord[]): Promise<InboxItem> {
-  return updateItem(root, item.id, { actions: records, status: statusOf(item, records) });
+  const saved = await updateItem(root, item.id, { actions: records, status: statusOf(item, records) });
+  // A settled card says so: once the operator applies or drops what waited, "Anything for you" turns Done (and back).
+  const check = stepOf(saved, 'check');
+  if (check && (check.status === 'needs-you' || check.status === 'done')) {
+    const waiting = records.filter((r) => r.status === 'pending' && r.kind === 'ok');
+    const w = waiting.length;
+    const detail = w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waitingWords(waiting[0].action)}` : 'Done';
+    if (detail !== check.detail) return markStep(root, item.id, { id: 'check', status: w ? 'needs-you' : 'done', detail });
+  }
+  return saved;
 }
 
 /** Apply one record, then save the sidecar at once, so an applied action always has its inverse on disk. */
@@ -559,7 +568,10 @@ export const PREVIEW_CHARS = 400;
 /** An item without its full text (a short preview instead) or the quoted thread; a stranded running step reads as failed (report only). */
 export function viewOf({ text, meta, ...rest }: InboxItem, now = Date.now()): InboxItem & { preview?: string; previewCut?: true } {
   const { quoted: _q, ...m } = meta ?? {};
-  const steps = rest.steps?.map((s) => (s.status === 'running' && now - Date.parse(s.at) > STRANDED_MS ? { ...s, status: 'failed' as const, detail: 'interrupted' } : s));
+  // Nothing left waiting (an older card saved before the check refreshed itself) reads as Done.
+  const settled = !((rest.actions ?? []) as ActionRecord[]).some((r) => r.status === 'pending' && r.kind === 'ok');
+  const steps = rest.steps?.map((s) => (s.status === 'running' && now - Date.parse(s.at) > STRANDED_MS ? { ...s, status: 'failed' as const, detail: 'interrupted' }
+    : s.id === 'check' && s.status === 'needs-you' && settled && rest.status !== 'held' ? { ...s, status: 'done' as const, detail: 'Done' } : s));
   const cut = !!text && text.length > PREVIEW_CHARS;
   return {
     ...rest, ...(steps ? { steps } : {}), ...(meta ? { meta: m } : {}),

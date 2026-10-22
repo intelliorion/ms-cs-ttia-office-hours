@@ -143,7 +143,14 @@ file, a command **is** an instruction. Press Enter; the AI reads it and the chat
 understood and one card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and
 every done action has **Undo** (a team or round that changed since is kept, and the card says so).
 
-What it can do:
+**Changes and questions.** The agent first decides what you typed: a change to make, a question to answer, or
+neither (then it asks you to rephrase); the panel says which. A question is answered from the universe (stars,
+links, and each idea's stage, function, region, round and roles), and the stars the answer rests on light up in the
+universe with the links between them, the rest dimmed: "which ideas deal with policy questions, and who leads them?",
+"highlight what is related to GSS" (the star and everything linked to it). A chip in the bar ("7 stars lit ✕") keeps
+the highlight after the panel closes, until you clear it or send something new. **A question never changes anything.**
+
+What a change can do:
 
 - Link or unlink two stars: "link Avery Chen to BSI" (a person to a team), "remove the link between X and Y".
 - Set a person's role on an idea: "make Avery Chen sponsor of the procurement FAQ bot" (this changes the idea's team).

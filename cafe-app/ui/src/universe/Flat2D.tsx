@@ -6,6 +6,7 @@ interface Props {
   graph: Graph;
   layout: Record<string, Vec3>;
   selectedId: string | null;
+  highlight?: string[] | null;
   hoverId: string | null;
   labels: boolean;
   onSelect: (id: string | null) => void;
@@ -19,7 +20,7 @@ const PAD = 50;
 const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Person: 7 };
 
 /** No WebGL: the same graph drawn flat in SVG, using x and y of the layout. */
-export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, onHover }: Props) {
+export function Flat2D({ graph, layout, selectedId, highlight = null, hoverId, labels, onSelect, onHover }: Props) {
   const { w: stageW, h: stageH } = useStageSize();
   const BOX = boxFor(stageW, stageH);
   const { pts } = useMemo(() => {
@@ -33,7 +34,8 @@ export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, o
     return { pts, k };
   }, [graph.nodes, layout, BOX.w, BOX.h]);
   const deg = useMemo(() => degrees(graph), [graph]);
-  const hood = selectedId ? neighbourhood(graph, selectedId) : null;
+  const litSet = !selectedId && highlight?.length ? new Set(highlight) : null;
+  const hood = selectedId ? neighbourhood(graph, selectedId) : litSet;
   const lit = (id: string) => !hood || hood.has(id);
   // Labels never overlap: place them in priority order, skip any that would collide.
   const shown = new Set<string>();
@@ -61,7 +63,7 @@ export function Flat2D({ graph, layout, selectedId, hoverId, labels, onSelect, o
       <g>
         {graph.edges.map((e) => {
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
-          const s = edgeStyle(e, selectedId);
+          const s = edgeStyle(e, selectedId, litSet);
           return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR} strokeOpacity={s.pulse ? 0.9 : s.opacity * 1.6} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>

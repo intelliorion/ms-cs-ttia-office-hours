@@ -242,7 +242,8 @@ function commandFor(prompt: string) {
   const cmd = m ? JSON.parse(`"${m[1]}"`) as string : '';
   const codes = [...cmd.matchAll(/\[([A-Z]\d+)\]/g)].map((x) => x[1]);
   const [a, b] = codes;
-  const say = (reply: string, actions: unknown[]) => ({ reply, actions });
+  const say = (reply: string, actions: unknown[]) => ({ kind: 'command', reply, actions });
+  if (/\?\s*$/.test(cmd)) return { kind: 'question', reply: codes.length ? `[${codes[0]}] is in the universe.` : 'The universe does not hold that.', actions: [], highlight: codes.slice(0, 5) };
   if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return say(`Remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
   if (/^\s*link/i.test(cmd) && a && b) return say(`Link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
   if (/^\s*put/i.test(cmd)) {
@@ -253,5 +254,5 @@ function commandFor(prompt: string) {
   if (/^\s*rename/i.test(cmd) && a) return say(`Rename [${a}].`, [{ op: 'rename', a, name: /to\s+(.+)$/i.exec(cmd)?.[1]?.trim() ?? '' }]);
   if (/^\s*merge/i.test(cmd) && a && b) return say(`Merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
   if (/^\s*move/i.test(cmd) && a) return say(`Move [${a}] to another stage.`, [{ op: 'stage', a }]);
-  return say("I didn't understand that as a command for the universe.", []);
+  return { kind: 'unclear', reply: "I couldn't tell what you want: say it as a change or a question.", actions: [] };
 }

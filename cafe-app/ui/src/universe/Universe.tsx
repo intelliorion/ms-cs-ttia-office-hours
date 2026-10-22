@@ -16,6 +16,8 @@ export interface UniverseProps {
   graph: Graph;
   layout: Record<string, Vec3>;
   selectedId: string | null;
+  /** Stars an answer rests on: lit, with the links between them, the rest dimmed. A selected star wins. */
+  highlight?: string[] | null;
   hoverId: string | null;
   labels: boolean;
   /** Focus mode: the graph fits the whole stage instead of the centre gap. */
@@ -93,7 +95,7 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
+function Scene({ graph, layout, selectedId, highlight = null, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
   const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
   const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
@@ -107,7 +109,8 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
   }, [graph.nodes, layout, centre]);
   const nodes = useMemo(() => graph.nodes.filter((n) => pos.has(n.id)), [graph.nodes, pos]);
   const deg = useMemo(() => degrees(graph), [graph]);
-  const hood = useMemo(() => (selectedId ? neighbourhood(graph, selectedId) : null), [graph, selectedId]);
+  const lit = useMemo(() => (highlight?.length ? new Set(highlight) : null), [highlight]);
+  const hood = useMemo(() => (selectedId ? neighbourhood(graph, selectedId) : lit), [graph, selectedId, lit]);
 
   const spin = useRef<Group>(null);
   const lastDown = useRef(-Infinity);
@@ -165,7 +168,7 @@ function Scene({ graph, layout, selectedId, hoverId, labels, focus = false, view
       <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
       <ambientLight intensity={0.2} />
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lite={lite} />
+        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lit={selectedId ? null : lit} lite={lite} />
         <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls

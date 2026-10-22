@@ -70,12 +70,14 @@ export const labelAlways = (node: Pick<GNode, 'type'>) => ALWAYS.includes(node.t
 export const LABEL_MAX = 40;
 export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
 
-export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null) {
+/** A selected star wins; otherwise a lit set (the stars an answer rests on) shows the links between them. */
+export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null, lit?: Set<string> | null) {
   const dashed = !edge.confirmed;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
     return { opacity: touches ? 0.9 : 0.04, dashed, pulse: touches };
   }
+  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? 0.85 : 0.03, dashed, pulse: false };
   return { opacity: dashed ? 0.35 : 0.18, dashed, pulse: false };
 }
 

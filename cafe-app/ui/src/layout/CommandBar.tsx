@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatPost, chatSend, getChat } from '../api';
 import { useStore } from '../state/store';
-import { EXAMPLES, STATUS_WORD, canUndo, waitingCount, type ChatEntryView } from './commandHelpers';
+import { EXAMPLES, KIND_WORD, STATUS_WORD, canUndo, waitingCount, type ChatEntryView } from './commandHelpers';
 
 /**
  * The command bar: the operator tells the Café what to do in their own words. The AI reads the command with every
@@ -9,7 +9,7 @@ import { EXAMPLES, STATUS_WORD, canUndo, waitingCount, type ChatEntryView } from
  * The agent keeps no conversation, so the panel shows only the current command: a new one replaces it.
  */
 export function CommandBar() {
-  const { refresh, ai } = useStore();
+  const { refresh, ai, highlight, setHighlight } = useStore();
   const [current, setCurrent] = useState<ChatEntryView | null>(null);
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
@@ -32,8 +32,8 @@ export function CommandBar() {
   const send = async () => {
     const t = text.trim();
     if (!t || thinking) return;
-    setOpen(true); setThinking(t); setText(''); setError(null);
-    try { setCurrent(await chatSend(t)); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
+    setOpen(true); setThinking(t); setText(''); setError(null); setHighlight(null);
+    try { const e = await chatSend(t); setCurrent(e); setHighlight(e.highlight ?? null); } catch (e) { setError((e as Error).message); setText(t); } finally { setThinking(null); }
   };
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     setBusy(true); setError(null);
@@ -53,6 +53,11 @@ export function CommandBar() {
           }}
           placeholder="Tell the Café what to do…" aria-label="Command" data-testid="command-input" maxLength={600} disabled={!!thinking} />
         {waiting > 0 && !open && <span className="cmd-badge" title="Actions waiting for you">{waiting}</span>}
+        {highlight && (
+          <button className="cmd-lit" data-action="command-clear-lit" title="Clear the highlight" onClick={() => setHighlight(null)}>
+            {highlight.length} star{highlight.length === 1 ? '' : 's'} lit <span aria-hidden="true">✕</span>
+          </button>
+        )}
         <button className="cmd-send" data-action="command-send" aria-label="Send" disabled={!text.trim() || !!thinking} onClick={() => void send()}>↵</button>
       </div>
       {open && (
@@ -67,9 +72,15 @@ export function CommandBar() {
             {entries.map((e) => (
               <div key={e.id} className="cmd-entry" data-entry={e.id}>
                 <div className="cmd-me">{e.text}</div>
-                <div className="cmd-ai">
+                <div className={`cmd-ai k-${e.kind ?? 'command'}`}>
+                  {e.kind && <div className="cmd-kind">{KIND_WORD[e.kind]}</div>}
                   {e.error ? <div className="cmd-err">{e.error}</div> : <div className="cmd-reply">{e.reply}</div>}
                   {e.problems.map((p, i) => <div key={i} className="cmd-problem">{p}</div>)}
+                  {e.kind === 'question' && (e.highlight?.length ?? 0) > 0 && (
+                    <div className="cmd-lit-note">{e.highlight!.length} star{e.highlight!.length === 1 ? '' : 's'} lit in the universe
+                      {highlight ? <button className="link-btn" onClick={() => setHighlight(null)}>Clear</button> : <button className="link-btn" onClick={() => setHighlight(e.highlight!)}>Light them again</button>}
+                    </div>
+                  )}
                   {e.actions.map((a) => (
                     <div key={a.id} className={`cmd-card s-${a.status}`} data-action-id={a.id}>
                       <div className="cmd-card-l">

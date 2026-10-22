@@ -50,6 +50,8 @@ describe('hiding names from the AI', () => {
     const h = hideNames('link Avery Chen to BSI', nodes);
     expect(showNames('Linked [P1] to [T1]. [Q9] is unknown.', h.codes)).toBe('Linked Avery Chen to BSI. [Q9] is unknown.');
     // The AI sometimes drops the brackets; a bare code the app gave out is still put back, other words are left alone.
-    expect(showNames('Linking P1 to team T1 (BSI); Q9 and MP3 stay.', h.codes)).toBe('Linking Avery Chen to team BSI (BSI); Q9 and MP3 stay.');
+    expect(showNames('Linking P1 to team T1; Q9 and MP3 stay.', h.codes)).toBe('Linking Avery Chen to team BSI; Q9 and MP3 stay.');
+    // A code written next to its own label reads once.
+    expect(showNames('[T1] (BSI) and [P1] Avery Chen, then BSI "BSI".', h.codes)).toBe('BSI and Avery Chen, then BSI.');
   });
 });

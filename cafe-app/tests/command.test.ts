@@ -21,7 +21,11 @@ async function setup(reply: (prompt: string) => unknown) {
   const prompts: string[] = [];
   const provider: Provider = {
     id: 'claude', label: 'Test AI', available: async () => true,
-    complete: async (prompt: string) => { prompts.push(prompt); return JSON.stringify(reply(prompt)); },
+    complete: async (prompt: string) => {
+      prompts.push(prompt);
+      const r = reply(prompt);
+      return JSON.stringify(r && typeof r === 'object' && !('kind' in r) ? { kind: 'command', ...r } : r);
+    },
   };
   return { root, prompts, ai: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) };
 }
@@ -96,7 +100,7 @@ describe('the command bar', () => {
   });
 
   it('unlink a form link hides it; a merge moves the links; both undo', async () => {
-    const { root, ai } = await setup((p) => (/"command": "unlink/.test(p)
+    const { root, ai } = await setup((p) => (/"command":\s*"unlink/.test(p)
       ? { reply: 'Remove it.', actions: [{ op: 'unlink', a: 'D1', b: 'T1' }] }
       : { reply: 'Merge.', actions: [{ op: 'merge', a: 'T1', b: 'T2' }] }));
     const u = await runCommand(root, 'unlink Corporate Services (CS) and BSI', ai, clock);
@@ -142,7 +146,7 @@ describe('the command bar', () => {
   });
 
   it('remove a star with all its links; Undo brings both back; form-owned stars get a pointer instead', async () => {
-    const { root, ai } = await setup((p) => (/"command": "remove the star/.test(p)
+    const { root, ai } = await setup((p) => (/"command":\s*"remove the star/.test(p)
       ? { reply: 'Remove.', actions: [{ op: 'remove_star', a: 'U1' }] }
       : { reply: 'Remove.', actions: [{ op: 'remove_star', a: 'P1' }, { op: 'remove_star', a: 'I1' }, { op: 'remove_star', a: 'T1' }] }));
     await saveIdea(root, { ...IDEAS[0], support: ['Agent Design Guidance'] });
@@ -162,6 +166,37 @@ describe('the command bar', () => {
       'Ideas are not removed: close Desk booking assistant with its stage button.',
       'Teams come from the ideas\' CS Function.',
     ]);
+  });
+
+  it('a question gets an answer and lit stars, sees the whole universe in codes, and never changes anything', async () => {
+    const { root, prompts, ai } = await setup(() => ({
+      kind: 'question', reply: '[P1] leads [I1], which is a [T1] idea.', highlight: ['P1', 'I1', 'T1', 'Z9'],
+      actions: [{ op: 'link', a: 'P1', b: 'T2' }],
+    }));
+    const entry = await runCommand(root, 'who leads the desk booking assistant?', ai, clock);
+    expect(entry.kind).toBe('question');
+    expect(entry.reply).toBe('Avery Chen leads Desk booking assistant, which is a BSI idea.');
+    expect(entry.highlight).toEqual(['person:avery-chen', 'idea:CAFE-2026-001', 'team:bsi']);
+    expect(entry.actions).toEqual([]);
+    // The AI got every star and link in codes, each idea's stage and function, and no person's name.
+    const data = prompts[0].slice(prompts[0].indexOf('<<<DATA'));
+    expect(data).toMatch(/"links":\[\["/);
+    expect(data).toMatch(/"stage":"Submit Idea","function":"BSI"/);
+    expect(data).toMatch(/"people":\[\{"code":"P\d+","role":"submitter"\},\{"code":"P\d+","role":"lead"\}\]/);
+    expect(data).not.toMatch(/Avery|Chen|Kwame|Mensah|Zainab|Okafor/);
+  });
+
+  it('"highlight what is related to GSS" lights GSS and every star linked to it, worked out by the app', async () => {
+    const { root, ai } = await setup(() => ({ kind: 'question', reply: 'Lit [T1] and everything linked to it.', actions: [], around: ['T1'] }));
+    const entry = await runCommand(root, 'highlight what is related to GSS', ai, clock);
+    expect(entry.reply).toBe('Lit GSS and everything linked to it.');
+    expect(entry.highlight!.sort()).toEqual(['entity:cs', 'person:kwame-mensah', 'team:gss']);
+  });
+
+  it('unclear: the agent asks to rephrase and nothing is proposed', async () => {
+    const { root, ai } = await setup(() => ({ kind: 'unclear', reply: 'Say it as a change or a question.', actions: [{ op: 'link', a: 'P1', b: 'T1' }] }));
+    const entry = await runCommand(root, 'BSI hmm', ai, clock);
+    expect(entry).toMatchObject({ kind: 'unclear', reply: 'Say it as a change or a question.', actions: [], problems: [] });
   });
 
   it('a new command cancels what the last one left waiting, saying so', async () => {

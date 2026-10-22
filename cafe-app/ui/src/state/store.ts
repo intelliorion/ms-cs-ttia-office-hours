@@ -83,6 +83,9 @@ export interface AppState {
   state: any | null;
   graph: any | null;
   selectedId: string | null;
+  /** The stars a command-bar answer rests on, lit in the universe until cleared. */
+  highlight: string[] | null;
+  setHighlight: (ids: string[] | null) => void;
   hoverId: string | null;
   /** Show every label in the universe, not only ideas, teams, tools and entities. */
   labels: boolean;
@@ -130,7 +133,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, highlight: null, hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -169,6 +172,7 @@ export const useStore = create<AppState>((set) => ({
   backToList: () => set(backPatch()),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
+  setHighlight: (ids) => set({ highlight: ids?.length ? ids : null }),
   setSuggest: (x) => set({ suggest: x }),
 }));
 

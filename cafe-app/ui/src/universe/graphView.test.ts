@@ -94,4 +94,10 @@ describe('relatedGraph (Only related)', () => {
     relatedGraph(g, 'idea:A');
     expect(g.nodes.length).toBe(5);
   });
+  it('a lit set shows the links between lit stars and fades the rest; a selection wins over it', () => {
+    const lit = new Set(['a', 'b']);
+    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit)).toMatchObject({ opacity: 0.85, pulse: false });
+    expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit).opacity).toBe(0.03);
+    expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, 'c', lit)).toMatchObject({ opacity: 0.9, pulse: true });
+  });
 });

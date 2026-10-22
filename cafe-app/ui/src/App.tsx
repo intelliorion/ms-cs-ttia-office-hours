@@ -20,7 +20,7 @@ import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from '
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, highlight, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
     leftView, openIdea, backToList, onlyRelated, toggleOnlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
   const onSelect = select;
@@ -63,7 +63,7 @@ export default function App() {
     <>
       <Stage focus={focus}>
         {shown && (
-          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus}
+          <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} highlight={highlight} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
             quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}

@@ -32,7 +32,7 @@ function aliases(n: GNode, firstNames: Map<string, number>): string[] {
  * Swaps every star the text names for a code like [P1], longest name first, whole words only, and lists the codes
  * for the AI. A person is listed by type only: their name never leaves the app.
  */
-export function hideNames(text: string, nodes: GNode[]): { text: string; legend: LegendEntry[]; codes: Map<string, Coded> } {
+export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean } = {}): { text: string; legend: LegendEntry[]; codes: Map<string, Coded> } {
   const firstNames = new Map<string, number>();
   for (const n of nodes) if (n.type === 'Person') { const f = norm(n.label.split(/\s+/)[0]); firstNames.set(f, (firstNames.get(f) ?? 0) + 1); }
   const cands = nodes.flatMap((n) => aliases(n, firstNames).map((alias) => ({ n, alias })))
@@ -67,7 +67,7 @@ export function hideNames(text: string, nodes: GNode[]): { text: string; legend:
   let out = ''; let at = 0;
   for (const t of taken) { out += `${text.slice(at, t.start)}[${code(t.n)}]`; at = t.end; }
   out += text.slice(at);
-  for (const n of nodes) if (ALWAYS.includes(n.type)) code(n);
+  for (const n of nodes) if (opts.all || ALWAYS.includes(n.type)) code(n);
 
   const legend = [...codes].map(([c, v]) => (v.type === 'Person' ? { code: c, type: v.type } : { code: c, type: v.type, label: v.label }));
   return { text: out, legend, codes };
@@ -75,5 +75,11 @@ export function hideNames(text: string, nodes: GNode[]): { text: string; legend:
 
 /** The AI's words with the real names put back; an unknown code stays as written. */
 export function showNames(text: string, codes: Map<string, Coded>): string {
-  return text.replace(/\[([A-Z]\d+)\]|\b([A-Z]\d+)\b/g, (m, a?: string, b?: string) => codes.get((a ?? b)!)?.label ?? m);
+  let out = text.replace(/\[([A-Z]\d+)\]|\b([A-Z]\d+)\b/g, (m, a?: string, b?: string) => codes.get((a ?? b)!)?.label ?? m);
+  // The AI sometimes writes the code and the label side by side ("[I1] Travel bot", "[T1] (GSS)"): say the name once.
+  for (const { label } of codes.values()) {
+    const l = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`${l}\\s*(?:\\(\\s*${l}\\s*\\)|"${l}"|${l})(?![\\p{L}\\p{N}])`, 'gu'), label);
+  }
+  return out;
 }

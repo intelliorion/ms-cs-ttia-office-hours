@@ -78,6 +78,22 @@ describe('CommandBar', () => {
     act(() => m.root.unmount()); m.el.remove();
   });
 
+  it('a question: shows it was read as a question, lights its stars in the universe, and the chip clears them', async () => {
+    vi.mocked(chatSend).mockResolvedValue({ id: 'c3', at: '2026-10-22', text: 'highlight what is related to GSS', kind: 'question',
+      reply: 'Lit GSS and everything linked to it.', problems: [], actions: [], highlight: ['team:gss', 'entity:cs', 'person:kwame-mensah'] });
+    useStore.setState({ highlight: null });
+    const { el, root } = await mount();
+    const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
+    await act(async () => { input.focus(); type(input, 'highlight what is related to GSS'); });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(el.querySelector('.cmd-kind')?.textContent).toBe('A question');
+    expect(useStore.getState().highlight).toEqual(['team:gss', 'entity:cs', 'person:kwame-mensah']);
+    expect(el.querySelector('[data-action="command-clear-lit"]')?.textContent).toMatch(/3 stars lit/);
+    await act(async () => { (el.querySelector('[data-action="command-clear-lit"]') as HTMLButtonElement).click(); });
+    expect(useStore.getState().highlight).toBeNull();
+    act(() => root.unmount()); el.remove();
+  });
+
   it('the empty panel offers examples; a waiting action shows a badge when closed', async () => {
     const { el, root } = await mount();
     await act(async () => { (el.querySelector('[data-testid="command-input"]') as HTMLInputElement).focus(); });

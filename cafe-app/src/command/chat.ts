@@ -7,6 +7,12 @@ import { commandTask, COMMAND_MAX } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
 import { hideNames, showNames } from './names';
+import { STAGE_NAMES } from '../rules/stages';
+import { nodeId } from '../graph/ontology';
+
+/** Enough for a programme's universe; past this a question is answered from the first stars and links only. */
+const MAX_STARS = 1500;
+const MAX_LINKS = 4000;
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 
 export interface ChatAction {
@@ -17,6 +23,10 @@ export interface ChatAction {
 /** One command and what came of it. The operator's own words stay here, on this machine; the AI only saw them with names coded. */
 export interface ChatEntry {
   id: string; at: string; text: string; reply: string; provider?: string;
+  /** How the agent read the message: a change to make, a question to answer, or neither. */
+  kind?: 'command' | 'question' | 'unclear';
+  /** For a question: the stars the answer rests on, lit in the universe. */
+  highlight?: string[];
   actions: ChatAction[]; problems: string[]; error?: string;
 }
 
@@ -52,15 +62,47 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
   const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
-  const hidden = hideNames(command, graph.nodes);
+  // Every star gets a code, so a question can be answered from the whole universe; people stay codes only.
+  const hidden = hideNames(command, graph.nodes, { all: true });
+  const codeOf = new Map([...hidden.codes].map(([c, v]) => [v.id, c]));
+  const roundName = new Map(rounds.map((r) => [r.id, r.name]));
+  const input = {
+    command: hidden.text, stars: hidden.legend.slice(0, MAX_STARS),
+    links: graph.edges.slice(0, MAX_LINKS).flatMap((e) => (codeOf.has(e.from) && codeOf.has(e.to) ? [[codeOf.get(e.from)!, e.rel, codeOf.get(e.to)!] as [string, string, string]] : [])),
+    ideas: ideas.flatMap((i) => {
+      const code = codeOf.get(`idea:${i.id}`);
+      if (!code) return [];
+      // Roles live on the idea, not on the links: the submitter, then each team member with their role, people as codes.
+      const people = [
+        ...(i.people.submitter ? [{ name: i.people.submitter, role: 'submitter' }] : []),
+        ...i.people.team.map((p) => ({ name: p.name, role: p.role })),
+      ].flatMap((p) => { const pc = codeOf.get(nodeId('Person', p.name)); return pc ? [{ code: pc, role: p.role }] : []; });
+      return [{ code, stage: STAGE_NAMES[i.stage], function: i.function, region: i.region, round: roundName.get(i.round), people }];
+    }),
+  };
   const entry: ChatEntry = { id, at: clock(), text: command, reply: '', actions: [], problems: [] };
   try {
-    const { provider, output } = await ai.runWith(commandTask, { command: hidden.text, stars: hidden.legend });
-    const { proposals, problems } = resolveSteps(output.actions, { codes: hidden.codes, graph, ideas, rounds });
+    const { provider, output } = await ai.runWith(commandTask, input);
     entry.provider = provider;
+    entry.kind = output.kind;
     entry.reply = showNames(output.reply, hidden.codes);
-    entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
-    entry.problems = problems;
+    if (output.kind === 'command') {
+      const { proposals, problems } = resolveSteps(output.actions, { codes: hidden.codes, graph, ideas, rounds });
+      entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
+      entry.problems = problems;
+    } else if (output.kind === 'question') {
+      // A question never changes anything: any actions the AI sent with it are dropped. Only stars that exist are lit.
+      const ids = new Set(graph.nodes.map((n) => n.id));
+      const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
+      const lit = (output.highlight ?? []).map(idOf);
+      // "Related to X": X and every star linked to it, worked out here so the list is complete.
+      for (const centre of (output.around ?? []).map(idOf)) {
+        if (!centre) continue;
+        lit.push(centre);
+        for (const e of graph.edges) { if (e.from === centre) lit.push(e.to); else if (e.to === centre) lit.push(e.from); }
+      }
+      entry.highlight = [...new Set(lit.filter((x): x is string => !!x && ids.has(x)))];
+    }
   } catch (e) {
     entry.error = `The AI couldn't read that (${(e as Error).message}). Try again, or make the change by hand.`;
   }

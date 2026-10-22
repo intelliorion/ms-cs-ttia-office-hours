@@ -12,13 +12,16 @@ import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { saveDrop, getItem, updateItem, holdItem, deleteHeld, listItems, type InboxItem } from './store';
 import { readAndScreen, matchStep, understandStep, readDetail, exportRows, HOW_WORDS, TEXT_NOT_KEPT, type TriageRecord, type MatchStep } from './triage';
 import { matchIdea, displayName, ASK_BELOW } from './match';
-import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, type Action, type ActionRecord } from './actions';
+import { kindOf, labelOf, planActions, applyAction, undoAction, logUndo, fingerprint, type Action, type ActionRecord } from './actions';
 import { markStep, timed, skipRest, resetStepsFrom, stepOf, type Step, type StepId, type StepStatus } from './steps';
 import { checkProposals, type ConflictContext } from './conflicts';
 import { appendHistory, readHistory } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import { readDesign } from '../design/store';
-import { rebuildGraph } from '../graph/store';
+import { rebuildGraph, readAiLinks } from '../graph/store';
+import { extractTask } from '../ai/tasks';
+import { extractInput, planAiLinks } from '../ai/apply';
+import { loadIdea } from '../ideas/store';
 
 /** Route-level inbox operations. The server runs every one of these behind its POST lock. */
 
@@ -217,13 +220,31 @@ export async function processItem(
   const records = [...kept, ...fresh];
   await updateItem(root, id, { actions: [...records] });
   if (tr.ask) return save(root, triaged, records);
+  const graphBefore = isExport ? await rebuildGraph(root) : null;
   for (let i = kept.length; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, triaged, records, i, clock);
   // Everything applied on this item so far (a re-run keeps what an earlier run applied, and says so).
   const applied = records.filter((r) => r.status === 'applied');
   const ctxApplied = applied.filter((r) => r.action.t !== 'graph_links');
   const graphApplied = applied.filter((r) => r.action.t === 'graph_links');
   await markStep(root, id, { id: 'context', status: ctxApplied.length ? 'done' : 'skipped', detail: ctxApplied.length ? contextDetail(ctxApplied) : 'Nothing to update' });
-  await markStep(root, id, { id: 'graph', status: graphApplied.length ? 'done' : 'skipped', detail: graphApplied.length ? graphDetail(graphApplied) : 'No graph facts' });
+  // An export draws its stars from the form's columns (ideas, teams, people, support asked for): count those too.
+  const drawn = graphBefore ? graphDrawn(graphBefore, await rebuildGraph(root)) : null;
+  const graphLine = [drawn?.line, graphApplied.length ? graphDetail(graphApplied) : ''].filter(Boolean).join('; ');
+  await markStep(root, id, { id: 'graph', status: graphLine ? 'done' : 'skipped', detail: graphLine || 'No graph facts' });
+  const created = isExport ? createdIdeas(records) : [];
+  if (created.length && connector && (await connector.status()).provider) {
+    // The AI reads each new idea's challenge, process and outcomes in the background; the card shows it go.
+    await markStep(root, id, { id: 'understand', status: 'running', detail: `Reading the ${created.length} new idea${created.length === 1 ? '' : 's'}…` });
+    await markStep(root, id, { id: 'check', status: 'running', detail: 'Waiting for the AI to finish reading' });
+    const done = save(root, triaged, records);
+    const job = (async () => { await done; await readNewIdeas(root, id, created, connector, clock, drawn?.line ?? ''); })()
+      .catch(() => undefined).finally(() => ideaReads.delete(id));
+    ideaReads.set(id, job);
+    return done;
+  }
+  if (isExport && created.length) {
+    await markStep(root, id, { id: 'understand', status: 'skipped', detail: 'No AI connected: open an idea and use AI suggest links to read it' });
+  }
   const waiting = records.filter((r) => r.status === 'pending' && r.kind === 'ok');
   const w = waiting.length;
   await markStep(root, id, {
@@ -245,6 +266,95 @@ export async function processItem(
  * nothing else, unless that item never got past "new" (sorting was interrupted): then it is sorted now.
  * The answer is the item as the Import shows it (a preview, never the full text or the quoted thread).
  */
+/** Background reads of a form export's new ideas, by Import item id (tests and the server await or watch these). */
+export const ideaReads = new Map<string, Promise<void>>();
+
+/** The ids an applied form import created. */
+function createdIdeas(records: ActionRecord[]): string[] {
+  const r = records.find((x) => x.action.t === 'import_export' && x.status === 'applied');
+  const report = r?.result as { created?: { id: string }[] } | undefined;
+  return (report?.created ?? []).map((c) => c.id);
+}
+
+/** What an import added to the graph by itself: "28 stars and 42 links from the form". */
+function graphDrawn(before: { nodes: { id: string }[]; edges: { id: string }[] }, after: { nodes: { id: string }[]; edges: { id: string }[] }) {
+  const had = new Set(before.nodes.map((n) => n.id)); const hadE = new Set(before.edges.map((e) => e.id));
+  const stars = after.nodes.filter((n) => !had.has(n.id)).length; const links = after.edges.filter((e) => !hadE.has(e.id)).length;
+  if (!stars && !links) return null;
+  return { stars, links, line: `${stars} star${stars === 1 ? '' : 's'} and ${links} link${links === 1 ? '' : 's'} from the form` };
+}
+
+/**
+ * Step 5 for a form export: the AI reads each new idea's challenge, current process and outcomes, and its pain points,
+ * capabilities, tools and systems go into the universe confirmed, under the same conflict rules as any dropped file.
+ * One idea at a time; the card's steps say how far it has got. An idea the AI could not read is counted, not fatal.
+ */
+export async function readNewIdeas(root: string, id: string, ideaIds: string[], connector: Connector, clock: Clock, formLine = ''): Promise<void> {
+  const n = ideaIds.length; let read = 0; const failed: string[] = [];
+  for (const [k, ideaId] of ideaIds.entries()) {
+    const idea = await loadIdea(root, ideaId).catch(() => null);
+    if (!idea) { failed.push(ideaId); continue; }
+    await markStep(root, id, { id: 'understand', status: 'running', detail: `Reading ${k + 1} of ${n}: ${idea.title}` });
+    await markStep(root, id, { id: 'check', status: 'running', detail: 'Waiting for the AI to finish reading' });
+    try {
+      const before = await rebuildGraph(root);
+      const { provider, output } = await connector.runWith(extractTask, extractInput(idea, before.nodes));
+      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
+      if (planned.links.length) {
+        const item = await load(root, id);
+        const { ideas } = await listIdeas(root);
+        const ctx: ConflictContext = {
+          idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),
+          match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [],
+        };
+        const { apply, hold } = checkProposals(ctx, [{ t: 'graph_links', ideaId: idea.id, links: planned.links }]);
+        const records = [...recordsOf(item)];
+        let m = records.reduce((mx, r) => Math.max(mx, Number(r.id.slice(1)) || 0), 0);
+        const start = records.length;
+        for (const action of apply) records.push({ id: `a${++m}`, action, kind: kindOf(action), status: 'pending', label: labelOf(action) });
+        for (const h of hold) {
+          records.push({
+            id: `a${++m}`, action: h.action, kind: 'ok', status: 'pending', label: labelOf(h.action),
+            held: { rule: h.rule, why: h.why, ...(h.existing ? { existing: h.existing } : {}), ...(h.node ? { node: h.node } : {}) },
+          });
+        }
+        await updateItem(root, id, { actions: [...records] });
+        for (let i = start; i < records.length; i++) if (records[i].kind === 'safe') await applyOne(root, item, records, i, clock);
+      }
+      read++;
+    } catch {
+      failed.push(ideaId);
+    }
+    const sofar = recordsOf(await load(root, id)).filter((r) => r.status === 'applied' && r.action.t === 'graph_links');
+    await markStep(root, id, { id: 'graph', status: 'running', detail: [formLine, sofar.length ? graphDetail(sofar) : ''].filter(Boolean).join('; ') || 'Reading…' });
+  }
+  const item = await load(root, id);
+  const records = [...recordsOf(item)];
+  // The AI's links wrote a history line in each idea; the import's Undo compares fingerprints, so take them again now.
+  const imp = records.findIndex((r) => r.action.t === 'import_export' && r.status === 'applied' && r.inverse?.t === 'remove-ideas');
+  if (imp >= 0) {
+    const inv = records[imp].inverse as Extract<NonNullable<ActionRecord['inverse']>, { t: 'remove-ideas' }>;
+    const prints: Record<string, string> = { ...inv.prints };
+    for (const ideaId of inv.ids) { const dir = await ideaDir(root, ideaId).catch(() => undefined); if (dir) prints[ideaId] = await fingerprint(dir); }
+    records[imp] = { ...records[imp], inverse: { ...inv, prints } };
+    await updateItem(root, id, { actions: [...records] });
+  }
+  const ai = records.filter((r) => r.status === 'applied' && r.action.t === 'graph_links');
+  await markStep(root, id, {
+    id: 'understand', status: read ? 'done' : 'failed',
+    detail: read === n ? `Read all ${n} new idea${n === 1 ? '' : 's'}` : `Read ${read} of ${n} new ideas; the AI couldn't read ${failed.join(', ')} (use AI suggest links on ${failed.length === 1 ? 'it' : 'them'})`,
+  });
+  const graphLine = [formLine, ai.length ? graphDetail(ai) : ''].filter(Boolean).join('; ');
+  await markStep(root, id, { id: 'graph', status: graphLine ? 'done' : 'skipped', detail: graphLine || 'No graph facts' });
+  const waiting = records.filter((r) => r.status === 'pending' && r.kind === 'ok');
+  const w = waiting.length;
+  await markStep(root, id, {
+    id: 'check', status: w ? 'needs-you' : 'done',
+    detail: w ? `${w} item${w === 1 ? '' : 's'} wait${w === 1 ? 's' : ''}: ${waiting[0].held?.why ?? waitingWords(waiting[0].action)}` : 'Done',
+  });
+  await save(root, item, records);
+}
+
 export async function processDrop(
   root: string, name: string, data: Uint8Array | string, connector: Connector | null | undefined, clock: Clock,
 ): Promise<{ item: InboxItem & { preview?: string }; duplicate?: true }> {
@@ -332,6 +442,19 @@ export async function undoRecord(root: string, id: string, recordId: string, clo
   records[i] = await undoAction(root, item, recordId, clock);
   await updateItem(root, item.id, { actions: [...records] });
   await logUndo(root, { op: 'undo', item: item.id, record: recordId, t: records[i].action.t, inverse: records[i].inverse });
+  // Undoing a form import also takes back the AI's links on the ideas it removed (they would point at nothing).
+  if (records[i].action.t === 'import_export') {
+    for (let j = 0; j < records.length; j++) {
+      const r = records[j];
+      if (r.status !== 'applied' || r.action.t !== 'graph_links') continue;
+      if (await ideaDir(root, r.action.ideaId).then(() => true, () => false)) continue;
+      try {
+        records[j] = await undoAction(root, { ...item, actions: records }, r.id, clock);
+        await updateItem(root, item.id, { actions: [...records] });
+        await logUndo(root, { op: 'undo', item: item.id, record: r.id, t: r.action.t, inverse: records[j].inverse });
+      } catch { /* a link someone else also added stays */ }
+    }
+  }
   return save(root, item, records);
 }
 

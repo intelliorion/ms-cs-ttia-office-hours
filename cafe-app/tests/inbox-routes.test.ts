@@ -8,6 +8,7 @@ import { saveIdea, listIdeas } from '../src/ideas/store';
 import { normalizeIdea } from '../src/ideas/idea';
 import { createConnector, type Connector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
+import { ideaReads } from '../src/inbox/flow';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import type { Understanding } from '../src/ai/tasks';
 
@@ -23,7 +24,12 @@ async function server(connector?: Connector) {
   const s = await startServer('2026-10-20', { connector: connector ?? createConnector({ providers: [fakeProvider()], settings: DEFAULT_SETTINGS }) });
   close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
   const post = async (url: string, body: unknown = {}) => fetch(`${s.base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  const drop = async (name: string, bytes: Uint8Array | Buffer) => json(await fetch(`${s.base}/api/inbox/drop`, { method: 'POST', headers: { 'x-filename': name, 'content-type': 'application/octet-stream' }, body: bytes }));
+  // A form export goes on reading its new ideas in the background; the tests wait for that unless they say not to.
+  const drop = async (name: string, bytes: Uint8Array | Buffer, opts: { wait?: boolean } = {}) => {
+    const r = await json(await fetch(`${s.base}/api/inbox/drop`, { method: 'POST', headers: { 'x-filename': name, 'content-type': 'application/octet-stream' }, body: bytes }));
+    if (opts.wait !== false && r.item?.id) await ideaReads.get(r.item.id);
+    return r;
+  };
   const inbox = async () => json(await fetch(`${s.base}/api/inbox`));
   return { ...s, post, drop, inbox };
 }
@@ -48,6 +54,57 @@ async function sentE2(root: string, id: string, questions: string[]) {
 const ideaFolders = async (root: string) => (await readdir(path.join(root, 'ideas'))).sort();
 
 describe('/api/inbox: exports', () => {
+  it('a form export: the graph step counts what the form drew, then the AI reads every new idea into the universe', async () => {
+    const s = await server();
+    const { item } = await s.drop('export.csv', await readFile(FIXTURE), { wait: false });
+    const step = (it: any, k: string) => it.steps.find((x: any) => x.id === k);
+    // The import itself drew stars from the form's columns: never "No graph facts".
+    expect(step(item, 'graph').detail).toMatch(/\d+ stars? and \d+ links? from the form/);
+    expect(step(item, 'understand').status).toBe('running');
+    await ideaReads.get(item.id);
+    const after = (await s.inbox()).items.find((i: any) => i.id === item.id);
+    expect(step(after, 'understand')).toMatchObject({ status: 'done', detail: 'Read all 3 new ideas' });
+    const links = after.actions.filter((r: any) => r.action.t === 'graph_links');
+    expect(links.map((r: any) => r.action.ideaId).sort()).toEqual(['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']);
+    expect(links.every((r: any) => r.status === 'applied')).toBe(true);
+    expect(step(after, 'graph').detail).toMatch(/from the form; \d+ links? added/);
+    expect(step(after, 'check').status).toBe('done');
+    const graph = await json(await fetch(`${s.base}/api/graph`));
+    expect(graph.edges.some((e: any) => e.from === 'idea:CAFE-2026-001' && e.source.startsWith('ai:'))).toBe(true);
+
+    // Undo of the import still removes all three ideas, and takes the AI's links on them back too.
+    const imp = after.actions.find((r: any) => r.action.t === 'import_export');
+    const undone = await json(await s.post(`/api/inbox/${item.id}/undo`, { recordId: imp.id }));
+    expect(undone.item.actions.find((r: any) => r.id === imp.id).status).toBe('undone');
+    expect(await ideaFolders(s.root)).toEqual([]);
+    expect(undone.item.actions.filter((r: any) => r.action.t === 'graph_links').every((r: any) => r.status === 'undone')).toBe(true);
+    const empty = await json(await fetch(`${s.base}/api/graph`));
+    expect(empty.edges.filter((e: any) => e.source.startsWith('ai:'))).toEqual([]);
+  });
+
+  it('a form export with no AI: ideas imported, understand says how to read them by hand, nothing left running', async () => {
+    const s = await server(createConnector({ providers: [], settings: DEFAULT_SETTINGS }));
+    const { item } = await s.drop('export.csv', await readFile(FIXTURE));
+    expect(ideaReads.has(item.id)).toBe(false);
+    const u = item.steps.find((x: any) => x.id === 'understand');
+    expect(u.status).toBe('skipped');
+    expect(u.detail).toMatch(/AI suggest links/);
+    expect(item.steps.some((x: any) => x.status === 'running')).toBe(false);
+  });
+
+  it('a form export: an idea the AI cannot read is counted, the others still land', async () => {
+    let calls = 0;
+    const flaky: Provider = { ...fakeProvider(), complete: async (prompt, o) => (prompt.startsWith('TASK: extract') && ++calls === 2 ? 'not json' : fakeProvider().complete(prompt, o)) };
+    const s = await server(createConnector({ providers: [flaky], settings: DEFAULT_SETTINGS }));
+    const { item } = await s.drop('export.csv', await readFile(FIXTURE));
+    await ideaReads.get(item.id);
+    const after = (await s.inbox()).items.find((i: any) => i.id === item.id);
+    const u = after.steps.find((x: any) => x.id === 'understand');
+    expect(u.status).toBe('done');
+    expect(u.detail).toBe("Read 2 of 3 new ideas; the AI couldn't read CAFE-2026-002 (use AI suggest links on it)");
+    expect(after.actions.filter((r: any) => r.action.t === 'graph_links' && r.status === 'applied')).toHaveLength(2);
+  });
+
   it('dropping the sample export imports 3 ideas as Safe; Undo removes exactly those (Review Focus 5)', async () => {
     const s = await server();
     const { item } = await s.drop('export.csv', await readFile(FIXTURE));

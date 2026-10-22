@@ -35,9 +35,9 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit,
     return { pts, k };
   }, [graph.nodes, layout, BOX.w, BOX.h]);
   const deg = useMemo(() => degrees(graph), [graph]);
-  const litSet = !selectedId && highlight?.length ? new Set(highlight) : null;
-  const hood = selectedId ? neighbourhood(graph, selectedId) : litSet;
-  const dim = litSet && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
+  const litSet = highlight?.length ? new Set(highlight) : null;
+  const hood = litSet ?? (selectedId ? neighbourhood(graph, selectedId) : null);
+  const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
   const lit = (id: string) => !hood || hood.has(id);
   // Labels never overlap: place them in priority order, skip any that would collide.
   const shown = new Set<string>();
@@ -65,7 +65,7 @@ export function Flat2D({ graph, layout, selectedId, highlight = null, hideUnlit,
       <g>
         {graph.edges.map((e) => {
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
-          const s = edgeStyle(e, selectedId, litSet, dim);
+          const s = edgeStyle(e, litSet ? null : selectedId, litSet, dim);
           return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR} strokeOpacity={s.pulse ? 0.9 : s.opacity * 1.6} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>

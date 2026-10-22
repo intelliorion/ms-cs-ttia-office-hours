@@ -32,20 +32,6 @@ export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<stri
   return out;
 }
 
-/**
- * The graph cut down to one node's neighbourhood (one hop: the node and everything linked to it) with only the links
- * among them. Positions are kept, so "Only related" removes the rest of the universe without moving a star.
- */
-export function relatedGraph(graph: Graph, id: string): Graph {
-  const keep = neighbourhood(graph, id);
-  const layout = graph.layout ? Object.fromEntries(Object.entries(graph.layout).filter(([k]) => keep.has(k))) : undefined;
-  return {
-    ...graph,
-    nodes: graph.nodes.filter((n) => keep.has(n.id)),
-    edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
-    ...(layout ? { layout } : {}),
-  };
-}
 
 export function degrees(graph: Pick<Graph, 'edges'>): Map<string, number> {
   const d = new Map<string, number>();
@@ -75,7 +61,7 @@ export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, select
   const dashed = !edge.confirmed;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
-    return { opacity: touches ? 0.9 : 0.04, dashed, pulse: touches };
+    return { opacity: touches ? 0.9 : dim / 3, dashed, pulse: touches };
   }
   // The rest fade with the stars: at the default dim a faint 0.03, gone entirely when the rest are hidden.
   if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? 0.85 : 0.25 * dim, dashed, pulse: false };

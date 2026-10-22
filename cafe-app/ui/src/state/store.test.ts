@@ -118,7 +118,7 @@ describe('left panel view', () => {
     const mem: Record<string, string> = {};
     vi.stubGlobal('localStorage', { getItem: (k: string) => mem[k] ?? null, setItem: (k: string, v: string) => { mem[k] = v; } });
     const { useStore, backPatch } = await import('./store');
-    expect(backPatch()).toEqual({ leftView: { kind: 'list' }, notice: null, suggest: null, onlyRelated: false });
+    expect(backPatch()).toEqual({ leftView: { kind: 'list' }, notice: null, suggest: null });
     useStore.setState({ focus: true, popout: { kind: 'inbox' } });
     useStore.getState().openIdea('CAFE-2026-003');
     expect(useStore.getState()).toMatchObject({ leftView: { kind: 'idea', id: 'CAFE-2026-003' }, selectedId: 'idea:CAFE-2026-003', focus: false, popout: null });
@@ -148,15 +148,6 @@ describe('quality', () => {
     const { nextQuality, qualityLabel } = await import('./store');
     expect([nextQuality('full'), nextQuality('lite'), nextQuality('flat')]).toEqual(['lite', 'flat', 'full']);
     expect(['full', 'lite', 'flat'].map((q) => qualityLabel(q as any))).toEqual(['Quality: Full', 'Quality: Lite', 'Quality: Flat']);
-  });
-  it('Only related flips and re-frames; Back switches it off', async () => {
-    const { useStore } = await import('./store');
-    useStore.setState({ onlyRelated: false });
-    const n = useStore.getState().viewNonce;
-    useStore.getState().toggleOnlyRelated();
-    expect(useStore.getState()).toMatchObject({ onlyRelated: true, viewNonce: n + 1 });
-    useStore.getState().backToList();
-    expect(useStore.getState().onlyRelated).toBe(false);
   });
   it('reads and writes the per-browser quality, ignoring junk and broken storage', async () => {
     const { readQuality, writeQuality, readQualityByHand } = await import('./store');
@@ -205,5 +196,19 @@ describe('quality', () => {
     useStore.getState().cycleQuality();
     expect([useStore.getState().quality, localStorage.getItem('cafe-quality'), localStorage.getItem('cafe-quality-by-hand')]).toEqual(['lite', 'lite', '1']);
     localStorage.clear();
+  });
+});
+
+describe('clicking a star', () => {
+  it('an idea opens at once (no card); any other star shows with the list on the left; a lit answer ends; empty space only deselects', async () => {
+    const { useStore } = await import('./store');
+    useStore.setState({ leftView: { kind: 'list' }, selectedId: null, highlight: ['team:gss'], focus: false } as any);
+    useStore.getState().clickStar('idea:CAFE-2026-001');
+    expect(useStore.getState()).toMatchObject({ leftView: { kind: 'idea', id: 'CAFE-2026-001' }, selectedId: 'idea:CAFE-2026-001', highlight: null });
+    useStore.getState().clickStar('capability:x');
+    expect(useStore.getState()).toMatchObject({ leftView: { kind: 'list' }, selectedId: 'capability:x' });
+    useStore.setState({ highlight: ['a'] });
+    useStore.getState().clickStar(null);
+    expect(useStore.getState()).toMatchObject({ selectedId: null, highlight: ['a'] });
   });
 });

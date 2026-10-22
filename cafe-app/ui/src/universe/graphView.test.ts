@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, relatedGraph, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
+import { neighbourhood, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -69,32 +69,8 @@ describe('labelSpotVisible', () => {
   });
 });
 
-describe('relatedGraph (Only related)', () => {
-  const n = (id: string, type: any = 'Capability') => ({ id, type, label: id } as any);
-  const e = (from: string, to: string) => ({ id: `${from}>${to}`, from, to, rel: 'NEEDS', confirmed: true } as any);
-  const g = {
-    nodes: [n('idea:A', 'Idea'), n('cap:1'), n('tool:x', 'Tool'), n('idea:B', 'Idea'), n('cap:far')],
-    edges: [e('idea:A', 'cap:1'), e('tool:x', 'idea:A'), e('cap:1', 'tool:x'), e('idea:B', 'cap:1'), e('idea:B', 'cap:far')],
-    layout: { 'idea:A': [0, 0, 0], 'cap:1': [1, 0, 0], 'tool:x': [0, 1, 0], 'idea:B': [5, 5, 5], 'cap:far': [9, 9, 9] } as any,
-  };
-  it('keeps the node, its one-hop neighbours and only the links among them', () => {
-    const r = relatedGraph(g, 'idea:A');
-    expect(r.nodes.map((x) => x.id).sort()).toEqual(['cap:1', 'idea:A', 'tool:x']);
-    expect(r.edges.map((x) => x.id).sort()).toEqual(['cap:1>tool:x', 'idea:A>cap:1', 'tool:x>idea:A']);
-  });
-  it('keeps positions and drops the rest of the layout', () => {
-    const r = relatedGraph(g, 'idea:A');
-    expect(Object.keys(r.layout!).sort()).toEqual(['cap:1', 'idea:A', 'tool:x']);
-    expect(r.layout!['cap:1']).toEqual([1, 0, 0]);
-  });
-  it('an unknown node leaves just that id, with no stars', () => {
-    expect(relatedGraph(g, 'idea:none').nodes).toEqual([]);
-  });
-  it('does not touch the graph it was given', () => {
-    relatedGraph(g, 'idea:A');
-    expect(g.nodes.length).toBe(5);
-  });
-  it('a lit set shows the links between lit stars and fades the rest; a selection wins over it', () => {
+describe('edge styles for what is in view', () => {
+  it('a lit set shows the links between lit stars and fades the rest; a selection pulses its own links (the universe passes no selection while stars are lit)', () => {
     const lit = new Set(['a', 'b']);
     expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit)).toMatchObject({ opacity: 0.85, pulse: false });
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit).opacity).toBe(0.03);

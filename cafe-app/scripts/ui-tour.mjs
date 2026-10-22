@@ -97,12 +97,11 @@ async function popoutShots(p) {
   await sleep(3500);
   await p.mouse.move(960, 1060);
   await shot(p, '30-panel-idea.png');
-  // "Only related": the universe keeps just this idea and what it links to (one hop); Show all brings the rest back.
-  await p.click('[data-action="only-related"]');
+  // The focus bar: slide "Hide the rest" to 100% and only this idea and what it links to show (it replaced Only related).
+  await p.$eval('[data-testid="highlight-hide"]', (el) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '100'); el.dispatchEvent(new Event('input', { bubbles: true })); });
   await sleep(3000);
   await shot(p, '34-only-related.png');
-  assert((await p.textContent('[data-action="only-related"]')) === 'Show all', 'the Only related pill did not flip');
-  await p.click('[data-action="only-related"]');
+  await p.$eval('[data-testid="highlight-hide"]', (el) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '88'); el.dispatchEvent(new Event('input', { bubbles: true })); });
   await sleep(1500);
   // A CSIC decision through the panel (the idea is at stage 2, so the Decision form is the one action section):
   // tick two checks, pick the decision, give a reason, save.
@@ -122,15 +121,11 @@ async function popoutShots(p) {
   assert((await p.evaluate(() => document.querySelector('.idea-list li.sel')?.textContent ?? '')).includes('2026-002'), 'Back lost the selection');
   await sleep(800);
   await shot(p, '31-panel-back.png');
-  // Esc closes the star card that the kept selection shows; then select the star again and open it from its card.
+  // Esc lets go of the kept selection; then a click on the idea's star opens it at once (no card in between).
   await p.keyboard.press('Escape');
-  await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
-  await p.waitForSelector('[data-testid="ideacard"]');
-  await sleep(1500);
-  await p.click('[data-testid="ideacard"] [data-action="open-idea"]');
+  await p.evaluate(() => window.__cafe.click('idea:CAFE-2026-002'));
   await p.waitForSelector(DETAILS);
-  assert((await p.locator('[role="dialog"]').count()) === 0, 'Open idea opened a dialog');
-  assert((await p.locator('[data-testid="ideacard"]').count()) === 0, 'the card stayed over the details');
+  assert((await p.locator('[role="dialog"]').count()) === 0, 'opening the idea opened a dialog');
   await sleep(2500);
   await shot(p, '32-card-open.png');
   // The lower sections (Graph links, Details, History) in the same column.
@@ -552,7 +547,7 @@ async function designShots(p) {
   await shot(p, '46-stage1.png');
 }
 
-// Selecting an idea star shows its card, not the pop-out; "Open idea" opens the pop-out. Also a real pointer click.
+// A real pointer click on an idea star opens the idea in the panels, with no card in between.
 async function ideaCardShots(p) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`ideacard: ${msg}`); };
   // Real pointer click on the star: the label wrapper's translate3d marks it; click 20px to its left.
@@ -573,24 +568,11 @@ async function ideaCardShots(p) {
   console.log('  pointer click at', Math.round(x), Math.round(spot.y));
   await p.mouse.click(x, spot.y);
   await sleep(1500);
-  const pointerCard = await p.locator('[data-testid="ideacard"]').count();
+  // A real click on an idea's star opens the idea at once: no card, no dialog.
+  await p.waitForSelector('[data-testid="idea-details"]', { timeout: 5000 });
   const pointerDialog = await p.locator('[role="dialog"]').count();
-  console.log(`  pointer click: card=${pointerCard} dialog=${pointerDialog}`);
+  console.log(`  pointer click: details open, dialog=${pointerDialog}`);
   assert(pointerDialog === 0, 'a star click opened a dialog');
-  assert(pointerCard === 1, 'a star click did not show the idea card');
-  await p.keyboard.press('Escape');
-  await sleep(300);
-  assert((await p.locator('[data-testid="ideacard"]').count()) === 0, 'Esc did not close the card');
-  await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
-  await sleep(1500);
-  await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
-  await p.waitForSelector('[data-testid="ideacard"]');
-  await sleep(3500);
-  assert((await p.locator('[role="dialog"]').count()) === 0, 'selecting opened a dialog');
-  await shot(p, '20-idea-card.png');
-  await p.click('[data-testid="ideacard"] [data-action="open-idea"]');
-  await p.waitForSelector('[data-testid="idea-details"]');
-  assert((await p.locator('[role="dialog"]').count()) === 0, 'Open idea opened a dialog');
   await sleep(2500);
   await shot(p, '21-idea-card-open.png');
   await p.click('[data-testid="idea-details"] [data-action="back"]');

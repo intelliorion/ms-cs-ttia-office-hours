@@ -73,7 +73,7 @@ export function openIdeaPatch(id: string, narrow: boolean) {
   return { leftView: { kind: 'idea', id } as LeftView, selectedId: `idea:${id}`, popout: null, focus: false, drawer: (narrow ? 'ideas' : null) as Drawer };
 }
 /** Back to the list: the selection and the camera stay; the idea's notice and suggestion go. */
-export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null, onlyRelated: false }; }
+export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null }; }
 export type EscAction = 'none' | 'blur' | 'back' | 'drawer' | 'deselect';
 /** What Esc does, in order: a modal handles its own; a text field lets go; idea details go back; a drawer closes; a star card closes. */
 export function escAction(s: { modal: boolean; leftView: LeftView; detailsVisible: boolean; drawer: Drawer; card: boolean; target?: any }): EscAction {
@@ -103,8 +103,6 @@ export interface AppState {
   /** Bumped by Reset view; the universe flies home when it changes. */
   viewNonce: number;
   /** Only the open idea's one-hop neighbourhood is drawn; off again on Back. */
-  onlyRelated: boolean;
-  toggleOnlyRelated: () => void;
   /** Focus mode: only the universe (and the title bar) show. */
   focus: boolean;
   toggleFocus: () => void;
@@ -121,6 +119,8 @@ export interface AppState {
   leftView: LeftView;
   /** Show an idea's details in the left panel (and select its star). */
   openIdea: (id: string) => void;
+  /** A click on a star: an idea opens; any other star shows on the right with the list on the left; a lit answer ends. */
+  clickStar: (id: string | null) => void;
   backToList: () => void;
   notice: Notice | null;
   suggest: Suggest | null;
@@ -144,7 +144,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, onlyRelated: false, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, highlight: null, hideUnlit: readHideUnlit(), hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -164,7 +164,6 @@ export const useStore = create<AppState>((set) => ({
   hover: (id) => set({ hoverId: id }),
   toggleLabels: () => set((s) => ({ labels: !s.labels })),
   resetView: () => set((s) => ({ selectedId: null, viewNonce: s.viewNonce + 1 })),
-  toggleOnlyRelated: () => set((s) => ({ onlyRelated: !s.onlyRelated, viewNonce: s.viewNonce + 1 })),
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: null, viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
   cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),
@@ -181,6 +180,11 @@ export const useStore = create<AppState>((set) => ({
   openPopout: (p) => set({ popout: p, drawer: null }),
   openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return openIdeaPatch(id, isNarrow()); }),
   backToList: () => set(backPatch()),
+  clickStar: (id) => set((s) => {
+    if (!id) return { selectedId: null };
+    if (id.startsWith('idea:')) { if (s.focus) writeFocus(false); return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null }; }
+    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, highlight: null };
+  }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
   setHighlight: (ids) => set({ highlight: ids?.length ? ids : null }),

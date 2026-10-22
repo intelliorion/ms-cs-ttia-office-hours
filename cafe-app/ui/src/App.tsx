@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
 import { RightPanels } from './panels/ContextPanels';
 import { Assistant } from './layout/Assistant';
-import { HighlightBar } from './layout/HighlightBar';
+import { FocusBar } from './layout/FocusBar';
 import { useChat } from './state/chat';
 import { Welcome } from './layout/Welcome';
 import { Drawers } from './layout/Drawers';
-import { relatedGraph } from './universe/graphView';
 import { useStore } from './state/store';
 import { IdeasPane } from './panels/IdeasPane';
 import { Universe } from './universe/Universe';
@@ -17,22 +16,20 @@ import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
-import { NodeCard } from './popouts/NodeCard';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
-    leftView, openIdea, backToList, onlyRelated, toggleOnlyRelated, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
-  // Any star, an idea included, is only selected; its card offers "Open idea", which shows the idea in the left panel.
-  const onSelect = select;
-  // No card for the idea whose details are already showing in the panel.
+    leftView, openIdea, backToList, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
+  // A click shows what was clicked, with no card in between (see clickStar).
+  const onSelect = clickStar;
   const chatOpen = useChat((c) => c.open);
   const showingDetails = leftView.kind === 'idea' && selectedId === `idea:${leftView.id}`;
+  // A star selected without its idea open: Esc deselects it.
   const cardFor = selectedId && !popout && !showingDetails && graph?.nodes.some((n: any) => n.id === selectedId) ? selectedId : null;
-  // "Only related" in the idea panel: the universe gets the one-hop neighbourhood instead of the whole graph.
-  const shown = useMemo(() => (graph && onlyRelated && leftView.kind === 'idea' ? relatedGraph(graph, `idea:${leftView.id}`) : graph), [graph, onlyRelated, leftView]);
+  const shown = graph;
   useEffect(() => { void refresh(); }, [refresh]);
   // Lite drops the panels' backdrop blur too (theme.css), so the quality is on the root element.
   useEffect(() => { document.documentElement.dataset.quality = quality; }, [quality]);
@@ -74,8 +71,6 @@ export default function App() {
         <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
-        {/* Any other star's links show in the right panels; an idea's star keeps its small card with Open idea. */}
-        {cardFor?.startsWith('idea:') && <NodeCard nodeId={cardFor} />}
         {!focus && <>
         <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 'calc(var(--sh) - 112px)' }}>
           <IdeasPane />
@@ -83,17 +78,12 @@ export default function App() {
         {/* The assistant docks in the right column while open; the context panels come back when it closes. */}
         {!chatOpen && <RightPanels />}
         </>}
-        <HighlightBar />
+        <FocusBar />
         <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
           <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
           <button className="pill" data-action="quality" data-quality={quality} title="Cycle Full → Lite → Flat" onClick={cycleQuality}>{qualityLabel(quality)}</button>
-          {leftView.kind === 'idea' && (
-            <button className={`pill${onlyRelated ? ' on' : ''}`} data-action="only-related" aria-pressed={onlyRelated}
-              title={onlyRelated ? 'Show the whole universe again' : 'Show only this idea and what it links to'} onClick={toggleOnlyRelated}>
-              {onlyRelated ? 'Show all' : 'Only related'}</button>
-          )}
         </div>
         <Assistant />
         {popout?.kind === 'import' && <ImportPopout />}

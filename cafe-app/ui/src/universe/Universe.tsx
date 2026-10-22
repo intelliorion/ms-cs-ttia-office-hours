@@ -112,9 +112,10 @@ function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId
   const nodes = useMemo(() => graph.nodes.filter((n) => pos.has(n.id)), [graph.nodes, pos]);
   const deg = useMemo(() => degrees(graph), [graph]);
   const lit = useMemo(() => (highlight?.length ? new Set(highlight) : null), [highlight]);
-  const hood = useMemo(() => (selectedId ? neighbourhood(graph, selectedId) : lit), [graph, selectedId, lit]);
-  // The slider applies to a highlight only; a selected star keeps the usual dim.
-  const dim = lit && !selectedId && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
+  // What is in view: an answer's lit stars win (they are the newest thing asked for), else the selected star and its links.
+  const hood = useMemo(() => lit ?? (selectedId ? neighbourhood(graph, selectedId) : null), [graph, selectedId, lit]);
+  // The bottom bar's slider sets how much of the rest is hidden, for either.
+  const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
 
   const spin = useRef<Group>(null);
   const lastDown = useRef(-Infinity);
@@ -172,7 +173,7 @@ function Scene({ graph, layout, selectedId, highlight = null, hideUnlit, hoverId
       <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
       <ambientLight intensity={0.2} />
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={selectedId} lit={selectedId ? null : lit} dim={dim} lite={lite} />
+        <Links edges={graph.edges} pos={pos} selectedId={lit ? null : selectedId} lit={lit} dim={dim} lite={lite} />
         <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls

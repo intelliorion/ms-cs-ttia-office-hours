@@ -25,7 +25,18 @@ export interface ExtractOutput {
   nodes: { type: NodeType; label: string }[];
   links: { from: string; to: string; rel: Relation; description: string; confidence: number }[];
 }
-export interface ReviewSuggestInput { idea: IdeaText }
+export interface ReviewSuggestInput {
+  idea: IdeaText;
+  /** The rest of the form: what help is asked, how far along it is, whether they tried AI already, function and region. */
+  form?: { support?: string[]; maturity?: string; use_case_category?: string[]; experimented?: string; participation?: string; function?: string; region?: string; stage?: string };
+  /** The team's answers to our questions, from their emails (names coded). */
+  answers?: { question: string; answer: string }[];
+  /** What has happened since the form: a builder named, a reply received, attendance confirmed. */
+  progress?: { builderNamed: boolean; replyReceived: boolean; attendanceConfirmed: boolean };
+  flags?: string[];
+  /** What the knowledge graph holds for the idea: its pain points, capabilities and systems, and how many other ideas need each. */
+  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+}
 export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string }
 
 const asObj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
@@ -125,12 +136,15 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
   prompt(input) {
     const { idea } = input as ReviewSuggestInput;
     return build('review-suggest', [
-      'Suggest a review of this idea for the operator, who decides. Tick each criterion true only if the submission supports it:',
+      'Suggest a review of this idea for the operator, who decides. Read all of DATA: the form (idea and form), the team\'s answers to our questions',
+      'from their emails (answers), what has happened since (progress), flags, and what the knowledge graph holds for it (graph: its pain points,',
+      'capabilities and systems, and how many other ideas need each, which bears on reuse). Later information outranks the form: an answer that',
+      'names a builder, the data or a live system changes the criteria. Tick each criterion true only if DATA supports it:',
       ...CRITERIA.map((c) => `- ${c.id}: ${c.text}`),
       'Suggest one decision:',
       ...Object.entries(DECISION_LABELS).map(([id, label]) => `- ${id}: ${label}`),
       'Give a plain-English reason of at most 300 characters. Do not estimate value or return on investment.',
-    ], REVIEW_SCHEMA, { idea: ideaData(idea) });
+    ], REVIEW_SCHEMA, { ...(input as ReviewSuggestInput), idea: ideaData(idea) });
   },
   parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => { const o = asObj(v); if (o) o.reason = trimStrings(o.reason, 300); }),
 };
@@ -304,6 +318,7 @@ export const understandTask: Task<Understanding> = {
       'ideaId: the Café ID it belongs to, only from "idea" or "candidates", or null. matchConfidence: 0 to 1, how sure you are. Be honest; lower it if unsure.',
       'kind: reply (an answer to our email), submission (a new idea), transcript (a meeting), update (news on an idea), other.',
       'facts.answers: for each question in "openQuestions" that the sender answered in item.text, the question and their answer in at most 300 characters. Leave out questions they did not answer.',
+      `When "openQuestions" is empty but item.${QUOTED_LABEL} asks numbered or plain questions and item.text answers them, give those questions (word for word from the quoted email) with the sender's answers.`,
       'facts.replyReceived: true only if this is the reply we are waiting for. facts.builderNamed: the person the sender says will build it, or null. facts.attendanceConfirmed: true only if they confirm they can attend every session.',
       'facts.newFlags: at most 3 short concerns (at most 80 characters each), such as "Needs client data". facts.stageHint: only if the text clearly says so, else null.',
       '"peoplePresent" lists the people in the To or Cc lines or speaking in a meeting. They are context only, never graph nodes.',
@@ -744,7 +759,8 @@ export const agentTask: Task<AgentOutput> = {
       'Choose next:',
       '- search: run query (a knowledge-graph query, below) and see what it finds. Search before you answer any question about the programme;',
       '  if a search finds nothing, try another way (a looser match, another type) before saying the graph does not hold it.',
-      '- read_idea: read the text of idea (its code): title, challenge, current process, outcomes, business impact, beneficiaries, additional context.',
+      '- read_idea: read the text of idea (its code): title, challenge, current process, outcomes, business impact, beneficiaries, additional context,',
+      '  and the team\'s answers to our questions from their emails.',
       '  Use it for questions about what an idea says, or to check before proposing a change about it.',
       '- answer: the message is a question and you can answer it from what the steps found. reply: up to 5 short sentences, numbers exactly as found,',
       '  no stars or facts the steps did not return. followups: up to 3 short questions the operator might ask next, as they would type them.',

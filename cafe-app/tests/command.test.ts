@@ -155,6 +155,7 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
     const entry = await runCommand(root, 'what does the desk booking idea say?', ai, clock);
     expect(entry.steps).toEqual([{ kind: 'read', text: 'Reading Desk booking assistant' }]);
     const second = JSON.parse(prompts[1].slice(prompts[1].indexOf('<<<DATA') + 7, prompts[1].indexOf('DATA>>>')));
+    expect(second.steps[0].result.answers).toEqual([]);
     expect(second.steps[0].result.challenge).toMatch(/^\[P\d+\] says staff email the desk team every morning\.$/);
     expect(prompts.join('\n')).not.toMatch(NAMES);
   });

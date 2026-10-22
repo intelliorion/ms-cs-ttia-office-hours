@@ -6,7 +6,7 @@ import { listRounds } from '../round/store';
 import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentStepDone } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
-import type { GNode } from '../graph/ontology';
+import { nodeId, type GNode } from '../graph/ontology';
 import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
 import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
@@ -118,13 +118,18 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const graph = await rebuildGraph(root);
   const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
+  // Names to code: every star, plus people the ideas' records name who are not stars yet (a builder named in an email).
+  const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
+  const extraPeople: GNode[] = [...new Set(ideas.flatMap((i) => [i.people.submitter, (i.people as { builder?: string }).builder, ...i.people.team.map((p) => p.name)]))]
+    .filter((x): x is string => !!x?.trim() && !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person', label }));
+  const codable = [...graph.nodes, ...extraPeople];
 
   // @mentions name a star exactly: each "@Label" becomes that star's code, whatever else the text matches.
   const mentioned = [...new Set(opts.mentions ?? [])].map((m) => nodes.get(m)).filter((n): n is GNode => !!n);
   let pre = message;
   mentioned.forEach((n, i) => { pre = pre.split(`@${n.label}`).join(`\u0000${i}\u0000`); });
   // The conversation's codes carry forward, so a star keeps its code from message to message.
-  const hidden = hideNames(pre, graph.nodes, { seed: new Map(thread.codes) });
+  const hidden = hideNames(pre, codable, { seed: new Map(thread.codes) });
   const legendOf = (n: GNode): LegendEntry => {
     const code = codeFor(hidden.codes, n);
     return n.type === 'Person' ? { code, type: n.type } : { code, type: n.type, label: n.label };
@@ -143,7 +148,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const coded = (s: unknown) => {
     const t = String(s ?? '');
     if (!t) return t;
-    const h = hideNames(t, graph.nodes, { seed: hidden.codes });
+    const h = hideNames(t, codable, { seed: hidden.codes });
     for (const [c, v] of h.codes) if (!hidden.codes.has(c)) hidden.codes.set(c, v);
     return h.text;
   };
@@ -204,6 +209,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
           result: {
             idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), title: idea.title, challenge: coded(idea.challenge), current_process: coded(idea.current_process),
             outcomes: idea.outcomes, business_impact: coded(idea.business_impact), beneficiaries: idea.beneficiaries, additional_context: coded(idea.additional_context),
+            answers: ((idea as { answers?: { question: string; answer: string }[] }).answers ?? []).slice(-20).map((a) => ({ question: a.question, answer: coded(a.answer) })),
           },
         });
       } else {

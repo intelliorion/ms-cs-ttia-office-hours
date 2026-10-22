@@ -5,7 +5,8 @@ export interface AiStatus {
   choices?: { id: string; label: string; available: boolean; note?: string }[];
 }
 export interface ReviewForm { criteria: Record<string, boolean>; decision: string; reason: string }
-export interface ReviewSuggestion { criteria: Record<string, boolean>; decision: string; reason: string; provider?: string }
+/** A suggested decision; `basis` is the app's own line on what it was based on (the form, email answers, a builder…). */
+export interface ReviewSuggestion { criteria: Record<string, boolean>; decision: string; reason: string; provider?: string; basis?: string }
 
 export const NO_AI_TIP = 'No AI connected: working by hand';
 const NAMES: Record<string, string> = { claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', fake: 'Fake (test)' };

@@ -27,6 +27,8 @@ import {
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { growIdea } from '../ai/grow';
+import { reviewInput } from '../review/suggestInput';
+import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
@@ -152,9 +154,11 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   })());
   add('POST', '/api/ai/extract', async ({ body }) => byHand(() => growIdea(root, ai, String(body.id)))());
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(async () => {
-    const idea = await loadIdea(root, String(body.id));
-    const { provider, output } = await ai.runWith(reviewSuggestTask, { idea: extractInput(idea, []).idea });
-    return { ...output, provider };
+    // Everything the idea now holds, not only the form: email answers, a builder, a reply, flags and its graph links.
+    const { input, basis, codes } = await reviewInput(root, String(body.id));
+    const { provider, output } = await ai.runWith(reviewSuggestTask, input);
+    // The AI wrote people as codes: put the names back for the operator.
+    return { ...output, reason: showNames(output.reason, codes), provider, basis };
   })());
   // Design series: the tool picker. The AI only suggests; the operator's save is what counts.
   add('GET', '/api/ideas/:id/design', async ({ params }) => {

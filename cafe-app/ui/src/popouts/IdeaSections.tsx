@@ -245,7 +245,7 @@ export function Review({ idea, state, busy, onSave, aiReview, aiName, onClearAi,
           ))}
         </ul>
       </details>
-      {suggested && <div className="sg-by" data-testid="ai-review-by">Suggested by {aiName}. Check it, change what you like, then save.</div>}
+      {suggested && <div className="sg-by" data-testid="ai-review-by">Suggested by {aiName}{aiReview?.basis ? `. ${aiReview.basis}` : ''}. Check it, change what you like, then save.</div>}
       <div className="rv-foot">
         <span className="hint">{decision ? SAVE_HINTS[decision] ?? '' : 'Pick a decision and give a reason.'}</span>
         <button className="btn primary" data-action="save-review" disabled={off || !decision || !reason.trim()}

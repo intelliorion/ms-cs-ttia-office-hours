@@ -44,7 +44,7 @@ export const loadTemplates = (root: string) => loadTemplatesFrom(paths(root).tem
 
 export interface RenderContext {
   idea?: Idea;
-  round?: Round;
+  round?: Partial<Round>;
   settings?: Settings;
 }
 

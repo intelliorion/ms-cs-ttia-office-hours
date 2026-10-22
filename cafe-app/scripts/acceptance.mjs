@@ -200,11 +200,21 @@ async function main() {
   print();
 }
 
+/** The operator makes a round and sets its dates; ideas join it with intoRound once they exist. */
+async function newRound() {
+  const round = await api('POST', '/api/rounds', { name: '' });
+  await api('POST', `/api/rounds/${round.id}`, { reviewBy: '2026-11-13', deadline: '2026-10-30' });
+}
+async function intoRound() {
+  const ideaIds = (await state()).ideas.filter((i) => !i.round).map((i) => i.id);
+  if (ideaIds.length) await api('POST', '/api/rounds/ROUND-001/ideas', { ideaIds });
+}
+
 async function run() {
   const status = await api('GET', '/api/ai/status');
   console.log(`AI: ${status.label}`);
   check('(setup)', REAL ? 'a real provider answers' : 'fake provider', status.label, REAL ? status.provider && status.provider !== 'fake' : status.provider === 'fake');
-  await api('POST', '/api/round', { reviewBy: '2026-11-13', deadline: '2026-10-30' });
+  await newRound();
   await api('POST', '/api/settings', { operatorName: 'Café operator', formLink: 'https://forms.example.com/cafe' });
 
   // 01 xlsx: 7 ideas, row 7 rejected.
@@ -216,6 +226,7 @@ async function run() {
     `${ideas.length} ideas, errors ${(imp?.result?.errors ?? []).map((e) => `row ${e.row}: ${e.message}`).join(',')}, ${d.aiCalls} AI`,
     imp?.status === 'applied' && ideas.length === 7 && imp.result.errors.length === 1 && imp.result.errors[0].row === 8
       && /title/i.test(imp.result.errors[0].message) && d.aiCalls === 0);
+  await intoRound();
 
   d = await drop('01-submissions.csv');
   imp = acts(d.item).find((r) => r.action.t === 'import_export');
@@ -436,9 +447,10 @@ async function agenticPass(clock) {
   const stepsOf = (item) => Object.fromEntries((item.steps ?? []).map((s) => [s.id, s]));
   const stepLine = (item) => (item.steps ?? []).map((s) => `${s.id}:${s.status}`).join(' ');
   try {
-    await api('POST', '/api/round', { reviewBy: '2026-11-13', deadline: '2026-10-30' });
+    await newRound();
     await api('POST', '/api/settings', { operatorName: 'Café operator', formLink: 'https://forms.example.com/cafe' });
     await drop('01-submissions.xlsx');
+    await intoRound();
     // The E2 the kit's reply answers, as in the main pass.
     const e2 = await api('POST', '/api/ideas/CAFE-2026-002/draft', { template: 'E2' });
     await api('POST', '/api/outbox/update', { key: e2.key, body: e2.body

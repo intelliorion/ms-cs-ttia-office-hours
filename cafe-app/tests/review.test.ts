@@ -5,7 +5,7 @@ import { tmpWorkspace, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { saveReview, writeReviewPack } from '../src/review/review';
 import { loadIdea, saveIdea, ideaDir } from '../src/ideas/store';
-import { saveSettings } from '../src/round/store';
+import { createRound, saveSettings, setIdeaRound } from '../src/round/store';
 import { paths } from '../src/workspace/paths';
 import { listOutbox } from '../src/comms/outbox';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
@@ -144,15 +144,28 @@ describe('writeReviewPack', () => {
     const root = await setup();
     await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx);
     await setStage(root, 'CAFE-2026-002', { closeAs: 'csic' }, clock);
+    await createRound(root, 'Older', fixedClock('2026-09-01'));
+    await createRound(root, 'Autumn', clock);
+    await setIdeaRound(root, 'CAFE-2026-001', 'ROUND-002', clock);
     const file = await writeReviewPack(root, clock);
-    expect(path.basename(file)).toBe('review-pack-2026-10-19.md');
+    expect(path.relative(root, file)).toBe(path.join('rounds', 'ROUND-002', 'review-pack-2026-10-19.md'));
     const md = await readFile(file, 'utf8');
     expect(md).toContain('2 ideas to decide');
+    // Grouped by round, newest first; a round with no open idea is left out; ideas in no round come last.
+    const headings = md.split('\n').filter((l) => /^##? /.test(l));
+    expect(headings).toEqual(['# Review pack', '## Autumn (ROUND-002)', '## No round yet']);
+    expect(md.indexOf('CAFE-2026-001')).toBeLessThan(md.indexOf('## No round yet'));
+    expect(md.indexOf('CAFE-2026-003')).toBeGreaterThan(md.indexOf('## No round yet'));
     expect(md).toContain('## CAFE-2026-001 Email scheduler');
     expect(md).toContain('## CAFE-2026-003 Third Party Invoice Assessment');
     expect(md).not.toContain('CAFE-2026-002');
     expect(md).toContain('Participation is Individual but 6 people are listed');
     expect(md).toContain('- Where it is: Review and Select');
     expect(md).not.toMatch(/ of 25/);
+  });
+
+  it('asks for a round when there is none', async () => {
+    const root = await setup();
+    await expect(writeReviewPack(root, clock)).rejects.toThrow('Create a round first (Rounds button)');
   });
 });

@@ -1,19 +1,20 @@
-export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System';
-export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System'];
+export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round';
+export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round'];
 export const NODE_LABELS: Record<NodeType, string> = {
   Entity: 'Entity', Team: 'Team', Person: 'Person', Idea: 'Idea', PainPoint: 'Pain point',
-  Capability: 'Capability', Tool: 'Tool', System: 'System or data',
+  Capability: 'Capability', Tool: 'Tool', System: 'System or data', Round: 'Round',
 };
 export const NODE_COLOURS: Record<NodeType, string> = {
   Entity: '#6366f1', Team: '#0ea5e9', Person: '#8b5cf6', Idea: '#f97316',
-  PainPoint: '#14b8a6', Capability: '#f59e0b', Tool: '#ef4444', System: '#10b981',
+  PainPoint: '#14b8a6', Capability: '#f59e0b', Tool: '#ef4444', System: '#10b981', Round: '#e7d8b1',
 };
-export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'SPONSORS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA';
+export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'SPONSORS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND';
 export const ALLOWED: Record<Relation, [NodeType, NodeType]> = {
   HAS_TEAM: ['Entity', 'Team'], HAS_MEMBER: ['Team', 'Person'],
   SUBMITTED: ['Person', 'Idea'], SPONSORS: ['Person', 'Idea'], RELATED: ['Person', 'Idea'],
   REPLACES: ['Idea', 'PainPoint'], NEEDS: ['Idea', 'Capability'],
   BUILT_WITH: ['Capability', 'Tool'], USES_DATA: ['Capability', 'System'],
+  IN_ROUND: ['Idea', 'Round'],
 };
 /** Relations the AI may propose. People links come only from the form. */
 export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA'];

@@ -2,11 +2,21 @@ import { formatDate } from '../clock';
 
 export interface Round {
   id: string;
+  /** Free text the operator chose, e.g. "2026 Q4". A round folder without one shows its id. */
+  name: string;
+  /** The day it was made (YYYY-MM-DD); '' for a round made before rounds had one. */
+  created: string;
   open?: string;
   deadline?: string;
   reviewBy?: string;
   seriesStart?: string;
   roadshow?: string;
+}
+
+/** The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4". */
+export function defaultRoundName(iso: string): string {
+  const [year, month] = iso.split('-').map(Number);
+  return `${year} Q${Math.ceil(month / 3)}`;
 }
 
 export interface Settings {
@@ -60,7 +70,7 @@ export const TOKENS: Record<string, TokenDef> = {
   '[YOUR NAME]': { from: 'settings', key: 'operatorName', label: 'Your name (email signature)' },
 };
 
-export function resolveToken(token: string, round: Round, settings: Settings): string | undefined {
+export function resolveToken(token: string, round: Partial<Round>, settings: Settings): string | undefined {
   const def = TOKENS[token];
   if (!def) return undefined;
   const source = (def.from === 'round' ? round : settings) as unknown as Record<string, unknown>;

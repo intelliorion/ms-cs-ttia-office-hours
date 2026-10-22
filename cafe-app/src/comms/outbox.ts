@@ -6,7 +6,8 @@ import { paths } from '../workspace/paths';
 import { writeFileAtomic, readText, appendHistory } from '../workspace/files';
 import { loadTemplates, render, fillText, analyse } from './templates';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
-import { currentRoundId, loadRound, loadSettings } from '../round/store';
+import { currentRoundId, loadRound, loadSettings, NO_ROUND } from '../round/store';
+import { TOKENS, type Round } from '../round/round';
 import { withTick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
@@ -101,8 +102,10 @@ export async function draftEmail(
   if (!tpl) throw new Error(`No template ${input.template}`);
   if (tpl.to !== 'list' && !input.ideaId) throw new Error(`${tpl.id} is about one idea; pick the idea first`);
   const idea = input.ideaId ? await loadIdea(root, input.ideaId) : undefined;
-  const round = idea?.round || (await currentRoundId(root));
-  const dir = idea ? path.join(await ideaDir(root, idea.id), 'emails') : path.join(paths(root).rounds, round, 'emails');
+  // An idea's emails follow the idea's own round, which may be none yet; a round-wide email needs a round.
+  const round = idea ? idea.round : await currentRoundId(root);
+  if (!idea && !round) throw new Error(NO_ROUND);
+  const dir = idea ? path.join(await ideaDir(root, idea.id), 'emails') : path.join(paths(root).rounds, round!, 'emails');
   const { records, count } = await recordsIn(root, dir);
   const existing = records.find((r) => r.template === tpl.id && r.status !== 'sent');
   if (existing) return existing;
@@ -113,7 +116,7 @@ export async function draftEmail(
     key: keyOf(root, path.join(dir, `${seq}-${tpl.id}.md`)),
     template: tpl.id,
     ...(idea ? { idea: idea.id } : {}),
-    round,
+    round: round ?? '',
     status: 'draft',
     created: clock(),
     to: r.to,
@@ -125,10 +128,21 @@ export async function draftEmail(
   return rec;
 }
 
+export const NO_ROUND_NOTE = 'Put this idea in a round to fill the dates';
+
 async function viewOf(root: string, r: EmailRecord): Promise<OutboxItem> {
-  const ctx = { round: await loadRound(root, r.round), settings: await loadSettings(root) };
+  // No round yet: the round's dates stay as tokens, and the note says how to fill them.
+  const round: Partial<Round> = r.round ? await loadRound(root, r.round).catch(() => ({})) : {};
+  const ctx = { round, settings: await loadSettings(root) };
   const view = { to: fillText(r.to, ctx), subject: fillText(r.subject, ctx), body: fillText(r.body, ctx) };
-  return { ...r, view, ...analyse(view) };
+  const found = analyse(view);
+  if (r.round) return { ...r, view, ...found };
+  // The round's dates become one note, in the place of the first of them.
+  const firstDate = found.missingSettings.find((m) => TOKENS[m.token]?.from === 'round');
+  const missingSettings = found.missingSettings
+    .filter((m) => m === firstDate || TOKENS[m.token]?.from !== 'round')
+    .map((m) => (m === firstDate ? { ...m, label: NO_ROUND_NOTE } : m));
+  return { ...r, view, ...found, missingSettings };
 }
 
 export async function listOutbox(root: string): Promise<OutboxItem[]> {

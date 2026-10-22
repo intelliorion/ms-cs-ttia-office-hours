@@ -3,7 +3,6 @@ import { readTable } from './readExport';
 import { COLUMNS, mapHeader, parseSubmitter, parseTeam, splitMulti, type Field } from './columns';
 import { listIdeas, nextId, saveIdea, slugify } from '../ideas/store';
 import { normalizeIdea } from '../ideas/idea';
-import { currentRoundId } from '../round/store';
 import { withTick } from '../checklist/checklist';
 import { appendHistory } from '../workspace/files';
 import type { StepDef } from '../rules/stages';
@@ -31,7 +30,6 @@ export async function importExport(
   if (index.title === undefined) {
     throw new Error(`${name} has no Title column, so nothing was imported. Columns found: ${table.header.join(', ') || 'none'}`);
   }
-  const round = await currentRoundId(root);
   const { ideas, problems } = await listIdeas(root);
   const byKey = new Map(ideas.map((i) => [i.dedupe_key, i.id]));
   // Broken folders still hold their ID, so it must never be reissued.
@@ -79,7 +77,7 @@ export async function importExport(
     const source = `${name} row ${rowNo}`;
     const at = opts.clock();
     let idea = normalizeIdea({
-      id, slug: slugify(title), title, round, stage: 1,
+      id, slug: slugify(title), title, round: '', stage: 1,
       entity: submitter.entity,
       function: opt(get('function')),
       region: opt(get('region')),

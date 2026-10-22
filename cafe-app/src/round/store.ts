@@ -1,28 +1,64 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { paths } from '../workspace/paths';
-import { readYaml, writeYaml } from '../workspace/files';
-import { DEFAULT_SETTINGS, ROUND_FIELDS, SETTING_FIELDS, type Round, type Settings } from './round';
+import { readYaml, writeYaml, appendHistory } from '../workspace/files';
+import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
+import type { Idea } from '../ideas/idea';
+import type { Clock } from '../clock';
+import { DEFAULT_SETTINGS, ROUND_FIELDS, SETTING_FIELDS, defaultRoundName, type Round, type Settings } from './round';
+export { defaultRoundName } from './round';
+
+/** What the operator is told when something needs a round and there is none. */
+export const NO_ROUND = 'Create a round first (Rounds button)';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ROUND_FOLDER = /^ROUND-[A-Za-z0-9._-]+$/;
+const NUMBERED = /^ROUND-(\d{3})$/;
 
-export async function currentRoundId(root: string): Promise<string> {
-  const names = (await fs.readdir(paths(root).rounds).catch(() => [] as string[]))
-    .filter((n) => n.startsWith('ROUND-'))
-    .sort();
-  const last = names.at(-1);
-  if (!last) throw new Error('No round yet. Run "cafe init" first.');
-  return last;
+const roundFile = (root: string, id: string) => path.join(paths(root).rounds, id, 'round.yaml');
+
+async function roundFolders(root: string): Promise<string[]> {
+  const entries = await fs.readdir(paths(root).rounds, { withFileTypes: true }).catch(() => []);
+  return entries.filter((e) => e.isDirectory() && ROUND_FOLDER.test(e.name)).map((e) => e.name);
 }
 
-export async function loadRound(root: string, id?: string): Promise<Round> {
-  const rid = id ?? (await currentRoundId(root));
-  const raw = (await readYaml<Partial<Round>>(path.join(paths(root).rounds, rid, 'round.yaml'))) ?? {};
-  return { ...raw, id: rid };
+async function hasRound(root: string, id: string): Promise<boolean> {
+  return ROUND_FOLDER.test(id) && (await roundFolders(root)).includes(id);
 }
 
-export async function saveRound(root: string, patch: Record<string, unknown>): Promise<Round> {
-  const round = await loadRound(root);
+function asRound(id: string, raw: Partial<Round>): Round {
+  const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : id;
+  const created = typeof raw.created === 'string' ? raw.created : '';
+  return { ...raw, id, name, created };
+}
+
+/** Every round folder, newest first by the day it was made, then by id. A round without a day sorts last. */
+export async function listRounds(root: string): Promise<Round[]> {
+  const rounds = await Promise.all((await roundFolders(root)).map(async (id) => asRound(id, (await readYaml<Partial<Round>>(roundFile(root, id))) ?? {})));
+  return rounds.sort((a, b) => b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
+}
+
+/** The newest round, or null when the operator has not made one yet. */
+export async function currentRoundId(root: string): Promise<string | null> {
+  return (await listRounds(root))[0]?.id ?? null;
+}
+
+/** Makes the next numbered round. Only ROUND-NNN folders count for the number. */
+export async function createRound(root: string, name: string, clock: Clock): Promise<Round> {
+  const highest = Math.max(0, ...(await roundFolders(root)).map((n) => Number(NUMBERED.exec(n)?.[1] ?? 0)));
+  const created = clock();
+  const round: Round = { id: `ROUND-${String(highest + 1).padStart(3, '0')}`, name: String(name ?? '').trim() || defaultRoundName(created), created };
+  await writeYaml(roundFile(root, round.id), round);
+  return round;
+}
+
+export async function loadRound(root: string, id: string): Promise<Round> {
+  if (!(await hasRound(root, id))) throw new Error(`Unknown round ${id}`);
+  return asRound(id, (await readYaml<Partial<Round>>(roundFile(root, id))) ?? {});
+}
+
+export async function saveRound(root: string, id: string, patch: Record<string, unknown>): Promise<Round> {
+  const round = await loadRound(root, id);
   const next: Round = { ...round };
   for (const [key, label] of ROUND_FIELDS) {
     if (!(key in patch)) continue;
@@ -33,7 +69,21 @@ export async function saveRound(root: string, patch: Record<string, unknown>): P
     if (value) next[key] = value;
     else delete next[key];
   }
-  await writeYaml(path.join(paths(root).rounds, round.id, 'round.yaml'), next);
+  await writeYaml(roundFile(root, round.id), next);
+  return next;
+}
+
+/** Puts an idea in a round, or takes it out with ''. The stage never changes; the change is logged. */
+export async function setIdeaRound(root: string, ideaId: string, round: string, clock: Clock): Promise<Idea> {
+  const target = String(round ?? '').trim();
+  const name = target ? (await loadRound(root, target)).name : '';
+  const idea = await loadIdea(root, ideaId);
+  if (idea.round === target) return idea;
+  const next: Idea = { ...idea, round: target };
+  await saveIdea(root, next);
+  await appendHistory(await ideaDir(root, ideaId), {
+    at: clock(), action: 'round', by: 'operator', detail: target ? `round set to ${name}` : 'round cleared',
+  });
   return next;
 }
 

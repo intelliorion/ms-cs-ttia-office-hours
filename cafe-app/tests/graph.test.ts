@@ -7,6 +7,7 @@ import { tmpWorkspace, sampleIdea, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
 import { DEFAULT_STEPS as steps } from '../src/rules/stages';
 import { fixedClock } from '../src/clock';
+import { saveIdea } from '../src/ideas/store';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -46,7 +47,8 @@ describe('buildGraph', () => {
 
   it('never turns attributes into nodes and puts stage on the idea node', () => {
     const g = buildGraph([rfx], []);
-    expect(g.nodes.some((n) => /APAC|2026-|@/.test(n.label))).toBe(false);
+    // A round star is labelled with the round's own name, so it is left out here.
+    expect(g.nodes.some((n) => n.type !== 'Round' && /APAC|2026-|@/.test(n.label))).toBe(false);
     const idea = g.nodes.find((n) => n.id === 'idea:CAFE-2026-002')!;
     expect(idea.attrs).toMatchObject({ stage: 2, stageLabel: 'Review and Select' });
   });
@@ -204,5 +206,47 @@ describe('approved tools', () => {
     const planner = links[1];
     expect(planner.description).toBe('Tasks — not on the approved list');
     expect(newNodes.find((n) => n.id === 'tool:microsoft-planner')?.attrs).toEqual({ approved: false });
+  });
+});
+
+describe('rounds in the graph', () => {
+  const r1 = { id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' };
+  const r2 = { id: 'ROUND-002', name: 'Spring pilots', created: '2026-10-20' };
+  const a = sampleIdea({ id: 'CAFE-2026-010', title: 'A', round: 'ROUND-001' });
+  const b = sampleIdea({ id: 'CAFE-2026-011', title: 'B', round: 'ROUND-001' });
+  const c = sampleIdea({ id: 'CAFE-2026-012', title: 'C', round: '' });
+
+  it('draws every round as a star and links each idea to its round', () => {
+    const g = buildGraph([a, b, c], [], [r1, r2]);
+    const rounds = g.nodes.filter((n) => n.type === 'Round');
+    expect(rounds.map((n) => [n.id, n.label, n.attrs])).toEqual([
+      [nodeId('Round', 'ROUND-001'), '2026 Q4', { roundId: 'ROUND-001', ideas: 2 }],
+      [nodeId('Round', 'ROUND-002'), 'Spring pilots', { roundId: 'ROUND-002', ideas: 0 }],
+    ]);
+    const links = g.edges.filter((e) => e.rel === 'IN_ROUND');
+    expect(links.map((e) => [e.from, e.to, e.description, e.source, e.confidence, e.confirmed])).toEqual([
+      ['idea:CAFE-2026-010', nodeId('Round', 'ROUND-001'), 'Round', 'form:CAFE-2026-010', 1, true],
+      ['idea:CAFE-2026-011', nodeId('Round', 'ROUND-001'), 'Round', 'form:CAFE-2026-011', 1, true],
+    ]);
+    expect(ALLOWED.IN_ROUND).toEqual(['Idea', 'Round']);
+    expect(NODE_COLOURS.Round).toBe('#e7d8b1');
+  });
+
+  it('still draws the link when the round folder is missing', () => {
+    const g = buildGraph([sampleIdea({ round: 'ROUND-999' })], [], [r1]);
+    const lost = g.nodes.find((n) => n.id === nodeId('Round', 'ROUND-999'));
+    expect(lost).toMatchObject({ type: 'Round', label: 'ROUND-999', attrs: { roundId: 'ROUND-999', ideas: 1 } });
+    expect(g.edges.filter((e) => e.rel === 'IN_ROUND').map((e) => e.to)).toEqual([nodeId('Round', 'ROUND-999')]);
+  });
+
+  it('rebuilds a legacy workspace with its old round as a star', async () => {
+    const root = await tmpWorkspace();
+    await mkdir(path.join(root, 'rounds', 'ROUND-2026-Q4'), { recursive: true });
+    await writeFile(path.join(root, 'rounds', 'ROUND-2026-Q4', 'round.yaml'), 'id: ROUND-2026-Q4\n');
+    await saveIdea(root, sampleIdea({ round: 'ROUND-2026-Q4' }));
+    const g = await rebuildGraph(root);
+    const star = g.nodes.find((n) => n.type === 'Round');
+    expect(star?.label).toBe('ROUND-2026-Q4');
+    expect(g.edges.filter((e) => e.rel === 'IN_ROUND').map((e) => [e.from, e.to])).toEqual([['idea:CAFE-2026-001', star?.id]]);
   });
 });

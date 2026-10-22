@@ -3,7 +3,6 @@ import path from 'node:path';
 import { initWorkspace } from '../src/workspace/init';
 import { createApp } from '../src/server/server';
 import { importExport } from '../src/import/importRows';
-import { writeStatusCsv } from '../src/exports/status';
 import { loadSteps } from '../src/rules/stages';
 import { systemClock } from '../src/clock';
 
@@ -17,7 +16,7 @@ const [command, ...rest] = positional;
 const root = path.resolve(flag('workspace') ?? process.env.CAFE_WORKSPACE ?? 'cafe-workspace');
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | status> [--workspace DIR] [--port N]';
+const USAGE = 'Usage: cafe <init | start | import <file>> [--workspace DIR] [--port N]';
 
 async function main(): Promise<void> {
   switch (command) {
@@ -43,10 +42,6 @@ async function main(): Promise<void> {
       if (!rest[0]) throw new Error('Usage: cafe import <export.csv|export.xlsx>');
       const report = await importExport(root, path.resolve(rest[0]), { clock, steps: await loadSteps(root) });
       console.log(JSON.stringify(report, null, 2));
-      return;
-    }
-    case 'status': {
-      console.log(await writeStatusCsv(root, clock));
       return;
     }
     case undefined:

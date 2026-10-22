@@ -34,10 +34,11 @@ function rawStatus(base: string, pathName: string, host: string): Promise<number
 }
 
 describe('api', () => {
-  it('reports an empty round', async () => {
+  it('starts with no rounds', async () => {
     const { base } = await boot();
     const state = await j(await fetch(`${base}/api/state`));
-    expect(state.round.id).toBe('ROUND-2026-Q4');
+    expect(state.rounds).toEqual([]);
+    expect(state).not.toHaveProperty('round');
     expect(state.ideas).toEqual([]);
     expect(state.steps).toHaveLength(25);
     expect(state.today).toBe('2026-10-19');
@@ -111,7 +112,8 @@ describe('api', () => {
     const draft = await j(await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' }));
     const res = await post(base, '/api/outbox/approve', { key: draft.key });
     expect(res.status).toBe(400);
-    expect((await j(res)).missing).toEqual(['Decisions by', 'Your name (email signature)']);
+    // The idea is in no round yet, so the round's dates are one note.
+    expect((await j(res)).missing).toEqual(['Put this idea in a round to fill the dates', 'Your name (email signature)']);
   });
 
   it('refuses paths and IDs outside the workspace', async () => {
@@ -127,7 +129,7 @@ describe('api', () => {
 
   it('only accepts JSON posts or a named file upload', async () => {
     const { base } = await boot();
-    const res = await fetch(`${base}/api/round`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
+    const res = await fetch(`${base}/api/rounds`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
     expect(res.status).toBe(415);
   });
 
@@ -146,13 +148,13 @@ describe('api', () => {
 
   it('does not trust a content type that only mentions JSON', async () => {
     const { base } = await boot();
-    const res = await fetch(`${base}/api/round`, { method: 'POST', headers: { 'content-type': 'text/plain; x=application/json' }, body: '{}' });
+    const res = await fetch(`${base}/api/rounds`, { method: 'POST', headers: { 'content-type': 'text/plain; x=application/json' }, body: '{}' });
     expect(res.status).toBe(415);
   });
 
   it('refuses cross-site origins and accepts local ones', async () => {
     const { base } = await boot();
-    const send = (origin: string) => fetch(`${base}/api/round`, {
+    const send = (origin: string) => fetch(`${base}/api/rounds`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin }, body: '{}',
     });
     expect((await send('http://evil.example')).status).toBe(403);
@@ -161,7 +163,9 @@ describe('api', () => {
   it('runs posts one at a time, so a double click ticks once and imports never reuse an ID', async () => {
     const { base, root } = await boot();
     await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
-    await post(base, '/api/round', { reviewBy: '2026-11-02' });
+    await post(base, '/api/rounds', { name: 'Autumn' });
+    await post(base, '/api/rounds/ROUND-001/ideas', { ideaIds: ['CAFE-2026-001'] });
+    await post(base, '/api/rounds/ROUND-001', { reviewBy: '2026-11-02' });
     await post(base, '/api/settings', { operatorName: 'Café operator' });
     const draft = await j(await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' }));
     expect((await post(base, '/api/outbox/approve', { key: draft.key })).status).toBe(200);
@@ -178,5 +182,23 @@ describe('api', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(state.ideas.map((i: { title: string }) => i.title)).toEqual(expect.arrayContaining(['Alpha idea', 'Beta idea']));
     expect(ids).toHaveLength(5);
+  });
+
+  it('makes rounds, fills them with ideas and takes one out', async () => {
+    const { base } = await boot();
+    await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
+    const made = await j(await post(base, '/api/rounds', { name: '' }));
+    expect(made).toEqual({ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-19' });
+    expect(await j(await post(base, '/api/rounds/ROUND-001/ideas', { ideaIds: ['CAFE-2026-001', 'CAFE-2026-002'] }))).toEqual({ updated: 2 });
+    expect((await j(await fetch(`${base}/api/rounds`))).rounds).toEqual([{ ...made, ideas: 2 }]);
+    expect((await j(await post(base, '/api/rounds/ROUND-001', { deadline: '2026-11-01' }))).deadline).toBe('2026-11-01');
+    const out = await j(await post(base, '/api/ideas/CAFE-2026-002/round', { round: '' }));
+    expect(out.round).toBe('');
+    const state = await j(await fetch(`${base}/api/state`));
+    expect(state.rounds.map((r: { id: string }) => r.id)).toEqual(['ROUND-001']);
+    expect((await j(await fetch(`${base}/api/rounds`))).rounds[0].ideas).toBe(1);
+    const bad = await post(base, '/api/ideas/CAFE-2026-001/round', { round: 'ROUND-404' });
+    expect(bad.status).toBe(400);
+    expect((await j(bad)).error).toContain('Unknown round');
   });
 });

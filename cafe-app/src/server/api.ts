@@ -5,7 +5,7 @@ import type { AddRoute } from './server';
 import { paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
-import { loadRound, saveRound, loadSettings, saveSettings } from '../round/store';
+import { listRounds, createRound, saveRound, setIdeaRound, loadSettings, saveSettings } from '../round/store';
 import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
@@ -15,7 +15,6 @@ import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft } from '../comms/outbox';
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
-import { writeStatusCsv } from '../exports/status';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
@@ -53,12 +52,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   };
 
   add('GET', '/api/state', async () => {
-    const [round, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
-      loadRound(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
+    const [rounds, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
+      listRounds(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
     ]);
     const today = clock();
     return {
-      today, round, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
+      today, rounds, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
         return {
@@ -75,7 +74,19 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     };
   });
 
-  add('POST', '/api/round', async ({ body }) => saveRound(root, body));
+  add('GET', '/api/rounds', async () => {
+    const [rounds, { ideas }] = await Promise.all([listRounds(root), listIdeas(root)]);
+    return { rounds: rounds.map((r) => ({ ...r, ideas: ideas.filter((i) => i.round === r.id).length })) };
+  });
+  add('POST', '/api/rounds', async ({ body }) => createRound(root, String(body.name ?? ''), clock));
+  add('POST', '/api/rounds/:id', async ({ params, body }) => saveRound(root, params.id, body));
+  add('POST', '/api/rounds/:id/ideas', async ({ params, body }) => {
+    const ids = body.ideaIds;
+    if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) throw new Error('Pick the ideas to put in the round');
+    for (const id of ids) await setIdeaRound(root, id, params.id, clock);
+    return { updated: ids.length };
+  });
+  add('POST', '/api/ideas/:id/round', async ({ params, body }) => setIdeaRound(root, params.id, String(body.round ?? ''), clock));
   add('POST', '/api/settings', async ({ body }) => saveSettings(root, body));
 
   add('POST', '/api/import', async ({ raw, headers }) => {
@@ -257,5 +268,4 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/inbox/:id/draft-held-reply', async ({ params, body }) =>
     draftHeldReply(root, params.id, clock, typeof body.ideaId === 'string' ? body.ideaId : undefined));
 
-  add('POST', '/api/status-export', async () => ({ file: await writeStatusCsv(root, clock) }));
 }

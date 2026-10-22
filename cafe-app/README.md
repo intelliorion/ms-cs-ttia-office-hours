@@ -2,7 +2,7 @@
 
 A local app for the person who runs the CS TTIA Creators' Café. It imports the submission export, tracks
 each idea's 25 steps, drafts the emails, blocks any email that still needs a date or link, shows replies
-that are late, and writes `status.csv` for submitters. It never sends anything: you approve, copy, send
+that are late, and writes the review pack for TTIA. It never sends anything: you approve, copy, send
 from Outlook, then mark the email as sent.
 
 The design is in `docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md` (the one-screen UI) and
@@ -41,7 +41,7 @@ panels, large white titles and pill buttons at the bottom.
   says so; in Full, if the first few seconds draw under 20 fps it switches to Lite once and says so. The choice is
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
-- **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack and status.csv (these write the files),
+- **Title bar.** The round and today's date, the Import, Round and Outbox buttons, Review pack (this writes the file),
   and the AI chip (which shows who is answering).
 
 ## Run it
@@ -60,7 +60,6 @@ Other commands:
 ```bash
 npm run cafe -- init   --workspace ~/cafe-workspace     # create the folders, rules and templates
 npm run cafe -- import export.csv --workspace ~/cafe-workspace
-npm run cafe -- status --workspace ~/cafe-workspace     # write exports/status.csv
 ```
 
 `CAFE_TODAY=2026-10-26` pretends today is another date, for example to see which replies are late.
@@ -68,7 +67,7 @@ npm run cafe -- status --workspace ~/cafe-workspace     # write exports/status.c
 ### The workspace folder
 
 ```
-rounds/       the round's dates, links and your name
+rounds/       one folder per round you make (ROUND-001, ...): its name and dates; the review pack
 inbox/        dropped files and exports (see Inbox: drop anything); inbox/held/ keeps files the app will not read
 ideas/        one folder per idea: the submission, its emails, its history
 cohorts/  roadshows/
@@ -76,7 +75,7 @@ graph/        the universe: nodes.jsonl, edges.jsonl, ai-links.jsonl (AI suggest
               layout.json (cached star positions)
 templates/    the email templates
 rules/        settings.yaml (including the AI choice), stages.yaml
-exports/      status.csv and the review pack
+exports/      files the app writes for you
 skills/
 ```
 
@@ -115,7 +114,7 @@ npm run dev:ui                                        # the UI with hot reload; 
 5. **Emails** (in the idea's details) and **Outbox** (pop-out): approve and copy, send from Outlook, mark as
    sent. E2 starts a five-day reply clock; use "Reply received" on the idea when they answer. Marking E3,
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
-6. **Round** (pop-out): write `status.csv` and the review pack for TTIA.
+6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
 ## Inbox: drop anything
 

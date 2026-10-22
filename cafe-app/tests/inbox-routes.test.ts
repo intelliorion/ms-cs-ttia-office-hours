@@ -237,8 +237,12 @@ describe('/api/inbox: held items', () => {
     expect((await s.inbox()).counts.held).toBe(1);
     expect((await s.post(`/api/inbox/${item.id}/apply`, { actionIds: ['a1'] })).status).toBe(400);
 
+    const noRound = await s.post(`/api/inbox/${item.id}/draft-held-reply`);
+    expect(noRound.status).toBe(400);
+    expect((await json(noRound)).error).toBe('Create a round first (Rounds button)');
+    await s.post('/api/rounds', { name: 'Autumn' });
     const drafted = await json(await s.post(`/api/inbox/${item.id}/draft-held-reply`));
-    expect(drafted.email).toMatchObject({ template: 'PD', status: 'draft', key: 'rounds/ROUND-2026-Q4/emails/001-PD.md' });
+    expect(drafted.email).toMatchObject({ template: 'PD', status: 'draft', key: 'rounds/ROUND-001/emails/001-PD.md' });
     expect(drafted.email.body).toMatch(/held-tracker\.csv/);
     const state = await json(await fetch(`${s.base}/api/state`));
     expect(state.outbox.some((m: any) => m.key === drafted.email.key)).toBe(true);

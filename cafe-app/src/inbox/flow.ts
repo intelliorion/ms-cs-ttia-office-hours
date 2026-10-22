@@ -6,7 +6,7 @@ import type { Connector } from '../ai/connector';
 import { paths } from '../workspace/paths';
 import { writeFileAtomic } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
-import { currentRoundId } from '../round/store';
+import { currentRoundId, NO_ROUND } from '../round/store';
 import { loadTemplates, render } from '../comms/templates';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { saveDrop, getItem, updateItem, holdItem, deleteHeld, listItems, type InboxItem } from './store';
@@ -368,6 +368,7 @@ async function roundDraft(root: string, item: InboxItem, clock: Clock): Promise<
   const tpl = (await loadTemplates(root)).PD;
   if (!tpl) throw new Error('No template PD');
   const round = await currentRoundId(root);
+  if (!round) throw new Error(NO_ROUND);
   const dir = path.join(paths(root).rounds, round, 'emails');
   const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((n) => /^\d{3}-[A-Z0-9]+\.md$/.test(n)).sort();
   const r = render(tpl, {});

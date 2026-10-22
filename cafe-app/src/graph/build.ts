@@ -1,4 +1,5 @@
 import type { Idea } from '../ideas/idea';
+import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
 import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, edgeId, nodeId, type AiLink, type GEdge, type GNode, type Relation } from './ontology';
@@ -6,7 +7,7 @@ export { nodeId } from './ontology';
 
 const ROLE_REL: Record<string, Relation> = { lead: 'RELATED', sponsor: 'SPONSORS', member: 'RELATED' };
 
-export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; edges: GEdge[] } {
+export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = []): { nodes: GNode[]; edges: GEdge[] } {
   const nodes = new Map<string, GNode>();
   const edges = new Map<string, GEdge>();
   const node = (n: GNode) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
@@ -16,6 +17,19 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
     if (existing) { if (description && !existing.description.includes(description)) existing.description += `; ${description}`; return; }
     edges.set(id, { id, from, to, rel, description, source, confidence, confirmed });
   };
+
+  // Every round is a star, with or without ideas. An idea whose round folder is gone still gets its round by id.
+  const roundStars = new Map<string, GNode>();
+  const roundStar = (id: string, label = id) => {
+    let star = roundStars.get(id);
+    if (!star) {
+      star = { id: nodeId('Round', id), type: 'Round', label, attrs: { roundId: id, ideas: 0 } };
+      roundStars.set(id, star);
+      node(star);
+    }
+    return star;
+  };
+  for (const r of rounds) roundStar(r.id, r.name);
 
   for (const idea of [...ideas].sort((a, b) => a.id.localeCompare(b.id))) {
     const ideaId = node({
@@ -27,6 +41,11 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[]): { nodes: GNode[]; 
       },
     });
     const src = `form:${idea.id}`;
+    if (idea.round) {
+      const star = roundStar(idea.round);
+      star.attrs!.ideas = Number(star.attrs!.ideas) + 1;
+      edge(ideaId, 'IN_ROUND', star.id, 'Round', src);
+    }
     const teamId = idea.function ? node({ id: nodeId('Team', idea.function), type: 'Team', label: idea.function }) : undefined;
     const entityId = idea.entity ? node({ id: nodeId('Entity', idea.entity), type: 'Entity', label: idea.entity === 'CS' ? 'Corporate Services (CS)' : idea.entity }) : undefined;
     if (entityId && teamId) edge(entityId, 'HAS_TEAM', teamId, 'CS Function', `${src}:CS Function`);

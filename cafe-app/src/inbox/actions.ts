@@ -10,7 +10,7 @@ import { normalizeIdea, type Closure, type Idea } from '../ideas/idea';
 import { setStage } from '../ideas/stage';
 import { changes, type StageTarget } from '../ideas/suggest';
 import { tick } from '../checklist/checklist';
-import { currentRoundId, loadSettings } from '../round/store';
+import { loadSettings } from '../round/store';
 import { renderHandoff } from '../review/review';
 import { importExport } from '../import/importRows';
 import { readTable } from '../import/readExport';
@@ -317,7 +317,7 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       const title = a.fields.title.trim();
       if (!title) throw new Error('An idea needs a title');
       const idea = normalizeIdea({
-        id, slug: slugify(title), title, round: await currentRoundId(root), stage: 1,
+        id, slug: slugify(title), title, round: '', stage: 1,
         ...(a.fields.challenge ? { challenge: a.fields.challenge } : {}),
         people: { submitter: a.fields.submitter, team: [] }, dedupe_key: `${key(title)}|${key(a.fields.submitter ?? '')}`,
       });

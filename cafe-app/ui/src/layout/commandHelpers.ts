@@ -3,7 +3,7 @@ export interface ChatActionView {
 }
 export interface ChatEntryView {
   id: string; at: string; text: string; reply: string; actions: ChatActionView[]; problems: string[]; error?: string;
-  kind?: 'command' | 'question' | 'unclear'; highlight?: string[];
+  kind?: 'command' | 'question' | 'unclear'; highlight?: string[]; trace?: { text: string; size: number }[][];
 }
 
 export const STATUS_WORD: Record<ChatActionView['status'], string> = {

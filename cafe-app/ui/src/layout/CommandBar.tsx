@@ -76,6 +76,14 @@ export function CommandBar() {
                   {e.kind && <div className="cmd-kind">{KIND_WORD[e.kind]}</div>}
                   {e.error ? <div className="cmd-err">{e.error}</div> : <div className="cmd-reply">{e.reply}</div>}
                   {e.problems.map((p, i) => <div key={i} className="cmd-problem">{p}</div>)}
+                  {e.kind === 'question' && (e.trace?.length ?? 0) > 0 && (
+                    <details className="cmd-trace" data-testid="command-trace">
+                      <summary>How I found it in the graph</summary>
+                      {e.trace!.map((steps, qi) => (
+                        <ol key={qi}>{steps.map((st, si) => <li key={si}><span>{st.text}</span><b>{st.size}</b></li>)}</ol>
+                      ))}
+                    </details>
+                  )}
                   {e.kind === 'question' && (e.highlight?.length ?? 0) > 0 && (
                     <div className="cmd-lit-note">{e.highlight!.length} star{e.highlight!.length === 1 ? '' : 's'} lit in the universe
                       {highlight ? <button className="link-btn" onClick={() => setHighlight(null)}>Clear</button> : <button className="link-btn" onClick={() => setHighlight(e.highlight!)}>Light them again</button>}

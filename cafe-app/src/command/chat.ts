@@ -3,16 +3,13 @@ import { readText, writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from '../graph/store';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
-import { commandTask, COMMAND_MAX } from '../ai/tasks';
+import { answerTask, commandTask, COMMAND_MAX, type AnswerInput } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
-import { hideNames, showNames } from './names';
+import { codeFor, hideNames, showNames } from './names';
 import { STAGE_NAMES } from '../rules/stages';
-import { nodeId } from '../graph/ontology';
-
-/** Enough for a programme's universe; past this a question is answered from the first stars and links only. */
-const MAX_STARS = 1500;
-const MAX_LINKS = 4000;
+import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
+import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 
 export interface ChatAction {
@@ -25,8 +22,10 @@ export interface ChatEntry {
   id: string; at: string; text: string; reply: string; provider?: string;
   /** How the agent read the message: a change to make, a question to answer, or neither. */
   kind?: 'command' | 'question' | 'unclear';
-  /** For a question: the stars the answer rests on, lit in the universe. */
+  /** For a question: every star the queries passed through, lit in the universe. */
   highlight?: string[];
+  /** For a question: how each query found its answer, step by step, with how many stars each step left. */
+  trace?: StepTrace[][];
   actions: ChatAction[]; problems: string[]; error?: string;
 }
 
@@ -55,6 +54,11 @@ async function save(root: string, entry: ChatEntry): Promise<ChatEntry> {
  * Runs a command: names the app knows are coded before the AI sees the text, the AI proposes steps, the app checks
  * each one and records proposals for the operator to do or cancel. Nothing changes here.
  */
+/** How many stars of each query the AI sees when it words an answer; the total is always given. */
+const ANSWER_STARS = 60;
+/** How many stars light up at most. */
+const LIT_MAX = 150;
+
 export async function runCommand(root: string, text: string, ai: Connector, clock: Clock): Promise<ChatEntry> {
   const command = text.trim().slice(0, COMMAND_MAX);
   if (!command) throw new Error('Type a command first');
@@ -62,27 +66,14 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
   const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
-  // Every star gets a code, so a question can be answered from the whole universe; people stay codes only.
-  const hidden = hideNames(command, graph.nodes, { all: true });
-  const codeOf = new Map([...hidden.codes].map(([c, v]) => [v.id, c]));
-  const roundName = new Map(rounds.map((r) => [r.id, r.name]));
-  const input = {
-    command: hidden.text, stars: hidden.legend.slice(0, MAX_STARS),
-    links: graph.edges.slice(0, MAX_LINKS).flatMap((e) => (codeOf.has(e.from) && codeOf.has(e.to) ? [[codeOf.get(e.from)!, e.rel, codeOf.get(e.to)!] as [string, string, string]] : [])),
-    ideas: ideas.flatMap((i) => {
-      const code = codeOf.get(`idea:${i.id}`);
-      if (!code) return [];
-      // Roles live on the idea, not on the links: the submitter, then each team member with their role, people as codes.
-      const people = [
-        ...(i.people.submitter ? [{ name: i.people.submitter, role: 'submitter' }] : []),
-        ...i.people.team.map((p) => ({ name: p.name, role: p.role })),
-      ].flatMap((p) => { const pc = codeOf.get(nodeId('Person', p.name)); return pc ? [{ code: pc, role: p.role }] : []; });
-      return [{ code, stage: STAGE_NAMES[i.stage], function: i.function, region: i.region, round: roundName.get(i.round), people }];
-    }),
+  const hidden = hideNames(command, graph.nodes);
+  const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x && !!x.trim()))].sort();
+  const vocabulary = {
+    stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
   };
   const entry: ChatEntry = { id, at: clock(), text: command, reply: '', actions: [], problems: [] };
   try {
-    const { provider, output } = await ai.runWith(commandTask, input);
+    const { provider, output } = await ai.runWith(commandTask, { command: hidden.text, stars: hidden.legend, vocabulary });
     entry.provider = provider;
     entry.kind = output.kind;
     entry.reply = showNames(output.reply, hidden.codes);
@@ -91,22 +82,39 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
       entry.problems = problems;
     } else if (output.kind === 'question') {
-      // A question never changes anything: any actions the AI sent with it are dropped. Only stars that exist are lit.
-      const ids = new Set(graph.nodes.map((n) => n.id));
+      // The answer comes from the graph: the app runs the AI's queries, and the AI only words what they found.
+      // A question never changes anything: any actions sent with it are dropped.
+      const queries = (output.queries ?? []).filter((q): q is Query => validate(QUERY_SCHEMA, q).length === 0);
+      const bad = (output.queries?.length ?? 0) - queries.length;
+      if (bad) entry.problems.push(`${bad} of the AI's searches ${bad === 1 ? 'was' : 'were'} malformed and left out.`);
+      if (!queries.length) { entry.problems = [...entry.problems, "I couldn't turn that into a search of the universe. Try naming the stars or ideas you mean."]; return finish(root, all, entry); }
       const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
-      const lit = (output.highlight ?? []).map(idOf);
-      // "Related to X": X and every star linked to it, worked out here so the list is complete.
-      for (const centre of (output.around ?? []).map(idOf)) {
-        if (!centre) continue;
-        lit.push(centre);
-        for (const e of graph.edges) { if (e.from === centre) lit.push(e.to); else if (e.to === centre) lit.push(e.from); }
-      }
-      entry.highlight = [...new Set(lit.filter((x): x is string => !!x && ids.has(x)))];
+      const results: QueryResult[] = queries.map((q) => runQuery(q, { graph, ideas, rounds, idOf }));
+      entry.trace = results.map((r) => r.trace);
+      entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
+      const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
+      const coded = (sid: string) => codeFor(hidden.codes, nodes.get(sid)!);
+      const legend = (sid: string) => { const n = nodes.get(sid)!; const c = coded(sid); return n.type === 'Person' ? { code: c, type: n.type } : { code: c, type: n.type, label: n.label }; };
+      const answerIn: AnswerInput = {
+        question: hidden.text,
+        results: results.map((r) => ({
+          stars: r.final.slice(0, ANSWER_STARS).map(legend), total: r.final.length,
+          ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: coded(x.id), links: x.n })) } : {}),
+          ...(r.counts ? { counts: r.counts } : {}),
+          ...(r.path ? { path: r.path.map(coded) } : {}),
+        })),
+      };
+      const answered = await ai.runWith(answerTask, answerIn);
+      entry.reply = showNames(answered.output.answer, hidden.codes);
     }
   } catch (e) {
     entry.error = `The AI couldn't read that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
-  // Only the latest command is shown, so nothing earlier may sit waiting out of sight.
+  return finish(root, all, entry);
+}
+
+/** Only the latest command is shown, so nothing earlier may sit waiting out of sight. */
+async function finish(root: string, all: ChatEntry[], entry: ChatEntry): Promise<ChatEntry> {
   for (const old of all) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A newer command replaced it'; }
   await writeChat(root, all);
   return save(root, entry);

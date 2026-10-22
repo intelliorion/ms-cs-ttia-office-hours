@@ -80,13 +80,15 @@ describe('CommandBar', () => {
 
   it('a question: shows it was read as a question, lights its stars in the universe, and the chip clears them', async () => {
     vi.mocked(chatSend).mockResolvedValue({ id: 'c3', at: '2026-10-22', text: 'highlight what is related to GSS', kind: 'question',
-      reply: 'Lit GSS and everything linked to it.', problems: [], actions: [], highlight: ['team:gss', 'entity:cs', 'person:kwame-mensah'] });
+      reply: 'GSS links to 2 stars.', problems: [], actions: [], highlight: ['team:gss', 'entity:cs', 'person:kwame-mensah'],
+      trace: [[{ text: 'Start from GSS', size: 1 }, { text: 'Follow any links to stars', size: 2 }]] });
     useStore.setState({ highlight: null });
     const { el, root } = await mount();
     const input = el.querySelector('[data-testid="command-input"]') as HTMLInputElement;
     await act(async () => { input.focus(); type(input, 'highlight what is related to GSS'); });
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
     expect(el.querySelector('.cmd-kind')?.textContent).toBe('A question');
+    expect([...el.querySelectorAll('[data-testid="command-trace"] li')].map((li) => li.textContent)).toEqual(['Start from GSS1', 'Follow any links to stars2']);
     expect(useStore.getState().highlight).toEqual(['team:gss', 'entity:cs', 'person:kwame-mensah']);
     expect(el.querySelector('[data-action="command-clear-lit"]')?.textContent).toMatch(/3 stars lit/);
     await act(async () => { (el.querySelector('[data-action="command-clear-lit"]') as HTMLButtonElement).click(); });

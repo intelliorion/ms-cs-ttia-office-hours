@@ -73,6 +73,15 @@ export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean } 
   return { text: out, legend, codes };
 }
 
+/** The code a star already has, or a new one of its kind (a star a query found that the message never named). */
+export function codeFor(codes: Map<string, Coded>, n: GNode): string {
+  for (const [c, v] of codes) if (v.id === n.id) return c;
+  const letter = LETTER[n.type];
+  let k = 1; while (codes.has(`${letter}${k}`)) k++;
+  codes.set(`${letter}${k}`, { id: n.id, type: n.type, label: n.label });
+  return `${letter}${k}`;
+}
+
 /** The AI's words with the real names put back; an unknown code stays as written. */
 export function showNames(text: string, codes: Map<string, Coded>): string {
   let out = text.replace(/\[([A-Z]\d+)\]|\b([A-Z]\d+)\b/g, (m, a?: string, b?: string) => codes.get((a ?? b)!)?.label ?? m);

@@ -144,11 +144,18 @@ understood and one card per action, each with **Do it** and **Cancel**. **Nothin
 every done action has **Undo** (a team or round that changed since is kept, and the card says so).
 
 **Changes and questions.** The agent first decides what you typed: a change to make, a question to answer, or
-neither (then it asks you to rephrase); the panel says which. A question is answered from the universe (stars,
-links, and each idea's stage, function, region, round and roles), and the stars the answer rests on light up in the
-universe with the links between them, the rest dimmed: "which ideas deal with policy questions, and who leads them?",
-"highlight what is related to GSS" (the star and everything linked to it). A chip in the bar ("7 stars lit ✕") keeps
-the highlight after the panel closes, until you clear it or send something new. **A question never changes anything.**
+neither (then it asks you to rephrase); the panel says which. **A question is answered by the knowledge graph, not
+from the AI's memory.** The AI turns it into a query from a fixed set of steps (find stars by kind or name, follow
+links, filter ideas by stage, function, region or round, go from ideas to their submitter, lead, sponsor or members
+and back, keep what a second search also found, the shortest chain between two stars, rank by number of links, count
+by stage, function, region, round or kind). The app runs the query on the graph and the idea records, the AI words the
+answer from those results only (people still by code), and the stars the query found light up with the links between
+them. **How I found it in the graph** under the answer lists each step and how many stars it kept. Examples: "which
+ideas use data from systems named like expense?", "which capability is needed by the most ideas?", "who leads the
+travel policy assistant?", "how is Zainab Okafor connected to the travel policy assistant?", "highlight what is
+related to GSS". When the graph doesn't hold the answer, it says so and lights nothing. A chip in the bar ("7 stars
+lit ✕") keeps the highlight after the panel closes. **A question never changes anything.** Idea text (the challenge,
+email answers) is not in the graph, so questions about it can't be answered yet.
 
 What a change can do:
 

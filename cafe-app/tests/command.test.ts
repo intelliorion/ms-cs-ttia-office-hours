@@ -24,7 +24,7 @@ async function setup(reply: (prompt: string) => unknown) {
     complete: async (prompt: string) => {
       prompts.push(prompt);
       const r = reply(prompt);
-      return JSON.stringify(r && typeof r === 'object' && !('kind' in r) ? { kind: 'command', ...r } : r);
+      return JSON.stringify(prompt.startsWith('TASK: command') && r && typeof r === 'object' && !('kind' in r) ? { kind: 'command', ...r } : r);
     },
   };
   return { root, prompts, ai: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) };
@@ -168,29 +168,53 @@ describe('the command bar', () => {
     ]);
   });
 
-  it('a question gets an answer and lit stars, sees the whole universe in codes, and never changes anything', async () => {
-    const { root, prompts, ai } = await setup(() => ({
-      kind: 'question', reply: '[P1] leads [I1], which is a [T1] idea.', highlight: ['P1', 'I1', 'T1', 'Z9'],
-      actions: [{ op: 'link', a: 'P1', b: 'T2' }],
-    }));
+  it('a question is answered from the graph: the AI writes a query, the app runs it, the AI words only what it found', async () => {
+    const { root, prompts, ai } = await setup((p) => (p.startsWith('TASK: answer')
+      ? { answer: '[P1] leads [I1]; it is one of [T1]\'s ideas.' }
+      : { kind: 'question', reply: 'You asked who leads [I1].', actions: [{ op: 'link', a: 'P1', b: 'T2' }],
+        queries: [{ steps: [{ op: 'stars', codes: ['I1'] }, { op: 'role', role: 'lead' }] }] }));
     const entry = await runCommand(root, 'who leads the desk booking assistant?', ai, clock);
     expect(entry.kind).toBe('question');
-    expect(entry.reply).toBe('Avery Chen leads Desk booking assistant, which is a BSI idea.');
-    expect(entry.highlight).toEqual(['person:avery-chen', 'idea:CAFE-2026-001', 'team:bsi']);
     expect(entry.actions).toEqual([]);
-    // The AI got every star and link in codes, each idea's stage and function, and no person's name.
-    const data = prompts[0].slice(prompts[0].indexOf('<<<DATA'));
-    expect(data).toMatch(/"links":\[\["/);
-    expect(data).toMatch(/"stage":"Submit Idea","function":"BSI"/);
-    expect(data).toMatch(/"people":\[\{"code":"P\d+","role":"submitter"\},\{"code":"P\d+","role":"lead"\}\]/);
-    expect(data).not.toMatch(/Avery|Chen|Kwame|Mensah|Zainab|Okafor/);
+    // The app ran the query: the idea and its lead, from the idea's own record.
+    expect(entry.highlight).toEqual(['idea:CAFE-2026-001', 'person:avery-chen']);
+    expect(entry.trace).toEqual([[{ text: 'Start from Desk booking assistant', size: 1 }, { text: "Go to the leads, from the ideas' records", size: 1 }]]);
+    // The second call got the results (the lead as a person code, no name) and worded them.
+    const answerPrompt = prompts.find((p) => p.startsWith('TASK: answer'))!;
+    const data = JSON.parse(answerPrompt.slice(answerPrompt.indexOf('<<<DATA') + 7, answerPrompt.indexOf('DATA>>>')));
+    expect(data.results).toEqual([{ stars: [{ code: expect.stringMatching(/^P\d+$/), type: 'Person' }], total: 1 }]);
+    expect(prompts.join('\n')).not.toMatch(/Avery|Chen|Kwame|Mensah|Zainab|Okafor/);
+    expect(entry.reply).toBe('Avery Chen leads Desk booking assistant; it is one of BSI\'s ideas.');
+    // The first call no longer carries the whole graph.
+    expect(prompts[0]).not.toMatch(/"links":/);
   });
 
-  it('"highlight what is related to GSS" lights GSS and every star linked to it, worked out by the app', async () => {
-    const { root, ai } = await setup(() => ({ kind: 'question', reply: 'Lit [T1] and everything linked to it.', actions: [], around: ['T1'] }));
+  it('"highlight what is related to GSS" runs a one-hop query and lights GSS and everything linked to it', async () => {
+    const { root, ai } = await setup((p) => (p.startsWith('TASK: answer')
+      ? { answer: '[T1] links to 3 stars.' }
+      : { kind: 'question', reply: 'You asked what is related to [T1].', actions: [],
+        queries: [{ steps: [{ op: 'stars', codes: ['T1'] }, { op: 'follow' }] }] }));
     const entry = await runCommand(root, 'highlight what is related to GSS', ai, clock);
-    expect(entry.reply).toBe('Lit GSS and everything linked to it.');
     expect(entry.highlight!.sort()).toEqual(['entity:cs', 'person:kwame-mensah', 'team:gss']);
+    expect(entry.reply).toBe('GSS links to 3 stars.');
+  });
+
+  it('a malformed query is left out, saying so, and the good one still runs', async () => {
+    const { root, ai } = await setup((p) => (p.startsWith('TASK: answer')
+      ? { answer: 'Found [T1].' }
+      : { kind: 'question', reply: 'You asked.', actions: [],
+        queries: [{ steps: [{ op: 'stars', codes: ['T1'] }] }, { op_note: 'oops' }] }));
+    const entry = await runCommand(root, 'show me GSS', ai, clock);
+    expect(entry.problems).toEqual(["1 of the AI's searches was malformed and left out."]);
+    expect(entry.highlight).toEqual(['team:gss']);
+    expect(entry.reply).toBe('Found GSS.');
+  });
+
+  it('a question with no query says so instead of guessing', async () => {
+    const { root, ai } = await setup(() => ({ kind: 'question', reply: 'You asked something.', actions: [] }));
+    const entry = await runCommand(root, 'what is the meaning of it all?', ai, clock);
+    expect(entry.problems).toEqual(["I couldn't turn that into a search of the universe. Try naming the stars or ideas you mean."]);
+    expect(entry.highlight).toBeUndefined();
   });
 
   it('unclear: the agent asks to rephrase and nothing is proposed', async () => {

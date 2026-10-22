@@ -224,6 +224,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: command')) return JSON.stringify(commandFor(prompt));
+      if (prompt.startsWith('TASK: answer')) return JSON.stringify({ answer: 'Here is what the graph holds for that.' });
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },
@@ -243,7 +244,9 @@ function commandFor(prompt: string) {
   const codes = [...cmd.matchAll(/\[([A-Z]\d+)\]/g)].map((x) => x[1]);
   const [a, b] = codes;
   const say = (reply: string, actions: unknown[]) => ({ kind: 'command', reply, actions });
-  if (/\?\s*$/.test(cmd)) return { kind: 'question', reply: codes.length ? `[${codes[0]}] is in the universe.` : 'The universe does not hold that.', actions: [], highlight: codes.slice(0, 5) };
+  if (/\?\s*$/.test(cmd)) {
+    return { kind: 'question', reply: 'You asked a question.', actions: [], ...(codes.length ? { queries: [{ steps: [{ op: 'stars', codes: [codes[0]] }, { op: 'follow' }] }] } : {}) };
+  }
   if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return say(`Remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
   if (/^\s*link/i.test(cmd) && a && b) return say(`Link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
   if (/^\s*put/i.test(cmd)) {

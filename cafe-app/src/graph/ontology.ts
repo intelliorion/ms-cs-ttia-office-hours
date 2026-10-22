@@ -26,6 +26,19 @@ export interface GEdge {
   id: string; from: string; to: string; rel: Relation; description: string;
   source: string; confidence: number; confirmed: boolean;
 }
+/**
+ * A change the operator asked for in the command bar, kept in graph/operator.jsonl and laid over the graph built
+ * from the ideas and AI links, in file order. "undone" edits are kept for the record and do nothing.
+ */
+export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone' } & (
+  | { t: 'link'; from: string; rel: Relation; to: string }
+  | { t: 'unlink'; from: string; rel: Relation; to: string }
+  | { t: 'rename'; node: string; label: string }
+  | { t: 'merge'; from: string; into: string }
+);
+/** Star types that can be merged: never ideas, rounds or the division. */
+export const MERGEABLE: NodeType[] = ['Team', 'Person', 'PainPoint', 'Capability', 'System', 'Support', 'Tool'];
+
 export interface AiLink {
   from: string; to: string; rel: Relation; description: string; source: string; confidence: number;
   status: 'pending' | 'confirmed' | 'removed'; newNodes?: GNode[];

@@ -56,7 +56,7 @@ export function planAiLinks(
   // (and every idea), or an AI link the operator confirmed. Nodes that exist only because of
   // a still-pending AI link stay "new", so links to them stay unconfirmed too.
   const known = new Set<string>(graph.nodes.filter((n) => n.type === 'Idea').map((n) => n.id));
-  for (const e of graph.edges) if (e.source.startsWith('form:')) { known.add(e.from); known.add(e.to); }
+  for (const e of graph.edges) if (e.source.startsWith('form:') || e.source === 'operator') { known.add(e.from); known.add(e.to); }
   for (const l of previous) if (l.status === 'confirmed') { known.add(l.from); known.add(l.to); }
   const seen = new Set([...graph.edges.map((e) => e.id), ...previous.map((l) => edgeId(l.from, l.rel, l.to))]);
 

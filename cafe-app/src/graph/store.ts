@@ -4,6 +4,7 @@ import { readText, writeFileAtomic } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
 import { buildGraph } from './build';
+import { readEdits } from './operator';
 import type { AiLink, GEdge, GNode } from './ontology';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
@@ -54,7 +55,7 @@ export async function setAiLinkStatus(root: string, edgeId: string, status: AiLi
 export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
-  const graph = buildGraph(ideas, links, await listRounds(root));
+  const graph = buildGraph(ideas, links, await listRounds(root), await readEdits(root));
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
   return { ...graph, problems };

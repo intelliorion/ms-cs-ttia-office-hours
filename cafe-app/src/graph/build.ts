@@ -2,12 +2,12 @@ import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, edgeId, nodeId, type AiLink, type GEdge, type GNode, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type OperatorEdit, type Relation } from './ontology';
 export { nodeId } from './ontology';
 
 const ROLE_REL: Record<string, Relation> = { lead: 'RELATED', sponsor: 'SPONSORS', member: 'RELATED' };
 
-export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = []): { nodes: GNode[]; edges: GEdge[] } {
+export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = []): { nodes: GNode[]; edges: GEdge[] } {
   const nodes = new Map<string, GNode>();
   const edges = new Map<string, GEdge>();
   const node = (n: GNode) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
@@ -99,8 +99,40 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     edge(l.from, l.rel, l.to, l.description, l.source, l.confidence, confirmed);
   }
 
+  applyEdits(nodes, edges, edits);
+
   return {
     nodes: [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id)),
     edges: [...edges.values()].sort((a, b) => a.id.localeCompare(b.id)),
   };
+}
+
+/** The operator's edits, in order, over what the form and the AI drew. An edit whose stars are gone does nothing. */
+function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits: OperatorEdit[]): void {
+  for (const e of edits) {
+    if (e.status !== 'active') continue;
+    if (e.t === 'rename') {
+      const n = nodes.get(e.node);
+      if (n && e.label.trim()) nodes.set(n.id, { ...n, label: e.label.trim() });
+    } else if (e.t === 'unlink') {
+      edges.delete(edgeId(e.from, e.rel, e.to));
+    } else if (e.t === 'link') {
+      const pair = ALLOWED[e.rel]; const from = nodes.get(e.from); const to = nodes.get(e.to);
+      if (!pair || !from || !to || from.type !== pair[0] || to.type !== pair[1]) continue;
+      const id = edgeId(e.from, e.rel, e.to);
+      if (!edges.has(id)) edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: 'operator', confidence: 1, confirmed: true });
+    } else if (e.t === 'merge') {
+      const from = nodes.get(e.from); const into = nodes.get(e.into);
+      if (!from || !into || from.id === into.id || from.type !== into.type || !MERGEABLE.includes(from.type)) continue;
+      for (const [id, x] of [...edges]) {
+        if (x.from !== from.id && x.to !== from.id) continue;
+        edges.delete(id);
+        const f = x.from === from.id ? into.id : x.from; const t = x.to === from.id ? into.id : x.to;
+        if (f === t) continue;
+        const nid = edgeId(f, x.rel, t);
+        if (!edges.has(nid)) edges.set(nid, { ...x, id: nid, from: f, to: t });
+      }
+      nodes.delete(from.id);
+    }
+  }
 }

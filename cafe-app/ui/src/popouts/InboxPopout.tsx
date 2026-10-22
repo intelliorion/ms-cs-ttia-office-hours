@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store';
-import { inboxDropFile, inboxDropText } from '../api';
+import { inboxDropFile } from '../api';
 import { Modal } from './Modal';
 import { InboxCard, TYPE_ICON, type Note, type Run } from './InboxCard';
 import {
@@ -26,7 +26,6 @@ export function InboxPopout() {
   const [busy, setBusy] = useState<string | null>(null);
   const going = useRef(false); // set at once, so a second click in the same tick cannot start a second call
   const [over, setOver] = useState(false);
-  const [paste, setPaste] = useState('');
   const [dupes, setDupes] = useState<Record<string, string>>({});
   const [chip, setChip] = useState<Chip>('all');
   const [q, setQ] = useState('');
@@ -120,13 +119,6 @@ export function InboxPopout() {
     setNotice(dropSummary(outcomes));
     if (input.current) input.current.value = '';
   };
-  const addNote = async () => {
-    const text = paste.trim();
-    if (!text) return;
-    const out = await dropping('Your note', () => inboxDropText(text));
-    if (out) setNotice(dropSummary([out]));
-    setPaste('');
-  };
 
   const waiting = (inbox?.counts.new ?? 0) + (inbox?.counts.ok ?? 0) + (inbox?.counts.held ?? 0);
   const card = (it: InboxItemView, expanded = false) => (
@@ -148,13 +140,9 @@ export function InboxPopout() {
             {lockedWhy && !busy && <div className="ib-locked" data-testid="import-locked" role="status"><span className="ib-locked-dot" aria-hidden="true" />{lockedWhy}</div>}
           </div>
           <div className="ib-well-r">
-            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={working} title={lockedWhy}
+            <input ref={input} type="file" multiple data-testid="inbox-file" aria-label="Choose files to import" disabled={working} title={lockedWhy} data-autofocus
               onChange={(e) => void dropFiles(e.target.files)} />
-            <div className="ib-paste">
-              <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={1} placeholder="Paste an email or a quick note"
-                aria-label="Paste a note" data-testid="inbox-paste" disabled={working} title={lockedWhy} data-autofocus />
-              <button className="btn primary sm" data-action="add-note" disabled={working || !paste.trim()} onClick={() => void addNote()}>Add note</button>
-            </div>
+            <div className="hint">To tell the Café what to do, use the command bar at the top.</div>
           </div>
           <div className="ib-under">
             <span>A form export imports its ideas; for a line-by-line report use <button className="link-btn" data-action="import" onClick={() => openPopout({ kind: 'import' })}>Import with a report</button></span>

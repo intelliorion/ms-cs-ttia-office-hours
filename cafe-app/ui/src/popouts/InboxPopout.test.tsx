@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 
-vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), inboxPost: vi.fn(async () => ({})), inboxDropFile: vi.fn(), inboxDropText: vi.fn() }));
-import { inboxDropText } from '../api';
+vi.mock('../api', async (orig) => ({ ...(await orig<typeof import('../api')>()), inboxPost: vi.fn(async () => ({})), inboxDropFile: vi.fn() }));
+import { inboxDropFile } from '../api';
 import { useStore } from '../state/store';
 import { InboxPopout } from './InboxPopout';
 import type { InboxItemView } from './inboxHelpers';
@@ -89,17 +89,16 @@ describe('InboxPopout', () => {
 
   it('reads the Import every 400 ms while a drop is on its way, and stops when it comes back', async () => {
     useStore.setState({ inbox: view([]) });
-    vi.mocked(inboxDropText).mockImplementation(() => new Promise((ok) => setTimeout(() => ok({ item: { id: 'ib9', name: 'Your note' } }), 1000)));
+    vi.mocked(inboxDropFile).mockImplementation(() => new Promise((ok) => setTimeout(() => ok({ item: { id: 'ib9', name: 'note.txt' } }), 1000)));
     const el = document.createElement('div'); document.body.appendChild(el);
     const root = createRoot(el);
     act(() => root.render(<InboxPopout />));
-    const ta = el.querySelector('[data-testid="inbox-paste"]') as HTMLTextAreaElement;
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, 'A quick note');
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    // The note box is gone: notes arrive as files; commands go to the command bar.
+    expect(el.querySelector('[data-testid="inbox-paste"]')).toBeNull();
     const before = refreshInbox.mock.calls.length;
-    act(() => (el.querySelector('[data-action="add-note"]') as HTMLButtonElement).click());
+    const drop = new Event('drop', { bubbles: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [new File(['A quick note'], 'note.txt')] } });
+    act(() => { el.querySelector('[data-testid="modal-back"]')!.dispatchEvent(drop); });
     await act(async () => { await vi.advanceTimersByTimeAsync(999); });
     expect(refreshInbox.mock.calls.length - before).toBeGreaterThanOrEqual(2);
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });

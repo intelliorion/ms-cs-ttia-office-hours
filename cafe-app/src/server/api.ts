@@ -26,6 +26,7 @@ import {
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
+import { readChat, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
 import {
@@ -73,6 +74,13 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
       approvedTools: APPROVED_TOOLS,
     };
   });
+
+  // The command bar: the operator's own instructions. The AI proposes; nothing changes until the operator says "Do it".
+  add('GET', '/api/chat', async () => ({ entries: (await readChat(root)).slice(-50) }));
+  add('POST', '/api/chat', async ({ body }) => runCommand(root, String(body.text ?? ''), ai, clock));
+  add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock));
+  add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));
+  add('POST', '/api/chat/:id/undo', async ({ params, body }) => undoChatAction(root, params.id, String(body.actionId ?? ''), clock));
 
   add('GET', '/api/rounds', async () => {
     const [{ rounds, problems }, { ideas }] = await Promise.all([listRoundsChecked(root), listIdeas(root)]);

@@ -156,6 +156,7 @@ cafe-app/ui/src/panels/ideasList.test.ts
 cafe-app/ui/src/panels/stageGate.test.ts
 cafe-app/ui/src/panels/stageGate.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
+cafe-app/ui/src/popouts/IdeaSections.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.tsx
 cafe-app/ui/src/popouts/ImportPopout.tsx
 cafe-app/ui/src/popouts/InboxCard.test.tsx
@@ -204,8 +205,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
+cafe-app/web/assets/index-BOCPrRLZ.js
 cafe-app/web/assets/index-BvKyKmUD.css
-cafe-app/web/assets/index-juKZNuYu.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

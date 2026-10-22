@@ -30,7 +30,6 @@ export const getInbox = () => fetch('/api/inbox').then((r) => handle<any>(r));
 /** A dropped file goes up as its own bytes; the server keeps it as dropped. */
 export const inboxDropFile = (file: File) =>
   fetch('/api/inbox/drop', { method: 'POST', headers: { 'x-filename': filenameHeader(file.name), 'content-type': 'application/octet-stream' }, body: file }).then((r) => handle<any>(r));
-export const inboxDropText = (text: string, name?: string) => post('/api/inbox/drop', name ? { text, name } : { text });
 export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismiss' | 'delete' | 'draft-held-reply' | 'process' | 'dismiss-action', body: unknown = {}) =>
   post(`/api/inbox/${encodeURIComponent(id)}/${what}`, body);
 
@@ -38,3 +37,9 @@ export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismi
 export const ideaGet = (id: string, what: 'design' | 'plan') => fetch(`/api/ideas/${encodeURIComponent(id)}/${what}`).then((r) => handle<any>(r));
 export type DesignRoute = 'tools/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan' | 'tools/questions/clear';
 export const designPost = (id: string, what: DesignRoute, body: unknown = {}) => post(`/api/ideas/${encodeURIComponent(id)}/${what}`, body);
+
+/** The command bar: the operator's commands, the agent's replies and the actions waiting for "Do it". */
+export const getChat = () => fetch('/api/chat').then((r) => handle<{ entries: any[] }>(r));
+export const chatSend = (text: string) => post('/api/chat', { text });
+export const chatPost = (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) =>
+  post(`/api/chat/${encodeURIComponent(id)}/${what}`, actionId ? { actionId } : {});

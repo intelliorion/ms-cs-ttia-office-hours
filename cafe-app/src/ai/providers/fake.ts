@@ -223,6 +223,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
+      if (prompt.startsWith('TASK: command')) return JSON.stringify(commandFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
     },
@@ -233,4 +234,24 @@ export function fakeProvider(): Provider {
       return JSON.stringify(lookFor(file));
     },
   };
+}
+
+/** The command bar, read by rule from the coded command: link, unlink, put … in, rename … to, merge … into, move (a stage). */
+function commandFor(prompt: string) {
+  const m = /"command":\s*"((?:[^"\\]|\\.)*)"/.exec(prompt);
+  const cmd = m ? JSON.parse(`"${m[1]}"`) as string : '';
+  const codes = [...cmd.matchAll(/\[([A-Z]\d+)\]/g)].map((x) => x[1]);
+  const [a, b] = codes;
+  const say = (reply: string, actions: unknown[]) => ({ reply, actions });
+  if (/^\s*(unlink|remove)/i.test(cmd) && a && b) return say(`Remove the link between [${a}] and [${b}].`, [{ op: 'unlink', a, b }]);
+  if (/^\s*link/i.test(cmd) && a && b) return say(`Link [${a}] and [${b}].`, [{ op: 'link', a, b, ...(/sponsor/i.test(cmd) ? { rel: 'SPONSORS' } : {}) }]);
+  if (/^\s*put/i.test(cmd)) {
+    const ideas = codes.filter((c) => c.startsWith('I')); const round = codes.find((c) => c.startsWith('R'));
+    const name = /in (?:a )?(?:new )?round (?:called )?"?([^"]+?)"?\s*$/i.exec(cmd)?.[1];
+    return say('Put the ideas in the round.', [{ op: 'round', ideas, ...(round ? { b: round } : name ? { name } : {}) }]);
+  }
+  if (/^\s*rename/i.test(cmd) && a) return say(`Rename [${a}].`, [{ op: 'rename', a, name: /to\s+(.+)$/i.exec(cmd)?.[1]?.trim() ?? '' }]);
+  if (/^\s*merge/i.test(cmd) && a && b) return say(`Merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
+  if (/^\s*move/i.test(cmd) && a) return say(`Move [${a}] to another stage.`, [{ op: 'stage', a }]);
+  return say("I didn't understand that as a command for the universe.", []);
 }

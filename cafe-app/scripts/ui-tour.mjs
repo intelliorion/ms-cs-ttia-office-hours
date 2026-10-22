@@ -288,8 +288,8 @@ async function inboxShots(p) {
   await p.waitForSelector('.ib-item [data-group="held"]', { timeout: 120000 });
   await sleep(800);
   await shot(p, '23-inbox-held.png');
-  await p.fill('[data-testid="inbox-paste"]', 'Quick call notes. Someone on the desk team asked for a weekly summary of open requests by region.\nThey will send an example next week.');
-  await p.click('[data-action="add-note"]');
+  // A note arrives as a file now; commands go to the command bar.
+  await p.setInputFiles('[data-testid="inbox-file"]', { name: 'call-notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Quick call notes. Someone on the desk team asked for a weekly summary of open requests by region.\nThey will send an example next week.') });
   await p.waitForSelector('[data-testid="which-idea"]', { timeout: 120000 });
   await sleep(800);
   await shot(p, '24-inbox-ask.png');

@@ -136,9 +136,30 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
 6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
+## Command bar: tell the Café what to do
+
+The box at the top of the screen, left of **Import**, takes your own instructions in plain words. Unlike a dropped
+file, a command **is** an instruction. Press Enter; the AI reads it and the chat panel below the box shows what it
+understood and one card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and
+every done action has **Undo** (a team or round that changed since is kept, and the card says so).
+
+What it can do:
+
+- Link or unlink two stars: "link Avery Chen to BSI" (a person to a team), "remove the link between X and Y".
+- Set a person's role on an idea: "make Avery Chen sponsor of the procurement FAQ bot" (this changes the idea's team).
+- Put ideas in a round, or create one: "put the travel and procurement bots in a new round called 2026 Q4".
+- Rename a star, or merge a duplicate into another: "merge Policy Q&A into Natural-language policy Q&A".
+
+The AI proposes; the app checks every action against the universe before it shows a card, and explains anything it
+left out. Stages still move only by your hand (the agent points you to the stage button), tools are still picked in
+the tool picker, and who submitted an idea stays as the form says. **Before the AI sees a command, every name the app
+knows (people, teams, ideas, rounds, stars) is swapped for a code such as [P1]**, so a person's name never leaves your
+machine; a name the app has never seen is sent as typed. Links you make are kept in `graph/operator.jsonl` and drawn
+over what the form and the AI drew; the chat is kept in `chat/log.jsonl`.
+
 ## Import: drop anything
 
-Open **Import** in the title bar (it shows how many things wait on you). Drop files on it, or paste a note,
+Open **Import** in the title bar (it shows how many things wait on you). Drop files on it,
 and the app works out which idea each one belongs to and what it changes. Everything dropped is read as
 **data, never as instructions**.
 
@@ -150,7 +171,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 - Word files: `.docx`.
 - PDFs: `.pdf`, with text or scanned, up to 10 MB.
 - Pictures: `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`, up to 10 MB (a whiteboard photo, a screenshot, a scan).
-- Notes and pasted text.
+- Notes as text files (`.txt`, `.md`). To tell the Café what to do, use the command bar instead (below).
 - Dropping a file anywhere on the Import pop-out works, not only on the dashed zone.
 - Want something to try? `test-data/` holds synthetic files (exports, emails, a transcript, a Word file, a held tracker, a text PDF, a whiteboard picture, a scanned PDF, and a reply that clashes with what the app holds) with a README on what to expect; run `npm run test-data` first (the files are generated, not committed) (script: `scripts/make-test-data.mjs`). All names in it are fictional; any resemblance is coincidental.
 
@@ -159,7 +180,7 @@ and the app works out which idea each one belongs to and what it changes. Everyt
 file alone into an empty temp folder and asks Claude Code to open it with its Read tool (that one file only), write
 out all the text in it line by line, and say in two sentences what the picture shows; the folder is deleted after.
 The Read step says "Picture: the AI is reading it…", then "Picture read by the AI, 4.2 s, 86 words". From there the
-transcription goes through Screen, Match, Understand and the rest exactly like a pasted note, and the card shows it
+transcription goes through Screen, Match, Understand and the rest exactly like a text note, and the card shows it
 under **What the AI read**. **Pictures are read by the AI before the personal-data check; a held picture's text is not
 kept** (the held card says "The text was not kept"). Reading pictures needs Claude Code as the AI helper; with Copilot
 CLI or the VS Code helper a picture is held with "Reading pictures needs Claude Code (AI helper → provider)", and with

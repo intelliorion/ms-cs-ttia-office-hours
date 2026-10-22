@@ -4,6 +4,7 @@ import { post } from '../api';
 import { chipText } from '../popouts/aiUi';
 import { baseName, titleSub, unsentCount } from '../popouts/titleHelpers';
 import { inboxCount } from '../popouts/inboxHelpers';
+import { CommandBar } from './CommandBar';
 
 export function TitleBar() {
   const { openPopout, refresh, setNotice, state, ai, refreshAi, inbox, refreshInbox } = useStore();
@@ -21,6 +22,7 @@ export function TitleBar() {
   return (
     <header className="titlebar">
       <div><span className="name"><span className="org">CS TTIA</span>Creators' Café</span><span className="sub">{titleSub(state)}</span></div>
+      <CommandBar />
       <div className="btns">
         <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, Word, PDF and pictures" onClick={() => openPopout({ kind: 'inbox' })}>
           <span className="ib-icon" aria-hidden="true">⤓</span>Import{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>

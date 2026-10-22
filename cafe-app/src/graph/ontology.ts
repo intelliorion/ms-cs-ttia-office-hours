@@ -1,7 +1,7 @@
 export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round' | 'Support' | 'Outcome' | 'Beneficiary' | 'Category';
 export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
 export const NODE_LABELS: Record<NodeType, string> = {
-  Entity: 'Entity', Team: 'Team', Person: 'Person', Idea: 'Idea', PainPoint: 'Pain point',
+  Entity: 'Division', Team: 'Team', Person: 'Person', Idea: 'Idea', PainPoint: 'Pain point',
   Capability: 'Capability', Tool: 'Tool', System: 'System or data', Round: 'Round', Support: 'Support requested',
   Outcome: 'Desired outcome', Beneficiary: 'Beneficiary', Category: 'Use case category',
 };

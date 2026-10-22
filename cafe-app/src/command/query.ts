@@ -61,7 +61,7 @@ export const QUERY_GUIDE = [
   '- path: the shortest chain of links between the two stars in codes.',
   '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
   '- count_by: count the set by stage, function, region, round or type (the set stays as it is).',
-  'Links: Entity HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/SPONSORS/RELATED Idea, Idea REPLACES PainPoint, Idea NEEDS Capability,',
+  'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/SPONSORS/RELATED Idea, Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',

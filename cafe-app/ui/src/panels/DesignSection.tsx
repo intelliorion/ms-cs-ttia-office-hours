@@ -38,8 +38,8 @@ export function CafeCheckCard({ check }: { check: any }) {
   );
 }
 
-function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
-  step: any; off: boolean; onAnswer: (body: any) => Promise<unknown>; onIdk: () => void; onOutbox: () => void;
+function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
+  step: any; off: boolean; onAnswer: (body: any) => Promise<unknown>; onIdk: () => void; onSendQuestions: () => void;
 }) {
   const [text, setText] = useState('');
   /** Changing a saved answer: the box reopens with the answer in it. */
@@ -71,7 +71,7 @@ function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
           {st.kind === 'asked' && (
             <div className="ds-asked" data-testid="asked-team">
               <span>{st.label}</span>
-              <button className="link-btn" data-action="open-outbox" onClick={onOutbox}>Open the Outbox</button>
+              <button className="link-btn" data-action="send-questions" disabled={off} onClick={onSendQuestions}>Open the questions email in Outlook</button>
             </div>
           )}
           {step.suggested?.length > 0 && (
@@ -84,7 +84,7 @@ function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
           <div className="ds-own">
             <textarea rows={2} value={text} placeholder="Or write the answer" aria-label={`Answer to question ${step.n}`} disabled={off} onChange={(e) => setText(e.target.value)} />
             <div className="ds-own-acts">
-              {st.kind === 'open' && <button className="btn sm amber" data-action="idk" disabled={off} title="Adds the question to the E2 draft in the Outbox" onClick={onIdk}>I don't know → ask the team</button>}
+              {st.kind === 'open' && <button className="btn sm amber" data-action="idk" disabled={off} title="Adds the question to the questions email (E2), sent from ✉ Emails" onClick={onIdk}>I don't know → ask the team</button>}
               <button className="btn sm primary" data-action="save-answer" disabled={off || !text.trim()}
                 onClick={async () => { if (await onAnswer({ answer: text })) setText(''); }}>Save answer</button>
             </div>
@@ -99,8 +99,8 @@ function StepItem({ step, off, onAnswer, onIdk, onOutbox }: {
  * Design: the brainstorm as a conversation, one question at a time; the Café check; Approve. Works by hand with no AI:
  * the operator adds questions, answers them and writes the summary.
  */
-export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onOutbox }: {
-  idea: any; design: DesignView | null; busy: boolean; aiWorking: boolean; noAi: boolean; call: DesignCall; onOutbox: () => void;
+export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSendQuestions }: {
+  idea: any; design: DesignView | null; busy: boolean; aiWorking: boolean; noAi: boolean; call: DesignCall; onSendQuestions: () => void;
 }) {
   const [handQ, setHandQ] = useState<{ question: string; suggested: string } | null>(null);
   const [finish, setFinish] = useState<string | null>(null);
@@ -138,9 +138,9 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onOut
       {steps.length > 0 && (
         <ol className="ds-steps">
           {steps.map((st) => (
-            <StepItem key={st.n} step={st} off={off} onOutbox={onOutbox}
+            <StepItem key={st.n} step={st} off={off} onSendQuestions={onSendQuestions}
               onAnswer={(body) => answer(st.n, body)}
-              onIdk={() => void call(() => designPost(id, 'design/answer', { n: st.n, idk: true }), { ok: () => `Question ${st.n} added to the E2 draft in the Outbox. Carry on with the next question.` })} />
+              onIdk={() => void call(() => designPost(id, 'design/answer', { n: st.n, idk: true }), { ok: () => `Question ${st.n} added to the questions email (E2): send it from ✉ Emails. Carry on with the next question.` })} />
           ))}
         </ol>
       )}

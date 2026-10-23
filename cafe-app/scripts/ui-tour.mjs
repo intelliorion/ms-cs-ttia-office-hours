@@ -158,7 +158,7 @@ const SECOND_EXPORT = [
 
 const click = (p, sel) => p.click(sel);
 
-// Import, Round, Outbox from the title bar, then a late reply (the app clock moved 8 days on).
+// Import, Round, an idea's Emails menu, then a late reply (the app clock moved 8 days on).
 async function popouts2Shots(p, gl, errors, restart) {
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
   // Import lives inside the Inbox now: open the Inbox, then "Import with a report".
@@ -208,11 +208,14 @@ async function popouts2Shots(p, gl, errors, restart) {
   await p.reload({ waitUntil: 'networkidle' });
   await p.waitForSelector('canvas');
   await sleep(2500);
-  await click(p, '.titlebar [data-action="outbox"]');
-  await p.waitForSelector('[data-group]');
-  await sleep(800);
-  await shot(p, '12-outbox.png');
+  // No Outbox: an idea's unsent email waits under its ✉ Emails menu, and opens in Outlook from there.
+  await p.evaluate((id) => window.__cafe.openIdea(id), b);
+  await click(p, '[data-action="email-menu"]');
+  await p.waitForSelector('.em-pop');
+  await sleep(500);
+  await shot(p, '12-emails.png');
   await p.keyboard.press('Escape');
+  await p.evaluate(() => window.__cafe.backToList());
 
   // Eight days on: the reply is late. Ideas list shows the amber line, Pipeline shows the late list.
   const later = new Date(Date.now() + 8 * 864e5);
@@ -501,10 +504,7 @@ async function designShots(p) {
   await p.locator(`${D} .ds-step[data-step="1"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await sleep(300);
   await shot(p, '42-design-idk.png');
-  await p.click(`${D} .ds-step[data-step="2"] [data-action="open-outbox"]`);
-  await p.waitForSelector('[data-group]');
-  await p.keyboard.press('Escape');
-  await p.waitForSelector(D);
+  assert(await p.locator(`${D} .ds-step[data-step="2"] [data-action="send-questions"]`).count() === 1, 'no way to send the questions email');
   // The third question by hand-typed answer, then the AI says done.
   await p.click(`${D} [data-action="next-question"]`);
   await p.waitForSelector(`${D} .ds-step[data-step="3"]`, { timeout: 90000 });

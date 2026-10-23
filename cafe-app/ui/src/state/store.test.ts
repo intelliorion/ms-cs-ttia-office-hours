@@ -19,7 +19,7 @@ describe('selectors', () => {
   it('counts ideas by stage with closed separate', () =>
     expect(ideasByStage(state)).toEqual([['Submit Idea', 1], ['Review and Select', 2], ['Design series', 0], ['Launch and Learn', 0], ['Closed', 1]]));
   it('summarises what is waiting, leaving out replies already received', () =>
-    expect(waitingSummary(state)).toEqual({ drafts: 1, approved: 1, repliesDue: 1, late: 1, lateIdeas: ['CAFE-2026-003'] }));
+    expect(waitingSummary(state)).toEqual({ unsent: 2, repliesDue: 1, late: 1, lateIdeas: ['CAFE-2026-003'] }));
   it('counts support across open ideas only', () => expect(supportCounts(state)).toEqual([['A', 1]]));
   it('groups function and region', () => expect(functionRegion(state)).toEqual([['GSS · APAC', 3], ['— · —', 1]]));
 });

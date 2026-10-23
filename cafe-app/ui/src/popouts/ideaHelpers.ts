@@ -1,8 +1,7 @@
 // Pure helpers for the idea pop-out and the star card. No React here, so they test in node.
 import { NODE_LABELS, type GEdge, type GNode } from '../../../src/graph/ontology';
-import { shortDate, emailChips, stageKey } from '../panels/filterIdeas';
+import { emailChips, stageKey } from '../panels/filterIdeas';
 import { STAGE_RING, ringColour } from '../universe/graphView';
-import { ApiError, copyText, post } from '../api';
 
 /** Emails the operator can draft for one idea. */
 export const IDEA_TEMPLATES = ['E1', 'E2', 'E2R', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'PD'];
@@ -16,51 +15,6 @@ const DECISION_SHORT: Record<string, string> = { select: 'Select', reuse: 'Reuse
 /** The email each review decision drafts. */
 export const DECISION_EMAIL: Record<string, string> = { select: 'E3', reuse: 'E4', csic: 'E5', notnow: 'E6', ask: 'E2' };
 
-export type EmailActionKind = 'approve' | 'set-first' | 'sent' | 'none';
-export interface EmailAction { label: string; enabled: boolean; kind: EmailActionKind }
-
-/** The one main action an Outbox item offers. `missing` are the labels of settings still to set. */
-export function emailAction(
-  item: { status: string; sentAt?: string; missingSettings?: { label: string }[] },
-  missing: string[] = (item.missingSettings ?? []).map((m) => m.label),
-): EmailAction {
-  if (item.status === 'draft') {
-    return missing.length
-      ? { label: `Set first: ${missing.join(', ')}`, enabled: true, kind: 'set-first' }
-      : { label: 'Approve and copy', enabled: true, kind: 'approve' };
-  }
-  if (item.status === 'approved') return { label: 'Mark as sent', enabled: true, kind: 'sent' };
-  return { label: item.sentAt ? `Sent ${shortDate(item.sentAt)}` : 'Sent', enabled: false, kind: 'none' };
-}
-
-/** Status chip wording for an Outbox item. */
-export const emailStatus = (status: string) =>
-  status === 'draft' ? 'Draft' : status === 'approved' ? 'Approved' : 'Sent';
-
-/** What goes on the clipboard when an email is approved. */
-export const clipText = (m: { subject: string; body: string }) => `Subject: ${m.subject}\n\n${m.body}`;
-
-export const APPROVED_NOTICE = (template: string) => `${template} approved and copied. Paste it into Outlook, send it, then mark it as sent.`;
-
-/**
- * Approves one Outbox item and puts "Subject: ...\n\n<body>" on the clipboard.
- * Returns the approved item; `fallback` is the text to show selected when the browser refused to copy.
- * Missing settings become "Set first: ..." so the operator knows to open Rounds.
- */
-export async function approveAndCopy(
-  key: string,
-  api: { post: typeof post; copyText: typeof copyText } = { post, copyText },
-): Promise<{ item: any; fallback: string | null }> {
-  try {
-    const item = await api.post('/api/outbox/approve', { key });
-    const text = clipText(item);
-    return { item, fallback: (await api.copyText(text)) ? null : text };
-  } catch (e) {
-    if (e instanceof ApiError && e.missing?.length) throw new ApiError(`Set first: ${e.missing.join(', ')}. Open Rounds to fill them in.`);
-    throw e;
-  }
-}
-
 /** Paths in a history line shown by their last part only, so the line never says where the app keeps things. */
 const baseNames = (s: unknown) => String(s ?? '').replace(/\S*[\\/](\S+)/g, '$1');
 
@@ -73,7 +27,9 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
     case 'created': return `Imported${h.source ? ` from ${String(h.source).split(/[\\/]/).pop()}` : ''}`;
     case 'tick': return `Step done: ${step(h.step)}`;
     case 'untick': return `Step undone: ${step(h.step)}`;
-    case 'draft': return `${h.detail} drafted in the Outbox`;
+    case 'draft': return `${h.detail} drafted`;
+    case 'replaced': return `${h.detail}`;
+    case 'unsent': return `${h.detail} not sent after all (Undo)`;
     case 'sent': return `${h.detail} marked sent`;
     case 'review': {
       const [k, ...rest] = String(h.detail ?? '').split(': ');

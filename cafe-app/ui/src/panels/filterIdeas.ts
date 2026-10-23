@@ -18,6 +18,7 @@ export const shortDate = (iso: string): string => {
 /** "E1 ✓ 19 Oct" for sent mails, "E5 draft" / "E5 approved" for ones waiting. */
 export function emailChips(idea: any, outbox: any[]): string[] {
   const sent = Object.entries((idea.sent ?? {}) as Record<string, string>).map(([t, d]) => `${t} ✓ ${shortDate(d)}`);
-  const waiting = outbox.filter((m) => m.idea === idea.id && m.status !== 'sent' && !(idea.sent ?? {})[m.template]).map((m) => `${m.template} ${m.status}`);
+  // Not sent yet: one per stage at most (an older one a newer one replaced is left out); "draft" either way.
+  const waiting = outbox.filter((m) => m.idea === idea.id && m.status !== 'sent' && !m.superseded && !(idea.sent ?? {})[m.template]).map((m) => `${m.template} draft`);
   return [...sent, ...waiting];
 }

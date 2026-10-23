@@ -27,7 +27,7 @@ describe('Welcome', () => {
   });
 
   it('hides while a pop-out is open', () => {
-    useStore.setState({ popout: { kind: 'outbox' } });
+    useStore.setState({ popout: { kind: 'round' } });
     show();
     expect(el.querySelector('[data-testid="welcome"]')).toBeNull();
   });

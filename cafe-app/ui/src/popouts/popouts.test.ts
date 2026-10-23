@@ -9,8 +9,7 @@ import { useStore } from '../state/store';
 import { TitleBar } from '../layout/TitleBar';
 import { RoundPopout } from './RoundPopout';
 import { RoundChip } from './IdeaSections';
-import { approveAndCopy } from './ideaHelpers';
-import { importReportLines, roundFieldsUnblock, groupOutbox, baseName, unsentCount } from './titleHelpers';
+import { importReportLines, roundFieldsUnblock, baseName } from './titleHelpers';
 
 describe('importReportLines', () => {
   it('words new ideas, skipped rows, unread rows, unused columns and flags', () => {
@@ -51,44 +50,10 @@ describe('roundFieldsUnblock', () => {
   });
 });
 
-describe('groupOutbox', () => {
-  it('groups by status, newest first', () => {
-    const g = groupOutbox([
-      { key: 'a', status: 'sent', created: '2026-10-01' }, { key: 'b', status: 'draft', created: '2026-10-02' },
-      { key: 'c', status: 'draft', created: '2026-10-05' }, { key: 'd', status: 'approved', created: '2026-10-03' },
-    ]);
-    expect(g.draft.map((m) => m.key)).toEqual(['c', 'b']);
-    expect(g.approved.map((m) => m.key)).toEqual(['d']);
-    expect(g.sent.map((m) => m.key)).toEqual(['a']);
-  });
-});
-
 describe('small helpers', () => {
   it('shows only the file name', () => {
     expect(baseName('/Users/me/cafe/exports/review-pack.md')).toBe('review-pack.md');
     expect(baseName('C:\\x\\review-pack.md')).toBe('review-pack.md');
-  });
-  it('counts unsent emails', () => {
-    expect(unsentCount([{ status: 'draft' }, { status: 'approved' }, { status: 'sent' }])).toBe(2);
-    expect(unsentCount(undefined)).toBe(0);
-  });
-});
-
-describe('approveAndCopy', () => {
-  const item = { template: 'E1', subject: 'Hi', body: 'Body' };
-  it('copies Subject and body, and offers no fallback', async () => {
-    let copied = '';
-    const r = await approveAndCopy('k', { post: async () => item, copyText: async (t: string) => { copied = t; return true; } } as any);
-    expect(copied).toBe('Subject: Hi\n\nBody');
-    expect(r.fallback).toBeNull();
-  });
-  it('returns the text as a fallback when the browser refuses', async () => {
-    const r = await approveAndCopy('k', { post: async () => item, copyText: async () => false } as any);
-    expect(r.fallback).toBe('Subject: Hi\n\nBody');
-  });
-  it('turns missing settings into Set first', async () => {
-    await expect(approveAndCopy('k', { post: async () => { throw new ApiError('x', ['Teams link']); }, copyText: async () => true } as any))
-      .rejects.toThrow('Set first: Teams link. Open Rounds to fill them in.');
   });
 });
 

@@ -34,18 +34,10 @@ export function roundFieldsUnblock(field: string): string {
   return u.emails.length ? `Needed for ${u.emails.join(', ')}` : u.hint ?? '';
 }
 
-/** Outbox items grouped for the pop-out, newest first inside each group. */
-export function groupOutbox<T extends { status: string; created?: string }>(items: T[]) {
-  const byNew = (a: T, b: T) => String(b.created ?? '').localeCompare(String(a.created ?? ''));
-  const pick = (s: string) => items.filter((m) => m.status === s).sort(byNew);
-  return { draft: pick('draft'), approved: pick('approved'), sent: pick('sent') };
-}
 
 /** Last part of a path, so notices never show where the app keeps things. */
 export const baseName = (p: string) => String(p).split(/[\\/]/).filter(Boolean).pop() ?? '';
 
-/** Unsent emails: drafts and approved ones. */
-export const unsentCount = (outbox: { status: string }[] | undefined) => (outbox ?? []).filter((m) => m.status !== 'sent').length;
 
 /**
  * The name offered for a new round: the year and quarter of the given day, e.g. "2026 Q4", numbered on when a round

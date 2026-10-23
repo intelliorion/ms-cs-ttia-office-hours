@@ -126,3 +126,60 @@ describe('the Outlook draft file', () => {
     expect(emlName('E3', 'CAFE-2026-001: you\'re in!')).toBe('E3 - CAFE-2026-001 you re in.eml');
   });
 });
+
+describe('one unsent email per stage', () => {
+  it('a newer email of the same stage replaces the waiting one; another stage, a sent one or the same email are left alone', async () => {
+    const { draftEmail } = await import('../src/comms/outbox');
+    const { readHistory } = await import('../src/workspace/files');
+    const { ideaDir } = await import('../src/ideas/store');
+    const root = await tmpWorkspace();
+    await saveSettings(root, { operatorName: 'Café operator' });
+    await saveIdea(root, idea);
+    const e3 = await draftEmail(root, { template: 'E3', ideaId: 'CAFE-2026-001' }, clock);
+    expect((await draftEmail(root, { template: 'E3', ideaId: 'CAFE-2026-001' }, clock)).key).toBe(e3.key);
+    const e7 = await draftEmail(root, { template: 'E7', ideaId: 'CAFE-2026-001' }, clock);
+    // Changed the decision: E6 replaces E3 (both Review and Select); E7 (Design series) stays.
+    await draftEmail(root, { template: 'E6', ideaId: 'CAFE-2026-001' }, clock);
+    const mine = (await listOutbox(root)).filter((m) => m.idea === 'CAFE-2026-001').map((m) => m.template).sort();
+    expect(mine).toEqual(['E6', 'E7']);
+    expect((await readHistory(await ideaDir(root, 'CAFE-2026-001'))).some((h: any) => h.action === 'replaced' && h.detail === 'E3 replaced by E6')).toBe(true);
+    // A sent email is never thrown away.
+    const e2 = await draftEmail(root, { template: 'E2', ideaId: 'CAFE-2026-001' }, clock);
+    expect((await listOutbox(root)).map((m) => m.template)).not.toContain('E6');
+    await openEmail(root, e2.key, clock, steps);
+    await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
+    expect((await listOutbox(root)).find((m) => m.key === e2.key)?.status).toBe('sent');
+    void e7;
+  });
+
+  it('a round email goes to the round asked for; an unknown round is refused', async () => {
+    const { draftEmail } = await import('../src/comms/outbox');
+    const { createRound } = await import('../src/round/store');
+    const root = await tmpWorkspace();
+    const r1 = await createRound(root, 'First', clock);
+    await createRound(root, 'Second', clock);
+    const rec = await draftEmail(root, { template: 'E0', round: r1.id }, clock);
+    expect(rec.round).toBe(r1.id);
+    expect(rec.key).toContain(`rounds/${r1.id}/emails/`);
+    await expect(draftEmail(root, { template: 'E0', round: '../x' }, clock)).rejects.toThrow('No round ../x');
+  });
+});
+
+describe('older unsent emails from before one-per-stage', () => {
+  it('only the newest unsent email of a stage counts; older ones are marked superseded, sent ones never', async () => {
+    const { listOutbox } = await import('../src/comms/outbox');
+    const { writeFileAtomic } = await import('../src/workspace/files');
+    const { ideaDir } = await import('../src/ideas/store');
+    const path = await import('node:path');
+    const root = await tmpWorkspace();
+    await saveIdea(root, idea);
+    const dir = path.join(await ideaDir(root, 'CAFE-2026-001'), 'emails');
+    const rec = (n: string, t: string, status: string, created: string) => writeFileAtomic(path.join(dir, `${n}-${t}.md`),
+      `---\ntemplate: ${t}\nidea: CAFE-2026-001\nround: ""\nstatus: ${status}\ncreated: ${created}\nto: x\nsubject: s\n---\nbody\n`);
+    await rec('001', 'E1', 'sent', '2026-10-01'); await rec('002', 'E3', 'draft', '2026-10-02'); await rec('003', 'E6', 'draft', '2026-10-03'); await rec('004', 'E7', 'draft', '2026-10-03');
+    const items = await listOutbox(root);
+    const by = (t: string) => items.find((m) => m.template === t)!;
+    expect([by('E1').superseded, by('E3').superseded, by('E6').superseded, by('E7').superseded]).toEqual([undefined, true, undefined, undefined]);
+    expect([by('E3').stage, by('E7').stage]).toEqual([2, 3]);
+  });
+});

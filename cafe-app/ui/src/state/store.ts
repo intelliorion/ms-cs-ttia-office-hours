@@ -8,7 +8,6 @@ export type Popout =
   | null
   | { kind: 'import' }
   | { kind: 'round' }
-  | { kind: 'outbox' }
   | { kind: 'inbox' }
   | { kind: 'ai' }
   | { kind: 'config' };
@@ -253,8 +252,8 @@ export function waitingSummary(s: any) {
   const open = s.ideas.filter(isOpen);
   const late = open.filter((i: any) => i.overdue.length > 0);
   return {
-    drafts: s.outbox.filter((m: any) => m.status === 'draft').length,
-    approved: s.outbox.filter((m: any) => m.status === 'approved').length,
+    // Emails drafted but not sent (opening one in Outlook counts as sent): only ones that couldn't open yet.
+    unsent: s.outbox.filter((m: any) => m.status !== 'sent' && !m.superseded).length,
     repliesDue: open.filter((i: any) => i.due?.s2d && !i.checklist?.s2d?.done).length,
     late: late.length,
     lateIdeas: late.map((i: any) => i.id as string),

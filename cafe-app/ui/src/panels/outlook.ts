@@ -21,3 +21,8 @@ export function stageEmails(idea: any, steps: any[]): string[] {
   if (idea.offerE2R) out.push('E2R');
   return [...new Set(out)];
 }
+
+/** An idea's emails drafted but not sent yet (one per stage at most): what the Email menu offers to send. */
+export function unsentFor(idea: any, outbox: any[] = []): { template: string; key: string }[] {
+  return outbox.filter((m) => m.idea === idea.id && m.status !== 'sent' && !m.superseded).map((m) => ({ template: m.template, key: m.key }));
+}

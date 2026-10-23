@@ -72,7 +72,7 @@ export function Waiting() {
   const { state, openIdea } = useStore();
   if (!state) return null;
   const w = waitingSummary(state);
-  const kpis: [number, string, boolean][] = [[w.drafts, 'Drafts to approve', false], [w.approved, 'Approved, not sent', false], [w.repliesDue, 'Replies due', false], [w.late, 'Replies late', w.late > 0]];
+  const kpis: [number, string, boolean][] = [[w.unsent, 'Emails not sent', false], [w.repliesDue, 'Replies due', false], [w.late, 'Replies late', w.late > 0]];
   const open = openIdea;
   const byId = new Map<string, any>(state.ideas.map((i: any) => [i.id, i]));
   return (

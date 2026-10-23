@@ -35,7 +35,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     const r = await call(() => designPost(idea.id, 'tools/suggest'), {
       ai: 'tools',
       ok: (x: any) => (x.questions?.length
-        ? `${aiName(x.provider)} needs ${x.questions.length} answer${x.questions.length === 1 ? '' : 's'} first. The questions are in one E2 draft in the Outbox; nothing is suggested until the team replies.`
+        ? `${aiName(x.provider)} needs ${x.questions.length} answer${x.questions.length === 1 ? '' : 's'} first. The questions are in one questions email (E2): send it from ✉ Emails. Nothing is suggested until the team replies.`
         : `One tool suggested by ${aiName(x.provider)}. Check why below, change the tool if you like, then Save.`),
     });
     if (r?.features) { setRows((rs) => mergeRows(rs, featureRows(r.features, { fromAi: true, tools }))); setDirty(true); }
@@ -70,7 +70,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
           <ol>{askedWithAnswers(asked.questions, idea).map((x, i) => (
             <li key={i}>{x.question}{x.answer && <div className="tp-answer" data-testid="tool-answer">↳ {x.answer}</div>}</li>
           ))}</ol>
-          <div className="hint">All in one E2 draft in the Outbox. {waiting ? 'The AI suggests nothing until the team replies; you can still pick by hand.' : 'The answers go to the AI with the form: press Suggest with AI again, or pick by hand.'}
+          <div className="hint">All in one questions email (E2), sent from ✉ Emails. {waiting ? 'The AI suggests nothing until the team replies; you can still pick by hand.' : 'The answers go to the AI with the form: press Suggest with AI again, or pick by hand.'}
             {' '}<button className="link-btn" data-action="tools-forget" disabled={off} onClick={() => void forget()}>Forget these questions</button></div>
         </div>
       )}

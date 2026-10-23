@@ -16,7 +16,7 @@ import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
  * One idea, in the left panel in place of the list: what to do now. Back, its ID, round and stage, then the suggestion
  * strip, the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3;
  * cards for the earlier ones after that). Emails open in Outlook from the head's Email menu and the sections' own
- * buttons; the Outbox keeps every one. What was submitted, its links and its history are on the right
+ * buttons; one unsent email per stage at most. What was submitted, its links and its history are on the right
  * (ContextPanels); the universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
@@ -124,7 +124,7 @@ export function IdeaDetails({ id }: { id: string }) {
   };
   const openTemplate = (template: string) => void act(
     async () => opened(await post(`/api/ideas/${encodeURIComponent(id)}/email-open`, { template })), (o: any) => openedText(o.email.template));
-  const undoOpen = (key: string) => void act(() => post('/api/outbox/unopen', { key }), (r: any) => `Undone: ${r.template} is back in the Outbox, not sent.`);
+  const undoOpen = (key: string) => void act(() => post('/api/outbox/unopen', { key }), (r: any) => `Undone: ${r.template} is not sent; it waits under ✉ Emails.`);
 
   const head = (extra?: React.ReactNode) => (
     <div className="id-head">
@@ -169,7 +169,7 @@ export function IdeaDetails({ id }: { id: string }) {
       <div className="pop-sub">
         {[idea.function, idea.region, idea.participation].filter(Boolean).join(' · ') || 'Function and region not given'}
         {idea.flags?.length > 0 && <span className="flagn" title={idea.flags.join('\n')}>⚑ {idea.flags.length} flag{idea.flags.length > 1 ? 's' : ''}</span>}
-        <EmailMenu idea={idea} steps={state.steps ?? []} busy={busy} onOpen={openTemplate} onOutbox={() => openPopout({ kind: 'outbox' })} />
+        <EmailMenu idea={idea} steps={state.steps ?? []} outbox={state.outbox ?? []} busy={busy} onOpen={openTemplate} />
       </div>
       {(mine || notice || (!idea.closed && idea.overdue?.length > 0)) && (
         <div className="pop-strip">
@@ -198,12 +198,12 @@ export function IdeaDetails({ id }: { id: string }) {
             onDraftEmail={() => void act(async () => opened(await post(`/api/ideas/${encodeURIComponent(id)}/prep/email`)), (o: any) => openedText(o.email.template))}
             onSave={(body) => void act(async () => {
               const r = await ideaPost(id, 'review', body);
-              // The decision is saved; its email then goes to Outlook. If it can't yet (a setting missing), it waits in the Outbox.
+              // The decision is saved; its email then goes to Outlook. If it can't yet (a setting missing), it waits under ✉ Emails.
               try { const o = opened(await post('/api/outbox/open', { key: r.email.key })); return { ...r, opened: o, suggest: o.suggest ?? r.suggest }; }
               catch (e) { return { ...r, openError: (e as Error).message }; }
             }, (r: any) => [
               'Decision saved.',
-              r.opened ? openedText(r.email.template) : `${r.email.template} is in the Outbox. ${r.openError}`,
+              r.opened ? openedText(r.email.template) : `${r.email.template} waits under ✉ Emails. ${r.openError}`,
               r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? []),
             ].filter(Boolean).join(' '))} />
         )}
@@ -215,7 +215,7 @@ export function IdeaDetails({ id }: { id: string }) {
         {gates.tools === 'summary' && <ToolsCard design={design} onEdit={edit('tools')} />}
         {gates.design === 'active' && (
           <DesignSection key={`design-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'design')} aiWorking={aiFor === 'design'}
-            noAi={noAi} call={designCall} onOutbox={() => openPopout({ kind: 'outbox' })} />
+            noAi={noAi} call={designCall} onSendQuestions={() => openTemplate('E2')} />
         )}
         {gates.design === 'summary' && <DesignCard design={design} onEdit={edit('design')} />}
         {gates.plan === 'active' && (

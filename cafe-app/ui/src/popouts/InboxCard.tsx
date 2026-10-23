@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { inboxPost } from '../api';
+import { inboxPost, post } from '../api';
+import { downloadEml, openedText } from '../panels/outlook';
 import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
@@ -265,7 +266,12 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
           <ul className="ib-reasons">{(item.hold?.reasons ?? []).map((x, i) => <li key={i}>{x}</li>)}</ul>
           <div className="ib-held-acts">
             <button className="btn sm" data-action="draft-held-reply" disabled={busy}
-              onClick={() => void go('Drafting…', () => inboxPost(item.id, 'draft-held-reply'), (r: any) => `${r.email?.template ?? 'PD'} drafted in the Outbox.`)}>Draft reply asking for counts</button>
+              onClick={() => void go('Drafting…', async () => {
+                const r = await inboxPost(item.id, 'draft-held-reply');
+                // Straight to Outlook, like every email now; if a setting is missing it waits under the idea's ✉ Emails.
+                try { const o = await post('/api/outbox/open', { key: r.email.key }); downloadEml(o); return { ...r, opened: true }; }
+                catch (e) { return { ...r, openError: (e as Error).message }; }
+              }, (r: any) => (r.opened ? openedText(r.email?.template ?? 'PD') : `${r.email?.template ?? 'PD'} is drafted under the idea's ✉ Emails. ${r.openError ?? ''}`.trim()))}>Draft reply asking for counts</button>
             {!sureDelete
               ? <button className="btn sm danger" data-action="delete" disabled={busy} onClick={() => setSureDelete(true)}>Delete</button>
               : (

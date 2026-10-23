@@ -6,10 +6,10 @@ import { paths } from '../workspace/paths';
 import { writeFileAtomic, readText, appendHistory } from '../workspace/files';
 import { loadTemplates, render, fillText, analyse } from './templates';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
-import { currentRoundId, loadRound, loadSettings, NO_ROUND } from '../round/store';
+import { currentRoundId, listRounds, loadRound, loadSettings, NO_ROUND } from '../round/store';
 import { TOKENS, type Round } from '../round/round';
 import { withTick } from '../checklist/checklist';
-import type { StepDef } from '../rules/stages';
+import { loadSteps, type StepDef } from '../rules/stages';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import { toEml, emlName } from './eml';
 
@@ -33,6 +33,10 @@ export interface EmailRecord {
 
 export interface OutboxItem extends EmailRecord {
   view: { to: string; subject: string; body: string };
+  /** The stage the email belongs to (from its template's step); none for a round email. */
+  stage?: number;
+  /** Unsent, but a newer unsent email of the same stage has taken its place (made before one-per-stage). */
+  superseded?: boolean;
   missingSettings: { token: string; label: string }[];
   contentPlaceholders: string[];
 }
@@ -98,19 +102,38 @@ async function recordsIn(root: string, dir: string): Promise<{ records: EmailRec
   return { records, problems, count: names.length };
 }
 
+/** The stage an email belongs to, from its template's step (the reminder E2R goes with E2). None for an email with no step. */
+export function templateStage(templates: Record<string, { step?: string }>, steps: StepDef[], id: string): number | undefined {
+  const step = templates[id === 'E2R' ? 'E2' : id]?.step;
+  return step ? steps.find((s) => s.id === step)?.stage : undefined;
+}
+
 export async function draftEmail(
-  root: string, input: { template: string; ideaId?: string }, clock: Clock,
+  root: string, input: { template: string; ideaId?: string; round?: string }, clock: Clock,
 ): Promise<EmailRecord> {
-  const tpl = (await loadTemplates(root))[input.template];
+  const templates = await loadTemplates(root);
+  const tpl = templates[input.template];
   if (!tpl) throw new Error(`No template ${input.template}`);
   if (tpl.to !== 'list' && !input.ideaId) throw new Error(`${tpl.id} is about one idea; pick the idea first`);
   const idea = input.ideaId ? await loadIdea(root, input.ideaId) : undefined;
-  // An idea's emails follow the idea's own round, which may be none yet; a round-wide email needs a round.
-  const round = idea ? idea.round : await currentRoundId(root);
+  // An idea's emails follow the idea's own round, which may be none yet; a round-wide email goes to the round asked
+  // for, else the current one.
+  if (!idea && input.round && !(await listRounds(root)).some((r) => r.id === input.round)) throw new Error(`No round ${input.round}`);
+  const round = idea ? idea.round : input.round || await currentRoundId(root);
   if (!idea && !round) throw new Error(NO_ROUND);
   const dir = idea ? path.join(await ideaDir(root, idea.id), 'emails') : path.join(paths(root).rounds, round!, 'emails');
   const { records, count } = await recordsIn(root, dir);
   const existing = records.find((r) => r.template === tpl.id && r.status !== 'sent');
+  // One unsent email per stage: a newer one (another decision, say) replaces what was waiting from the same stage.
+  if (idea && !existing) {
+    const steps = await loadSteps(root);
+    const stage = templateStage(templates, steps, tpl.id);
+    const stale = stage === undefined ? [] : records.filter((r) => r.status !== 'sent' && r.template !== tpl.id && templateStage(templates, steps, r.template) === stage);
+    for (const r of stale) {
+      await fs.unlink(fileOf(root, r.key)).catch(() => undefined);
+      await appendHistory(await ideaDir(root, idea.id), { at: clock(), action: 'replaced', by: 'app', detail: `${r.template} replaced by ${tpl.id}`, source: r.key });
+    }
+  }
   if (existing) {
     // An idea may have changed round since this draft was made; the draft follows it.
     if (idea && existing.status === 'draft' && existing.round !== round) {
@@ -177,6 +200,17 @@ export async function listOutboxChecked(root: string): Promise<{ items: OutboxIt
       problems.push(...found.problems);
       for (const r of found.records) items.push(await viewOf(root, r));
     }
+  }
+  // One unsent email per stage: an older one still waiting from before that rule is marked, newest wins.
+  const templates = await loadTemplates(root);
+  const steps = await loadSteps(root);
+  const newest = new Map<string, OutboxItem>();
+  for (const m of items) {
+    const stage = m.idea ? templateStage(templates, steps, m.template) : undefined;
+    if (stage !== undefined) m.stage = stage;
+    if (!m.idea || stage === undefined || m.status === 'sent') continue;
+    const k = `${m.idea}|${stage}`; const was = newest.get(k);
+    if (!was || `${m.created}|${m.key}` > `${was.created}|${was.key}`) { if (was) was.superseded = true; newest.set(k, m); } else m.superseded = true;
   }
   const order: Record<EmailStatus, number> = { draft: 0, approved: 1, sent: 2 };
   items.sort((a, b) => order[a.status] - order[b.status] || a.created.localeCompare(b.created) || a.key.localeCompare(b.key));

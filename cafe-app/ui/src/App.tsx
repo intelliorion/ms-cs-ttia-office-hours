@@ -13,7 +13,6 @@ import { IdeasPane } from './panels/IdeasPane';
 import { Universe } from './universe/Universe';
 import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
-import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { ConfigPopout } from './popouts/ConfigPopout';
@@ -96,7 +95,6 @@ export default function App() {
         <Assistant />
         {popout?.kind === 'import' && <ImportPopout />}
         {popout?.kind === 'round' && <RoundPopout />}
-        {popout?.kind === 'outbox' && <OutboxPopout />}
         {popout?.kind === 'inbox' && <InboxPopout />}
         {popout?.kind === 'ai' && <AiPopout />}
         {popout?.kind === 'config' && <ConfigPopout />}

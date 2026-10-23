@@ -25,7 +25,7 @@ panels, large white titles and pill buttons at the bottom.
   and History. **← Back** (or Esc) returns to the list where you left it (same search, filters and scroll); the
   star stays selected. Opening an idea turns Focus off so the panel shows.
 - **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
-- **Pop-outs.** Import, Rounds, Outbox and AI open in front of the universe; close them with the X or Esc.
+- **Pop-outs.** Import, Rounds, Project configuration and AI open in front of the universe; close them with the X or Esc.
   (Import with a report opens from a link inside the Import.) Ideas never open in a pop-out: an idea link in the
   Import or the late list opens it in the left panel.
 - **First run.** With no ideas yet, a card in the middle of the universe says "Nothing here but dark matter." and
@@ -45,7 +45,7 @@ panels, large white titles and pill buttons at the bottom.
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
 - **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
-  Rounds, Outbox, Review pack (this writes the file), and ⚙ Settings: the AI connector (a dot shows whether an
+  Rounds, Review pack (this writes the file), and ⚙ Settings: the AI connector (a dot shows whether an
   AI is answering), Project configuration (your name for the signature, the form, CSIC and Teams links, the
   distribution list, capacity; kept in rules/settings.yaml) and the theme: Default (the night sky) or Frost (a
   light winter morning: the stars become glossy baubles with gold caps on silver threads, with snow falling).
@@ -135,9 +135,13 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
    once you close it as CSIC. Links the idea has in the universe are listed here too: any AI link can be
    removed, and a link a conflict rule held says "Waiting on you" with **Add it anyway**.
-5. **Emails** (in the idea's details) and **Outbox** (pop-out): approve and copy, send from Outlook, mark as
-   sent. E2 starts a five-day reply clock; use "Reply received" on the idea when they answer. Marking E3,
-   E4, E5, E6 or E10 as sent suggests a move too. A missing date or link blocks approval until you set it.
+5. **Emails.** There is no Outbox. Every email opens straight in Outlook as a new message (an unsent .eml) and
+   counts as sent, with Undo: from the stage's own buttons (Draft email, Save decision), from the idea's
+   **✉ Emails** menu (this stage's emails, plus anything drafted and not sent yet), and for a round's call for
+   ideas and deadline reminder, from that round in Rounds. An idea keeps at most one unsent email per stage: a
+   newer one (another decision, say) replaces it. E2 starts a five-day reply clock. Sending E3, E4, E5, E6 or
+   E10 suggests a move too. A missing date or link stops the email opening until you set it (Project
+   configuration, or the round's dates in Rounds); it then waits under ✉ Emails.
 6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
 ## Café assistant: ask, or tell the Café what to do
@@ -421,7 +425,7 @@ nothing is saved until you press a button, and you can do everything except plan
    (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** asks for
    the one tool for the proof of concept: it comes back as one suggested row with a "Why this tool" list (the facts from
    the form it relied on and the rule that led to the tool), and the tool drop-down stays yours to change. When the form
-   says too little, the AI returns every question it needs instead, all of them in one E2 draft in the Outbox; the panel
+   says too little, the AI returns every question it needs instead, all of them in one questions email (E2), sent from ✉ Emails; the panel
    lists them and Suggest waits until the reply is marked received (or you forget the questions). **Add feature** adds an
    empty row. Each row shows
    its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any other tool is
@@ -429,8 +433,8 @@ nothing is saved until you press a button, and you can do everything except plan
    feature to its tool in the universe. A tool that is not on the approved list is refused.
 2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
    input it needs, who builds it, and so on. Each question comes with a reason and suggested answers. Pick
-   one, type your own, or press **I don't know → ask the team**: the question goes into the idea's E2 draft
-   in the Outbox, and when the team's reply comes in through the Import, it fills the answer. The live
+   one, type your own, or press **I don't know → ask the team**: the question goes into the idea's questions
+   email (E2), sent from ✉ Emails, and when the team's reply comes in through the Import, it fills the answer. The live
    design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
    flags, each "Clean" or listed.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for

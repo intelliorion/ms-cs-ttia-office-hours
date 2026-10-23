@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
 import { Modal } from './Modal';
+import { downloadEml, openedText } from '../panels/outlook';
+
+/** The emails a round sends to everyone, not about one idea. */
+const ROUND_EMAILS: [string, string][] = [['E0', 'Call for ideas'], ['E0B', 'Deadline reminder']];
 import { defaultRoundName, ideaCount, roundFieldsUnblock } from './titleHelpers';
 
 type Pairs = readonly (readonly [string, string])[];
@@ -59,6 +63,10 @@ export function RoundPopout() {
     if (await run(() => post(`/api/rounds/${encodeURIComponent(pickTarget)}/ideas`, { ideaIds: ids }), `${ideaCount(ids.length)} put in ${targetName}.`)) setTicked([]);
   };
   const takeOut = (i: IdeaRow) => run(() => post(`/api/ideas/${encodeURIComponent(i.id)}/round`, { round: '' }), `${i.id} taken out of its round.`);
+  const openRoundEmail = (r: RoundRow, template: string) => run(async () => {
+    const o = await post(`/api/rounds/${encodeURIComponent(r.id)}/email-open`, { template });
+    downloadEml(o);
+  }, openedText(template));
   const saveDates = (r: RoundRow) => run(
     () => post(`/api/rounds/${encodeURIComponent(r.id)}`, Object.fromEntries(roundFields.map(([k]) => [k, dateOf(r, k)]))),
     `${r.name} dates saved.`,
@@ -72,7 +80,7 @@ export function RoundPopout() {
         <div className="pop-col">
           <section className="sec">
             <h3>Rounds <span className="sec-n">newest first</span></h3>
-            <p className="hint lead">Emails stay in draft until the dates they quote are set.</p>
+            <p className="hint lead">Emails that quote a date open in Outlook once that date is set here.</p>
             {(state?.roundProblems ?? []).map((p: { folder: string }) => (
               <div key={p.folder} className="hint warn" data-testid="round-problem">Could not read rounds/{p.folder}/round.yaml</div>
             ))}
@@ -98,6 +106,16 @@ export function RoundPopout() {
                       <div className="rf-foot"><button className="btn primary" type="submit" data-action="save-round" disabled={busy}>Save dates</button></div>
                     </form>
                   </details>
+                  {/* The round's own emails: drafted for this round and opened in Outlook (counted as sent). */}
+                  <div className="rnd-emails">
+                    {ROUND_EMAILS.map(([t, label]) => {
+                      const sent = (state?.outbox ?? []).find((m: any) => m.round === r.id && m.template === t && m.status === 'sent');
+                      return (
+                        <button key={t} className="btn sm" data-action="round-email" data-template={t} disabled={busy} title="Opens it in Outlook; counts as sent"
+                          onClick={() => void openRoundEmail(r, t)}>✉ {label}{sent ? <span className="em-sent"> · sent {String(sent.sentAt ?? '').slice(5)}</span> : null}</button>
+                      );
+                    })}
+                  </div>
                   {mine.length > 0 && (
                     <ul className="rnd-ideas">
                       {mine.map((i) => (

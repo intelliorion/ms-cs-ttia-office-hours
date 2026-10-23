@@ -129,6 +129,13 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/ideas/:id/draft', async ({ params, body }) =>
     draftEmail(root, { template: String(body.template), ideaId: params.id }, clock));
   add('POST', '/api/round/draft', async ({ body }) => draftEmail(root, { template: String(body.template) }, clock));
+  // A round's own emails (the call for ideas and the deadline reminder), from Rounds: drafted for that round, opened in Outlook.
+  add('POST', '/api/rounds/:id/email-open', async ({ params, body }) => {
+    const template = String(body.template);
+    if (template !== 'E0' && template !== 'E0B') throw new Error('Rounds send the call for ideas (E0) and the deadline reminder (E0B)');
+    const rec = await draftEmail(root, { template, round: params.id }, clock);
+    return openEmail(root, rec.key, clock, await steps());
+  });
 
   add('POST', '/api/outbox/approve', async ({ body }) => approve(root, String(body.key), clock));
   add('POST', '/api/outbox/sent', async ({ body }) => markSent(root, String(body.key), clock, await steps()));

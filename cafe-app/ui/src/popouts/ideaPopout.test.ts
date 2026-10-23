@@ -1,24 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emailAction, historyLine, ideaLinks, nodeLinks, clipText, cafeIdOf, ideaCardModel } from './ideaHelpers';
-
-describe('emailAction', () => {
-  it('offers approve and copy on a draft with nothing missing', () => {
-    expect(emailAction({ status: 'draft', missingSettings: [] }, [])).toEqual({ label: 'Approve and copy', enabled: true, kind: 'approve' });
-  });
-  it('asks for missing settings first', () => {
-    const a = emailAction({ status: 'draft' }, ['Teams link', 'Your name']);
-    expect(a).toEqual({ label: 'Set first: Teams link, Your name', enabled: true, kind: 'set-first' });
-  });
-  it('reads missing settings from the item when none are passed', () => {
-    expect(emailAction({ status: 'draft', missingSettings: [{ label: 'Form link' }] }).label).toBe('Set first: Form link');
-  });
-  it('offers mark as sent once approved', () => {
-    expect(emailAction({ status: 'approved' }, [])).toEqual({ label: 'Mark as sent', enabled: true, kind: 'sent' });
-  });
-  it('has nothing to do once sent', () => {
-    expect(emailAction({ status: 'sent', sentAt: '2026-10-19' }, [])).toEqual({ label: 'Sent 19 Oct', enabled: false, kind: 'none' });
-  });
-});
+import { historyLine, ideaLinks, nodeLinks, cafeIdOf, ideaCardModel } from './ideaHelpers';
 
 describe('historyLine', () => {
   it('shows an Import line for a filed email, by file name only', () => {
@@ -36,7 +17,8 @@ describe('historyLine', () => {
   });
   it('says which email was sent or drafted', () => {
     expect(historyLine({ at: '2026-10-19', action: 'sent', detail: 'E1' })).toBe('E1 marked sent');
-    expect(historyLine({ at: '2026-10-19', action: 'draft', detail: 'E5' })).toBe('E5 drafted in the Outbox');
+    expect(historyLine({ at: '2026-10-19', action: 'draft', detail: 'E5' })).toBe('E5 drafted');
+    expect(historyLine({ at: '2026-10-19', action: 'replaced', detail: 'E3 replaced by E6' })).toContain('E3 replaced by E6');
   });
   it('names the step', () => {
     expect(historyLine({ at: '2026-10-19', action: 'tick', step: 's2a' }, steps)).toBe('Step done: Feasibility assessed');
@@ -84,7 +66,6 @@ describe('ideaLinks', () => {
 });
 
 describe('small helpers', () => {
-  it('builds the clipboard text', () => { expect(clipText({ subject: 'Hi', body: 'Body' })).toBe('Subject: Hi\n\nBody'); });
   it('finds the Café ID behind an idea star only', () => {
     expect(cafeIdOf('idea:CAFE-2026-002')).toBe('CAFE-2026-002');
     expect(cafeIdOf('team:gss')).toBeNull();

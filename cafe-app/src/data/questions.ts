@@ -17,7 +17,7 @@ import { sameQuestion } from '../inbox/question';
 import { readDesign, skillGuidance } from '../design/store';
 import { reviewInput, codeValue } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
-import { applyUpdate, planUpdates } from '../review/updates';
+import { applyAnswerUpdates, planUpdates } from '../review/updates';
 import type { DataStepInput, DataStepOutput } from '../ai/tasks';
 import {
   columnsOf, dataPoints, DATA_TOPICS, isUsable, meaningOf, sizeWords, whatOf, type DataQuestion, type DataState, type DataTopic,
@@ -76,32 +76,21 @@ export async function saveDataAnswers(root: string, id: string, d: DataState): P
 }
 
 /**
- * What the AI's reply says the data changes in the record, applied by the code: each update checked the way the
- * decision's are (planUpdates: real changes only, names from their codes, nothing applied twice), then applied at once
- * (applyUpdate), listed on the data section and logged in history. No Yes, No or Undo.
+ * What the AI's reply says the data changes in the record, applied by the code: each update checked the way every
+ * section's are (planUpdates: real changes only, names from their codes, nothing applied twice), then applied at once
+ * (applyAnswerUpdates), listed on the data section and logged in history. No Yes, No or Undo.
  */
 export async function applyDataUpdates(root: string, id: string, out: Pick<DataStepOutput, 'updates'>, codes: Map<string, Coded>, provider: string, clock: Clock): Promise<PrepUpdate[]> {
   const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
-  const before = (idea.updates ?? []).filter((u) => u.from === 'data');
   // The data answers are on the idea already (saveDataAnswers): facts restating them, or the team's earlier answers in
   // other words, would only repeat them. The builder, participation, flags and the universe's links are kept.
   const updates = out.updates ? { ...out.updates, facts: [] } : undefined;
-  const planned = (await planUpdates(root, idea, updates, codes, provider, before, 'data')).filter((u) => u.status === 'proposed' && u.from === 'data');
-  if (!planned.length) return [];
+  const planned = await planUpdates(root, idea, updates, codes, provider, idea.updates ?? [], 'data');
+  if (!planned.some((u) => u.status === 'proposed' && u.from === 'data')) return [];
+  await saveIdea(root, { ...(await loadIdea(root, id)), updates: planned });
+  const done = await applyAnswerUpdates(root, id, 'data', clock, DATA_SOURCE);
   const at = clock();
-  const done: PrepUpdate[] = [];
-  for (const u of planned) {
-    try {
-      const undo = await applyUpdate(root, id, u, clock, { by: 'app', source: DATA_SOURCE });
-      done.push({ ...u, status: 'applied', undo });
-      await appendHistory(await ideaDir(root, id), { at, action: 'data-update', by: 'app', detail: `Updated from the data answers: ${u.label}`, source: DATA_SOURCE });
-    } catch (e) {
-      await appendHistory(await ideaDir(root, id), { at, action: 'data-update', by: 'app', detail: `Not applied (${(e as Error).message}): ${u.label}`, source: DATA_SOURCE });
-    }
-  }
-  const now = await loadIdea(root, id);
-  await saveIdea(root, { ...now, updates: [...(now.updates ?? []), ...done] });
-  await updateData(root, id, (d) => { d.applied = [...(d.applied ?? []), ...done.map((u) => ({ at, kind: u.kind, label: u.label, key: u.key }))]; });
+  if (done.length) await updateData(root, id, (d) => { d.applied = [...(d.applied ?? []), ...done.map((u) => ({ at, kind: u.kind, label: u.label, key: u.key }))]; });
   return done;
 }
 

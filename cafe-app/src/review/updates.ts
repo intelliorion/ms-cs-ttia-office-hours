@@ -8,7 +8,7 @@ import { tick } from '../checklist/checklist';
 import { loadSteps } from '../rules/stages';
 import { showNames, type Coded } from '../command/names';
 import { planAiLinks } from '../ai/apply';
-import { rebuildGraph, readAiLinks, appendAiLink, setAiLinkStatus } from '../graph/store';
+import { rebuildGraph, readAiLinks, appendAiLink } from '../graph/store';
 import { edgeId, NODE_LABELS, type AiLink, type NodeType } from '../graph/ontology';
 import type { ReviewUpdates } from '../ai/tasks';
 
@@ -25,7 +25,9 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
  * The AI's proposed updates, checked against the idea as it is: only real changes, each once, in plain words.
- * Names come back from their codes. A change said no to before is not proposed again; applied ones stay listed.
+ * Names come back from their codes. A change applied before is not made again; one said no to (before updates were
+ * applied by themselves) is never made. Facts restating an answer already on the idea from elsewhere (the team's
+ * reply, the design or data questions) are left out.
  */
 export async function planUpdates(
   root: string, idea: WithAnswers, u: ReviewUpdates | undefined, codes: Map<string, Coded>, provider: string, before: PrepUpdate[] = [],
@@ -68,7 +70,9 @@ export async function planUpdates(
     }
     const have = idea.answers ?? [];
     const facts = (u.facts ?? []).map((f) => ({ question: showNames(f.question, codes), answer: showNames(f.answer, codes) }))
-      .filter((f) => f.answer.trim() && !have.some((h) => norm(h.answer) === norm(f.answer) || (sameQuestion(h.question, f.question) && norm(h.answer).replace(/\W/g, '') === norm(f.answer).replace(/\W/g, ''))));
+      .filter((f) => f.answer.trim() && !have.some((h) => norm(h.answer) === norm(f.answer) || (sameQuestion(h.question, f.question) && norm(h.answer).replace(/\W/g, '') === norm(f.answer).replace(/\W/g, ''))))
+      // A question answered already in the team's reply or another section's questions: the answer is on the idea.
+      .filter((f) => !have.some((h) => h.source !== REVIEW_SOURCE && sameQuestion(h.question, f.question)));
     // One answer per question from your review: a newer one replaces the one before, it is not added beside it.
     const replacing = have.filter((h) => h.source === REVIEW_SOURCE && facts.some((f) => sameQuestion(f.question, h.question))).length;
     if (facts.length) {
@@ -94,32 +98,28 @@ export async function planUpdates(
 }
 
 /**
- * Applies one update to the idea (the builder, participation, a flag, the answers as facts, a graph link) and returns
- * how to undo it. The decision's Yes does this; the data questions do it by themselves (src/data). `source` is where
- * saved answers and ticks say they came from.
+ * Applies one checked update to the idea (the builder, participation, a flag, the answers as facts, a graph link).
+ * Every section that takes in answers does this by itself, right after the suggestion that proposed it
+ * (applyAnswerUpdates). `source` is where saved answers and ticks say they came from.
  */
 export async function applyUpdate(
   root: string, id: string, u: PrepUpdate, clock: Clock, opts: { by: 'operator' | 'app'; source: string },
-): Promise<NonNullable<PrepUpdate['undo']>> {
+): Promise<void> {
   const idea = await loadIdea(root, id) as WithAnswers;
   const steps = await loadSteps(root);
-  const tickIf = async (step: string, ok: boolean): Promise<string[]> => {
+  const tickIf = async (step: string, ok: boolean): Promise<void> => {
     const now = await loadIdea(root, id);
-    if (!ok || now.checklist[step]?.done) return [];
+    if (!ok || now.checklist[step]?.done) return;
     await tick(root, id, step, true, { by: opts.by, source: opts.source, clock, steps });
-    return [step];
   };
-  const undo: NonNullable<PrepUpdate['undo']> = {};
   if (u.kind === 'builder' && u.builder) {
     // The builder: the one named takes the role; anyone else who had it keeps their other roles.
     let team = idea.people.team;
     for (const other of withRoleOn(idea, 'builder')) if (norm(other.name) !== norm(u.builder.name)) team = withoutRole(team, other.name, 'builder');
     team = withAddedRole(team, u.builder.name, 'builder');
-    undo.team = idea.people.team; undo.teamAfter = team;
     await saveIdea(root, { ...idea, people: { ...idea.people, team } });
-    undo.ticked = await tickIf('s2e', u.builder.canAttend);
+    await tickIf('s2e', u.builder.canAttend);
   } else if (u.kind === 'participation' && u.participation) {
-    undo.participation = idea.participation ?? null;
     // Keep what the form said, the first time the field changes.
     const formWas = idea.formWas?.participation !== undefined || !idea.participation ? idea.formWas : { ...idea.formWas, participation: idea.participation };
     await saveIdea(root, { ...idea, participation: u.participation, ...(formWas ? { formWas } : {}) });
@@ -128,78 +128,45 @@ export async function applyUpdate(
   } else if (u.kind === 'facts' && u.facts) {
     const replaced = (idea.answers ?? []).filter((a) => a.source === opts.source && u.facts!.some((f) => sameQuestion(f.question, a.question)));
     const kept = (idea.answers ?? []).filter((a) => !replaced.includes(a));
-    undo.replaced = replaced;
     await saveIdea(root, { ...idea, answers: [...kept, ...u.facts.map((f) => ({ ...f, source: opts.source }))] } as Idea);
     // The team answered our questions: the reply is in.
-    undo.ticked = await tickIf('s2d', !!(idea.sent?.E2 || idea.sent?.E2R));
+    await tickIf('s2d', !!(idea.sent?.E2 || idea.sent?.E2R));
   } else if (u.kind === 'link' && u.link) {
     await appendAiLink(root, { ...(u.link as AiLink), status: 'confirmed' });
-    undo.edgeId = edgeId(u.link.from, u.link.rel as AiLink['rel'], u.link.to);
   }
-  return undo;
 }
 
-/** Yes, No or Undo on one proposed update. Each change goes in the idea's history; Undo puts back only what it changed. */
-export async function decideUpdate(root: string, id: string, uid: string, act: unknown, clock: Clock): Promise<PrepUpdate> {
-  const idea = await loadIdea(root, id) as WithAnswers;
-  const all = idea.updates ?? [];
-  const u = all.find((x) => x.id === uid);
-  if (!u) throw new Error('That update is gone; re-evaluate again');
+/** Each section's answers, as the idea's history names them. */
+export const ANSWERS_OF: Record<UpdateSource, string> = {
+  decision: 'decision answers', tools: 'tool answers', design: 'design answers', roadshow: 'roadshow answers', data: 'data answers',
+};
+
+/**
+ * The updates one section's suggestion proposed (checked by planUpdates), applied by the code at once: no one says
+ * yes to them. Each is logged in the idea's history (by the AI, with the section's answers as its source) and kept on
+ * the idea as applied, for the read-only "Updated from your answers" list. One that cannot be applied is logged and
+ * dropped. Returns the ones applied.
+ */
+export async function applyAnswerUpdates(root: string, id: string, from: UpdateSource, clock: Clock, source = REVIEW_SOURCE): Promise<PrepUpdate[]> {
+  const waiting = ((await loadIdea(root, id)).updates ?? []).filter((u) => u.status === 'proposed' && sourceOf(u) === from);
+  if (!waiting.length) return [];
   const at = clock();
   const dir = await ideaDir(root, id);
-  const log = (detail: string) => appendHistory(dir, { at, action: 'review-update', by: 'operator', detail, source: REVIEW_SOURCE });
-  const save = async (next: PrepUpdate, changed?: WithAnswers) => {
-    const base = changed ?? (await loadIdea(root, id) as WithAnswers);
-    await saveIdea(root, { ...base, updates: (base.updates ?? all).map((x) => (x.id === uid ? next : x)) } as Idea);
-    return next;
-  };
-  if (act === 'no') {
-    if (u.status !== 'proposed') throw new Error('Only a proposed update can be said no to');
-    return save({ ...u, status: 'dismissed' });
-  }
-  if (act === 'yes') {
-    if (u.status !== 'proposed') throw new Error(`That update is already ${u.status}`);
-    const undo = await applyUpdate(root, id, u, clock, { by: 'operator', source: REVIEW_SOURCE });
-    await log(`Applied from your answers: ${u.label}`);
-    return save({ ...u, status: 'applied', undo });
-  }
-  if (act === 'undo') {
-    if (u.status !== 'applied') throw new Error('Only an applied update can be undone');
-    const steps = await loadSteps(root);
-    const now = await loadIdea(root, id) as WithAnswers;
-    if (u.kind === 'builder' && u.builder) {
-      // As it was, when nothing about the team has changed since; else only the builder role goes (and someone this
-      // added to the team leaves it again), so other changes since stay.
-      if (u.undo?.team && JSON.stringify(now.people.team) === JSON.stringify(u.undo.teamAfter)) {
-        await saveIdea(root, { ...now, people: { ...now.people, team: u.undo.team } });
-      } else {
-        const wasOn = (u.undo?.team ?? []).some((p) => norm(p.name) === norm(u.builder!.name));
-        const team = wasOn ? withoutRole(now.people.team, u.builder.name, 'builder') : now.people.team.filter((p) => norm(p.name) !== norm(u.builder!.name));
-        await saveIdea(root, { ...now, people: { ...now.people, team } });
-      }
-    } else if (u.kind === 'participation') {
-      const { participation: _p, ...rest } = now;
-      const back = (u.undo?.participation ? { ...now, participation: u.undo.participation } : rest) as Idea;
-      // Back to the form's value: nothing differs from the form any more.
-      if (back.formWas?.participation !== undefined && back.formWas.participation === back.participation) {
-        const { participation: _w, ...was } = back.formWas;
-        if (Object.keys(was).length) back.formWas = was; else delete back.formWas;
-      }
-      await saveIdea(root, back);
-    } else if (u.kind === 'flag' && u.flag && !now.flags.includes(u.flag)) {
-      await saveIdea(root, { ...now, flags: [...now.flags, u.flag] });
-    } else if (u.kind === 'facts' && u.facts) {
-      const drop = new Set(u.facts.map((f) => norm(f.answer)));
-      await saveIdea(root, { ...now, answers: [...(now.answers ?? []).filter((a) => !(a.source === REVIEW_SOURCE && drop.has(norm(a.answer)))), ...(u.undo?.replaced ?? [])] } as Idea);
-    } else if (u.kind === 'link' && u.undo?.edgeId) {
-      await setAiLinkStatus(root, u.undo.edgeId, 'removed').catch(() => {});
+  const done = new Map<string, PrepUpdate>();
+  const failed = new Set<string>();
+  for (const u of waiting) {
+    try {
+      await applyUpdate(root, id, u, clock, { by: 'app', source });
+      done.set(u.id, { ...u, status: 'applied' });
+      await appendHistory(dir, { at, action: 'answers-update', by: 'ai', detail: `Updated from the ${ANSWERS_OF[from]}: ${u.label}`, source: ANSWERS_OF[from] });
+    } catch (e) {
+      failed.add(u.id);
+      await appendHistory(dir, { at, action: 'answers-update', by: 'ai', detail: `Not applied (${(e as Error).message}): ${u.label}`, source: ANSWERS_OF[from] });
     }
-    for (const step of u.undo?.ticked ?? []) await tick(root, id, step, false, { by: 'operator', source: REVIEW_SOURCE, clock, steps });
-    await log(`Undone: ${u.label}`);
-    const { undo: _u, ...rest } = u;
-    return save({ ...rest, status: 'proposed' });
   }
-  throw new Error('Say yes, no or undo');
+  const now = await loadIdea(root, id);
+  await saveIdea(root, { ...now, updates: (now.updates ?? []).filter((u) => !failed.has(u.id)).map((u) => done.get(u.id) ?? u) });
+  return [...done.values()];
 }
 
 /** Take back one saved answer (wrong, out of date or a duplicate). Logged in the idea's history. */
@@ -215,9 +182,9 @@ export async function removeAnswer(root: string, id: string, question: string, a
 }
 
 /**
- * What a suggestion read in the answers, taken into the idea: its proposed updates (checked, each waiting for Yes,
- * on the one list the decision and the tool picker share) and its brief of what the answers add. Returns the fields
- * to save on the idea; a suggestion that wrote no brief keeps the one there.
+ * What a suggestion read in the answers, taken into the idea: its updates (checked, on the one list every section
+ * shares, to be applied by applyAnswerUpdates once these fields are saved) and its brief of what the answers add.
+ * Returns the fields to save on the idea; a suggestion that wrote no brief keeps the one there.
  */
 export async function takeInAnswers(
   root: string, idea: WithAnswers, out: { updates?: ReviewUpdates; learned?: { topic: string; text: string }[] },

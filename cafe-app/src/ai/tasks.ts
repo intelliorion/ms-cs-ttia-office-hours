@@ -47,7 +47,7 @@ export interface ReviewSuggestInput {
 /** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
 export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
 /**
- * What the answers change in the idea's record, proposed for the operator's Yes: a builder, participation, flags the
+ * What the answers change in the idea's record, checked and applied by the app at once: a builder, participation, flags the
  * answers settle, the answers as facts, and stars and links for the graph. Empty values when nothing changes.
  */
 export interface ReviewUpdates {
@@ -119,13 +119,13 @@ export const UPDATES_SCHEMA: JsonSchema = {
 
 /**
  * What a suggestion does with the team's answers, the same for the decision, the tool picker and the design questions:
- * the updates they justify (for the operator's Yes) and a short brief of what they add. `key` is where DATA holds the
+ * the updates they justify (checked and applied by the app at once) and a short brief of what they add. `key` is where DATA holds the
  * answers (one key, or several read together).
  */
 function answerRules(key: string | string[]): string[] {
   const at = (Array.isArray(key) ? key : [key]).map((k) => `DATA.${k}`).join(' and ');
   return [
-    `updates: what ${at} change in the idea's record, for the operator to say yes to; leave a field empty when nothing changes.`,
+    `updates: what ${at} change in the idea's record. The app applies these by itself (no one says yes to them), so propose only what an answer clearly says; leave a field empty when nothing changes.`,
     'builder: the person an answer names to build it, as their code alone when they have one (a code followed by a stray surname is that person), else the name as written; "" when none.',
     'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
     'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',

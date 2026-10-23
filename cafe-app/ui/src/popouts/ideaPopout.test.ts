@@ -7,6 +7,10 @@ describe('historyLine', () => {
       .toBe('Import: Email filed as 2026-10-20-re-questions.eml (from 2026-10-20-reply.eml)');
     expect(historyLine({ at: '2026-10-20', action: 'inbox-undo', detail: 'Undone: File it in CAFE-2026-001' })).toBe('Import: Undone: File it in CAFE-2026-001');
   });
+  it('says what the answers changed, as written', () => {
+    expect(historyLine({ at: '2026-10-23', action: 'answers-update', by: 'ai', detail: 'Updated from the tool answers: Make Person 2 the builder' }))
+      .toBe('Updated from the tool answers: Make Person 2 the builder');
+  });
   const steps = [{ id: 's2a', text: 'Feasibility assessed' }];
   it('says where a stage change went', () => {
     expect(historyLine({ at: '2026-10-19', action: 'stage', detail: 'Review and Select → Design series' })).toBe('Moved to Design series');

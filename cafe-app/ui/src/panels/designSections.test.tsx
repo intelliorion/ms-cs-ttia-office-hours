@@ -185,11 +185,14 @@ describe('DesignSection', () => {
     expect(el.querySelectorAll('[data-action="approve-design"]')).toHaveLength(1);
   });
 
-  it('the design shows no "From your answers" list: its answers save themselves', async () => {
+  it('the design lists what its answers changed, read-only; the other sections\' updates are not here', async () => {
     const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
-    const idea = { ...IDEA, updates: [{ id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' }] };
+    const idea = { ...IDEA, updates: [{ id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'applied', from: 'design' },
+      { id: 'u2', kind: 'flag', label: 'Clear the flag: x', status: 'applied', from: 'tools' }] };
     await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
-    expect(el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')).toBeNull();
+    const list = el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')!;
+    expect([...list.querySelectorAll('[data-update]')].map((x) => x.getAttribute('data-update'))).toEqual(['u1']);
+    expect(list.querySelectorAll('button')).toHaveLength(0);
   });
 
   it('Redesign asks first; Cancel does nothing; Start again posts design/redesign and says the plan is out of date', async () => {

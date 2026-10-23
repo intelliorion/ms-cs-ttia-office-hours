@@ -14,7 +14,7 @@ import { writeFileAtomic, readHistory, readText, appendHistory } from '../worksp
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
-import { decideUpdate, removeAnswer, takeInAnswers } from '../review/updates';
+import { applyAnswerUpdates, removeAnswer, takeInAnswers } from '../review/updates';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -220,8 +220,6 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // operator pasted, a builder, flags, its graph links) is read; names are coded on the way out and restored on the way back.
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(() =>
     suggestPrep(root, String(body.id), (input) => ai.runWith(reviewSuggestTask, input), clock))());
-  // What the answers would change (a builder, participation, a flag, the answers, graph links): Yes, No or Undo, one at a time.
-  add('POST', '/api/ideas/:id/prep/update', async ({ params, body }) => decideUpdate(root, params.id, String(body.update ?? ''), body.do, clock));
   // Take back one saved answer (a wrong or duplicate one) from the Submission's "Learned since the form".
   add('POST', '/api/ideas/:id/answers/remove', async ({ params, body }) => removeAnswer(root, params.id, String(body.question ?? ''), String(body.answer ?? ''), clock));
   add('POST', '/api/ideas/:id/prep/answer', async ({ params, body }) => answerNeed(root, params.id, String(body.need ?? ''), body.answer));
@@ -327,10 +325,14 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const { input, codes, read } = await codedDesignInput(root, idea, state);
     const { provider, output: raw } = await byHand(() => ai.runWith(designStepTask, input))();
     const output = decodeStep(raw, codes);
-    // The design answers save themselves (nothing to say yes to); the reply only rewrites the brief of what the answers add.
-    // The record is read again: nothing between the AI call and here may be lost.
+    // The design answers save themselves (nothing to say yes to); the reply rewrites the brief of what the answers add,
+    // and what they change in the record (the builder, participation, flags, the universe's links) is checked and
+    // applied at once. Facts are left out: the design answers are on the idea already. The record is read again:
+    // nothing between the AI call and here may be lost.
     const now = await loadIdea(root, idea.id);
-    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { learned: raw.learned }, codes, provider, clock(), read, 'design')) });
+    const updates = raw.updates ? { ...raw.updates, facts: [] } : undefined;
+    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { updates, learned: raw.learned }, codes, provider, clock(), read, 'design')) });
+    await applyAnswerUpdates(root, idea.id, 'design', clock);
     // The feature list follows the answers: a feature they leave out, move to another tool or change is changed at once.
     const changed = await applyFeatureChanges(root, idea.id, output.features, clock);
     const out = await applyDesignEvent(root, await loadIdea(root, idea.id), stepEvent(output), clock);

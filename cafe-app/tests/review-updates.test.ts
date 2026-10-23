@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
 import { suggestPrep, answerNeed, type RunReview } from '../src/review/prep';
-import { decideUpdate, REVIEW_SOURCE } from '../src/review/updates';
+import { REVIEW_SOURCE } from '../src/review/updates';
 import { rebuildGraph } from '../src/graph/store';
 import { readHistory } from '../src/workspace/files';
 import { fixedClock } from '../src/clock';
@@ -43,7 +43,7 @@ async function setup() {
 const updates = async (root: string) => (await loadIdea(root, idea.id)).updates ?? [];
 
 describe('what your answers change in the record', () => {
-  it('re-evaluating proposes each change in plain words; nothing changes until Yes', async () => {
+  it('re-evaluating applies each checked change at once, in plain words, and logs each by the AI', async () => {
     const root = await setup();
     await suggestPrep(root, idea.id, ai({
       builder: 'CODE', builderCanAttend: true, participation: 'Team', resolvedFlags: [FLAG.toUpperCase(), 'A flag the idea does not have'],
@@ -53,26 +53,16 @@ describe('what your answers change in the record', () => {
           { from: 'Contract term extraction', to: 'Contract library', rel: 'USES_DATA', description: 'Exported files', confidence: 0.8 }] },
     }).run, clock);
     const u = await updates(root);
-    expect(u.map((x) => [x.kind, x.status])).toEqual([
-      ['builder', 'proposed'], ['participation', 'proposed'], ['flag', 'proposed'], ['facts', 'proposed'], ['link', 'proposed'], ['link', 'proposed'],
+    expect(u.map((x) => [x.kind, x.status, x.from])).toEqual([
+      ['builder', 'applied', 'decision'], ['participation', 'applied', 'decision'], ['flag', 'applied', 'decision'], ['facts', 'applied', 'decision'],
+      ['link', 'applied', 'decision'], ['link', 'applied', 'decision'],
     ]);
     expect(u[0].label).toBe('Make Person 2 the builder, and tick "Builder named, can attend every session"');
     expect(u[1].label).toBe('Set participation to Team (the form says Individual)');
     expect(u[2].label).toBe(`Clear the flag: ${FLAG}`);
     expect(u[4].label).toBe('Vendor contract summariser needs Contract term extraction; adds a new star: Contract term extraction (capability)');
     expect(u[5].label).toBe('Contract term extraction uses data from Contract library; adds a new star: Contract term extraction (capability), Contract library (system or data)');
-    const now = await loadIdea(root, idea.id);
-    expect(now.participation).toBe('Individual');
-    expect(now.people.team[1].roles).toEqual(['member']);
-  });
-
-  it('Yes applies one change (and logs it); Undo puts back only that change', async () => {
-    const root = await setup();
-    await suggestPrep(root, idea.id, ai({ builder: 'CODE', builderCanAttend: true, participation: 'Team', resolvedFlags: [FLAG],
-      facts: [{ question: 'Is sample data enough?', answer: 'Sample contracts are enough.' }] }).run, clock);
-    const [b, p, f, a] = await updates(root);
-    for (const x of [b, p, f, a]) expect((await decideUpdate(root, idea.id, x.id, 'yes', clock)).status).toBe('applied');
-    let now = await loadIdea(root, idea.id) as any;
+    const now = await loadIdea(root, idea.id) as any;
     expect(now.people.team[1]).toEqual({ name: 'Person 2', roles: ['builder'], added: ['builder'] });
     expect(now.formWas).toEqual({ participation: 'Individual' });
     expect(now.checklist.s2e?.done).toBe(true);
@@ -80,30 +70,44 @@ describe('what your answers change in the record', () => {
     expect(now.flags).toEqual([]);
     expect(now.answers).toEqual([{ question: 'Is sample data enough?', answer: 'Sample contracts are enough.', source: REVIEW_SOURCE }]);
     expect(now.checklist.s2d?.done).toBe(true);
-    expect((await rebuildGraph(root)).edges.map((e) => `${e.from} ${e.rel}`)).toContain('person:person-2 BUILDS');
-    expect((await readHistory(await ideaDir(root, idea.id))).filter((h: any) => h.action === 'review-update')).toHaveLength(4);
-    for (const x of [b, p, f, a]) expect((await decideUpdate(root, idea.id, x.id, 'undo', clock)).status).toBe('proposed');
-    now = await loadIdea(root, idea.id) as any;
-    expect(now.people.team[1]).toEqual({ name: 'Person 2', roles: ['member'] });
-    expect(now.checklist.s2e?.done).toBeFalsy();
-    expect(now.participation).toBe('Individual');
-    expect(now.formWas).toBeUndefined();
-    expect(now.flags).toEqual([FLAG]);
-    expect(now.answers ?? []).toEqual([]);
+    const edges = (await rebuildGraph(root)).edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
+    expect(edges.some((e) => e.startsWith('person:person-2 BUILDS'))).toBe(true);
+    expect(edges.some((e) => e.endsWith('NEEDS capability:contract-term-extraction'))).toBe(true);
+    const log = (await readHistory(await ideaDir(root, idea.id))).filter((h: any) => h.action === 'answers-update');
+    expect(log).toHaveLength(6);
+    expect(log[0]).toMatchObject({ by: 'ai', source: 'decision answers', detail: 'Updated from the decision answers: Make Person 2 the builder, and tick "Builder named, can attend every session"' });
+    // Nothing is made twice: suggesting again with the same answers changes nothing more.
+    await suggestPrep(root, idea.id, ai({ builder: 'CODE', participation: 'Team' }).run, clock);
+    expect(await updates(root)).toHaveLength(6);
   });
 
-  it('No drops a change and it is not proposed again; one already true is never proposed', async () => {
-    const root = await setup();
-    const run = ai({ participation: 'Team', builder: 'Person 1 Extra' }).run;
-    await suggestPrep(root, idea.id, run, clock);
-    const x = (await updates(root)).find((y) => y.kind === 'participation')!;
-    await decideUpdate(root, idea.id, x.id, 'no', clock);
-    await suggestPrep(root, idea.id, run, clock);
-    expect((await updates(root)).map((y) => [y.kind, y.status])).toEqual([['participation', 'dismissed'], ['builder', 'proposed']]);
-    // Already the form's value, or already the builder: nothing to propose.
-    await saveIdea(root, { ...(await loadIdea(root, idea.id)), prep: undefined, updates: undefined, people: { ...idea.people, team: [{ name: 'Person 2', roles: ['builder'] }] } });
+  it('a change said no to before updates applied themselves is never made; an older waiting one is made on the next suggestion', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, { ...idea, updates: [
+      { id: 'u1', key: 'participation:Team', kind: 'participation', participation: 'Team', label: 'Set participation to Team', status: 'dismissed', from: 'decision' },
+      { id: 'u2', key: 'flag:x', kind: 'flag', flag: FLAG, label: `Clear the flag: ${FLAG}`, status: 'proposed', from: 'decision' },
+      { id: 'u3', key: 'builder:person 2', kind: 'builder', builder: { name: 'Person 2', canAttend: false }, label: 'Make Person 2 the builder', status: 'proposed', from: 'tools' },
+    ] });
+    await suggestPrep(root, idea.id, ai({ participation: 'Team', resolvedFlags: [FLAG] }).run, clock);
+    const u = await updates(root);
+    expect(u.map((x) => [x.kind, x.from, x.status])).toEqual([
+      ['participation', 'decision', 'dismissed'], ['builder', 'tools', 'proposed'], ['flag', 'decision', 'applied'],
+    ]);
+    const now = await loadIdea(root, idea.id);
+    expect(now.participation).toBe('Individual');
+    expect(now.flags).toEqual([]);
+    // Already the form's value, or already the builder: nothing to change.
+    await saveIdea(root, { ...now, prep: undefined, updates: undefined, people: { ...idea.people, team: [{ name: 'Person 2', roles: ['builder'] }] } });
     await suggestPrep(root, idea.id, ai({ participation: 'Individual', builder: 'Person 2' }).run, clock);
     expect(await updates(root)).toEqual([]);
+  });
+
+  it('a fact restating an answer the team already gave elsewhere is not saved again', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, { ...idea, answers: [{ question: 'How many claims a month?', answer: 'About 12,000.', source: 'reply.eml' }] } as any);
+    await suggestPrep(root, idea.id, ai({ facts: [{ question: 'How many claims a month?', answer: 'Roughly twelve thousand claims.' }] }).run, clock);
+    expect(await updates(root)).toEqual([]);
+    expect(((await loadIdea(root, idea.id)) as any).answers).toHaveLength(1);
   });
 });
 
@@ -118,33 +122,26 @@ describe('the same person, the same answers: no duplicates', () => {
   it('a builder spelt another way, or with an extra word, is the person already known, and takes over as the builder', async () => {
     const root = await start();
     await suggestPrep(root, idea.id, ai({ builder: 'Tomasz Wiśniewski Viseiewki' }).run, clock);
-    let [b] = await updates(root);
+    const [b] = await updates(root);
     expect(b.label).toBe('Make Tomasz Wiśniewski the builder (the answer says "Tomasz Wiśniewski Viseiewki") instead of Person 1');
-    await decideUpdate(root, idea.id, b.id, 'yes', clock);
+    expect(b.status).toBe('applied');
     expect((await loadIdea(root, idea.id)).people.team).toEqual([
       { name: 'Person 1', roles: ['lead'] }, { name: 'Tomasz Wiśniewski', roles: ['sponsor', 'builder'], note: 'Sponsor', added: ['builder'] },
     ]);
     // Re-evaluated, the answer spelt yet another way: nothing new to do.
     await suggestPrep(root, idea.id, ai({ builder: 'Tomasz Viseiewki' }).run, clock);
-    expect((await updates(root)).filter((x) => x.status === 'proposed')).toEqual([]);
-    // Undo puts the team back as it was.
-    [b] = await updates(root);
-    await decideUpdate(root, idea.id, b.id, 'undo', clock);
-    expect((await loadIdea(root, idea.id)).people.team).toEqual(team.team);
+    expect(await updates(root)).toHaveLength(1);
   });
 
   it('answers re-worded on a second re-evaluation replace the ones saved before', async () => {
     const root = await start();
     await suggestPrep(root, idea.id, ai({ facts: [{ question: 'Can the builder attend all sessions?', answer: 'Not confirmed yet.' }, { question: 'Is sample data enough?', answer: 'Yes.' }] }).run, clock);
-    await decideUpdate(root, idea.id, (await updates(root))[0].id, 'yes', clock);
     await suggestPrep(root, idea.id, ai({ facts: [{ question: 'Can the builder attend all of the sessions?', answer: 'Confirmed, every session.' }, { question: 'Is sample data enough?', answer: 'Yes' }] }).run, clock);
-    const fresh = (await updates(root)).find((x) => x.status === 'proposed')!;
+    const fresh = (await updates(root))[1];
     expect(fresh.facts).toEqual([{ question: 'Can the builder attend all of the sessions?', answer: 'Confirmed, every session.' }]);
     expect(fresh.label).toMatch(/^Save this answer on the idea \(in place of 1 saved before\)/);
-    await decideUpdate(root, idea.id, fresh.id, 'yes', clock);
+    expect(fresh.status).toBe('applied');
     expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer)).toEqual(['Yes.', 'Confirmed, every session.']);
-    await decideUpdate(root, idea.id, fresh.id, 'undo', clock);
-    expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer).sort()).toEqual(['Not confirmed yet.', 'Yes.']);
   });
 });
 
@@ -183,20 +180,20 @@ describe('the brief of what the answers add', () => {
   });
 });
 
-describe('each section keeps its own proposals', () => {
-  it('a proposal says which suggestion made it; a new one in another section leaves it waiting', async () => {
+describe('each section keeps its own updates', () => {
+  it('an update says which suggestion made it; each section applies only its own', async () => {
     const root = await tmpWorkspace();
     await saveIdea(root, idea);
-    const { takeInAnswers } = await import('../src/review/updates');
+    const { takeInAnswers, applyAnswerUpdates } = await import('../src/review/updates');
     const now = await loadIdea(root, idea.id);
     // The decision proposes participation; then the tool picker proposes a builder.
     await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { updates: { ...NONE, participation: 'Team' } }, new Map(), 'fake', '2026-10-23', 1, 'decision')) });
     const mid = await loadIdea(root, idea.id);
     await saveIdea(root, { ...mid, ...(await takeInAnswers(root, mid, { updates: { ...NONE, builder: 'Person 2' } }, new Map(), 'fake', '2026-10-23', 1, 'tools')) });
-    expect((await updates(root)).map((u) => [u.kind, u.from, u.status])).toEqual([['participation', 'decision', 'proposed'], ['builder', 'tools', 'proposed']]);
-    // The decision suggests again with nothing to change: only its own waiting proposal goes.
-    const last = await loadIdea(root, idea.id);
-    await saveIdea(root, { ...last, ...(await takeInAnswers(root, last, { updates: NONE }, new Map(), 'fake', '2026-10-23', 1, 'decision')) });
-    expect((await updates(root)).map((u) => [u.kind, u.from])).toEqual([['builder', 'tools']]);
+    expect((await applyAnswerUpdates(root, idea.id, 'tools', clock)).map((u) => u.kind)).toEqual(['builder']);
+    expect((await updates(root)).map((u) => [u.kind, u.from, u.status])).toEqual([['participation', 'decision', 'proposed'], ['builder', 'tools', 'applied']]);
+    expect((await loadIdea(root, idea.id)).participation).toBe('Individual');
+    expect((await applyAnswerUpdates(root, idea.id, 'decision', clock)).map((u) => u.kind)).toEqual(['participation']);
+    expect((await loadIdea(root, idea.id)).participation).toBe('Team');
   });
 });

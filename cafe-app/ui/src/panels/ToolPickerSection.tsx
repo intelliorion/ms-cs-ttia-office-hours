@@ -160,10 +160,8 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
             <div className="rs-by">By {aiName(prep.provider)} on {prep.at}.</div>
           </div>
         )}
-        {/* What the answers change in the record: the same list as the decision's, each waiting for Yes. */}
-        <Updates updates={updatesFrom(idea, 'tools')} disabled={off} onUpdate={(update, what) => void call(
-          () => post(`/api/ideas/${encodeURIComponent(idea.id)}/prep/update`, { update, do: what }),
-          { ok: (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`) })} />
+        {/* What the answers changed in the record, applied by themselves: the same list as the decision's. */}
+        <Updates updates={updatesFrom(idea, 'tools')} />
         <div className="ai-row rs-acts">
           {!prep ? (
             <button className="btn" data-action="tools-suggest" disabled={noAi || off || !design}

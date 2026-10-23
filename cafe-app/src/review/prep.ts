@@ -7,7 +7,7 @@ import { NEED_ANSWER_MAX, type ReviewSuggestInput, type ReviewSuggestOutput } fr
 import { addQuestion } from '../design/brainstorm';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { reviewInput } from './suggestInput';
-import { takeInAnswers } from './updates';
+import { applyAnswerUpdates, takeInAnswers } from './updates';
 import { emailAnswerFor, isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from './needs';
 
 type WithAnswers = Idea & { answers?: EmailAnswer[] };
@@ -32,9 +32,10 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
     at: clock(), decision: output.decision, reason: showNames(output.reason, codes), criteria: output.criteria,
     needs, basis: pasted.length ? `${basis}, with ${pasted.length} answer${pasted.length === 1 ? '' : 's'} you added` : basis, provider,
   };
-  // What the answers would change (proposed, each waiting for Yes) and the brief of what they add.
+  // What the answers change (checked, then applied by themselves) and the brief of what they add.
   const taken = await takeInAnswers(root, idea, output, codes, provider, prep.at, (input.answers ?? []).length);
   await saveIdea(root, { ...idea, prep, ...taken });
+  await applyAnswerUpdates(root, id, 'decision', clock);
   const open = needs.filter((x) => isOpenNeed(x, idea.answers)).length;
   await appendHistory(await ideaDir(root, id), {
     at: prep.at, action: 'review-suggest', by: 'app',

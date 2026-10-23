@@ -51,7 +51,8 @@ export async function writeYaml(file: string, data: unknown): Promise<void> {
 export interface HistoryEntry {
   at: string;
   action: string;
-  by: 'operator' | 'app';
+  /** 'ai': a change the AI proposed and the code checked and applied (updates from answers). */
+  by: 'operator' | 'app' | 'ai';
   step?: string;
   source?: string;
   detail?: string;

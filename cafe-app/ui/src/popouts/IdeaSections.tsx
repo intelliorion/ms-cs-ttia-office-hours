@@ -138,7 +138,7 @@ export function History({ history, steps }: { history: HistoryEntry[] | null; st
                 <li key={`${h.at}-${i}`}>
                   <span className="when">{shortDate(h.at)}</span>
                   <span className="what">{historyLine(h, steps)}</span>
-                  <span className="who">{h.by === 'app' ? 'app' : 'you'}</span>
+                  <span className="who">{h.by === 'app' ? 'app' : h.by === 'ai' ? 'AI' : 'you'}</span>
                 </li>
               ))}
             </ol>

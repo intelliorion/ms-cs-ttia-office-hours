@@ -359,11 +359,16 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
   process and outcomes and proposes capabilities, systems and pain points, with links. It never proposes a tool: a Tool star
   appears only when you pick the tool in the tool picker.
 - **Suggest a decision / Re-evaluate** (in the idea's details): a decision, its reason and a to-do list of what you
-  still need. It also proposes what the answers change in the record, under **From your answers**: a builder (the
-  builder role, and "Builder named, can attend" when they confirm), participation, flags the answers settle, the
-  answers themselves (saved on the idea for the design series and later suggestions, and "Answers received"), and
-  links in the universe (a system the answers name, say). Nothing changes until you say Yes to each; No keeps it from
-  coming back; Undo puts back only that change. Every Yes and Undo is in the idea's history.
+  still need. What the answers change in the record is **applied by itself**: a builder (the builder role, and
+  "Builder named, can attend" when they confirm), participation, flags the answers settle, the answers themselves
+  (saved on the idea for the design series and later suggestions, and "Answers received"; an answer already on the
+  idea from the team's reply or another section's questions is not saved twice), and links in the universe (a system
+  the answers name, say). The AI proposes each change, the app checks it (only real changes, each made once, names
+  from their codes) and applies it, and lists it read-only under **Updated from your answers**; each is in the idea's
+  history, by the AI, with the section's answers as its source. There is no Yes, No or Undo: change the record by hand
+  (or with the assistant) if one is wrong. The tool picker, the design questions and the data questions do the same,
+  each with its own list. An older record may still hold a change from before this (shown as not applied): the
+  section's next suggestion applies it if the answers still say so; one you said no to then is never made.
 - **The Submission** (right panel) shows the form, and in its own colour what came after it: a role or a person added
   later (by an answer, an email or the assistant), a field changed from the form's value ("Team (form: Individual)"),
   and **Learned since the form**: the AI's short brief of what the answers add, one point per topic (Builder, Data,
@@ -501,8 +506,8 @@ nothing is saved until you press a button, and you can do everything except plan
      the tool, each with the question for the team and a box for the answer. **✉ Draft email** opens the open
      questions (E2) in Outlook; **Re-evaluate** reads your answers (and any the Import recorded) and updates the list
      and the tool (your own tool is evaluated again, not replaced). When the form says too little to pick at all, it
-     gives only the list. The answers also propose updates to the record under **From your answers** (one list for
-     both) and rewrite the Submission's **Learned since the form**.
+     gives only the list. What the answers change in the record is applied by itself and listed under **Updated from
+     your answers** (as for the decision), and the Submission's **Learned since the form** is rewritten.
    - The tool shows its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any
      other tool is Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the features and
      the tool, approach.md and design.md, ticks "Tool picked", and links every feature to the one tool in the
@@ -520,8 +525,8 @@ nothing is saved until you press a button, and you can do everything except plan
    one, type your own, or press **I don't know → ask the team**: the question goes into the idea's questions
    email (E2), sent from ✉ Emails, and when the team's reply comes in through the Import, it fills the answer. Each
    AI question also reads the answers so far, like the decision and the tool picker: what they change in the record
-   (a builder named, a flag settled, a system the data comes from) is proposed under **From your answers** in the
-   Design section (the same one list, each waiting for your Yes), and the Submission's **Learned since the form** is
+   (a builder named, a flag settled, a system the data comes from) is applied by itself and listed under **Updated
+   from your answers** in the Design section, and the Submission's **Learned since the form** is
    rewritten with what they add. Names are coded on the way out. A question added by hand changes neither. The live
    design.md sits under the questions.
    The design runs until it is **build-ready**: after the five points (must show, smallest input, who uses it, what

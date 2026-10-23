@@ -58,10 +58,12 @@ export interface PrepNeed {
 }
 /** The last decision suggestion and its to-do list. Saved on the idea so answers survive a reload; the decision itself is saved only by Save decision. */
 /**
- * One change the answers justify, proposed after a suggestion or a re-evaluation: nothing changes until the operator
- * says Yes. `key` names the change, so one said no to is not proposed again; `undo` is how an applied one goes back.
+ * One change the answers justify, proposed by the AI after a suggestion or a re-evaluation, checked by the code and
+ * applied at once (applyAnswerUpdates). `key` names the change, so it is never made twice. Older records may still say
+ * 'proposed' (made before updates applied themselves: applied on the section's next suggestion if still true, shown as
+ * not applied meanwhile) or 'dismissed' (the operator said no: never made); `undo` is from then and no longer used.
  */
-/** Where a proposal came from: the decision, the tool picker, the design questions, the roadshow's to-do list or the data questions (applied by themselves). */
+/** Where an update came from: the decision, the tool picker, the design questions, the roadshow's to-do list or the data questions. */
 export type UpdateSource = 'decision' | 'tools' | 'design' | 'roadshow' | 'data';
 
 export interface PrepUpdate {

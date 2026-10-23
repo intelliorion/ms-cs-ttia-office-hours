@@ -6,7 +6,7 @@ import { draftQuestionsEmail } from '../review/prep';
 import { isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from '../review/needs';
 import { reviewInput } from '../review/suggestInput';
 import { codedDataBrief } from '../data/brief';
-import { takeInAnswers } from '../review/updates';
+import { applyAnswerUpdates, takeInAnswers } from '../review/updates';
 import { showNames } from '../command/names';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
@@ -295,8 +295,9 @@ export async function suggestTools(
   const name = (t: string) => showNames(t, codes);
   state.toolPrep = { at, provider, needs: mergeNeeds(prev, output.needs, name) };
   await writeDesign(root, id, state);
-  // What the answers change (proposed, each waiting for Yes) and the brief of what they add, as after the decision.
+  // What the answers change (checked, then applied by themselves) and the brief of what they add, as after the decision.
   await saveIdea(root, { ...idea, ...(await takeInAnswers(root, idea, output, codes, provider, at, answers.length, 'tools')) });
+  await applyAnswerUpdates(root, id, 'tools', clock);
   const p = output.pick;
   const tool = p && validateChoice({
     tool: p.tool, by: evaluate ? 'operator' : 'ai', reason: name(p.reason), flags: p.flags,

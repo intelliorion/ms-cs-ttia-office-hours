@@ -3,6 +3,7 @@ import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, sampleIdea } from './helpers';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
+import { readHistory } from '../src/workspace/files';
 import { readDesign, writeDesign, emptyDesign, loadSkill, type DesignState } from '../src/design/store';
 import { validateFeatures, validateChoice, renderApproachMd, pathwayLabel, pathwayOf, mergeSuggestions, toolPickInput, PATHWAYS } from '../src/design/tools';
 import { designStepInput, codedDesignInput } from '../src/design/brainstorm';
@@ -433,7 +434,7 @@ describe('saving the features and the tool', () => {
 });
 
 describe('tool picker answers, taken in like the decision\'s', () => {
-  it('names are coded on the way to the AI; its proposed updates join the idea\'s one list and its brief goes on the idea', async () => {
+  it('names are coded on the way to the AI; its updates join the idea\'s one list, applied at once; its brief goes on the idea', async () => {
     let seen = '';
     const fake = fakeProvider();
     const provider: Provider = { ...fake, complete: async (p, o) => {
@@ -454,7 +455,8 @@ describe('tool picker answers, taken in like the decision\'s', () => {
     expect(out.tool.cons).toEqual(['No scheduling logic: Person 2 would need Power Automate']);
     expect(out.tool.fit).toEqual([{ feature: 'Intake', fit: 'partly', note: 'Person 2 adds the slots by hand' }]);
     const idea = await loadIdea(s.root, ID) as any;
-    expect(idea.updates.map((u: any) => [u.kind, u.label])).toEqual([['builder', 'Make Person 2 the builder']]);
+    expect(idea.updates.map((u: any) => [u.kind, u.from, u.status, u.label])).toEqual([['builder', 'tools', 'applied', 'Make Person 2 the builder']]);
+    expect(idea.people.team.find((p: any) => p.name === 'Person 2').roles).toContain('builder');
     expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it.' }]);
   });
 });
@@ -500,7 +502,7 @@ describe('the design questions build on the features and the tool', () => {
 });
 
 describe('design answers save themselves', () => {
-  it('every design answer goes on the idea at once (nothing to say yes to); names coded on the way out; the brief goes on the idea', async () => {
+  it('every design answer goes on the idea at once; names coded on the way out; what they change is applied by itself; the brief goes on the idea', async () => {
     const sp = spy((p) => {
       if (!p.startsWith('TASK: design-step')) return undefined;
       const code = /\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"stepsSoFar"')))?.[1];
@@ -525,16 +527,20 @@ describe('design answers save themselves', () => {
     expect(sp.prompts.at(-1)).toMatch(/updates: what DATA.stepsSoFar and DATA.teamAnswers change/);
     // The design's own answers ride in as its steps, not again as team answers.
     expect(d.teamAnswers ?? []).toEqual([]);
+    // What the answers change in the record is applied at once, by the AI, from the design answers.
     const idea = await loadIdea(s.root, ID) as any;
-    expect(idea.updates ?? []).toEqual([]);
+    expect(idea.updates.map((u: any) => [u.kind, u.from, u.status, u.label])).toEqual([['builder', 'design', 'applied', 'Make Person 2 the builder']]);
+    expect(idea.people.team.find((p: any) => p.name === 'Person 2').roles).toContain('builder');
+    expect((await readHistory(await ideaDir(s.root, ID))).filter((h: any) => h.action === 'answers-update').map((h: any) => [h.by, h.source]))
+      .toEqual([['ai', 'design answers']]);
     expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it in Power Apps.' }]);
     expect(idea.learned.from).toBe(1);
-    // A changed answer changes the copy on the idea; nothing is proposed.
+    // A changed answer changes the copy on the idea; nothing more is made by itself.
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 2, answer: 'A sample' });
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Person 2, in Power Apps.' });
     const after = await loadIdea(s.root, ID) as any;
     expect(after.answers.map((a: any) => a.answer)).toEqual(['Person 2, in Power Apps.', 'A sample']);
-    expect(after.updates ?? []).toEqual([]);
+    expect(after.updates).toHaveLength(1);
   });
 });
 

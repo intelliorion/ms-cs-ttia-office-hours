@@ -2,6 +2,7 @@ import { useStore } from '../state/store';
 import { useEffect, useRef, useState } from 'react';
 import { copyText, designPost } from '../api';
 import { NO_AI_TIP } from '../popouts/aiUi';
+import { Updates, updatesFrom } from './ReviewSelect';
 import {
   AI_WAIT, buildInstruction, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
 } from './designHelpers';
@@ -183,7 +184,8 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
           <div className="ds-sum">{s.summary}</div>
         </div>
       )}
-      {/* What the design answers change in the record: the same list as the decision's and the tool picker's, each waiting for Yes. */}
+      {/* What the design answers changed in the record, applied by themselves: the same list as the decision's and the tool picker's. */}
+      <Updates updates={updatesFrom(idea, 'design')} />
       {handQ && (
         <div className="ds-form" data-testid="hand-question">
           <input ref={qRef} type="text" value={handQ.question} maxLength={200} placeholder="The question" aria-label="Question" disabled={off}

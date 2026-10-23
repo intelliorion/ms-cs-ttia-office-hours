@@ -208,8 +208,6 @@ export function IdeaDetails({ id }: { id: string }) {
         {gates.review === 'active' && (
           <ReviewSelect idea={idea} state={state} busy={busy} aiBusy={aiBusy && !aiFor} noAi={noAi} noAiTip={NO_AI_TIP}
             aiName={providerName(idea.prep?.provider, ai)} onSuggest={() => void suggestReview()} onAnswer={answer}
-            onUpdate={(update, what) => void act(() => post(`/api/ideas/${encodeURIComponent(id)}/prep/update`, { update, do: what }),
-              (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`))}
             onDraftEmail={() => void act(async () => opened(await post(`/api/ideas/${encodeURIComponent(id)}/prep/email`)), (o: any) => openedText(o.email.template))}
             // Saving writes the decision only; its email waits in ✉ Emails until you choose to send it.
             onSave={(body) => void act(() => ideaPost(id, 'review', body), (r: any) => [

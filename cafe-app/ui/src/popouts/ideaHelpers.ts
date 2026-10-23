@@ -45,6 +45,8 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
     case 'round': { const d = String(h.detail ?? ''); return d ? d[0].toUpperCase() + d.slice(1) : 'Round changed'; }
     case 'inbox': return `Import: ${baseNames(h.detail)}${h.source ? ` (from ${String(h.source).split(/[\\/]/).pop()})` : ''}`;
     case 'inbox-undo': return `Import: ${baseNames(h.detail)}`;
+    // What the answers changed in the record, applied by the AI (older records: by the operator's Yes or Undo).
+    case 'answers-update': case 'data-update': case 'review-update': return String(h.detail ?? 'Updated from the answers');
     default: return [h.action, h.detail].filter(Boolean).join(': ');
   }
 }

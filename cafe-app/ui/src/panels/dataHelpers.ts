@@ -1,7 +1,10 @@
 /** The Data step's words and small rules, kept apart from the section so they can be tested on their own. */
-import { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, columnsOf, guessKind, meaningOf, sizeWords, whatOf } from '../../../src/data/model';
+import { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, TOPIC_WORDS, columnsOf, guessKind, meaningOf, sizeWords, whatOf } from '../../../src/data/model';
 
-export { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, columnsOf, guessKind, meaningOf, sizeWords, whatOf };
+export { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, TOPIC_WORDS, columnsOf, guessKind, meaningOf, sizeWords, whatOf };
+
+/** Where an earlier answer came from, in words: a file by its name, the app's own sources as they are. */
+export const sourceWords = (source: string) => String(source).split(/[\\/]/).pop() ?? source;
 export const DATA_KIND_OPTIONS = Object.entries(KIND_LABELS) as [string, string][];
 export const ACCEPT = DATA_EXTS.map((e) => `.${e}`).join(',');
 

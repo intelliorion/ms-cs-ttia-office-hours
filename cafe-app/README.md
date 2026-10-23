@@ -469,13 +469,19 @@ nothing is saved until you press a button, and you can do everything except plan
      and what is missing. The code keeps only real columns and features, and says what it dropped.
    - **Saved**: into the design (`design.yaml`'s data section, and a Data section in design.md).
 
+   With several files each is one line (name, kind, state: Understood, Held, Could not read…) that opens to its
+   steps and what was understood; a file that needs you (held, failed, to understand again, or working) stays open,
+   and a single file opens by itself. The summary shows its first few lines with **more**.
+
    **Edit understanding** corrects the one line and any column's meaning; your words win and survive **Understand
    again**. Changing a file's kind asks for Understand again. No step card is undone; a file can be removed.
 
    Then **Check the understanding**: the AI asks about the data one question at a time, like the design questions (why
    it matters, 2–4 suggested answers, your own, or **I don't know → ask the team** into the questions email), aimed
    at what the code sees open: no sample input, no sample of the output, no rules, unexplained columns or codes, the
-   volumes. Answers save themselves on the idea ("data questions"); the Import fills the ones asked of the team. What
+   volumes. A topic the team's earlier answers already settle ("about 12,000 claims a month") is not asked: the AI
+   quotes the answer, the code checks the words are in an answer on the idea (not a data answer) and closes that gap,
+   shown under **Settled by earlier answers** with where the answer came from (and in design.md). Answers save themselves on the idea ("data questions"); the Import fills the ones asked of the team. What
    the answers and files imply for the record and the universe (a system the data comes from, a builder, a fact) is
    checked and **applied by itself**, listed read-only under **Updated from your answers** and logged in history (no
    Yes/No). When the AI says the understanding is complete it shows a summary (input, output, knowledge, rules, the

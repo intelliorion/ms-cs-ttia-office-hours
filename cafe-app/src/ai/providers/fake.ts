@@ -513,9 +513,12 @@ function dataUnderstandFor(prompt: string) {
 
 /** The data questions, by rule: the output first when no output file is there, then the volumes, then complete. */
 function dataStepFor(prompt: string) {
-  const data = dataOf(prompt) as { stepsSoFar?: { question: string; answer: string; topic?: string }[]; gaps?: { topic: string }[]; files?: { name: string; kind: string }[] };
+  const data = dataOf(prompt) as { stepsSoFar?: { question: string; answer: string; topic?: string }[]; gaps?: { topic: string }[]; files?: { name: string; kind: string }[]; teamAnswers?: { question: string; answer: string }[] };
   const steps = data.stepsSoFar ?? [];
-  const asked = (t: string) => steps.some((s) => s.topic === t);
+  // An earlier answer that gives a count per month, week or day settles the volumes: quoted, not asked again.
+  const volume = (data.teamAnswers ?? []).find((a) => /\d[\d,.]*\s+\w+.*\b(a|per|each)\s+(month|week|day)\b/i.test(a.answer));
+  const settled = volume ? [{ topic: 'volumes', answer: volume.answer }] : [];
+  const asked = (t: string) => steps.some((s) => s.topic === t) || settled.some((s) => s.topic === t);
   const last = steps[steps.length - 1]?.answer ?? '';
   const from = /from (?:the )?([A-Z][A-Za-z ]{2,30}?)(?: export| system|[.,]|$)/.exec(last)?.[1];
   const updates = {
@@ -528,15 +531,15 @@ function dataStepFor(prompt: string) {
   };
   const gap = (t: string) => (data.gaps ?? []).some((g) => g.topic === t);
   if (gap('output') && !asked('output')) {
-    return { done: false, topic: 'output', question: 'What should the proof of concept produce from the sample?', why: 'There is no sample of the output yet.', suggested: ['A list of flagged rows with a reason', 'A summary by category', 'I will drop a sample output'], updates, learned: [] };
+    return { done: false, topic: 'output', question: 'What should the proof of concept produce from the sample?', why: 'There is no sample of the output yet.', suggested: ['A list of flagged rows with a reason', 'A summary by category', 'I will drop a sample output'], updates, learned: [], settled };
   }
   if (!asked('volumes')) {
-    return { done: false, topic: 'volumes', question: 'How many rows does a real run have, and how often?', why: 'The size and rhythm shape the build.', suggested: ['About 1,000 rows a month', 'About 200 rows a week', 'A few thousand rows a quarter'], updates, learned: [] };
+    return { done: false, topic: 'volumes', question: 'How many rows does a real run have, and how often?', why: 'The size and rhythm shape the build.', suggested: ['About 1,000 rows a month', 'About 200 rows a week', 'A few thousand rows a quarter'], updates, learned: [], settled };
   }
   const names = (data.files ?? []).map((x) => x.name).join(', ') || 'the answers';
   return {
     done: true,
     summary: { text: `The data is understood: ${names}.`, input: 'The sample input as dropped.', output: 'As the answers say.', knowledge: '', rules: 'As the rules file says.', gapsClosed: ['The output', 'The volumes'] },
-    updates, learned: [],
+    updates, learned: [], settled,
   };
 }

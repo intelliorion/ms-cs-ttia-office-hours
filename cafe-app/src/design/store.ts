@@ -8,7 +8,7 @@ import { csicFlags, dropRetiredFlags, legacyChoice, scopeOf, toolFeatures, type 
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 import { retiredToolNote } from '../graph/ontology';
-import { columnsOf, dataOf, KIND_LABELS, meaningOf, sizeWords, whatOf, type DataState } from '../data/model';
+import { columnsOf, dataOf, KIND_LABELS, meaningOf, sizeWords, TOPIC_WORDS, whatOf, type DataState } from '../data/model';
 
 export type { Pathway, ToolChoice, DesignTag, StoredDiagram, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
@@ -242,6 +242,7 @@ export function renderDataMd(d: DataState): string[] {
     out.push('### Data questions', '');
     for (const x of answered) out.push(`**D${x.n}. ${mdLine(x.question).replace(/\*/g, '')}**`, '', mdLine(x.answer) || '(asked the team in an E2; waiting for the reply)', '');
   }
+  if (d.settled?.length) out.push('Settled by earlier answers:', '', ...d.settled.map((x) => `- ${TOPIC_WORDS[x.topic] ?? x.topic}: "${mdLine(x.answer)}"${x.source ? ` (${mdLine(x.source.split(/[\\/]/).pop() ?? x.source)})` : ''}`), '');
   if (d.summary?.open.length && !d.confirmedAt) out.push('Still open:', '', ...d.summary.open.map((x) => `- ${mdLine(x)}`), '');
   return out.slice(0, out[out.length - 1] === '' ? -1 : undefined);
 }

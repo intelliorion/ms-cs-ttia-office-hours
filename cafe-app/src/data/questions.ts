@@ -20,7 +20,7 @@ import { showNames, type Coded } from '../command/names';
 import { applyAnswerUpdates, planUpdates } from '../review/updates';
 import type { DataStepInput, DataStepOutput } from '../ai/tasks';
 import {
-  columnsOf, dataPoints, DATA_TOPICS, isUsable, meaningOf, sizeWords, whatOf, type DataQuestion, type DataState, type DataTopic,
+  columnsOf, dataPoints, DATA_TOPICS, isUsable, meaningOf, sizeWords, whatOf, type DataQuestion, type DataSettled, type DataState, type DataTopic,
 } from './model';
 import { DataStepError, readData, reopenData, updateData } from './store';
 import { DATA_SOURCE } from './understand';
@@ -54,10 +54,37 @@ export function dataGaps(d: DataState): { topic: DataTopic; gap: string }[] {
   const unclear = usable.flatMap((f) => columnsOf(f).filter((c) => c.type !== 'empty' && !meaningOf(f, c.name)).map((c) => c.name));
   if (unclear.length) topics.push({ topic: 'codes', gap: `Columns with no meaning yet: ${unclear.slice(0, 10).join(', ')}${unclear.length > 10 ? ` and ${unclear.length - 10} more` : ''}` });
   topics.push({ topic: 'volumes', gap: 'How much data a real run has, and how often' });
-  const covered = new Set(d.steps.filter((s) => s.topic && (s.answer?.trim() || s.askedTeam)).map((s) => s.topic));
+  const covered = new Set<DataTopic | undefined>(d.steps.filter((s) => s.topic && (s.answer?.trim() || s.askedTeam)).map((s) => s.topic));
+  // A topic the team's earlier answers settle (checked by settledBy) is not open either.
+  for (const s of d.settled ?? []) covered.add(s.topic);
   // What each file's understanding says is missing, for the AI to weigh (a few per file).
   const missing = usable.flatMap((f) => (f.understanding?.missing ?? []).slice(0, 3).map((m) => ({ topic: 'other' as DataTopic, gap: `${f.name}: ${m}` })));
   return [...files, ...topics.filter((g) => !covered.has(g.topic)), ...missing].slice(0, 16);
+}
+
+const plain = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+/**
+ * The topics the AI says earlier answers already settle, checked: a real topic (not "other"), and words that are in
+ * one of the idea's answers (not the data questions' own; at least a few words of it). Each keeps the answer's question
+ * and source, to show. Earlier ones are kept while their answer is still on the idea; a newer one on a topic replaces it.
+ */
+export function settledBy(
+  said: { topic: string; answer: string }[], before: DataSettled[], answers: { question: string; answer: string; source?: string }[],
+): DataSettled[] {
+  const pool = answers.filter((a) => a.source !== DATA_SOURCE && a.answer?.trim());
+  const find = (words: string) => {
+    const w = plain(words);
+    if (w.length < 6) return undefined;
+    return pool.find((a) => plain(a.answer).includes(w)) ?? pool.find((a) => w.includes(plain(a.answer)) && plain(a.answer).length >= 6);
+  };
+  const out = new Map<DataTopic, DataSettled>();
+  for (const s of before) if (pool.some((a) => a.answer === s.answer && a.question === s.question)) out.set(s.topic, s);
+  for (const s of said) {
+    if (s.topic === 'other' || !(DATA_TOPICS as readonly string[]).includes(s.topic)) continue;
+    const a = find(s.answer);
+    if (a) out.set(s.topic as DataTopic, { topic: s.topic as DataTopic, answer: a.answer, question: a.question, ...(a.source ? { source: a.source } : {}) });
+  }
+  return [...out.values()];
 }
 
 /** What the code still sees open once the AI says complete: its gaps, and the questions waiting for the team. */
@@ -141,10 +168,14 @@ export async function nextDataStep(
   const { provider, output } = await run(input);
   if (output.done && !d.files.length && !d.steps.some((s) => s.answer?.trim())) throw new DataStepError('The AI called it complete with no data and no answers: drop a file or ask a question by hand');
   const applied = await applyDataUpdates(root, id, output, codes, provider, clock);
+  // The gaps earlier answers settle, checked against the answers on the idea (names back from their codes).
+  const answersNow = ((await loadIdea(root, id)) as Idea & { answers?: { question: string; answer: string; source?: string }[] }).answers ?? [];
+  const settled = settledBy((output.settled ?? []).map((s) => ({ topic: s.topic, answer: showNames(s.answer, codes) })), d.settled ?? [], answersNow);
   // The brief of what the answers add, as after every suggestion (a reply with none keeps the one there).
   const points = (output.learned ?? []).map((p) => ({ topic: p.topic.trim(), text: showNames(p.text, codes).trim() })).filter((p) => p.topic && p.text);
   if (points.length) { const now = await loadIdea(root, id); await saveIdea(root, { ...now, learned: { at: clock(), provider, from: read, points } }); }
   const { data, out } = await updateData(root, id, (x) => {
+    if (settled.length) x.settled = settled; else delete x.settled;
     if (output.done && output.summary) {
       const s = output.summary;
       x.summary = {

@@ -40,6 +40,8 @@ Keep going until the understanding is complete. Look for, in order:
 3. **The rules and knowledge**: is the rule written down (a rules sheet, a policy)? What reference material must the
    proof of concept know?
 4. **Volumes**: how much data a real run has and how often (rows a week, files a month): a number range is enough.
+   When the team's earlier answers already say it, quote that answer under "settled" and do not ask again (the same
+   for any other topic they settle).
 5. **Anything else** it depends on (a lookup list, a calendar, a second export).
 
 How to ask:

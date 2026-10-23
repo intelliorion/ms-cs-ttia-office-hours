@@ -156,6 +156,32 @@ describe('DataSection', () => {
     expect(el.querySelector('h3')!.textContent).toContain('confirmed 2026-10-20');
   });
 
+  it('several files are one line each (name, kind, state) that opens; one that needs you stays open', async () => {
+    const more = [FILE, { ...FILE, id: 'f3', name: 'rules.xlsx', kind: 'rules' }, { ...FILE, id: 'f4', name: 'out.csv', kind: 'output' }, HELD];
+    await mount({ files: more, steps: [] });
+    const row = (fid: string) => el.querySelector(`[data-file="${fid}"]`)!;
+    expect(row('f1').querySelector('.da-row')!.textContent).toBe('▸expenses.csvSample inputUnderstood');
+    expect(row('f1').querySelector('[data-testid="data-understanding"]')).toBeNull();
+    expect(row('f2').querySelector('.da-state')!.textContent).toBe('Held');
+    expect(row('f2').querySelector('[data-testid="data-held"]')).not.toBeNull();
+    await click('[data-file="f1"] [data-action="data-file-toggle"]');
+    expect(row('f1').querySelector('.da-what')!.textContent).toBe('Masked claims');
+    expect(row('f1').querySelector('select.da-kind')).not.toBeNull();
+    await click('[data-file="f1"] [data-action="data-file-toggle"]');
+    expect(row('f1').querySelector('.da-what')).toBeNull();
+  });
+
+  it('the summary folds to a few lines with "more"; topics earlier answers settle are shown with their source', async () => {
+    const summary = { text: 'Masked claims checked against the caps.', input: 'expenses.csv', output: 'A flagged list', knowledge: '', rules: 'The caps', gapsClosed: ['The output'], open: [], at: '2026-10-20' };
+    const settled = [{ topic: 'volumes', answer: 'About 12,000 claims a month.', question: 'How many claims?', source: 'inbox/2026-10-20-reply.eml' }];
+    await mount({ files: [FILE], steps: [], summary, settled });
+    expect(el.querySelector('[data-testid="data-summary"] .ds-sum')!.className).toContain('da-fold');
+    expect(el.querySelector('.da-sum-dl')).toBeNull();
+    await click('[data-action="data-summary-more"]');
+    expect(el.querySelector('.da-sum-dl')!.textContent).toContain('A flagged list');
+    expect(el.querySelector('[data-testid="data-settled"]')!.textContent).toBe('Settled by earlier answers: Volumes: “About 12,000 claims a month.” (2026-10-20-reply.eml)');
+  });
+
   it('with no AI: no Understand or Next question; by hand works', async () => {
     await mount({ files: [FILE], steps: [] }, { noAi: true });
     expect((el.querySelector('[data-action="data-next"]') as HTMLButtonElement).disabled).toBe(true);

@@ -182,7 +182,12 @@ export interface DataState {
   /** The design points the confirmed data settles (input-shape, output, logic), written at confirmation. */
   points?: Partial<Record<'input-shape' | 'output' | 'logic', string>>;
   applied?: DataApplied[];
+  /** Gaps the team's earlier answers settle (the AI names them, the code checks the words are in that answer). */
+  settled?: DataSettled[];
 }
+
+/** A topic an earlier answer on the idea settles: the answer's words, the question it answered and where it came from. */
+export interface DataSettled { topic: DataTopic; answer: string; question: string; source?: string }
 
 export const emptyData = (): DataState => ({ files: [], steps: [] });
 
@@ -204,6 +209,7 @@ export function dataOf(raw: unknown): DataState | undefined {
     ...(r.confirmedAt ? { confirmedAt: String(r.confirmedAt) } : {}),
     ...(r.points && typeof r.points === 'object' ? { points: r.points } : {}),
     ...(r.applied?.length ? { applied: arr<DataApplied>(r.applied) } : {}),
+    ...(r.settled?.length ? { settled: arr<DataSettled>(r.settled).filter((x) => x && typeof x.answer === 'string' && typeof x.topic === 'string') } : {}),
   };
 }
 

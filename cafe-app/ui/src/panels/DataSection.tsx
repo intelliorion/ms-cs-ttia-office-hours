@@ -4,7 +4,7 @@ import { NO_AI_TIP } from '../popouts/aiUi';
 import { AI_WAIT, openStep } from './designHelpers';
 import { StepCarousel, StepItem, type DesignCall, type DesignView } from './DesignSection';
 import {
-  ACCEPT, columnRows, currentCard, DATA_KIND_OPTIONS, dataPhase, glyphOf, guessKind, isRunning, KIND_LABELS, mergeFiles, sizeWords, stepCards, whatOf,
+  ACCEPT, columnRows, currentCard, DATA_KIND_OPTIONS, dataPhase, glyphOf, guessKind, isRunning, KIND_LABELS, mergeFiles, sizeWords, sourceWords, stepCards, TOPIC_WORDS, whatOf,
 } from './dataHelpers';
 
 /** What the folded part of a file card holds, in a few words ("6 columns, 4 rules, 3 issues, 2 missing"). */
@@ -39,24 +39,48 @@ function StepDots({ file }: { file: any }) {
   );
 }
 
-/** One file: its steps, the hold (when the check found personal data), and what was understood, with Edit. */
-function FileCard({ file, off, aiOff, readOnly, onKind, onRelease, onRemove, onUnderstand, onEdit }: {
-  file: any; off: boolean; aiOff: boolean; readOnly: boolean;
+/** A file's state in one or two words, for its one-line row. */
+export function fileWord(file: any): { word: string; tone: 'ok' | 'you' | 'bad' | 'run' } {
+  if (isRunning(file)) return { word: `${currentCard(file)?.word ?? 'Working'}…`, tone: 'run' };
+  if (file.check?.status === 'held') return { word: 'Held', tone: 'you' };
+  if (file.unreadable || (file.steps ?? []).some((s: any) => s.status === 'failed')) return { word: 'Could not read', tone: 'bad' };
+  if (file.stale) return { word: 'Understand again', tone: 'you' };
+  if (file.understanding || file.edits?.what) return { word: 'Understood', tone: 'ok' };
+  return { word: 'Not understood yet', tone: 'you' };
+}
+
+/** A file opens by itself when it needs you or is working, or when it is the only one; else it is one line that opens. */
+export const opensItself = (file: any, count: number) => count === 1 || fileWord(file).tone !== 'ok';
+
+/** One file: one line (name, kind, state) that opens to its steps, the hold, and what was understood, with Edit. */
+function FileCard({ file, count, off, aiOff, readOnly, onKind, onRelease, onRemove, onUnderstand, onEdit }: {
+  file: any; count: number; off: boolean; aiOff: boolean; readOnly: boolean;
   onKind: (kind: string) => void; onRelease: () => void; onRemove: () => void; onUnderstand: () => void; onEdit: (body: { what: string; columns: Record<string, string> }) => Promise<unknown>;
 }) {
   const [edit, setEdit] = useState<{ what: string; columns: Record<string, string> } | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [toggled, setToggled] = useState<boolean | null>(null);
   const u = file.understanding;
   const cols = columnRows(file);
   const held = file.check?.status === 'held';
   const what = whatOf(file);
   const running = isRunning(file);
+  const state = fileWord(file);
+  // What needs you stays open; otherwise the operator's click decides.
+  const open = state.tone !== 'ok' || !!edit || (toggled ?? opensItself(file, count));
   return (
-    <li className={`da-file${held ? ' held' : ''}${running ? ' running' : ''}`} data-file={file.id} data-testid="data-file">
+    <li className={`da-file${held ? ' held' : ''}${running ? ' running' : ''}${open ? ' open' : ''}`} data-file={file.id} data-testid="data-file">
+      <button type="button" className="da-row" aria-expanded={open} data-action="data-file-toggle" title={what || file.name}
+        onClick={() => setToggled(!open)}>
+        <span className="da-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        <span className="da-name">{file.name}</span>
+        <span className="da-kind-ro">{KIND_LABELS[file.kind as keyof typeof KIND_LABELS]}</span>
+        <span className={`da-state ${state.tone}`}>{state.word}</span>
+      </button>
+      {open && <>
       <div className="da-h">
-        <span className="da-name" title={file.name}>{file.name}</span>
         <span className="sec-n">{sizeWords(file)}</span>
-        {readOnly ? <span className="da-kind-ro">{KIND_LABELS[file.kind as keyof typeof KIND_LABELS]}</span> : (
+        {!readOnly && (
           <select className="da-kind" aria-label={`What ${file.name} is`} value={file.kind} disabled={off || running} onChange={(e) => onKind(e.target.value)}>
             {DATA_KIND_OPTIONS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
@@ -128,6 +152,7 @@ function FileCard({ file, off, aiOff, readOnly, onKind, onRelease, onRemove, onU
           )}
         </div>
       )}
+      </>}
     </li>
   );
 }
@@ -146,6 +171,7 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
   const [over, setOver] = useState(false);
   const [handQ, setHandQ] = useState<{ question: string; suggested: string } | null>(null);
   const [finish, setFinish] = useState<string | null>(null);
+  const [moreSum, setMoreSum] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const id = idea.id;
   const off = busy || aiWorking;
@@ -219,7 +245,7 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
       {files.length > 0 && (
         <ul className="da-files" aria-label="Data files">
           {files.map((f) => (
-            <FileCard key={f.id} file={f} off={off} aiOff={off || noAi} readOnly={false}
+            <FileCard key={f.id} file={f} count={files.length} off={off} aiOff={off || noAi} readOnly={false}
               onKind={(kind) => void filePost(f.id, 'kind', { kind }, `${f.name}: ${KIND_LABELS[kind as keyof typeof KIND_LABELS]}. Understand it again so the AI reads it as that.`)}
               onRelease={() => void filePost(f.id, 'release', {}, `${f.name} goes on as masked or synthetic data; the flagged columns stay masked for the AI.`, true)}
               onRemove={() => void filePost(f.id, 'remove', {}, `${f.name} removed, with its copy in the idea folder.`)}
@@ -241,11 +267,14 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
           {d.summary && (
             <div className={`ds-done da-sum${d.confirmedAt ? ' confirmed' : ''}`} data-testid="data-summary">
               <div className="ds-done-h">{d.confirmedAt ? `Confirmed on ${d.confirmedAt}` : 'The AI says the understanding is complete'}</div>
-              <div className="ds-sum">{d.summary.text}</div>
-              <dl className="dp-settles da-sum-dl">
-                {[['Input', d.summary.input], ['Output', d.summary.output], ['Knowledge', d.summary.knowledge], ['Rules', d.summary.rules]].filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
-              </dl>
-              {d.summary.gapsClosed?.length > 0 && <div className="hint">Settled by your answers: {d.summary.gapsClosed.join('; ')}</div>}
+              <div className={`ds-sum${moreSum ? '' : ' da-fold'}`}>{d.summary.text}</div>
+              {moreSum && <>
+                <dl className="dp-settles da-sum-dl">
+                  {[['Input', d.summary.input], ['Output', d.summary.output], ['Knowledge', d.summary.knowledge], ['Rules', d.summary.rules]].filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+                </dl>
+                {d.summary.gapsClosed?.length > 0 && <div className="hint">Settled by your answers: {d.summary.gapsClosed.join('; ')}</div>}
+              </>}
+              <button className="link-btn da-more-btn" data-action="data-summary-more" aria-expanded={moreSum} onClick={() => setMoreSum(!moreSum)}>{moreSum ? 'less' : 'more'}</button>
               {d.summary.open?.length > 0 && !d.confirmedAt && <div className="hint warn">Still open: {d.summary.open.join('; ')}</div>}
               {d.confirmedAt
                 ? <div className="hint">It now feeds the features, the tool, the design, the kits and the roadshow. Dropping a file or changing it asks for a new confirmation.</div>
@@ -256,6 +285,13 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
                     <span className="hint">Confirm once: only a confirmed understanding is used after this.</span>
                   </div>
                 )}
+            </div>
+          )}
+          {(d.settled?.length ?? 0) > 0 && (
+            <div className="hint da-settled" data-testid="data-settled">
+              Settled by earlier answers: {d.settled.map((s: any, i: number) => (
+                <span key={s.topic}>{i ? '; ' : ''}<b>{TOPIC_WORDS[s.topic as keyof typeof TOPIC_WORDS] ?? s.topic}</b>: “{s.answer}”{s.source ? ` (${sourceWords(s.source)})` : ''}</span>
+              ))}
             </div>
           )}
           {(d.applied?.length ?? 0) > 0 && (

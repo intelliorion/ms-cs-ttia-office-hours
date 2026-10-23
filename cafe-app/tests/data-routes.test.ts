@@ -175,6 +175,29 @@ describe('The data questions, the automatic updates and the one confirmation', (
     expect(pointOf(await readDesign(root, ID), 'input-shape')).toBeUndefined();
   });
 
+  it('an earlier answer that settles the volumes closes that gap: not asked, not "still open", shown with its source', async () => {
+    const { root, drop, post } = await server();
+    await saveIdea(root, { ...(await loadIdea(root, ID)), answers: [{ question: 'How many claims are checked?', answer: 'About 12,000 claims a month, every Monday.', source: 'inbox/2026-10-19-reply.eml' }] } as any);
+    await drop('expenses.csv', expenseCsv(10), 'input');
+    await drop('flagged.csv', outputCsv(), 'output');
+    await drop('policy caps.xlsx', await rulesXlsx(), 'rules');
+    const r = await post(`/api/ideas/${ID}/data/step`);
+    expect(r.body.done).toBe(true);
+    const d = r.body.state.data;
+    expect(d.settled).toEqual([{ topic: 'volumes', answer: 'About 12,000 claims a month, every Monday.', question: 'How many claims are checked?', source: 'inbox/2026-10-19-reply.eml' }]);
+    expect(d.summary.open.join(' ')).not.toMatch(/How much data/);
+  });
+
+  it('a settled topic is checked: words not in any answer, a data answer or "other" settle nothing; one whose answer went is dropped', async () => {
+    const { settledBy } = await import('../src/data/questions');
+    const answers = [{ question: 'Volume?', answer: 'About 12,000 claims a month.', source: 'reply.eml' }, { question: 'Rows?', answer: 'A thousand rows', source: 'data questions' }];
+    expect(settledBy([{ topic: 'volumes', answer: '12,000 claims a month' }], [], answers)).toEqual([{ topic: 'volumes', answer: 'About 12,000 claims a month.', question: 'Volume?', source: 'reply.eml' }]);
+    expect(settledBy([{ topic: 'volumes', answer: 'About 50,000 claims a month' }], [], answers)).toEqual([]);
+    expect(settledBy([{ topic: 'volumes', answer: 'A thousand rows' }], [], answers)).toEqual([]);
+    expect(settledBy([{ topic: 'other', answer: '12,000 claims a month' }], [], answers)).toEqual([]);
+    expect(settledBy([], [{ topic: 'volumes', answer: 'Gone', question: 'Q' }], answers)).toEqual([]);
+  });
+
   it('"I don\'t know" puts the question in the questions email; the hand path needs no AI', async () => {
     const { drop, post } = await server();
     await drop('expenses.csv', expenseCsv(10), 'input');

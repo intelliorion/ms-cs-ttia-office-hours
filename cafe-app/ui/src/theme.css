@@ -655,6 +655,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .modal.ai-working{position:relative}
 .modal.ai-working,.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working]){border-color:rgba(var(--rgb-accent),.55);animation:ai-edge-glow 2.4s ease-in-out infinite}
 .modal.ai-working::before,.panel:has(.idea-detail[data-ai-working])::before,.drawer:has(.idea-detail[data-ai-working])::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:2px;pointer-events:none;z-index:2;background:conic-gradient(from var(--ib-a),transparent 0 55%,rgba(var(--rgb-accent),.95) 75%,rgba(var(--rgb-cream),.9) 82%,transparent 100%);-webkit-mask:linear-gradient(var(--black) 0 0) content-box,linear-gradient(var(--black) 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:ib-rim 2.8s linear infinite}
+:is(.panel,.drawer):has(.idea-detail[data-ai-working])::before{inset:-6px;padding:7px;border-radius:11px;background:conic-gradient(from var(--ib-a),transparent 0 40%,rgba(var(--rgb-accent),.95) 70%,rgba(var(--rgb-cream),.95) 80%,transparent 100%)}
+:is(.panel,.drawer):has(.idea-detail[data-ai-working]){animation-name:ai-panel-glow}
+@keyframes ai-panel-glow{0%,100%{box-shadow:0 0 0 2px rgba(var(--rgb-accent),.45) inset,0 0 26px rgba(var(--rgb-accent),.35)}50%{box-shadow:0 0 0 2px rgba(var(--rgb-accent),.7) inset,0 0 56px rgba(var(--rgb-accent),.6)}}
 @keyframes ai-edge-glow{0%,100%{box-shadow:0 0 0 1px rgba(var(--rgb-accent),.25) inset,0 0 18px rgba(var(--rgb-accent),.22),0 30px 80px rgba(var(--rgb-shadow),.55)}50%{box-shadow:0 0 0 1px rgba(var(--rgb-accent),.4) inset,0 0 42px rgba(var(--rgb-accent),.42),0 30px 80px rgba(var(--rgb-shadow),.55)}}
 .modal .x:disabled{opacity:.35;cursor:not-allowed;border-color:var(--panel-border)}
 .ib-well input[type=file]:disabled,.ib-paste textarea:disabled{opacity:.45;cursor:not-allowed}

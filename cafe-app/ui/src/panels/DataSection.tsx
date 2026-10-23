@@ -39,6 +39,22 @@ function StepDots({ file }: { file: any }) {
   );
 }
 
+/**
+ * What the notice says after files go up: the ones read and understood, and the ones held at the personal-data check
+ * (with what to do: confirm they are masked or synthetic, or remove them). Never "understood" for a held file.
+ */
+export function uploadNotice(files: any[]): string {
+  const held = files.filter((f) => f?.check?.status === 'held');
+  const failed = files.filter((f) => f?.check?.status !== 'held' && (f?.unreadable || (f?.steps ?? []).some((s: any) => s.status === 'failed')));
+  const ok = files.filter((f) => !held.includes(f) && !failed.includes(f));
+  const names = (xs: any[]) => xs.map((f) => f.name).join(', ');
+  const parts: string[] = [];
+  if (ok.length) parts.push(`${ok.length === 1 ? `${ok[0].name} is` : `${ok.length} files are`} read and understood. Check what the AI made of ${ok.length === 1 ? 'it' : 'them'}, then ask about the data.`);
+  if (held.length) parts.push(`${names(held)} ${held.length === 1 ? 'is' : 'are'} held at the personal-data check: nothing in ${held.length === 1 ? 'it' : 'them'} has gone to the AI. Confirm ${held.length === 1 ? 'it is' : 'they are'} masked or synthetic ("It is masked / synthetic — continue"), or remove ${held.length === 1 ? 'it' : 'them'}.`);
+  if (failed.length) parts.push(`${names(failed)} could not be read or understood: see ${failed.length === 1 ? 'its' : 'their'} steps.`);
+  return parts.join(' ');
+}
+
 /** A kind in a few words for the one-line row ("Sample output", not "… (what it should produce)"). */
 export const shortKind = (kind: string) => (KIND_LABELS[kind as keyof typeof KIND_LABELS] ?? kind).replace(/\s*\(.*\)$/, '');
 
@@ -197,13 +213,14 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
   const upload = async () => {
     const list = staged;
     await call(async () => {
-      let last: any = null;
+      const files: any[] = [];
       for (const s of list) {
-        last = await dataUpload(id, s.file, s.kind, progress);
+        const r = await dataUpload(id, s.file, s.kind, progress);
+        files.push(r?.file ?? { name: s.file.name });
         setStaged((xs) => xs.filter((x) => x.key !== s.key));
       }
-      return last;
-    }, { ai, ok: () => `${list.length === 1 ? `${list[0].file.name} is` : `${list.length} files are`} read and understood. Check what the AI made of ${list.length === 1 ? 'it' : 'them'}, then ask about the data.` });
+      return files;
+    }, { ai, ok: (files: any[]) => uploadNotice(files) });
   };
   const filePost = (fid: string, what: 'release' | 'understand' | 'kind' | 'edit' | 'remove', body: unknown, ok: string, stream = false) =>
     call(() => dataFilePost(id, fid, what, body, stream ? progress : undefined), { ...(stream ? { ai } : {}), ok: () => ok });

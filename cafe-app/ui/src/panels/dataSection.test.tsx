@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../api', () => api);
 
 import { useStore } from '../state/store';
-import { DataSection, DataCard } from './DataSection';
+import { DataSection, DataCard, uploadNotice } from './DataSection';
 import type { DesignCall } from './DesignSection';
 import { dataGate } from './stageGate';
 import { columnRows, currentCard, dataPhase, glyphOf, mergeFiles, stepCards } from './dataHelpers';
@@ -180,6 +180,23 @@ describe('DataSection', () => {
     await click('[data-action="data-summary-more"]');
     expect(el.querySelector('.da-sum-dl')!.textContent).toContain('A flagged list');
     expect(el.querySelector('[data-testid="data-settled"]')!.textContent).toBe('Settled by earlier answers: Volumes: “About 12,000 claims a month.” (2026-10-20-reply.eml)');
+  });
+
+  it('a file held at the personal-data check is never "read and understood": the notice says it is held and what to do', async () => {
+    const said: string[] = [];
+    const say: DesignCall = async (fn, o) => { const r = await fn(); said.push(o.ok(r) ?? ''); return r; };
+    await act(async () => root.render(<DataSection idea={IDEA} design={{ state: state({ files: [], steps: [] }), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={say} onSendQuestions={() => {}} />));
+    const input = el.querySelector('[data-testid="data-file-input"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'claims.csv')], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })); });
+    api.dataUpload.mockResolvedValue({ file: HELD, state: state({ files: [HELD], steps: [] }) });
+    await click('[data-action="data-upload"]');
+    expect(said[0]).toMatch(/^claims\.csv is held at the personal-data check: nothing in it has gone to the AI\. Confirm it is masked or synthetic/);
+    expect(said[0]).toMatch(/or remove it\.$/);
+    expect(said[0]).not.toMatch(/understood/);
+    // Mixed: one understood, one held.
+    expect(uploadNotice([FILE, HELD])).toBe('expenses.csv is read and understood. Check what the AI made of it, then ask about the data. '
+      + 'claims.csv is held at the personal-data check: nothing in it has gone to the AI. Confirm it is masked or synthetic ("It is masked / synthetic — continue"), or remove it.');
   });
 
   it('with no AI: no Understand or Next question; by hand works', async () => {

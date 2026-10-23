@@ -34,18 +34,22 @@ interface PointSource {
   steps: { tag?: string; answer?: string }[];
   /** What the AI's done reply said the earlier answers already settle, by tag. */
   settled?: Partial<Record<string, string>>;
+  /** The confirmed data's points (input-shape, output, logic): what the dropped files settle, after any answer. */
+  data?: { confirmedAt?: string; points?: Partial<Record<string, string>> };
 }
 
 /**
  * The answer that settles a point: the answered questions tagged with it (several join with "; "), else what the done
- * reply said the answers settle, else, with no tags at all (hand-written questions), the first answer for the smallest
- * input. Undefined when the point is still open.
+ * reply said the answers settle, else what the confirmed data settles, else, with no tags at all (hand-written
+ * questions), the first answer for the smallest input. Undefined when the point is still open.
  */
 export function pointOf(state: PointSource, tag: DesignTag): string | undefined {
   const hits = state.steps.filter((s) => s.tag === tag && s.answer?.trim()).map((s) => s.answer!.trim());
   if (hits.length) return hits.join('; ');
   const said = state.settled?.[tag];
   if (typeof said === 'string' && said.trim()) return said.trim();
+  const fromData = state.data?.confirmedAt ? state.data.points?.[tag] : undefined;
+  if (typeof fromData === 'string' && fromData.trim()) return fromData.trim();
   if (tag === 'smallest-input' && !state.steps.some((s) => s.tag)) return state.steps[0]?.answer?.trim() || undefined;
   return undefined;
 }

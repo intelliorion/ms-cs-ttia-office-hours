@@ -34,9 +34,14 @@ cafe-app/src/command/query.ts
 cafe-app/src/comms/eml.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
+cafe-app/src/data/check.ts
+cafe-app/src/data/model.ts
+cafe-app/src/data/profile.ts
+cafe-app/src/data/read.ts
 cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/diagram.ts
+cafe-app/src/design/diagramFile.ts
 cafe-app/src/design/diagramLayout.ts
 cafe-app/src/design/kitFiles.ts
 cafe-app/src/design/kitInput.ts
@@ -123,6 +128,8 @@ cafe-app/tests/command-names.test.ts
 cafe-app/tests/command-query.test.ts
 cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
+cafe-app/tests/data-read-check.test.ts
+cafe-app/tests/dataFixtures.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kit-content.test.ts
@@ -299,7 +306,7 @@ cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
 cafe-app/web/assets/index-CnGPjLzT.css
-cafe-app/web/assets/index-MKp9b1Kk.js
+cafe-app/web/assets/index-D_jf7QUJ.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

@@ -155,7 +155,7 @@ const unreadable = (reason: string): ParsedDrop => ({ type: 'unknown', text: '',
  * A PDF's text by code; a picture (or a scanned PDF) by the AI looking at the stored file.
  * onStep tells the Read step what is happening while the AI runs. AI errors other than "can't look" are thrown.
  */
-async function readPending(
+export async function readPending(
   file: string, parsed: ParsedDrop, bytes: Uint8Array, ai: Connector | null | undefined, onStep?: (detail: string) => unknown,
 ): Promise<{ parsed: ParsedDrop; aiMs?: number }> {
   if (!parsed.meta.pending) return { parsed };

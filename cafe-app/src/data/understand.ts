@@ -20,11 +20,12 @@ import { knownParticipants } from '../inbox/screen';
 import { reviewInput, codeValue } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
 import { readDesign, skillGuidance } from '../design/store';
+export { guessKind } from './model';
 import {
-  columnsOf, DATA_FILES_MAX, DATA_STEP_ORDER, isDataKind, KIND_HINTS, KIND_LABELS, sizeWords, whatOf,
+  columnsOf, DATA_FILES_MAX, guessKind, isUsable, DATA_STEP_ORDER, isDataKind, KIND_HINTS, KIND_LABELS, sizeWords, whatOf,
   type DataFile, type DataKind, type DataStepCard, type DataStepId, type DataUnderstanding, type FindingKind,
 } from './model';
-import { checkDataFile, dataTypeOf, extOf, readDataFile, type ReadResult } from './read';
+import { checkDataFile, dataTypeOf, readDataFile, type ReadResult } from './read';
 import { checkRead, heldWords } from './check';
 import { docExcerpt, lookAt, profileDoc, profileTable, type LookResult } from './profile';
 import { copyName, copyPath, dataFolder, DataStepError, fileOf, nextFileId, readData, removeCopy, reopenData, updateData } from './store';
@@ -33,20 +34,6 @@ export type DataProgress = (event: { file: DataFile }) => void;
 export const DATA_SOURCE = 'data questions';
 /** How many times the AI may ask to look closer before it must answer. */
 export const LOOK_ROUNDS = 2;
-
-/** The kind a file most likely is, from its name and type: the drop-down starts there; the operator decides. */
-export function guessKind(name: string): DataKind {
-  const n = name.toLowerCase();
-  const ext = extOf(n);
-  if (ext === 'eml' || ext === 'msg') return 'email';
-  if (/rule|polic|lookup|mapping|reference|limits?|caps?\b|thresholds?/.test(n)) return 'rules';
-  if (/today|current|manual|as[-_ ]is|report/.test(n)) return 'today';
-  if (/output|result|expected|flagged|target|to[-_ ]be/.test(n)) return 'output';
-  if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n)) return 'process';
-  if (['csv', 'tsv', 'xlsx'].includes(ext)) return 'input';
-  if (['pdf', 'docx', 'txt', 'md'].includes(ext)) return 'process';
-  return 'other';
-}
 
 const ms = (t0: number) => Date.now() - t0;
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
@@ -327,7 +314,8 @@ async function understandWithAi(
   const state = await readDesign(root, id);
   const data = state.data ?? { files: [], steps: [] };
   const f = fileOf(data, fid);
-  const others = data.files.filter((x) => x.id !== fid);
+  // The other files as far as they are known: a held or unreadable one says nothing yet.
+  const others = data.files.filter((x) => x.id !== fid && isUsable(x));
   // The idea's text coded as the decision codes it; everything about the file coded with the same list.
   const { input: seen, codes } = await reviewInput(root, id);
   const features = state.features.map((x) => ({ name: x.name, ...(x.what ? { what: x.what } : {}) }));

@@ -55,7 +55,16 @@ function phonesIn(text: string): string[] {
   return (t.match(PHONE) ?? []).map((p) => p.replace(/\D/g, '')).filter((d) => d.length >= 9 && d.length <= 15);
 }
 const cardsIn = (text: string) => (text.match(CARD) ?? []).map((c) => c.replace(/\D/g, '')).filter(luhn);
-const ibansIn = (text: string) => (text.match(IBAN) ?? []).map((x) => x.replace(/\s/g, '')).filter((x) => x.length >= 15 && /\d{6,}/.test(x));
+/** An IBAN by its check digits (ISO 13616, mod 97): a hash or a code that merely looks like one is not. */
+export function ibanValid(raw: string): boolean {
+  const s = raw.replace(/\s/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s)) return false;
+  const moved = `${s.slice(4)}${s.slice(0, 4)}`.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let rem = 0;
+  for (const ch of moved) rem = (rem * 10 + Number(ch)) % 97;
+  return rem === 1;
+}
+const ibansIn = (text: string) => (text.match(IBAN) ?? []).map((x) => x.replace(/\s/g, '')).filter(ibanValid);
 const personalEmails = (text: string) => [...new Set((text.match(EMAIL) ?? []).map((e) => e.toLowerCase()))]
   .filter((e) => !EXAMPLE_DOMAIN.test(e) && !ROLE_MAILBOX.test(e.split('@')[0]));
 
@@ -66,7 +75,7 @@ const personalEmails = (text: string) => [...new Set((text.match(EMAIL) ?? []).m
 export function maskText(text: string): string {
   let out = text.replace(EMAIL, '<email>');
   out = out.replace(CARD, (m) => (luhn(m.replace(/\D/g, '')) ? '<card>' : m));
-  out = out.replace(IBAN, (m) => (m.replace(/\s/g, '').length >= 15 && /\d{6,}/.test(m) ? '<bank>' : m));
+  out = out.replace(IBAN, (m) => (ibanValid(m) ? '<bank>' : m));
   // Phones last, on what is left, never touching dates, times or amounts.
   const keep: string[] = [];
   const shielded = NOT_PHONES.reduce((x, re) => x.replace(re, (m) => { keep.push(m); return `\u0000${keep.length - 1}\u0000`; }), out);

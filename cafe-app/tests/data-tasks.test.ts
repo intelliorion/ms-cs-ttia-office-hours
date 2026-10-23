@@ -24,7 +24,10 @@ describe('the data skill and its two tasks', () => {
     expect(dataUnderstandTask.parse(JSON.stringify(empty))).toMatchObject({ what: 'A table' });
     expect(() => dataUnderstandTask.parse(JSON.stringify({ ...empty, kindHint: 'spreadsheet' }))).toThrow(/invalid output/);
     expect(() => dataUnderstandTask.parse(JSON.stringify({ ...empty, what: '' }))).toThrow(/invalid output/);
-    expect(() => dataUnderstandTask.parse(JSON.stringify({ ...empty, extra: 1 }))).toThrow(/invalid output/);
+    // An extra field the AI adds (a "name" on a rule, found on the live check) is dropped, not a reason to refuse.
+    const extra = dataUnderstandTask.parse(JSON.stringify({ ...empty, extra: 1, rules: [{ name: 'Weekend rule', rule: 'No weekend spend', columns: [] }] }));
+    expect(extra.rules).toEqual([{ rule: 'No weekend spend', columns: [] }]);
+    expect((extra as any).extra).toBeUndefined();
     const long = dataUnderstandTask.parse(JSON.stringify({ ...empty, what: 'x'.repeat(500), look: [1, 2, 3, 4, 5].map((k) => ({ column: `c${k}`, why: '' })) }));
     expect(long.what.length).toBe(200);
     expect(long.look).toHaveLength(3);
@@ -96,17 +99,24 @@ describe('gaps, the brief and the Data point', () => {
   it('the code sees what is open, by topic; a question on a topic covers it', () => {
     const d: DataState = { files: [input], steps: [] };
     const topics = dataGaps(d).map((g) => g.topic);
-    expect(topics).toEqual(['output', 'rules', 'codes', 'other', 'volumes']);
+    expect(topics).toEqual(['output', 'rules', 'codes', 'volumes', 'other']);
     expect(dataGaps({ files: [], steps: [] })[0]).toEqual({ topic: 'input', gap: 'No data dropped yet' });
     const asked: DataState = { files: [input], steps: [{ n: 1, question: 'Output?', suggested: [], topic: 'output', source: 'operator', askedTeam: { emailKey: 'k' } }] };
     expect(dataGaps(asked).map((g) => g.topic)).not.toContain('output');
     expect(openAfterDone(asked)).toContain('Asked the team: Output?');
+    // A held file stays open whatever was asked about the input; the volumes are never cut off by many missing items.
+    const many = { ...input, understanding: { ...input.understanding!, missing: Array.from({ length: 20 }, (_, i) => `m${i}`) } };
+    const held = file({ id: 'f2', name: 'p.csv', check: { status: 'held', findings: [], masked: [], notes: [] } });
+    const g = dataGaps({ files: [many, held], steps: [{ n: 1, question: 'In?', suggested: [], topic: 'input', source: 'operator', answer: 'x' }] });
+    expect(g[0].gap).toMatch(/^p\.csv is held/);
+    expect(g.map((x) => x.topic)).toContain('volumes');
+    expect(g.filter((x) => x.topic === 'other')).toHaveLength(3);
   });
   it('the brief is only for confirmed data, and the Data point is said by code', () => {
     expect(dataBrief({ files: [input], steps: [] })).toBeUndefined();
     const b = dataBrief({ files: [input], steps: [{ n: 1, question: 'Rows?', suggested: [], source: 'operator', answer: '1,000 a month' }], confirmedAt: '2026-10-20' })!;
     expect(b.files[0]).toMatchObject({ name: 'expenses.csv', kind: 'Sample input', what: 'Masked claims', size: '10 rows, 6 columns' });
     expect(b.answers).toEqual([{ question: 'Rows?', answer: '1,000 a month' }]);
-    expect(dataLearnedText({ files: [input], steps: [] })).toBe('Sample input: expenses.csv (10 rows, 6 columns), Masked claims.');
+    expect(dataLearnedText({ files: [input], steps: [] })).toBe('Sample input: expenses.csv (10 rows, 6 columns): Masked claims.');
   });
 });

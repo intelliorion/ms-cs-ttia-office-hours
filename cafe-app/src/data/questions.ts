@@ -36,24 +36,28 @@ const isOpen = (s: DataQuestion) => !s.answer?.trim() && !s.askedTeam;
 
 /** What the code sees still open, by topic. A topic an answered (or asked) question covers is not open. */
 export function dataGaps(d: DataState): { topic: DataTopic; gap: string }[] {
-  const out: { topic: DataTopic; gap: string }[] = [];
   const usable = d.files.filter(isUsable);
   const has = (...kinds: string[]) => usable.some((f) => kinds.includes(f.kind));
-  if (!d.files.length) out.push({ topic: 'input', gap: 'No data dropped yet' });
+  // A file that says nothing yet is open whatever was asked.
+  const files: { topic: DataTopic; gap: string }[] = [];
+  if (!d.files.length) files.push({ topic: 'input', gap: 'No data dropped yet' });
   for (const f of d.files) {
-    if (f.check?.status === 'held') out.push({ topic: 'input', gap: `${f.name} is held for personal data: nothing in it is known yet` });
-    else if (f.unreadable) out.push({ topic: 'input', gap: `${f.name} could not be read: ${f.unreadable}` });
-    else if (!f.understanding && !f.edits?.what) out.push({ topic: 'input', gap: `${f.name} is not understood yet` });
+    if (f.check?.status === 'held') files.push({ topic: 'input', gap: `${f.name} is held for personal data: nothing in it is known yet` });
+    else if (f.unreadable) files.push({ topic: 'input', gap: `${f.name} could not be read: ${f.unreadable}` });
+    else if (!f.understanding && !f.edits?.what) files.push({ topic: 'input', gap: `${f.name} is not understood yet` });
   }
-  if (d.files.length && !has('input')) out.push({ topic: 'input', gap: 'No sample input: what the proof of concept reads' });
-  if (!has('output', 'today')) out.push({ topic: 'output', gap: 'No sample of the output: what it should produce' });
-  if (!has('rules', 'process') && !usable.some((f) => f.understanding?.rules.length)) out.push({ topic: 'rules', gap: 'No rules, policy or reference: the rule is not written down' });
+  // The topics: closed by a file, or by a question on that topic answered or asked of the team.
+  const topics: { topic: DataTopic; gap: string }[] = [];
+  if (d.files.length && !has('input')) topics.push({ topic: 'input', gap: 'No sample input: what the proof of concept reads' });
+  if (!has('output', 'today')) topics.push({ topic: 'output', gap: 'No sample of the output: what it should produce' });
+  if (!has('rules', 'process') && !usable.some((f) => f.understanding?.rules.length)) topics.push({ topic: 'rules', gap: 'No rules, policy or reference: the rule is not written down' });
   const unclear = usable.flatMap((f) => columnsOf(f).filter((c) => c.type !== 'empty' && !meaningOf(f, c.name)).map((c) => c.name));
-  if (unclear.length) out.push({ topic: 'codes', gap: `Columns with no meaning yet: ${unclear.slice(0, 10).join(', ')}${unclear.length > 10 ? ` and ${unclear.length - 10} more` : ''}` });
-  for (const f of usable) for (const m of f.understanding?.missing ?? []) out.push({ topic: 'other', gap: `${f.name}: ${m}` });
-  out.push({ topic: 'volumes', gap: 'How much data a real run has, and how often' });
+  if (unclear.length) topics.push({ topic: 'codes', gap: `Columns with no meaning yet: ${unclear.slice(0, 10).join(', ')}${unclear.length > 10 ? ` and ${unclear.length - 10} more` : ''}` });
+  topics.push({ topic: 'volumes', gap: 'How much data a real run has, and how often' });
   const covered = new Set(d.steps.filter((s) => s.topic && (s.answer?.trim() || s.askedTeam)).map((s) => s.topic));
-  return out.filter((g) => !covered.has(g.topic) || g.topic === 'other' || (g.topic === 'input' && !d.files.length)).slice(0, 14);
+  // What each file's understanding says is missing, for the AI to weigh (a few per file).
+  const missing = usable.flatMap((f) => (f.understanding?.missing ?? []).slice(0, 3).map((m) => ({ topic: 'other' as DataTopic, gap: `${f.name}: ${m}` })));
+  return [...files, ...topics.filter((g) => !covered.has(g.topic)), ...missing].slice(0, 16);
 }
 
 /** What the code still sees open once the AI says complete: its gaps, and the questions waiting for the team. */
@@ -79,7 +83,10 @@ export async function saveDataAnswers(root: string, id: string, d: DataState): P
 export async function applyDataUpdates(root: string, id: string, out: Pick<DataStepOutput, 'updates'>, codes: Map<string, Coded>, provider: string, clock: Clock): Promise<PrepUpdate[]> {
   const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
   const before = (idea.updates ?? []).filter((u) => u.from === 'data');
-  const planned = (await planUpdates(root, idea, out.updates, codes, provider, before, 'data')).filter((u) => u.status === 'proposed' && u.from === 'data');
+  // The data answers are on the idea already (saveDataAnswers): facts restating them, or the team's earlier answers in
+  // other words, would only repeat them. The builder, participation, flags and the universe's links are kept.
+  const updates = out.updates ? { ...out.updates, facts: [] } : undefined;
+  const planned = (await planUpdates(root, idea, updates, codes, provider, before, 'data')).filter((u) => u.status === 'proposed' && u.from === 'data');
   if (!planned.length) return [];
   const at = clock();
   const done: PrepUpdate[] = [];
@@ -152,8 +159,8 @@ export async function nextDataStep(
     if (output.done && output.summary) {
       const s = output.summary;
       x.summary = {
-        text: one(decode(s.text, codes), SUMMARY_MAX), input: one(decode(s.input, codes), 400), output: one(decode(s.output, codes), 400),
-        knowledge: one(decode(s.knowledge, codes), 400), rules: one(decode(s.rules, codes), 400),
+        text: one(decode(s.text, codes), SUMMARY_MAX), input: one(decode(s.input, codes), 600), output: one(decode(s.output, codes), 600),
+        knowledge: one(decode(s.knowledge, codes), 600), rules: one(decode(s.rules, codes), 600),
         gapsClosed: s.gapsClosed.map((g) => one(decode(g, codes), 200)).filter(Boolean), open: openAfterDone(x), at: clock(), provider,
       };
       reopenData(x);
@@ -242,7 +249,7 @@ export function dataLearnedText(d: DataState): string {
   const usable = d.files.filter(isUsable);
   const part = (kinds: string[], label: string) => {
     const fs = usable.filter((f) => kinds.includes(f.kind));
-    return fs.length ? `${label}: ${fs.map((f) => `${f.name}${sizeWords(f) ? ` (${sizeWords(f)})` : ''}${whatOf(f) ? `, ${whatOf(f)!.replace(/\.$/, '')}` : ''}`).join('; ')}.` : '';
+    return fs.length ? `${label}: ${fs.map((f) => `${f.name}${sizeWords(f) ? ` (${sizeWords(f)})` : ''}${whatOf(f) ? `: ${whatOf(f)!.replace(/\.$/, '')}` : ''}`).join('; ')}.` : '';
   };
   const text = [part(['input'], 'Sample input'), part(['output', 'today'], 'Output'), part(['rules', 'process', 'email', 'other'], 'Reference')].filter(Boolean).join(' ')
     || d.summary?.text || '';

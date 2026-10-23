@@ -1218,6 +1218,20 @@ export const DESIGN_KIT_SCHEMA: JsonSchema = kObj(['sample', 'checks'], {
  * Trims a reply to the schema, in place: every string to one line within its maxLength, every list cut to its
  * maxItems. Only lengths change: a wrong type or a missing field is still refused by the check after it.
  */
+/**
+ * Drops, in place, any field a closed object in the schema does not have (an AI's extra "name" on a rule): the data
+ * tasks keep what they asked for and lose nothing they need. Types and required fields are still checked after.
+ */
+function pruneToSchema(v: unknown, s: JsonSchema): void {
+  if (s.type === 'array' && Array.isArray(v) && s.items) { for (const x of v) pruneToSchema(x, s.items); return; }
+  const o = asObj(v);
+  if (s.type !== 'object' || !o || !s.properties) return;
+  for (const k of Object.keys(o)) {
+    if (!Object.hasOwn(s.properties, k)) { if (s.additionalProperties === false) delete o[k]; continue; }
+    pruneToSchema(o[k], s.properties[k]);
+  }
+}
+
 function trimToSchema(v: unknown, s: JsonSchema): unknown {
   if (s.type === 'string' && typeof v === 'string') return s.maxLength ? trimStrings(oneLine(v) as string, s.maxLength) : oneLine(v);
   if (s.type === 'array' && Array.isArray(v)) {
@@ -1832,7 +1846,7 @@ export const dataUnderstandTask: Task<DataUnderstandOutput> = {
       'Values shown as <email>, <phone>, <name>, <id>, <card>, <bank> or <sensitive> are masked personal data: never guess them and never ask for them. Never name a person. No value words (savings, return on investment, costs, KPIs).',
     ], DATA_UNDERSTAND_SCHEMA, dataUnderstandData(i), 'one file of a Café idea\'s sample data, already masked, with the idea and its features');
   },
-  parse: (raw) => parseChecked<DataUnderstandOutput>(raw, DATA_UNDERSTAND_SCHEMA, (v) => { trimToSchema(v, DATA_UNDERSTAND_SCHEMA); }),
+  parse: (raw) => parseChecked<DataUnderstandOutput>(raw, DATA_UNDERSTAND_SCHEMA, (v) => { pruneToSchema(v, DATA_UNDERSTAND_SCHEMA); trimToSchema(v, DATA_UNDERSTAND_SCHEMA); }),
 };
 
 export interface DataStepInput {
@@ -1873,7 +1887,7 @@ export const DATA_STEP_SCHEMA: JsonSchema = {
     suggested: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
     topic: { enum: [...DATA_TOPICS, null] },
     summary: kObj(['text', 'input', 'output', 'knowledge', 'rules', 'gapsClosed'], {
-      text: kStr(600, 1), input: kStr(400), output: kStr(400), knowledge: kStr(400), rules: kStr(400), gapsClosed: kList(8, 200),
+      text: kStr(600, 1), input: kStr(600), output: kStr(600), knowledge: kStr(600), rules: kStr(600), gapsClosed: kList(8, 200),
     }),
   },
 };
@@ -1881,6 +1895,7 @@ export const DATA_STEP_SCHEMA: JsonSchema = {
 function parseDataStep(raw: string): DataStepOutput {
   const t = parseChecked<DataStepOutput>(raw, DATA_STEP_SCHEMA, (v) => {
     const o = asObj(v); if (!o) return;
+    if (asObj(o.summary)) pruneToSchema(o.summary, DATA_STEP_SCHEMA.properties!.summary as JsonSchema);
     for (const [k, max] of [['question', 200], ['why', 160]] as const) if (Object.hasOwn(o, k)) o[k] = trimStrings(oneLine(o[k]), max);
     if (Array.isArray(o.suggested)) o.suggested = o.suggested.map((s) => trimStrings(oneLine(s), 120));
     if (asObj(o.summary)) trimToSchema(o.summary, DATA_STEP_SCHEMA.properties!.summary as JsonSchema);
@@ -1930,7 +1945,7 @@ export const dataStepTask: Task<DataStepOutput> = {
       'Never ask for personal, client or third-party data, for a masked value, or for a name; never ask about value, savings, costs or KPIs. Never ask what the files or the answers already say.',
       'When the input, the output, the rules, the knowledge and the volumes are all understood (from the files or the answers), or the only open items were asked of the team, reply {"done": true, "summary": {...}}: text (what the data is and how it fits together, at most 600 characters), input, output, knowledge, rules (one short paragraph each: what is known, with real file and column names; "" when there is none), and gapsClosed (what your questions settled, one line each). Ask nothing then.',
       'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "topic": "..."}.',
-      'Every reply, done or not, also carries "updates" and "learned": what the data answers and the files change in the idea\'s record. The app applies these by itself (no one says yes to them), so propose only what an answer or a file clearly says. Every system or data source a file or answer names (the expense system an export comes from, a policy library) is a System node linked by USES_DATA from the Capability that reads it.',
+      'Every reply, done or not, also carries "updates" and "learned": what the data answers and the files change in the idea\'s record. The app applies these by itself (no one says yes to them), so propose only what an answer or a file clearly says, and nothing DATA.graph already holds. Every system or data source a file or answer names (the expense system an export comes from, a policy library) is a System node linked by USES_DATA from the Capability that reads it. facts: [] (the data answers are saved on the idea already).',
       'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
       ...(data.learned ? ['learned: the whole brief again, not only what is new: keep each point of DATA.learned (change it where a later answer says otherwise) and add what the answers add (a "Data" point for what the data is).'] : []),
       ...answerRules(['stepsSoFar', 'teamAnswers']),

@@ -28,6 +28,20 @@ export const KIND_HINTS: Record<DataKind, string> = {
   email: 'A request or message of the kind it handles',
   other: 'Anything else that helps',
 };
+/** The kind a file most likely is, from its name and type: the drop-down starts there; the operator decides. */
+export function guessKind(name: string): DataKind {
+  const n = name.toLowerCase();
+  const ext = (/\.([a-z0-9]+)$/.exec(n)?.[1] ?? '');
+  if (ext === 'eml' || ext === 'msg') return 'email';
+  if (/rule|polic|lookup|mapping|reference|limits?|caps?\b|thresholds?/.test(n)) return 'rules';
+  if (/today|current|manual|as[-_ ]is|report/.test(n)) return 'today';
+  if (/output|result|expected|flagged|target|to[-_ ]be/.test(n)) return 'output';
+  if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n)) return 'process';
+  if (['csv', 'tsv', 'xlsx'].includes(ext)) return 'input';
+  if (['pdf', 'docx', 'txt', 'md'].includes(ext)) return 'process';
+  return 'other';
+}
+
 export const isDataKind = (k: unknown): k is DataKind => typeof k === 'string' && (DATA_KINDS as readonly string[]).includes(k);
 
 /** The file types the Data step reads. */
@@ -245,6 +259,6 @@ export function dataPoints(d: DataState): Partial<Record<'input-shape' | 'output
   const output = usable.find((f) => f.kind === 'output' && f.tables?.length) ?? usable.find((f) => f.kind === 'today' && f.tables?.length);
   if (output) out.output = `Like ${output.name}: ${list(cols(output))}`.slice(0, 300);
   const rules = usable.flatMap((f) => f.understanding?.rules.map((r) => r.rule) ?? []);
-  if (rules.length) out.logic = rules.slice(0, 4).join('; ').slice(0, 300);
+  if (rules.length) out.logic = rules.slice(0, 4).map((r) => r.replace(/[.;\s]+$/, '')).join('; ').slice(0, 300);
   return out;
 }

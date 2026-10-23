@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { checkDataFile, readDataFile, readCsv, delimiterOf, cleanHeader, DataError } from '../src/data/read';
-import { checkColumn, checkRead, maskText, maskNames, luhn } from '../src/data/check';
+import { checkColumn, checkRead, maskText, maskNames, luhn, ibanValid } from '../src/data/check';
 import { profileTable, profileDoc, lookAt, shapeOf } from '../src/data/profile';
 import { dataPoints, dataOf, meaningOf, sizeWords, type DataFile } from '../src/data/model';
 import { textPdf } from './helpers';
@@ -74,6 +74,10 @@ describe('Check: the Café data rule in code', () => {
     expect(checkColumn('account_code', Array.from({ length: 40 }, (_, i) => `GL${4000 + (i % 5)}`), known).hit).toBeUndefined();
     expect(checkColumn('policy_type', ['Hotel Stay', 'Train Fare', 'Team Lunch'], known).hit).toBeUndefined();
     expect(checkColumn('requester', ['Ava Ng'], new Set(['ava ng'])).hit?.kind).toBe('name');
+    // Hashed codes are masked, never bank numbers (an IBAN has check digits): found on the live check.
+    expect(checkColumn('employee_code', ['323DB00EC7ABA7DD', 'D1CC1508BD3767F0', 'AB12C3D4E5F60789', 'EC12ABA7DD00EC7A'], known)).toEqual({ note: 'employee_code looks masked or made up' });
+    expect(ibanValid('GB82WEST12345698765432')).toBe(true);
+    expect(ibanValid('GB82WEST12345698765433')).toBe(false);
     expect(luhn('4111111111111111')).toBe(true);
     expect(luhn('4111111111111112')).toBe(false);
   });

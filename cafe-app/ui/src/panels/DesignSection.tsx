@@ -1,7 +1,7 @@
 import { useStore } from '../state/store';
 import { useEffect, useRef, useState } from 'react';
 import { copyText, designPost, post } from '../api';
-import { Updates } from './ReviewSelect';
+import { Updates, updatesFrom } from './ReviewSelect';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, buildInstruction, cafeCheckRows, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
@@ -180,7 +180,7 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
         </div>
       )}
       {/* What the design answers change in the record: the same list as the decision's and the tool picker's, each waiting for Yes. */}
-      <Updates updates={idea.updates ?? []} disabled={off} onUpdate={(update, what) => void call(
+      <Updates updates={updatesFrom(idea, 'design')} disabled={off} onUpdate={(update, what) => void call(
         () => post(`/api/ideas/${encodeURIComponent(id)}/prep/update`, { update, do: what }),
         { ok: (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`) })} />
       {handQ && (

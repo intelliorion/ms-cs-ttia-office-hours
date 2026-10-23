@@ -273,7 +273,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     // What the answers change (proposed, each waiting for Yes) and the brief of what they add, as after the decision.
     // The record is read again: nothing between the AI call and here may be lost.
     const now = await loadIdea(root, idea.id);
-    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, raw, codes, provider, clock(), read)) });
+    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, raw, codes, provider, clock(), read, 'design')) });
     const out = await applyDesignEvent(root, idea, stepEvent(output), clock);
     return output.done ? out : { ...out, step: out.state.steps[out.state.steps.length - 1] };
   });

@@ -61,10 +61,15 @@ export interface PrepNeed {
  * One change the answers justify, proposed after a suggestion or a re-evaluation: nothing changes until the operator
  * says Yes. `key` names the change, so one said no to is not proposed again; `undo` is how an applied one goes back.
  */
+/** Where a proposal came from: the decision, the tool picker or the design questions. */
+export type UpdateSource = 'decision' | 'tools' | 'design';
+
 export interface PrepUpdate {
   id: string;
   key: string;
   kind: 'builder' | 'participation' | 'flag' | 'facts' | 'link';
+  /** Which suggestion proposed it: each section lists only its own. Older records came from the decision. */
+  from?: UpdateSource;
   label: string;
   status: 'proposed' | 'applied' | 'dismissed';
   builder?: { name: string; canAttend: boolean; typed?: string; instead?: string[] };

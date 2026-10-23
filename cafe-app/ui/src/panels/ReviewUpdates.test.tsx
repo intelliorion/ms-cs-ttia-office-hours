@@ -29,3 +29,13 @@ describe('From your answers', () => {
     expect(el.querySelector('[data-testid="rs-updates"]')).toBeNull();
   });
 });
+
+describe('one section, its own proposals', () => {
+  it('the decision, the tool picker and the design each list only what they proposed (older ones are the decision\'s)', async () => {
+    const { updatesFrom } = await import('./ReviewSelect');
+    const idea = { updates: [{ id: 'u1', from: 'tools' }, { id: 'u2' }, { id: 'u3', from: 'design' }, { id: 'u4', from: 'decision' }] };
+    expect(updatesFrom(idea, 'decision').map((u) => u.id)).toEqual(['u2', 'u4']);
+    expect(updatesFrom(idea, 'tools').map((u) => u.id)).toEqual(['u1']);
+    expect(updatesFrom(idea, 'design').map((u) => u.id)).toEqual(['u3']);
+  });
+});

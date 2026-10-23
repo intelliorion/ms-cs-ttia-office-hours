@@ -182,3 +182,21 @@ describe('the brief of what the answers add', () => {
     expect(((await loadIdea(root, idea.id)) as any).learned.stale).toBe(true);
   });
 });
+
+describe('each section keeps its own proposals', () => {
+  it('a proposal says which suggestion made it; a new one in another section leaves it waiting', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, idea);
+    const { takeInAnswers } = await import('../src/review/updates');
+    const now = await loadIdea(root, idea.id);
+    // The decision proposes participation; then the tool picker proposes a builder.
+    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { updates: { ...NONE, participation: 'Team' } }, new Map(), 'fake', '2026-10-23', 1, 'decision')) });
+    const mid = await loadIdea(root, idea.id);
+    await saveIdea(root, { ...mid, ...(await takeInAnswers(root, mid, { updates: { ...NONE, builder: 'Person 2' } }, new Map(), 'fake', '2026-10-23', 1, 'tools')) });
+    expect((await updates(root)).map((u) => [u.kind, u.from, u.status])).toEqual([['participation', 'decision', 'proposed'], ['builder', 'tools', 'proposed']]);
+    // The decision suggests again with nothing to change: only its own waiting proposal goes.
+    const last = await loadIdea(root, idea.id);
+    await saveIdea(root, { ...last, ...(await takeInAnswers(root, last, { updates: NONE }, new Map(), 'fake', '2026-10-23', 1, 'decision')) });
+    expect((await updates(root)).map((u) => [u.kind, u.from])).toEqual([['builder', 'tools']]);
+  });
+});

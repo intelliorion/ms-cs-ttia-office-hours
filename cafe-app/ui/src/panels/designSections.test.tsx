@@ -169,13 +169,15 @@ describe('ToolPickerSection', () => {
 });
 
 describe('DesignSection', () => {
-  it('shows "From your answers" from the design answers; Yes goes to the idea\'s one list of updates', async () => {
+  it('shows "From your answers" for the design answers only (not the decision\'s); Yes goes to the idea\'s list', async () => {
     const calls: string[] = [];
     const call: DesignCall = async (fn, o) => { try { const r = await fn(); calls.push(o.ok(r as any) ?? ''); return r; } catch { return null; } };
     api.post.mockImplementation(async () => ({ id: 'u1', label: 'Make Person 2 the builder' }) as any);
     const idea = { ...IDEA, updates: [
-      { id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed' },
-      { id: 'u2', kind: 'flag', label: 'Clear the flag: x', status: 'dismissed' },
+      { id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' },
+      { id: 'u2', kind: 'flag', label: 'Clear the flag: x', status: 'dismissed', from: 'design' },
+      { id: 'u3', kind: 'participation', label: 'Set participation to Team', status: 'proposed', from: 'decision' },
+      { id: 'u4', kind: 'facts', label: 'Save this answer', status: 'applied' },
     ] };
     await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
     const list = el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')!;

@@ -259,7 +259,7 @@ export async function suggestTools(
   state.toolPrep = { at, provider, needs: mergeNeeds(prev, output.needs, name) };
   await writeDesign(root, id, state);
   // What the answers change (proposed, each waiting for Yes) and the brief of what they add, as after the decision.
-  await saveIdea(root, { ...idea, ...(await takeInAnswers(root, idea, output, codes, provider, at, answers.length)) });
+  await saveIdea(root, { ...idea, ...(await takeInAnswers(root, idea, output, codes, provider, at, answers.length, 'tools')) });
   const p = output.pick;
   const tool = p && validateChoice({
     tool: p.tool, by: evaluate ? 'operator' : 'ai', reason: name(p.reason), flags: p.flags,

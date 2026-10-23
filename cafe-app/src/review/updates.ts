@@ -1,5 +1,5 @@
 import type { Clock } from '../clock';
-import type { Idea, PrepUpdate } from '../ideas/idea';
+import type { Idea, PrepUpdate, UpdateSource } from '../ideas/idea';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
 import { hasRole, matchPerson, personOn, withAddedRole, withoutRole, withRoleOn } from '../ideas/people';
 import { sameQuestion } from '../inbox/question';
@@ -11,6 +11,10 @@ import { planAiLinks } from '../ai/apply';
 import { rebuildGraph, readAiLinks, appendAiLink, setAiLinkStatus } from '../graph/store';
 import { edgeId, NODE_LABELS, type AiLink, type NodeType } from '../graph/ontology';
 import type { ReviewUpdates } from '../ai/tasks';
+
+
+/** Where a proposal came from; older ones, from before there were sources, came from the decision. */
+export const sourceOf = (u: Pick<PrepUpdate, 'from'>): UpdateSource => u.from ?? 'decision';
 
 type WithAnswers = Idea & { answers?: { question: string; answer: string; source?: string }[] };
 /** Where answers saved from the review list say they came from. */
@@ -25,11 +29,13 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
  */
 export async function planUpdates(
   root: string, idea: WithAnswers, u: ReviewUpdates | undefined, codes: Map<string, Coded>, provider: string, before: PrepUpdate[] = [],
+  from: UpdateSource = 'decision',
 ): Promise<PrepUpdate[]> {
-  const kept = before.filter((x) => x.status !== 'proposed');
+  // A new suggestion replaces only its own section's waiting proposals; the other sections' stay as they are.
+  const kept = before.filter((x) => x.status !== 'proposed' || sourceOf(x) !== from);
   const known = new Set(kept.map((x) => x.key));
   const out: Omit<PrepUpdate, 'id'>[] = [];
-  const add = (x: Omit<PrepUpdate, 'id' | 'status'>) => { if (!known.has(x.key)) { known.add(x.key); out.push({ ...x, status: 'proposed' }); } };
+  const add = (x: Omit<PrepUpdate, 'id' | 'status' | 'from'>) => { if (!known.has(x.key)) { known.add(x.key); out.push({ ...x, from, status: 'proposed' }); } };
   let graph: Awaited<ReturnType<typeof rebuildGraph>> | undefined;
   const graphNow = async () => (graph ??= await rebuildGraph(root));
   if (u) {
@@ -201,10 +207,11 @@ export async function removeAnswer(root: string, id: string, question: string, a
  */
 export async function takeInAnswers(
   root: string, idea: WithAnswers, out: { updates?: ReviewUpdates; learned?: { topic: string; text: string }[] },
-  codes: Map<string, Coded>, provider: string, at: string, read: number,
+  codes: Map<string, Coded>, provider: string, at: string, read: number, from: UpdateSource = 'decision',
 ): Promise<Pick<Idea, 'updates' | 'learned'>> {
-  const updates = await planUpdates(root, idea, out.updates, codes, provider, idea.updates);
+  const updates = await planUpdates(root, idea, out.updates, codes, provider, idea.updates, from);
   const points = (out.learned ?? []).map((p) => ({ topic: p.topic.trim(), text: showNames(p.text, codes).trim() })).filter((p) => p.topic && p.text);
   const learned = points.length ? { at, provider, from: read, points } : idea.learned;
-  return { ...(updates.length ? { updates } : {}), ...(learned ? { learned } : {}) };
+  // An emptied list is saved empty, so a waiting proposal that went does not linger.
+  return { ...(updates.length || idea.updates?.length ? { updates } : {}), ...(learned ? { learned } : {}) };
 }

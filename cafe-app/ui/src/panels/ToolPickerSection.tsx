@@ -7,7 +7,7 @@ import {
   mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, STALE_NOTE, toolView,
   type FeatureRow, type ToolView,
 } from './designHelpers';
-import { TodoList, Updates } from './ReviewSelect';
+import { TodoList, Updates, updatesFrom } from './ReviewSelect';
 import { post } from '../api';
 import { openedText } from './outlook';
 import { isOpenNeed, awaitsReevaluation } from '../../../src/review/needs';
@@ -146,7 +146,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
           </div>
         )}
         {/* What the answers change in the record: the same list as the decision's, each waiting for Yes. */}
-        <Updates updates={idea.updates ?? []} disabled={off} onUpdate={(update, what) => void call(
+        <Updates updates={updatesFrom(idea, 'tools')} disabled={off} onUpdate={(update, what) => void call(
           () => post(`/api/ideas/${encodeURIComponent(idea.id)}/prep/update`, { update, do: what }),
           { ok: (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`) })} />
         <div className="ai-row rs-acts">

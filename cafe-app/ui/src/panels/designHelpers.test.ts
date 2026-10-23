@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   approvedTools, buildInstruction, cafeCheckRows, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
-  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate,
+  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel,
 } from './designHelpers';
 
 // The features route's mixed reply: a saved DesignFeature first, then AI suggestions (and an older row with a tool).
@@ -188,5 +188,21 @@ describe('approvedTools', () => {
   it('toolView keeps a tool only when it is on the list it is given', () => {
     expect(toolView({ tool: 'New tool' })).toBeNull();
     expect(toolView({ tool: 'New tool' }, ['New tool'])!.tool).toBe('New tool');
+  });
+});
+
+describe('a feature the design moved', () => {
+  it('keeps its scope through the rows and the save body; "Put it back" (no scope) sends none', () => {
+    const rows = featureRows([
+      { id: 'a', name: 'Review list', flags: [], scope: { status: 'out', why: 'Leave marking out', step: 2 } },
+      { id: 'b', name: 'Query drafting', flags: [], scope: { status: 'outside', by: 'Microsoft Copilot + SharePoint' } },
+      { id: 'c', name: 'Bad', flags: [], scope: { status: 'outside' } },
+    ]);
+    expect(rows.map((r) => r.scope?.status)).toEqual(['out', 'outside', undefined]);
+    const body = featuresBody(rows);
+    expect(body[0].scope).toEqual({ status: 'out', why: 'Leave marking out', step: 2 });
+    expect(featuresBody([{ ...rows[0], scope: undefined }])[0]).not.toHaveProperty('scope');
+    expect(scopeLabel(rows[0].scope)).toBe('Out of scope');
+    expect(scopeLabel(rows[1].scope, 'Dataiku')).toBe('Microsoft Copilot + SharePoint, outside the Dataiku build');
   });
 });

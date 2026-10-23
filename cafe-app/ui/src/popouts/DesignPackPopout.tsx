@@ -4,7 +4,7 @@ import { ideaGet, post } from '../api';
 import { Modal } from './Modal';
 import { CafeCheckCard } from '../panels/DesignSection';
 import { fileNote, packFiles, pointRows } from './designPack';
-import { FIT_MARK } from '../panels/designHelpers';
+import { FIT_MARK, scopeLabel } from '../panels/designHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
@@ -78,6 +78,15 @@ export function DesignPackPopout({ id }: { id: string }) {
                   <ul className="tp-fit" data-testid="pack-fit" aria-label="The features and how the tool fits each">
                     {features.map((f) => {
                       const x = (tool?.fit ?? []).find((y: any) => y.feature?.toLowerCase() === String(f.name).toLowerCase());
+                      if (f.scope) {
+                        return (
+                          <li key={f.id ?? f.name} data-fit={f.scope.status} data-scope={f.scope.status} className={`scope-${f.scope.status}`}>
+                            <span className={`tp-fit-m ${f.scope.status}`}>{f.scope.status === 'out' ? 'out' : 'other'}</span>
+                            <span className="tp-fit-f">{f.name}</span>
+                            <span className="tp-fit-n">{scopeLabel(f.scope, tool?.tool)}{f.scope.why ? `: ${f.scope.why}` : ''}</span>
+                          </li>
+                        );
+                      }
                       return (
                         <li key={f.id ?? f.name} data-fit={x?.fit ?? 'unknown'}>
                           <span className={`tp-fit-m ${x?.fit ?? 'unknown'}`}>{x ? FIT_MARK[x.fit] : '–'}</span>

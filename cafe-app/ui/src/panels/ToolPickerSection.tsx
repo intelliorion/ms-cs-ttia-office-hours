@@ -5,7 +5,7 @@ import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
   mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, STALE_NOTE, toolView,
-  type FeatureRow, type ToolView,
+  scopeLabel, type FeatureRow, type ToolView,
 } from './designHelpers';
 import { TodoList, Updates, updatesFrom } from './ReviewSelect';
 import { post } from '../api';
@@ -120,7 +120,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
         ) : (
           <ul className="tp-rows" aria-label="Features">
             {rows.map((r) => (
-              <li key={r.key} className={`tp-row${r.suggested ? ' suggested' : ''}`} data-feature={r.name}>
+              <li key={r.key} className={`tp-row${r.suggested ? ' suggested' : ''}${r.scope ? ` scope-${r.scope.status}` : ''}`} data-feature={r.name} data-scope={r.scope?.status}>
                 <div className="tp-r1">
                   <input type="text" className="tp-name" value={r.name} placeholder="Feature name" aria-label="Feature name" disabled={off}
                     onChange={(e) => edit(r.key, { name: e.target.value })} />
@@ -130,6 +130,15 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                 <input type="text" className="tp-what" value={r.what} placeholder="What it does, in one line" aria-label="What it does" disabled={off}
                   onChange={(e) => edit(r.key, { what: e.target.value })} />
                 {r.flags.length > 0 && <div className="tp-r3">{r.flags.map((f) => <span key={f} className="tp-flag">{flagWord(f)}</span>)}</div>}
+                {r.scope && (
+                  <div className="tp-scope" data-testid="feature-scope">
+                    <span className={`tp-scope-b ${r.scope.status}`}>{scopeLabel(r.scope, choice?.tool)}</span>
+                    {r.scope.why && <span className="tp-scope-w">{r.scope.why}</span>}
+                    <span className="tp-scope-w">{r.scope.step ? `Design Q${r.scope.step}` : 'From the design'}</span>
+                    <button className="link-btn" data-action="feature-unscope" disabled={off} title="Back in the build; Save to keep it"
+                      onClick={() => edit(r.key, { scope: undefined })}>Put it back</button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -201,6 +210,15 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
               <ul className="tp-fit" data-testid="tool-fit" aria-label="How the tool fits each feature">
                 {body.map((f) => {
                   const x = fits.get(f.name.toLowerCase());
+                  if (f.scope) {
+                    return (
+                      <li key={f.name} data-fit={f.scope.status} className={`scope-${f.scope.status}`} title={scopeLabel(f.scope, choice.tool)}>
+                        <span className={`tp-fit-m ${f.scope.status}`}>{f.scope.status === 'out' ? 'out' : 'other'}</span>
+                        <span className="tp-fit-f">{f.name}</span>
+                        <span className="tp-fit-n">{scopeLabel(f.scope, choice.tool)}{f.scope.why ? `: ${f.scope.why}` : ''}</span>
+                      </li>
+                    );
+                  }
                   return (
                     <li key={f.name} data-fit={x?.fit ?? 'unknown'} title={x ? FIT_WORD[x.fit] : 'Not evaluated'}>
                       <span className={`tp-fit-m ${x?.fit ?? 'unknown'}`}>{x ? FIT_MARK[x.fit] : '–'}</span>

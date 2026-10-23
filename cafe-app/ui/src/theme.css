@@ -1066,3 +1066,11 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .tp-similar li{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid rgba(var(--rgb-warm),.45);border-radius:6px;font-size:14px}
 .dp-settles div.open dd{color:var(--muted);font-style:italic}
 .dp-hint{font-style:normal;font-size:13px;opacity:.8}
+.tp-row.scope-out .tp-name,.tp-row.scope-out .tp-what{text-decoration:line-through;opacity:.6}
+.tp-scope{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;font-size:12.5px}
+.tp-scope-b{border-radius:999px;padding:0 8px;line-height:18px;border:1px solid rgba(var(--rgb-line),.3);color:var(--muted)}
+.tp-scope-b.outside{color:var(--accent,var(--teal));border-color:currentColor}
+.tp-scope-w{color:var(--muted)}
+.tp-fit li.scope-out .tp-fit-f{text-decoration:line-through;opacity:.6}
+.tp-fit-m.out{color:var(--muted);border:1px dashed rgba(var(--rgb-line),.4)}
+.tp-fit-m.outside{color:var(--teal);border:1px solid currentColor}

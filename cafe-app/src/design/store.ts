@@ -5,10 +5,10 @@ import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
 import { cafeCheck, type CafeCheck } from './cafecheck';
-import { legacyChoice, toolFeatures, type Pathway, type ToolChoice } from './choice';
+import { legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 
-export type { Pathway, ToolChoice, DesignTag };
+export type { Pathway, ToolChoice, DesignTag, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
 export type StepSource = 'operator' | 'e2' | 'ai-suggested';
 
@@ -20,6 +20,8 @@ export interface DesignFeature {
   what?: string;
   /** Feature flags (needs-live-system, personal-data, reuse-existing). */
   flags: string[];
+  /** Set when a design answer moved the feature out of the build: dropped, or done with another tool outside it. */
+  scope?: FeatureScope;
 }
 
 
@@ -49,6 +51,7 @@ export interface DesignState {
   summary?: string;
   /** What the done reply said the earlier answers already settle, for points no question was tagged with (tag → one line). */
   settled?: Partial<Record<DesignTag, string>>;
+
   cafeCheck?: CafeCheck;
   approvedAt?: string;
   /** Older records: the picker's questions as sent. Read into toolPrep. */
@@ -105,10 +108,14 @@ function normalize(raw: Partial<DesignState>): DesignState {
   const legacy = !raw.tool && rawFeatures.some((f) => typeof f?.tool === 'string' && f.tool)
     ? legacyChoice(rawFeatures, raw.approvedAt ?? raw.toolPrep?.at ?? '') : undefined;
   const tool = legacy?.tool ?? choiceOf(raw.tool);
-  const features: DesignFeature[] = rawFeatures.map((f) => ({
-    id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
-    flags: arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build')),
-  }));
+  const features: DesignFeature[] = rawFeatures.map((f) => {
+    const scope = scopeOf(f.scope);
+    return {
+      id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
+      flags: arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build')),
+      ...(scope ? { scope } : {}),
+    };
+  });
   const { settled: rawSettled, ...others } = rest;
   const settled = settledOf(rawSettled);
   return {
@@ -139,10 +146,13 @@ const bullets = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).
 /** Free text as one Markdown line: whitespace runs collapse and a leading # or - is escaped, so it can never add a heading or a field. */
 export const mdLine = (text: string | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim().replace(/^([#>*+-]|\d+[.)])/, '\\$1');
 
-/** One feature as a design.md line: its tool and its fit. */
+/** One feature as a design.md line: its tool and fit, or, once the design moved it, out of scope (struck through) or outside the build. */
 export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<DesignState, 'tool'>): string {
-  const name = mdLine(f.name).replace(/\*/g, '');
+  const name = mdLine(f.name).replace(/[*~]/g, '');
   const flags = f.flags.length ? ` [${f.flags.join('; ')}]` : '';
+  const why = f.scope?.why ? ` (${mdLine(f.scope.why)})` : '';
+  if (f.scope?.status === 'out') return `- ~~**${name}**~~ — out of scope${why}${f.what ? `: ~~${mdLine(f.what)}~~` : ''}`;
+  if (f.scope?.status === 'outside') return `- **${name}** (${mdLine(f.scope.by)}, outside the ${state.tool?.tool ?? 'main'} build)${f.what ? `: ${mdLine(f.what)}` : ''}${why}${flags}`;
   const fit = (state.tool?.fit ?? []).find((x) => x.feature.toLowerCase() === f.name.toLowerCase());
   const how = fit && fit.fit !== 'yes' ? ` (${fit.fit === 'no' ? 'the tool cannot do this' : 'partly'}${fit.note ? `: ${mdLine(fit.note)}` : ''})` : '';
   return `- **${name}** (${f.tool ?? 'no tool picked'})${f.what ? `: ${mdLine(f.what)}` : ''}${how}${flags}`;

@@ -20,7 +20,7 @@ import {
 } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, mdLine, type DesignFeature, type DesignState, skillGuidance } from './store';
 import { cafeCheck } from './cafecheck';
-import { FIT_LEVELS, legacyChoice, outOfDate, pathwayOf, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
+import { FIT_LEVELS, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
 
 /** Where each approved tool lands on the pathway ladder (Café skill, Part 3). */
 export const PATHWAYS: Record<string, string> = {
@@ -46,7 +46,7 @@ export function pathwayLabel(tool: string, builder?: string): string {
   return pathwayOf(tool, builder) === 'Assisted Citizen' ? `${base} (${ASSISTED_NOTE})` : base;
 }
 
-export interface FeatureInput { id?: string; name: string; what?: string; flags?: string[] }
+export interface FeatureInput { id?: string; name: string; what?: string; flags?: string[]; scope?: unknown }
 
 /** One line of plain text: every whitespace run (newlines too) becomes one space, so AI text can never start a heading or field. */
 const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -71,7 +71,9 @@ export function validateFeatures(raw: unknown): DesignFeature[] {
     while (ids.has(id)) id = `${id}-2`;
     ids.add(id);
     const what = str(r.what, 160);
-    out.push({ id, name, ...(what ? { what } : {}), flags: [...new Set(flags)] });
+    // Where the design moved the feature (out of scope, or another tool outside the build) rides along with the row.
+    const scope = scopeOf(r.scope);
+    out.push({ id, name, ...(what ? { what } : {}), flags: [...new Set(flags)], ...(scope ? { scope } : {}) });
   }
   return out;
 }
@@ -118,12 +120,27 @@ export function validateChoice(raw: unknown, features: { name: string }[], build
 
 /**
  * feature name → tool, for the graph (capability BUILT_WITH tool): the features the one tool covers. A feature its fit
- * says it cannot do ("no") is left out: the graph must not say it is built with a tool that cannot build it.
+ * says it cannot do ("no") is left out: the graph must not say it is built with a tool that cannot build it. So is a
+ * feature the design moved: out of scope (no tool), or done outside the build (BUILT_WITH that other tool only when it
+ * is one approved tool, never the main one).
  */
 export const toolsMap = (state: Pick<DesignState, 'features' | 'tool'>): Record<string, string> => {
   const cannot = new Set((state.tool?.fit ?? []).filter((x) => x.fit === 'no').map((x) => x.feature.trim().toLowerCase()));
-  return Object.fromEntries(toolFeatures(state).filter((f) => f.tool && !cannot.has(f.name.trim().toLowerCase())).map((f) => [f.name, f.tool!]));
+  const out: Record<string, string> = {};
+  for (const f of state.features) {
+    if (f.scope?.status === 'out') continue;
+    if (f.scope?.status === 'outside') {
+      const other = canonicalTool(f.scope.by ?? '');
+      if (other && other !== state.tool?.tool) out[f.name] = other;
+      continue;
+    }
+    if (state.tool && !cannot.has(f.name.trim().toLowerCase())) out[f.name] = state.tool.tool;
+  }
+  return out;
 };
+
+/** The features the idea NEEDS in the graph: all but the ones the design left out of the proof of concept. */
+export const neededFeatures = (state: Pick<DesignState, 'features'>): string[] => state.features.filter(inScope).map((f) => f.name);
 
 const FIT_WORD: Record<FitLevel, string> = { yes: 'Yes', partly: 'Partly', no: 'No' };
 /** A table cell: one line, and a pipe cannot open a new column. */
@@ -134,7 +151,12 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
   const builder = builderOf(idea);
   const out = [`# Approach — ${idea.title}`, '', '## Features', ''];
   if (!state.features.length) out.push('(no features yet)');
-  for (const f of state.features) out.push(`- **${mdLine(f.name).replace(/\*/g, '')}**: ${mdLine(f.what) || '(not yet said)'}${f.flags.length ? ` [${f.flags.join(', ')}]` : ''}`);
+  for (const f of state.features) {
+    const name = mdLine(f.name).replace(/[*~]/g, '');
+    const why = f.scope?.why ? ` (${mdLine(f.scope.why)})` : '';
+    if (f.scope?.status === 'out') out.push(`- ~~**${name}**~~ — out of scope${why}`);
+    else out.push(`- **${name}**${f.scope ? ` (${mdLine(scopeWords(f.scope, state.tool?.tool))})` : ''}: ${mdLine(f.what) || '(not yet said)'}${f.flags.length ? ` [${f.flags.join(', ')}]` : ''}${why}`);
+  }
   out.push('', '## Tool', '');
   const t = state.tool;
   if (!t) { out.push('Not picked yet.', ''); return out.join('\n'); }
@@ -154,7 +176,8 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
     out.push('| Feature | Fit | Note |', '| --- | --- | --- |');
     for (const f of state.features) {
       const x = fits.get(nameKey(f.name));
-      out.push(`| ${cell(f.name)} | ${x ? FIT_WORD[x.fit] : 'Not evaluated'} | ${cell(x?.note)} |`);
+      const moved = f.scope ? (f.scope.status === 'out' ? 'Out of scope' : `Outside the build (${f.scope.by})`) : '';
+      out.push(`| ${cell(f.name)} | ${moved ? cell(moved) : x ? FIT_WORD[x.fit] : 'Not evaluated'} | ${cell(x?.note)} |`);
     }
   }
   if (t.context.length) { out.push('', '## Why this tool', ''); for (const c of t.context) out.push(`- ${mdLine(c)}`); }
@@ -307,7 +330,7 @@ export async function saveToolPicks(
   if (tool) state.tool = tool; else delete state.tool;
   if (reopen) delete state.approvedAt;
   // Every feature (idea NEEDS it) and the ones the tool covers (BUILT_WITH it), for the graph and the Submission.
-  const withTools: Idea = { ...idea, tools: toolsMap(state), features: state.features.map((f) => f.name) };
+  const withTools: Idea = { ...idea, tools: toolsMap(state), features: neededFeatures(state) };
   state.cafeCheck = cafeCheck(withTools, state);
   await writeDesign(root, id, state);
   const dir = await ideaDir(root, id);

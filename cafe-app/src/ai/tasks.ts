@@ -5,6 +5,7 @@ import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
 import { QUERY_GUIDE, QUERY_SCHEMA } from '../command/query';
 import { BUILD_HINTS, BUILD_TAGS, DESIGN_TAGS, POINT_MAX } from '../design/points';
 
+
 export interface Task<T> {
   name: string;
   prompt(input: unknown): string;
@@ -689,10 +690,15 @@ export const toolPickTask: Task<ToolPickOutput> = {
 export { DESIGN_TAGS };
 export type DesignStepTag = (typeof DESIGN_TAGS)[number];
 
+/** How a design answer moves a feature: out of the proof of concept, to another tool outside the build, or reworded. */
+export const FEATURE_CHANGES = ['drop', 'outside-tool', 'reword'] as const;
+export type FeatureChangeKind = (typeof FEATURE_CHANGES)[number];
+export interface FeatureChange { name: string; change: FeatureChangeKind; what?: string; by?: string; why?: string }
 
 export interface DesignStepInput {
   idea: IdeaText;
-  features: { name: string; what?: string; tool?: string }[];
+  /** The feature list; `scope` says when an earlier answer already moved one ("out of scope", or "<tool>, outside the build"). */
+  features: { name: string; what?: string; tool?: string; scope?: string }[];
   /** The one tool chosen in the Tool picker: its cons and the features it fits partly or not at all are what to design around. */
   tool?: { tool: string; pathway?: string; cons: string[]; gaps: { feature: string; fit: string; note: string }[] };
   /** "Learned since the form": what the team's answers added (names coded). Settled; never asked again. */
@@ -717,6 +723,8 @@ export interface DesignStepOutput {
   tag?: DesignStepTag | null;
   /** Done only: the points the answers settled though no question was tagged with them (tag → one line). */
   settled?: Partial<Record<DesignStepTag, string>>;
+  /** What the answers so far change in the feature list (only the features that change). */
+  features?: FeatureChange[];
   updates?: ReviewUpdates;
   learned?: LearnedPoint[];
 }
@@ -725,7 +733,19 @@ const SETTLED_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false,
   properties: Object.fromEntries(DESIGN_TAGS.map((t) => [t, { type: 'string', maxLength: POINT_MAX }])),
 };
-
+const FEATURE_CHANGES_SCHEMA: JsonSchema = {
+  type: 'array', maxItems: FEATURES_MAX,
+  items: {
+    type: 'object', additionalProperties: false, required: ['name', 'change'],
+    properties: {
+      name: { type: 'string', minLength: 1, maxLength: 60 },
+      change: { type: 'string', enum: FEATURE_CHANGES },
+      what: { type: 'string', maxLength: 160 },
+      by: { type: 'string', maxLength: 60 },
+      why: { type: 'string', maxLength: 160 },
+    },
+  },
+};
 
 export const DESIGN_STEP_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false, required: ['done', 'updates', 'learned'],
@@ -739,6 +759,7 @@ export const DESIGN_STEP_SCHEMA: JsonSchema = {
     summary: { type: 'string', maxLength: 600 },
     tag: { enum: [...DESIGN_TAGS, null] },
     settled: SETTLED_SCHEMA,
+    features: FEATURE_CHANGES_SCHEMA,
   },
 };
 
@@ -755,13 +776,29 @@ function trimDesignStep(v: unknown): void {
   if (settled) for (const k of Object.keys(settled)) {
     if ((DESIGN_TAGS as readonly string[]).includes(k)) settled[k] = trimStrings(oneLine(settled[k]), POINT_MAX); else delete settled[k];
   }
+  if (Array.isArray(o.features)) {
+    for (const f of o.features) {
+      const x = asObj(f);
+      if (!x) continue;
+      for (const [k, max] of [['name', 60], ['what', 160], ['by', 60], ['why', 160]] as const) if (Object.hasOwn(x, k)) x[k] = trimStrings(oneLine(x[k]), max);
+    }
+  }
   trimAnswerParts(o);
+}
+
+/** The feature changes as sent, one line each, with nothing empty left in. (Checked against the list when applied.) */
+function featureChangesOf(t: { features?: FeatureChange[] }): { features?: FeatureChange[] } {
+  const out = (t.features ?? []).map((f) => ({
+    name: f.name.trim(), change: f.change,
+    ...(f.what?.trim() ? { what: f.what.trim() } : {}), ...(f.by?.trim() ? { by: f.by.trim() } : {}), ...(f.why?.trim() ? { why: f.why.trim() } : {}),
+  })).filter((f) => f.name);
+  return out.length ? { features: out } : {};
 }
 
 /** Schema-checked, then: a finished design needs a summary and asks nothing; an open one needs a question and has no summary. */
 function parseDesignStep(raw: string): DesignStepOutput {
   const t = parseChecked<DesignStepOutput>(raw, DESIGN_STEP_SCHEMA, trimDesignStep);
-  const answers = { updates: t.updates, learned: t.learned };
+  const answers = { updates: t.updates, learned: t.learned, ...featureChangesOf(t) };
   if (t.done) {
     if (!t.summary?.trim()) throw new AiError('invalid output: a finished design needs a summary');
     const settled = Object.fromEntries(Object.entries(t.settled ?? {}).map(([k, v]) => [k, String(v).trim()]).filter(([, v]) => v));
@@ -782,6 +819,7 @@ function designStepData(input: DesignStepInput) {
     idea: ideaData(input.idea),
     features: (Array.isArray(input.features) ? input.features : []).slice(0, 12).map((f) => ({
       name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.tool ? { tool: cap(f.tool, 40) } : {}),
+      ...(f.scope ? { scope: cap(f.scope, 120) } : {}),
     })),
     ...(input.tool?.tool ? {
       tool: {
@@ -826,7 +864,7 @@ export const designStepTask: Task<DesignStepOutput> = {
       'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
       'When the five points AND the five build points are settled (by a question, or already by the answers, the brief or the team), reply {"done": true, "summary": "...", "settled": {...}}: summary is what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
       `settled: for each point no question in "stepsSoFar" settles directly but the answers, the brief or the team do, one plain line saying what it is (at most ${POINT_MAX} characters), keyed by its tag. Leave out a point no answer settles; never invent one.`,
-
+      'features: in every reply, done or not, list ONLY the features whose place in the proof of concept an answer in "stepsSoFar" changed, by their exact name from "features" (never a new name): "drop" when an answer leaves it out of the proof of concept (why: which answer, in a few words); "outside-tool" when an answer says it is done with another tool, outside the chosen tool\'s build (by: that tool, e.g. "Microsoft Copilot + SharePoint"); "reword" when an answer changes what it does (what: the new one line). A feature whose "scope" already says so needs no entry. Use [] when nothing changes.',
       'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "tag": ...}: question at most 200 characters, why (one line on why it matters) at most 160, each suggested answer at most 120.',
       'The idea title may be the only thing there; work from what is there.',
       'Every reply, done or not, also carries "updates" and "learned": what the answers so far change in the idea\'s record. The answers are the design answers in "stepsSoFar" (skip any "(not known yet; asked the team)") and "teamAnswers".',

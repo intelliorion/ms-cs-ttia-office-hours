@@ -39,6 +39,7 @@ cafe-app/src/design/cafecheck.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
+cafe-app/src/design/scope.ts
 cafe-app/src/design/store.ts
 cafe-app/src/design/tools.ts
 cafe-app/src/graph/build.ts
@@ -109,6 +110,7 @@ cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-points.test.ts
+cafe-app/tests/design-scope.test.ts
 cafe-app/tests/design-store.test.ts
 cafe-app/tests/design-tools.test.ts
 cafe-app/tests/due.test.ts

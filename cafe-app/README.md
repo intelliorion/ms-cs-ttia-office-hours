@@ -491,6 +491,15 @@ nothing is saved until you press a button, and you can do everything except plan
    done, its reply also says in one line each what the earlier answers settled for any point no question asked
    about, so design.md and the pack show it instead of "(not yet answered)". design.md has a section for each build
    point; the design pack shows them under **To build it**.
+   The **feature list follows the design**: when an answer leaves a feature out ("Leave marking out"), moves it to
+   another tool ("draft with Copilot and log in a SharePoint list") or changes what it does, the AI says so in its
+   reply and the app applies it at once, as the answers save themselves. Only names on the list count. A dropped
+   feature stays in the list, struck through, marked **Out of scope** with why; a moved one names the other tool
+   ("Microsoft Copilot + SharePoint, outside the Dataiku build"). design.md, approach.md, the design pack and the
+   tool picker show the updated list; each change is logged in the idea's history. In the universe an out-of-scope
+   feature is no longer needed by the idea, and an outside one is not built with the main tool (it is built with
+   the other tool only when that is one approved tool). In the tool picker, **Put it back** (then Save) returns a
+   feature to the build.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
    example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it

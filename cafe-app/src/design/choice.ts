@@ -33,8 +33,40 @@ export interface ToolChoice {
   provider?: string;
 }
 
+/**
+ * A feature the design moved out of the build. "out": out of scope for the proof of concept (kept in the list, struck
+ * through, with why). "outside": done with another tool (`by`, e.g. "Microsoft Copilot + SharePoint"), outside the
+ * main tool's build.
+ */
+export interface FeatureScope { status: 'out' | 'outside'; by?: string; why?: string; at?: string; step?: number }
+
 /** A feature as stored now: no tool of its own. */
-export interface FeatureLike { id?: string; name: string; what?: string; flags?: string[] }
+export interface FeatureLike { id?: string; name: string; what?: string; flags?: string[]; scope?: FeatureScope }
+
+const one = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/** A stored or sent scope made safe; undefined when it says nothing (an "outside" scope needs the other tool). */
+export function scopeOf(raw: unknown): FeatureScope | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const status = r.status === 'out' || r.status === 'outside' ? r.status : undefined;
+  const by = one(r.by, 60);
+  if (!status || (status === 'outside' && !by)) return undefined;
+  const why = one(r.why, 200); const at = one(r.at, 40);
+  const step = Number.isInteger(r.step) && (r.step as number) > 0 ? (r.step as number) : undefined;
+  return { status, ...(status === 'outside' ? { by } : {}), ...(why ? { why } : {}), ...(at ? { at } : {}), ...(step ? { step } : {}) };
+}
+
+/** In the main tool's build: not out of scope and not done with another tool. */
+export const inBuild = (f: { scope?: FeatureScope }) => !f.scope;
+/** In the proof of concept at all (an outside-tool feature still is). */
+export const inScope = (f: { scope?: FeatureScope }) => f.scope?.status !== 'out';
+/** How a moved feature is described: "out of scope" or "<by>, outside the <tool> build". */
+export function scopeWords(scope: FeatureScope | undefined, tool?: string): string {
+  if (!scope) return '';
+  if (scope.status === 'out') return 'out of scope';
+  return `${scope.by}, outside the ${tool ?? 'main'} build`;
+}
 
 /** The stored pathway for a tool: custom app is TTIA-Led; a citizen tool with no builder named yet is Assisted Citizen. */
 export function pathwayOf(tool: string, builder?: string): Pathway {
@@ -59,7 +91,11 @@ export function outOfDate(features: { name: string }[], choice: Pick<ToolChoice,
  */
 export function toolFeatures<F extends FeatureLike>(state: { features: F[]; tool?: Pick<ToolChoice, 'tool' | 'pathway'> }): (F & { tool?: string; pathway?: Pathway })[] {
   const t = state.tool;
-  return state.features.map((f) => (t ? { ...f, tool: t.tool, pathway: t.pathway } : { ...f }));
+  // A feature the design moved out of the build is not the tool's: an out-of-scope one has no tool, an outside one has
+  // the other tool it is done with.
+  return state.features.map((f) => (f.scope?.status === 'out' ? { ...f }
+    : f.scope?.status === 'outside' ? { ...f, tool: f.scope.by }
+    : t ? { ...f, tool: t.tool, pathway: t.pathway } : { ...f }));
 }
 
 /** The tools that have a kit: the one chosen (a list, so the kit code can stay per tool). */

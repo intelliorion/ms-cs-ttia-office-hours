@@ -8,6 +8,7 @@ import { draftEmail, updateDraft } from '../comms/outbox';
 import { sameQuestion } from '../inbox/question';
 import { DESIGN_TAGS, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
 import { isDesignTag, POINT_MAX } from './points';
+import { scopeWords } from './choice';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
   type DesignState, type DesignStep, type DesignTag, type StepSource,
@@ -173,7 +174,9 @@ export function designStepInput(
   const t = state.tool;
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
-    features: toolFeatures(state).map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
+    features: toolFeatures(state).map((f) => ({
+      name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}), ...(f.scope ? { scope: scopeWords(f.scope, t?.tool) } : {}),
+    })),
     ...(t ? { tool: { tool: t.tool, pathway: t.pathway, cons: t.cons, gaps: t.fit.filter((x) => x.fit !== 'yes') } } : {}),
     ...(extra.learned?.length ? { learned: extra.learned } : {}),
     ...(extra.teamAnswers?.length ? { teamAnswers: extra.teamAnswers } : {}),
@@ -218,9 +221,9 @@ export function decodeStep(out: DesignStepOutput, codes: Map<string, Coded>): De
     ...out, ...(out.question !== undefined ? { question: n(out.question) } : {}), ...(out.why !== undefined ? { why: n(out.why) } : {}),
     ...(out.summary !== undefined ? { summary: n(out.summary) } : {}), ...(out.suggested ? { suggested: out.suggested.map((x) => showNames(x, codes)) } : {}),
     ...(out.settled ? { settled: Object.fromEntries(Object.entries(out.settled).map(([k, v]) => [k, showNames(String(v), codes)])) } : {}),
+    ...(out.features ? { features: out.features.map((f) => ({ ...f, ...(f.what ? { what: n(f.what) } : {}), ...(f.by ? { by: n(f.by) } : {}), ...(f.why ? { why: n(f.why) } : {}) })) } : {}),
   };
 }
-
 
 /** Refuses a new question while the last one is still open (one question at a time). */
 export function assertNoOpenStep(state: DesignState): void {

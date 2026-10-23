@@ -55,6 +55,17 @@ export interface FeatureRow {
   flags: string[];
   /** Filled by the AI and not saved yet: shown with a highlighted border. */
   suggested: boolean;
+  /** Where the design moved it: out of scope, or another tool outside the build. Kept on save; "Put it back" clears it. */
+  scope?: FeatureScope;
+}
+
+/** What the design said about a feature (the server's FeatureScope). */
+export interface FeatureScope { status: 'out' | 'outside'; by?: string; why?: string; at?: string; step?: number }
+
+/** "Out of scope" or "<other tool>, outside the <tool> build", for a badge. */
+export function scopeLabel(scope: FeatureScope | undefined, tool?: string): string {
+  if (!scope) return '';
+  return scope.status === 'out' ? 'Out of scope' : `${scope.by}, outside the ${tool ?? 'main'} build`;
 }
 
 /** The one tool for the whole proof of concept, as the panel holds it (the server's ToolChoice). */
@@ -98,6 +109,7 @@ export function featureRows(raw: unknown, opts: { fromAi?: boolean } = {}): Feat
     name: str(f.name), what: str(f.what),
     flags: lines(f.flags, 5).filter((x) => FEATURE_FLAGS.includes(x)),
     suggested: Boolean(opts.fromAi) && !str(f.id),
+    ...(f.scope && (f.scope.status === 'out' || (f.scope.status === 'outside' && str(f.scope.by))) ? { scope: { ...f.scope } } : {}),
   }));
 }
 
@@ -131,10 +143,10 @@ export const FIT_MARK: Record<string, string> = { yes: '✓', partly: 'partly', 
 export const FIT_WORD: Record<string, string> = { yes: 'Does it', partly: 'Partly', no: "Can't do it" };
 
 /** The features to send: name, what and flags, trimmed; rows with no name and nothing else are dropped. */
-export function featuresBody(rows: FeatureRow[]): { name: string; what?: string; flags: string[] }[] {
+export function featuresBody(rows: FeatureRow[]): { name: string; what?: string; flags: string[]; scope?: FeatureScope }[] {
   return rows
     .filter((r) => r.name.trim() || r.what.trim())
-    .map((r) => ({ name: r.name.trim(), ...(r.what.trim() ? { what: r.what.trim() } : {}), flags: r.flags }));
+    .map((r) => ({ name: r.name.trim(), ...(r.what.trim() ? { what: r.what.trim() } : {}), flags: r.flags, ...(r.scope ? { scope: r.scope } : {}) }));
 }
 
 /** The body for POST …/tools: the features, and the one tool when there is one. */

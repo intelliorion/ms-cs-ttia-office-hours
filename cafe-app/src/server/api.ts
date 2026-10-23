@@ -23,6 +23,7 @@ import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask } from '../ai/tasks';
+import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
@@ -286,8 +287,11 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     // The record is read again: nothing between the AI call and here may be lost.
     const now = await loadIdea(root, idea.id);
     await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { learned: raw.learned }, codes, provider, clock(), read, 'design')) });
-    const out = await applyDesignEvent(root, idea, stepEvent(output), clock);
-    return output.done ? out : { ...out, step: out.state.steps[out.state.steps.length - 1] };
+    // The feature list follows the answers: a feature they leave out, move to another tool or change is changed at once.
+    const changed = await applyFeatureChanges(root, idea.id, output.features, clock);
+    const out = await applyDesignEvent(root, await loadIdea(root, idea.id), stepEvent(output), clock);
+    const said = changed.length ? { featureChanges: changed } : {};
+    return output.done ? { ...out, ...said } : { ...out, ...said, step: out.state.steps[out.state.steps.length - 1] };
   });
   add('POST', '/api/ideas/:id/design/answer', async ({ params, body }) => {
     const idea = await loadIdea(root, params.id);

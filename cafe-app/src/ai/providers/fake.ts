@@ -232,6 +232,20 @@ const DESIGN_DONE = {
   },
 };
 
+/**
+ * What the last design answer changes in the feature list, by rule: "leave … out" drops the first feature the tool
+ * fits only partly; "… with Copilot" moves it to Microsoft Copilot, outside the build. Nothing otherwise.
+ */
+function featureChangesFor(prompt: string) {
+  const data = dataOf(prompt) as { stepsSoFar?: { answer: string }[]; features?: { name: string; scope?: string }[]; tool?: { gaps?: { feature: string }[] } };
+  const last = data.stepsSoFar?.[data.stepsSoFar.length - 1]?.answer ?? '';
+  const open = (data.tool?.gaps ?? []).map((g) => g.feature).find((n) => !(data.features ?? []).some((f) => f.name === n && f.scope));
+  if (!open) return [];
+  if (/\bleave\b.*\bout\b/i.test(last)) return [{ name: open, change: 'drop', why: 'Left out of the proof of concept' }];
+  if (/\bwith (microsoft )?copilot\b/i.test(last)) return [{ name: open, change: 'outside-tool', by: 'Microsoft Copilot', why: 'Drafted with Copilot instead' }];
+  return [];
+}
+
 /** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */
 const DESIGN_PLAN = {
   tasks: [
@@ -280,7 +294,8 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));
       if (prompt.startsWith('TASK: feature-list')) return JSON.stringify(featuresFor(prompt));
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : toolPickFor(prompt));
-      if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS });
+      if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS, features: featureChangesFor(prompt) });
+
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';

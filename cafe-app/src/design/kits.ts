@@ -42,7 +42,8 @@ export function designPlanInput(idea: Idea, state: DesignState): DesignPlanInput
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     summary: state.summary ?? '',
-    features: toolFeatures(state).map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
+    // A feature the design left out of the proof of concept is not planned.
+    features: toolFeatures(state).filter((f) => f.scope?.status !== 'out').map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
     // Only what was settled; a step's source says nothing the plan needs.
     steps: state.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: s.question, answer: s.answer!.trim() })),
     guidance: skillGuidance('writing-plans'),

@@ -238,10 +238,11 @@ export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { tod
   const confirmed = design.data?.confirmedAt ? design.data.files.filter(isUsable) : [];
   const today = confirmed.find((f) => f.kind === 'today');
   const sample = confirmed.find((f) => f.kind === 'output');
-  const fileLine = (label: string, f: DataFile) => clip(`${label}: ${f.name}${whatOf(f) ? `, ${whatOf(f)}` : ''}`);
-  // A before-after the AI wrote still opens with the files when it does not name them.
+  const fileLine = (label: string, f: DataFile) => clip(`${label}: ${f.name}${whatOf(f) ? `, ${whatOf(f)}` : ''}`, 110);
+  // A before-after the AI wrote still opens with the files when it does not name them: by name only, so its own
+  // lines still fit beside it.
   const openWith = (lines: string[] | undefined, f: DataFile | undefined, label: string) =>
-    (!lines?.length || !f || lines.some((l) => l.includes(f.name)) ? lines : [fileLine(label, f), ...lines].slice(0, DECK_POINTS_MAX));
+    (!lines?.length || !f || lines.some((l) => l.includes(f.name)) ? lines : [`${label}: ${f.name}`, ...lines].slice(0, DECK_POINTS_MAX));
   const withFiles = (sl: DeckSlide): DeckSlide => (sl.visual !== 'before-after' ? sl
     : { ...sl, ...(sl.before ? { before: openWith(sl.before, today, "Today's report") } : {}), ...(sl.after ? { after: openWith(sl.after, sample, 'It makes') } : {}) });
   return {

@@ -106,7 +106,7 @@ describe('DataSection', () => {
     await mount({ files: [FILE], steps: [] });
     const card = el.querySelector('[data-file="f1"]')!;
     expect(card.querySelector('.da-what')!.textContent).toBe('Masked claims');
-    expect(card.querySelector('.da-cols')!.textContent).toContain('policy_type categoryThe policy Codes: T travel, M meals');
+    expect(card.querySelector('.da-cols')!.textContent).toContain('policy_type categoryThe policy. Codes: T travel, M meals');
     expect(card.textContent).toContain('amount under the cap');
     expect(card.textContent).toContain('claim_id: 1 repeated value');
     expect(card.textContent).toContain('What H means');

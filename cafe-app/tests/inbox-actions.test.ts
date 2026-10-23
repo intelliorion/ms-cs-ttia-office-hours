@@ -390,6 +390,9 @@ describe('the AI alone never decides a Safe write (final review 2)', () => {
     // A one- or two-word "question" must cover most of ours, not just appear in it.
     expect(sameQuestion('budget', 'What is the budget for this?')).toBe(false);
     expect(sameQuestion('Budget?', '1. Budget')).toBe(true);
+    // Words every question has ("the", "will", "proof of concept") never make two questions the same.
+    expect(sameQuestion('Who in the team will build the proof of concept?', 'How will you run the demo: a link to the proof of concept, or a recording?')).toBe(false);
+    expect(sameQuestion('Who will build the proof of concept?', 'Who in your team will build the proof of concept?')).toBe(true);
   });
 
   it('an injection email on an idea with no E2 sent: no Safe answer and no ticks', async () => {

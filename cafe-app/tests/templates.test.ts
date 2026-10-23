@@ -51,6 +51,16 @@ describe('templates', () => {
     expect(render(t.E0, {}).to).toBe('[DISTRIBUTION LIST]');
   });
 
+  it('no cohort placeholder is left that the app cannot fill: a session email goes to the idea\'s people', async () => {
+    const t = await loadTemplatesFrom(BUNDLED_TEMPLATES);
+    for (const tpl of Object.values(t)) expect(`${tpl.subject}\n${tpl.body}`, tpl.id).not.toMatch(/COHORT|\[NUMBER\]|\[THEME\]/);
+    const team = normalizeIdea({ ...idea, people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['builder'] }] } });
+    const r = render(t.E7, { idea: team });
+    expect(r.to).toBe('Person 1; Person 2');
+    expect(r.subject).toBe("CAFE-2026-001: Creators' Café design series, session [N]: [TOPIC]");
+    expect(render(t.SR, {}).to).toBe('[SESSION ATTENDEES]');
+  });
+
   it('keeps $ sequences in user values literal', async () => {
     const { E1 } = await loadTemplatesFrom(BUNDLED_TEMPLATES);
     const dollarIdea = normalizeIdea({ ...idea, title: 'Cost $& savings $$' });

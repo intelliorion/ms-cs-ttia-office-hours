@@ -78,6 +78,12 @@ describe('small helpers', () => {
 });
 
 describe('ideaCardModel', () => {
+  it('a closed idea says how it closed in words, never "[object Object]"', () => {
+    const g = { nodes: [{ id: 'idea:CAFE-9', type: 'Idea', label: 'x', attrs: { stage: 4, closed: 'Reuse what exists' } }], edges: [] } as any;
+    const closed = { id: 'CAFE-9', title: 'x', stage: 4, closed: { as: 'reuse', at: '2026-10-23' }, people: { team: [] } };
+    expect(ideaCardModel(closed, g).stageLabel).toBe('Closed · Reuse what exists');
+    expect(ideaCardModel(closed, null).stageLabel).toBe('Closed · reuse');
+  });
   const graph = { nodes: [{ id: 'idea:CAFE-1', type: 'Idea', label: 'x', attrs: { stage: 2, stageLabel: 'Triage' } }], edges: [
     { from: 'idea:CAFE-1', to: 'team:a', rel: 'X' }, { from: 'tool:b', to: 'idea:CAFE-1', rel: 'Y' }, { from: 'tool:b', to: 'team:a', rel: 'Z' }] } as any;
   const idea = { id: 'CAFE-1', title: 'Mail bot', function: 'BSI', region: 'AMER', stage: 2, sent: { E1: '2026-10-19' }, overdue: [{ text: 'E2 reply is 8 days late' }] };

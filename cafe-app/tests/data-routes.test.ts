@@ -62,7 +62,7 @@ describe('Understand the data: one file through Read, Check, Profile, Understand
     expect(md).toContain('## Data');
     expect(md).toContain('### expenses export.csv (Sample input)');
     expect(md).toMatch(/Not confirmed yet/);
-    expect(md).toContain('- `policy_type` (category): The policy type of each row Codes: Each code is a kind of row');
+    expect(md).toContain('- `policy_type` (category): The policy type of each row. Codes: Each code is a kind of row');
     expect((await readHistory(dir)).some((h) => h.detail === 'Data dropped: expenses export.csv (Sample input)')).toBe(true);
   });
 
@@ -196,6 +196,21 @@ describe('The data questions, the automatic updates and the one confirmation', (
     expect(settledBy([{ topic: 'volumes', answer: 'A thousand rows' }], [], answers)).toEqual([]);
     expect(settledBy([{ topic: 'other', answer: '12,000 claims a month' }], [], answers)).toEqual([]);
     expect(settledBy([], [{ topic: 'volumes', answer: 'Gone', question: 'Q' }], answers)).toEqual([]);
+  });
+
+  it('a step left running by an app that stopped shows as stopped: the file can be understood again, and nothing waits on it', async () => {
+    const { root, drop, post } = await server();
+    await drop('expenses.csv', expenseCsv(10), 'input');
+    const { writeDesign } = await import('../src/design/store');
+    const { INTERRUPTED } = await import('../src/data/model');
+    const st = await readDesign(root, ID);
+    st.data!.files[0].steps[3] = { id: 'understand', status: 'running', detail: 'Asking the AI…' } as any;
+    await writeDesign(root, ID, st);
+    const back = (await readDesign(root, ID)).data!.files[0].steps[3];
+    expect(back).toMatchObject({ status: 'failed', detail: INTERRUPTED });
+    expect((await post(`/api/ideas/${ID}/data/step`)).status).toBe(200);
+    const again = await post(`/api/ideas/${ID}/data/f1/understand`);
+    expect(again.body.state.data.files[0].steps.map((x: any) => x.status)).toEqual(['done', 'done', 'done', 'done', 'done']);
   });
 
   it('"I don\'t know" puts the question in the questions email; the hand path needs no AI', async () => {

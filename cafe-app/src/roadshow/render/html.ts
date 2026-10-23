@@ -99,10 +99,17 @@ function fitHtml(m: DeckModel): string {
 export function dataHtml(m: DeckModel): string {
   const d = m.data;
   if (!d) return '';
+  // Two or more files going in share the column: fewer column names each, so the slide never spills over.
+  const many = d.inputs.length + d.rules.length > 1;
+  const chips = (cols: string[]) => {
+    const max = many ? 4 : 8;
+    const shown = cols.slice(0, max).map((c) => `<span>${esc(c)}</span>`).join('');
+    return `${shown}${cols.length > max ? `<span class="more">+${cols.length - max} more</span>` : ''}`;
+  };
   const card = (f: { name: string; kind: string; what: string; columns: string[] }, cls = '') => `<div class="dt-f${cls}"><div class="dt-k">${esc(f.kind)}</div><b>${esc(f.name)}</b>`
-    + `${f.what ? `<p>${esc(f.what)}</p>` : ''}${f.columns.length ? `<div class="dt-cols">${f.columns.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : ''}</div>`;
+    + `${f.what ? `<p>${esc(f.what)}</p>` : ''}${f.columns.length ? `<div class="dt-cols">${chips(f.columns)}</div>` : ''}</div>`;
   const ins = [...d.inputs.map((f) => card(f)), ...d.rules.map((f) => card(f, ' rules'))].join('');
-  return `<div class="dt"><div class="dt-col"><div class="dt-h">What goes in</div>${ins || '<p class="muted">Not given.</p>'}</div><div class="dt-arrow" aria-hidden="true">→</div>`
+  return `<div class="dt${many ? ' many' : ''}"><div class="dt-col"><div class="dt-h">What goes in</div>${ins || '<p class="muted">Not given.</p>'}</div><div class="dt-arrow" aria-hidden="true">→</div>`
     + `<div class="dt-mid"><b>${esc(d.tool ?? 'The proof of concept')}</b><span>on sample, masked data</span></div><div class="dt-arrow" aria-hidden="true">→</div>`
     + `<div class="dt-col"><div class="dt-h">What comes out</div>${d.output ? card(d.output, ' out') : '<p class="muted">Not given.</p>'}</div></div>`;
 }
@@ -117,7 +124,9 @@ function beforeAfterHtml(s: DeckSlide, m: DeckModel): string {
   const before = s.before?.length ? s.before : m.before;
   const after = s.after?.length ? s.after : m.after;
   const list = (xs: string[]) => (xs.length ? `<ul>${xs.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="muted">Not written down yet.</p>');
-  return `<div class="ba"><div class="ba-c before"><div class="ba-h">Today</div>${list(before)}</div><div class="ba-arrow" aria-hidden="true">→</div>`
+  // Long lists get a smaller type, so the two boxes hold what they say.
+  const long = (xs: string[]) => xs.length > 3 || xs.join('').length > 200;
+  return `<div class="ba${long(before) || long(after) ? ' many' : ''}"><div class="ba-c before"><div class="ba-h">Today</div>${list(before)}</div><div class="ba-arrow" aria-hidden="true">→</div>`
     + `<div class="ba-c after"><div class="ba-h">With the proof of concept</div>${list(after)}</div></div>`;
 }
 
@@ -151,8 +160,10 @@ function slideBody(s: DeckSlide, m: DeckModel): string {
     }
     case 'fit-table': return `${head}<div class="split wide-l"><div>${fitHtml(m)}</div><div class="col">${pointsHtml(s)}${quoteHtml(s)}</div></div>`;
     case 'timeline': return `${head}${timelineHtml(m)}<div class="foot-pts">${pointsHtml(s)}${quoteHtml(s)}</div>`;
-    case 'data': return `${head}${m.data ? dataHtml(m) : ''}${s.points.length ? `<div class="foot-pts">${pointsHtml(s)}</div>` : ''}`;
-    case 'before-after': return `${head}${beforeAfterHtml(s, m)}${s.points.length ? `<div class="foot-pts">${pointsHtml(s)}</div>` : ''}`;
+    // The drawing says most of it: at most two points under it.
+    // With no confirmed data to draw, the points are the slide.
+    case 'data': return m.data ? `${head}${dataHtml(m)}${s.points.length ? `<div class="foot-pts">${pointsHtml({ ...s, points: s.points.slice(0, 2) })}</div>` : ''}` : `${head}${pointsHtml(s)}`;
+    case 'before-after': return `${head}${beforeAfterHtml(s, m)}${s.points.length ? `<div class="foot-pts">${pointsHtml({ ...s, points: s.points.slice(0, 2) })}</div>` : ''}`;
     default: return `${head}<div class="body">${pointsHtml(s)}${quoteHtml(s)}</div>`;
   }
 }
@@ -237,13 +248,13 @@ ${DIAGRAM_CSS}
 .ba-c{border-radius:18px;padding:26px 30px;background:var(--soft);border:1px solid var(--line);overflow:hidden}
 .ba-c.after{background:color-mix(in srgb,var(--accent) 9%,var(--slide));border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
 .ba-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}.after .ba-h{color:var(--accent)}
-.ba ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:12px;font-size:22px;line-height:1.3}
+.ba ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:12px;font-size:22px;line-height:1.3}.ba.many ul{font-size:18px;gap:8px}.ba.many .ba-c{padding:20px 24px}
 .ba-arrow{display:grid;place-items:center;font-size:44px;color:var(--accent)}
 .dt{display:grid;grid-template-columns:1.2fr 54px .8fr 54px 1.2fr;align-items:center;gap:0;max-height:470px}
 .dt-col{display:flex;flex-direction:column;gap:12px;min-width:0}.dt-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .dt-f{border-radius:16px;padding:14px 18px;background:var(--soft);border:1px solid var(--line);overflow:hidden}.dt-f b{font:700 21px/1.2 var(--head);word-break:break-word}
 .dt-f.rules{border-style:dashed}.dt-f.out{background:color-mix(in srgb,var(--accent) 9%,var(--slide));border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
-.dt-f p{margin:6px 0 0;font-size:15px;color:var(--muted);line-height:1.3}.dt-k{font:700 12px var(--head);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.dt-f p{margin:6px 0 0;font-size:15px;color:var(--muted);line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.dt.many .dt-f{padding:10px 16px}.dt.many .dt-f p{-webkit-line-clamp:2}.dt.many .dt-cols{margin-top:6px}.dt-cols span.more{background:none;border-style:dashed;color:var(--muted)}.dt-k{font:700 12px var(--head);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
 .dt-cols{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.dt-cols span{font:600 13px ui-monospace,Menlo,monospace;padding:3px 8px;border-radius:6px;background:var(--card);border:1px solid var(--line)}
 .dt-mid{border-radius:18px;padding:22px 16px;text-align:center;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#020617));color:#fff;display:flex;flex-direction:column;gap:6px}.dt-mid b{font:800 24px var(--head)}.dt-mid span{font-size:14px;opacity:.85}
 .dt-arrow{display:grid;place-items:center;font-size:40px;color:var(--accent)}

@@ -2,11 +2,11 @@
 id: RS
 title: Session moved
 to: cohort
-subject: "Creators' Café [COHORT NAME], session [N] has moved"
+subject: "Creators' Café design series: session [N] has moved"
 ---
 Hi all,
 
-Session [N] of the [COHORT NAME] design series has moved.
+Session [N] of the design series has moved.
 
 Was: [OLD DATE, TIME]
 Now: [NEW DATE, TIME]

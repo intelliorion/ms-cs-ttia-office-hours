@@ -281,7 +281,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           </ul>
           <div className={`hint${design.state.planStale ? ' warn' : ''}`} data-testid={design.state.planStale ? 'plan-stale' : undefined}>
             {design.state.planStale ? planStaleText(design.state.planStale, approved)
-              : approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}
+              : approved ? 'Writing again rewrites plan.md and the kit files the app made, and takes away the ones it no longer writes; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}
           </div>
         </>
       ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a filled-in starter kit for the picked tool (and for any tool the design adds for its gaps): a synthetic sample, the tool\'s own files and a test checklist. No code.'}</div>}

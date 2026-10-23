@@ -39,6 +39,9 @@ function StepDots({ file }: { file: any }) {
   );
 }
 
+/** A kind in a few words for the one-line row ("Sample output", not "… (what it should produce)"). */
+export const shortKind = (kind: string) => (KIND_LABELS[kind as keyof typeof KIND_LABELS] ?? kind).replace(/\s*\(.*\)$/, '');
+
 /** A file's state in one or two words, for its one-line row. */
 export function fileWord(file: any): { word: string; tone: 'ok' | 'you' | 'bad' | 'run' } {
   if (isRunning(file)) return { word: `${currentCard(file)?.word ?? 'Working'}…`, tone: 'run' };
@@ -74,7 +77,7 @@ function FileCard({ file, count, off, aiOff, readOnly, onKind, onRelease, onRemo
         onClick={() => setToggled(!open)}>
         <span className="da-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
         <span className="da-name">{file.name}</span>
-        <span className="da-kind-ro">{KIND_LABELS[file.kind as keyof typeof KIND_LABELS]}</span>
+        <span className="da-kind-ro">{shortKind(file.kind)}</span>
         <span className={`da-state ${state.tone}`}>{state.word}</span>
       </button>
       {open && <>
@@ -110,7 +113,7 @@ function FileCard({ file, count, off, aiOff, readOnly, onKind, onRelease, onRemo
               <ul className="card-list da-cols" aria-label={`Columns of ${file.name}`}>
                 {cols.map((c) => (
                   <li key={`${c.name}`}><span className="card-k"><code>{c.name}</code> <span className="da-type">{c.type}</span></span>
-                    <span className="card-v">{c.meaning || <span className="hint">(meaning not said)</span>}{c.mine && <span className="da-mine"> (yours)</span>}{c.codes && <span className="hint"> Codes: {c.codes}</span>}</span></li>
+                    <span className="card-v">{c.meaning || <span className="hint">(meaning not said)</span>}{c.mine && <span className="da-mine"> (yours)</span>}{c.codes && <span className="hint">{c.meaning && !/[.!?:)]$/.test(c.meaning) ? '.' : ''} Codes: {c.codes}</span>}</span></li>
                 ))}
               </ul>
             )}
@@ -348,7 +351,10 @@ export function DataCard({ design }: { design: DesignView | null }) {
       <h3>The data <span className="sec-n">{phase.word}</span></h3>
       {d.summary?.text && <div className="card-text">{d.summary.text}</div>}
       <ul className="card-list">
-        {d.files.map((f: any) => <li key={f.id}><span className="card-k">{f.name}</span><span className="card-v">{KIND_LABELS[f.kind as keyof typeof KIND_LABELS]}{whatOf(f) ? `: ${whatOf(f)}` : ''}</span></li>)}
+        {d.files.map((f: any) => {
+          const kind = shortKind(f.kind); const what = whatOf(f) ?? '';
+          return <li key={f.id}><span className="card-k">{f.name}</span><span className="card-v">{what.toLowerCase().startsWith(kind.toLowerCase()) ? what : `${kind}${what ? `: ${what}` : ''}`}</span></li>;
+        })}
       </ul>
       {!d.confirmedAt && <div className="hint warn">Not confirmed: the features, the tool, the design and the roadshow did not use it.</div>}
     </section>

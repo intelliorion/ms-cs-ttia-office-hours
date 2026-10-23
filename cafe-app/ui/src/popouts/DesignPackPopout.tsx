@@ -9,7 +9,7 @@ import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, opensInT
 import { RecipeFlowDiagram } from './RecipeFlowDiagram';
 import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
 import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
-import { columnRows, dataPhase, KIND_LABELS, sizeWords, whatOf } from '../panels/dataHelpers';
+import { columnRows, dataPhase, KIND_LABELS, meaningWithCodes, sizeWords, whatOf } from '../panels/dataHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
@@ -119,7 +119,7 @@ export function DesignPackPopout({ id }: { id: string }) {
                       {f.check?.status === 'held' ? <div className="hint warn">Held: it may hold personal data, so nothing in it is used.</div> : (
                         <>
                           {whatOf(f) && <div className="dp-file-u">{whatOf(f)}</div>}
-                          {cols.length > 0 && <dl className="dp-settles dp-cols">{cols.map((c) => <div key={c.name}><dt><code>{c.name}</code> {c.type}</dt><dd>{c.meaning || '(meaning not said)'}{c.codes ? ` Codes: ${c.codes}` : ''}</dd></div>)}</dl>}
+                          {cols.length > 0 && <dl className="dp-settles dp-cols">{cols.map((c) => <div key={c.name}><dt><code>{c.name}</code> {c.type}</dt><dd>{meaningWithCodes(c.meaning || '(meaning not said)', c.codes)}</dd></div>)}</dl>}
                           {f.understanding?.rules?.length > 0 && <div className="dp-file-u">Rules: {f.understanding.rules.map((r: any) => String(r.rule).replace(/[.;\s]+$/, '')).join('; ')}</div>}
                           {f.understanding?.derivations?.length > 0 && <div className="dp-file-u">How the output is worked out: {f.understanding.derivations.map((x: any) => `${x.output}: ${String(x.how).replace(/[.;\s]+$/, '')}`).join('; ')}</div>}
                           {issues.length > 0 && <div className="hint warn">Issues: {issues.slice(0, 6).map((x: string) => x.replace(/[.;\s]+$/, '')).join('; ')}</div>}

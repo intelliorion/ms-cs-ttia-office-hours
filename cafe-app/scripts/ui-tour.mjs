@@ -103,13 +103,10 @@ async function popoutShots(p) {
   await shot(p, '34-only-related.png');
   await p.$eval('[data-testid="highlight-hide"]', (el) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '88'); el.dispatchEvent(new Event('input', { bubbles: true })); });
   await sleep(1500);
-  // A CSIC decision through the panel (the idea is at stage 2, so the Decision form is the one action section):
-  // tick two checks, pick the decision, give a reason, save.
+  // A CSIC decision through the panel, by hand (no suggestion asked for): Decide by hand, pick it, save.
   assert((await p.locator(`${DETAILS} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker shows at stage 2');
-  const crit = p.locator(`${DETAILS} .criteria input`);
-  await crit.nth(0).check(); await crit.nth(2).check();
+  await p.click(`${DETAILS} [data-action="decide-by-hand"]`);
   await p.check(`${DETAILS} input[name^="decision-"][value="csic"]`);
-  await p.fill(`${DETAILS} textarea.reason`, 'It needs the live shared mailbox, so it belongs in the CSIC Repository.');
   await p.click(`${DETAILS} [data-action="save-review"]`);
   await p.waitForSelector('[data-testid="suggest"]');
   await sleep(800);
@@ -197,6 +194,9 @@ async function popouts2Shots(p, gl, errors, restart) {
   // Fixture: an E2 sent on the app's day, so it is late 8 days on.
   const { ideas } = await (await fetch(`${base}/api/state`)).json();
   const [a, b, c] = [ideas[1].id, ideas[2].id, ideas[4].id];
+  // An idea's emails take their dates from the idea's round: put these three in the round first.
+  const { rounds } = await (await fetch(`${base}/api/state`)).json();
+  await post(`/api/rounds/${rounds[0].id}/ideas`, { ideaIds: [a, b, c] });
   const e2 = await post(`/api/ideas/${a}/draft`, { template: 'E2' });
   await post('/api/outbox/approve', { key: e2.key });
   await post('/api/outbox/sent', { key: e2.key });
@@ -614,7 +614,7 @@ async function drawersShots(browser, errors) {
   await p.keyboard.press('Escape');
   await p.waitForSelector('[data-testid="drawer"]', { state: 'detached' });
   await p.click('[data-action="drawer-charts"]');
-  await p.waitForSelector('[data-testid="drawer"] .kpis');
+  await p.waitForSelector('[data-testid="drawer"] .sub-h'); // the charts (Ideas by stage …); the KPI tiles are gone
   await sleep(1200);
   await shot(p, '15-drawers-charts.png');
   await p.click('[data-testid="drawer"] .x');
@@ -866,7 +866,9 @@ async function main() {
     await p.evaluate(() => window.__cafe.hover(null));
     await popoutShots(p);
     if (process.env.CAFE_AI_FAKE === '1') { await aiShots(p); await inboxShots(p); }
-    await drawersShots(gl, errors);
+    // A browser of its own: SwiftShader gives one more WebGL context per browser only so often, and the narrow page
+    // fell back to the flat view (no canvas) in the shared one.
+    { const narrow = await chromium.launch({ channel: 'chrome', headless: true, args: GPU }); try { await drawersShots(narrow, errors); } finally { await narrow.close(); } }
     await popouts2Shots(p, gl, errors, restart);
     await inboxHandShots(p, restart);
     await gl.close();

@@ -29,6 +29,17 @@ describe('Review and Select', () => {
     expect(onSuggest).toHaveBeenCalled();
   });
 
+  it('with no AI (or without asking it) Decide by hand opens the form; Save keeps the operator\'s choice', async () => {
+    const onSave = vi.fn();
+    await show(idea(), { onSave });
+    await act(async () => q('[data-action="decide-by-hand"]')!.click());
+    expect(q('[data-testid="rs-form"]')).toBeTruthy();
+    expect(q('[data-action="decide-by-hand"]')).toBeNull();
+    await act(async () => (el.querySelector('input[name^="decision-"][value="notnow"]') as HTMLInputElement).click());
+    await act(async () => q('[data-action="save-review"]')!.click());
+    expect(onSave.mock.calls[0][0].decision).toBe('notnow');
+  });
+
   it('after a suggestion: the to-dos one by one, each with what is needed, the question and a box; Draft email and Re-evaluate; no Save while any is open', async () => {
     const onDraftEmail = vi.fn(); const onAnswer = vi.fn(async () => {});
     await show(idea(prep([builder, data])), { onDraftEmail, onAnswer });

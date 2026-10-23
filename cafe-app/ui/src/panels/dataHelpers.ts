@@ -3,6 +3,10 @@ import { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, TOPIC_WORDS, 
 
 export { DATA_EXTS, DATA_STEP_ORDER, DATA_STEP_WORDS, KIND_LABELS, TOPIC_WORDS, columnsOf, guessKind, meaningOf, sizeWords, whatOf };
 
+/** A column's meaning with its codes after it, as one sentence then the codes ("The policy. Codes: T travel"). */
+export const meaningWithCodes = (meaning: string, codes?: string) =>
+  (codes ? `${meaning}${/[.!?:)]$/.test(meaning) ? '' : '.'} Codes: ${codes}` : meaning);
+
 /** Where an earlier answer came from, in words: a file by its name, the app's own sources as they are. */
 export const sourceWords = (source: string) => String(source).split(/[\\/]/).pop() ?? source;
 export const DATA_KIND_OPTIONS = Object.entries(KIND_LABELS) as [string, string][];

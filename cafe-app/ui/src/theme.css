@@ -312,7 +312,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 
 /* Idea details in the left panel (and the narrow Ideas drawer): one column, Back on top, the rest scrolls. */
 .idea-detail{display:flex;flex-direction:column;flex:1;min-height:0;color:var(--text)}
-.id-head{flex:none;display:flex;align-items:center;gap:10px;padding:2px 0 8px}
+.id-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:2px 0 8px;min-width:0}
 .id-head .iid{margin:0}
 .id-head .stg{margin-left:auto}
 .btn.back{padding:6px 14px 6px 12px;font-size:14px;border-color:rgba(var(--rgb-accent),.7);color:var(--strong);background:rgba(var(--rgb-accent),.14)}
@@ -481,7 +481,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 
 /* Stage button in the idea head, with its drop-down menu. */
 .stg-wrap{position:relative;margin-left:auto}
-.stg-btn{background:rgba(var(--rgb-s6),.6);cursor:pointer;font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px}
+.stg-btn{background:rgba(var(--rgb-s6),.6);cursor:pointer;font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .stg-btn:hover:not(:disabled){background:rgba(var(--rgb-accent),.1)}
 .stg-btn .caret{font-size:10px;opacity:.8}
 .stage-pop{z-index:40;min-width:240px;margin:0;padding:6px;list-style:none;background:rgba(var(--rgb-s3),.97);border:1px solid var(--panel-border);border-radius:6px;box-shadow:0 10px 30px rgba(var(--rgb-shadow),.5)}

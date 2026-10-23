@@ -165,6 +165,8 @@ const dropBytes = async (name, bytes) => {
 const drop = async (name) => dropBytes(name, new Uint8Array(await fs.readFile(path.join(KIT, name))));
 const state = () => api('GET', '/api/state');
 const ideaOf = async (id) => (await state()).ideas.find((i) => i.id === id);
+/** The builder: the team member with the builder role (the old people.builder field is gone). */
+const builderOf = (idea) => (idea?.people?.team ?? []).find((p) => (p.roles ?? []).includes('builder'))?.name;
 const graph = () => api('GET', '/api/graph');
 
 /* ---------- checks ---------- */
@@ -350,7 +352,7 @@ async function run() {
       what = `edges ${g0.edges.length}→${g1.edges.length}, nodes ${g0.nodes.length}→${g1.nodes.length}`;
     } else if (pick.r.action.t === 'name_builder') {
       const idea = await ideaOf(pick.r.action.ideaId);
-      reflected = idea.people?.builder === pick.r.action.name; what = `builder ${idea.people?.builder}`;
+      reflected = builderOf(idea) === pick.r.action.name; what = `builder ${builderOf(idea)}`;
     }
     check('(apply Needs-OK)', `${pick.r.action.t} on ${pick.it.name.slice(0, 12)} applied, shown`, `${r?.status}; ${what}`, r?.status === 'applied' && reflected);
   }
@@ -449,6 +451,13 @@ async function designPass() {
     `${plan.files.length} files, plan.md ${!!planMd}, agent kit ${!!agent}, Not picked ${planMd.includes('### Not picked')}`,
     plan.files.includes('plan.md') && plan.files.includes('kit/custom-app/BUILD-WITH-AGENT.md') && !!planMd && /```text\n/.test(agent)
       && planMd.includes('CSIC Repository') && !planMd.includes('### Not picked'));
+  // The custom app's starter scaffold, and the app's list of the kit files it wrote (not one of the pack's files).
+  const app = await fs.readFile(path.join(dir, 'kit', 'custom-app', 'app', 'app.js'), 'utf8').catch(() => '');
+  const written = JSON.parse(await fs.readFile(path.join(dir, 'kit', '.cafe-written.json'), 'utf8').catch(() => '{}'));
+  check('(design) scaffold', 'app/index.html, style.css, app.js with rule stubs; the agent starts from it; kit list written',
+    `app.js ${app.length} chars, TODOs ${(app.match(/TODO/g) ?? []).length}, agent mentions app/ ${agent.includes('Start from the scaffold in app/')}, list ${written.files?.length ?? 0} files`,
+    ['index.html', 'style.css', 'app.js'].every((f) => plan.files.includes(`kit/custom-app/app/${f}`)) && /function \w+\(row\)/.test(app)
+      && agent.includes('Start from the scaffold in app/') && written.files?.includes('kit/custom-app/app/app.js') && !plan.files.includes('kit/.cafe-written.json'));
 }
 
 /* ---------- agentic Inbox: eight steps, conflicts held, history (--fake) ---------- */
@@ -483,7 +492,7 @@ async function agenticPass(clock) {
       const r = acts(d.item).find((x) => x.action.t === 'name_builder' && x.status === 'pending');
       if (r) await api('POST', `/api/inbox/${d.item.id}/apply`, { actionIds: [r.id] });
     }
-    const seeded = await Promise.all(['CAFE-2026-001', 'CAFE-2026-002'].map(async (id) => (await ideaOf(id)).people?.builder));
+    const seeded = await Promise.all(['CAFE-2026-001', 'CAFE-2026-002'].map(async (id) => builderOf(await ideaOf(id))));
     check(A('(seed builders)'), 'builders on 001 and 002, applied by the operator', seeded.join(', '), seeded[0] === 'Avery Chen' && seeded[1] === 'Rhys Llewellyn');
 
     // 02: a clean reply, every step done, AI links confirmed.
@@ -527,8 +536,8 @@ async function agenticPass(clock) {
       const stored = (await fs.readFile(path.join(ws, 'data', 'graph', 'ai-links.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l))
         .find((l) => l.to === twin.id && String(l.source).includes('13-conflicting-reply'));
       check(A('13 resolved'), "keep the form's builder; link onto the existing star, confirmed; no new star",
-        `builder ${(await ideaOf('CAFE-2026-001')).people?.builder}; AI link ${stored?.status ?? 'none'}; edge ${onTwin ? (onTwin.confirmed ? 'confirmed' : 'waiting') : 'none'}; Slot findings star ${g13.nodes.some((n) => /^slot findings$/i.test(n.label))}; status ${out.item.status}`,
-        (await ideaOf('CAFE-2026-001')).people?.builder === 'Avery Chen' && onTwin?.confirmed === true && stored?.status === 'confirmed'
+        `builder ${builderOf(await ideaOf('CAFE-2026-001'))}; AI link ${stored?.status ?? 'none'}; edge ${onTwin ? (onTwin.confirmed ? 'confirmed' : 'waiting') : 'none'}; Slot findings star ${g13.nodes.some((n) => /^slot findings$/i.test(n.label))}; status ${out.item.status}`,
+        builderOf(await ideaOf('CAFE-2026-001')) === 'Avery Chen' && onTwin?.confirmed === true && stored?.status === 'confirmed'
           && !g13.nodes.some((n) => /^slot findings$/i.test(n.label)) && out.item.status === 'applied');
     }
 

@@ -8,7 +8,7 @@ import { csicFlags, dropRetiredFlags, legacyChoice, scopeOf, toolFeatures, type 
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 import { retiredToolNote } from '../graph/ontology';
-import { columnsOf, dataOf, KIND_LABELS, meaningOf, sizeWords, TOPIC_WORDS, whatOf, type DataState } from '../data/model';
+import { columnsOf, dataOf, KIND_LABELS, meaningOf, settleInterrupted, sizeWords, TOPIC_WORDS, whatOf, type DataState } from '../data/model';
 
 export type { Pathway, ToolChoice, DesignTag, StoredDiagram, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
@@ -72,6 +72,9 @@ export interface DesignState {
 
 /** Said in design.md and on approval when the tool choice has a CSIC flag (csicFlags). */
 export const CSIC_NOTE = 'This idea has a CSIC feature, so that part goes to the CSIC Repository, not a Café build.';
+
+/** A line that goes on with more after it ends with a full stop. */
+const stop = (text: string, more: boolean) => (more && !/[.!?:)]$/.test(text) ? `${text}.` : text);
 
 export function emptyDesign(): DesignState {
   return { version: 1, status: 'not-started', features: [], steps: [] };
@@ -155,7 +158,9 @@ function normalize(raw: Partial<DesignState>): DesignState {
 export async function readDesign(root: string, id: string): Promise<DesignState> {
   const dir = await ideaDir(root, id);
   const raw = await readYaml<Partial<DesignState>>(path.join(dir, 'design.yaml'));
-  return raw ? normalize(raw) : emptyDesign();
+  const state = raw ? normalize(raw) : emptyDesign();
+  if (state.data) settleInterrupted(id, state.data);
+  return state;
 }
 
 export async function writeDesign(root: string, id: string, state: DesignState): Promise<void> {
@@ -226,7 +231,7 @@ export function renderDataMd(d: DataState): string[] {
     if (cols.length) {
       for (const c of cols.slice(0, 60)) {
         const codes = f.understanding?.columns.find((x) => x.name === c.name)?.codes;
-        out.push(`- \`${c.name.replace(/`/g, "'")}\` (${c.type}): ${mdLine(meaningOf(f, c.name)) || '(meaning not said)'}${codes ? ` Codes: ${mdLine(codes)}` : ''}`);
+        out.push(`- \`${c.name.replace(/`/g, "'")}\` (${c.type}): ${stop(mdLine(meaningOf(f, c.name)) || '(meaning not said)', !!codes)}${codes ? ` Codes: ${mdLine(codes)}` : ''}`);
       }
       out.push('');
     }

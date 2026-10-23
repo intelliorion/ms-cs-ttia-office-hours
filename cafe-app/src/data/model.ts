@@ -191,6 +191,23 @@ export interface DataSettled { topic: DataTopic; answer: string; question: strin
 
 export const emptyData = (): DataState => ({ files: [], steps: [] });
 
+/** The files whose steps run in this process now ("<idea>/<file id>"): a step left running by an app that stopped is not one. */
+export const LIVE_RUNS = new Set<string>();
+export const INTERRUPTED = 'Stopped: the app was closed while this ran. Understand it again, or remove the file.';
+
+/**
+ * A step still "running" that nothing in this app runs (the app stopped mid-run) is shown as stopped, so the file can
+ * be understood again or removed, and nothing waits on it for ever. Changes `data` in place; true when it changed.
+ */
+export function settleInterrupted(id: string, data: DataState): boolean {
+  let changed = false;
+  for (const f of data.files) {
+    if (LIVE_RUNS.has(`${id}/${f.id}`)) continue;
+    for (const s of f.steps) if (s.status === 'running') { s.status = 'failed'; s.detail = INTERRUPTED; changed = true; }
+  }
+  return changed;
+}
+
 const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 

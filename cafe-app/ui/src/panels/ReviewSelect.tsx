@@ -57,8 +57,12 @@ export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName,
       <Updates updates={updatesFrom(idea, 'decision')} />
       <div className="rs-acts">
         {!prep ? (
-          <button className="btn primary" data-action="ai-suggest-review" disabled={noAi || off} title={noAi ? noAiTip : undefined} onClick={onSuggest}>
-            {aiBusy ? 'Working…' : 'Suggest a decision'}</button>
+          <>
+            <button className="btn primary" data-action="ai-suggest-review" disabled={noAi || off} title={noAi ? noAiTip : undefined} onClick={onSuggest}>
+              {aiBusy ? 'Working…' : 'Suggest a decision'}</button>
+            {/* With no AI (or without asking it), the decision is still the operator's to make. */}
+            {!showForm && <button className="btn" data-action="decide-by-hand" disabled={off} onClick={() => setAnyway(true)}>Decide by hand</button>}
+          </>
         ) : (
           <>
             <button className="btn" data-action="draft-questions" disabled={off || !open.length}

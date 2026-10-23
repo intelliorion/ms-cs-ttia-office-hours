@@ -76,7 +76,11 @@ export function analyse(view: { to: string; subject: string; body: string }) {
 
 function toLine(tpl: Template, idea?: Idea): string {
   if (tpl.to === 'list') return '[DISTRIBUTION LIST]';
-  if (tpl.to === 'cohort') return '[COHORT MEMBERS]';
+  // A session email for one idea goes to its people (the submitter and the team); with no idea, the operator fills it in.
+  if (tpl.to === 'cohort') {
+    const names = idea ? [...new Set([idea.people.submitter ?? '', ...idea.people.team.map((p) => p.name)].map((n) => n.trim()).filter(Boolean))] : [];
+    return names.length ? names.join('; ') : '[SESSION ATTENDEES]';
+  }
   return idea?.people.submitter?.trim() || '[SUBMITTER]';
 }
 

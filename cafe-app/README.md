@@ -358,6 +358,8 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
 - **Grow the universe from this idea** (in the idea's details): reads the idea's title, challenge, current
   process and outcomes and proposes capabilities, systems and pain points, with links. It never proposes a tool: a Tool star
   appears only when you pick the tool in the tool picker.
+- **Decide by hand** (beside Suggest a decision, before anything is suggested) opens the decision form at once: the
+  decision is yours with or without the AI.
 - **Suggest a decision / Re-evaluate** (in the idea's details): a decision, its reason and a to-do list of what you
   still need. What the answers change in the record is **applied by itself**: a builder (the builder role, and
   "Builder named, can attend" when they confirm), participation, flags the answers settle, the answers themselves
@@ -474,7 +476,10 @@ nothing is saved until you press a button, and you can do everything except plan
    and a single file opens by itself. The summary shows its first few lines with **more**.
 
    **Edit understanding** corrects the one line and any column's meaning; your words win and survive **Understand
-   again**. Changing a file's kind asks for Understand again. No step card is undone; a file can be removed.
+   again**. Changing a file's kind asks for Understand again. No step card is undone; a file can be removed. A step
+   left running when the app stopped shows as stopped ("Understand it again, or remove the file"), so nothing waits on
+   it for ever. A picture or a document has no columns of its own: a table the AI reads in it becomes one of its key
+   facts ("Columns of the table in it: …").
 
    Then **Check the understanding**: the AI asks about the data one question at a time, like the design questions (why
    it matters, 2–4 suggested answers, your own, or **I don't know → ask the team** into the questions email), aimed

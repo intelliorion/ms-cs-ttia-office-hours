@@ -83,6 +83,16 @@ describe('the code checks the AI\'s understanding against the profile', () => {
     expect(u.serves).toEqual(['Weekend check']);
     expect(u.kindHint).toBeUndefined();
   });
+  it('a picture or a document has no profiled columns: the table the AI read in it becomes one of its facts, not "dropped"', () => {
+    const f = file({ kind: 'today', tables: undefined });
+    const u = checkUnderstanding({
+      ...empty, points: ['Three exceptions are listed.'],
+      columns: [{ name: 'claim_id', meaning: 'The claim' }, { name: 'rule_broken', meaning: 'The rule' }],
+    } as any, f, [], [], '2026-10-23', 'claude', []);
+    expect(u.columns).toEqual([]);
+    expect(u.dropped).toBeUndefined();
+    expect(u.points).toEqual(['Three exceptions are listed.', 'Columns of the table in it: claim_id, rule_broken']);
+  });
   it('guesses a kind from the name; the operator decides', () => {
     expect(guessKind('Expense policy caps.xlsx')).toBe('rules');
     expect(guessKind('flagged output.csv')).toBe('output');

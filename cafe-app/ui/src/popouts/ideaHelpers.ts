@@ -96,7 +96,9 @@ export interface IdeaCardModel { id: string; title: string; stageLabel: string; 
 /** What the floating card for a selected idea star shows. */
 export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[] } | null | undefined, outbox: any[] = [], ring: Record<string, string> = STAGE_RING): IdeaCardModel {
   const node: any = graph?.nodes.find((n) => n.id === `idea:${idea.id}`);
-  const stageLabel = idea.closed ? `Closed · ${idea.closed}` : String(node?.attrs?.stageLabel ?? '');
+  // A closed idea says how it closed, in words (the graph has them; else the closure's own name, never the record).
+  const closedWord = idea.closed ? String(node?.attrs?.closed || (typeof idea.closed === 'object' ? idea.closed.as : idea.closed)) : '';
+  const stageLabel = idea.closed ? `Closed · ${closedWord}` : String(node?.attrs?.stageLabel ?? '');
   const stageColour = idea.closed ? ring.closed : node ? ringColour(node as any, ring) : ring[stageKey(idea)] ?? ring[2];
   const nodeId = `idea:${idea.id}`;
   return {

@@ -22,7 +22,7 @@ import { showNames, type Coded } from '../command/names';
 import { readDesign, skillGuidance } from '../design/store';
 export { guessKind } from './model';
 import {
-  columnsOf, DATA_FILES_MAX, guessKind, isUsable, DATA_STEP_ORDER, isDataKind, KIND_HINTS, KIND_LABELS, sizeWords, whatOf,
+  columnsOf, DATA_FILES_MAX, guessKind, isUsable, DATA_STEP_ORDER, isDataKind, KIND_HINTS, KIND_LABELS, LIVE_RUNS, sizeWords, whatOf,
   type DataFile, type DataKind, type DataStepCard, type DataStepId, type DataUnderstanding, type FindingKind,
 } from './model';
 import { checkDataFile, dataTypeOf, readDataFile, type ReadResult } from './read';
@@ -97,6 +97,7 @@ export async function dropDataFile(
   const { out: rec } = await updateData(root, id, (data) => {
     if (data.files.length >= DATA_FILES_MAX) throw new DataStepError(`At most ${DATA_FILES_MAX} files per idea: remove one first`);
     const fid = nextFileId(data);
+    LIVE_RUNS.add(`${id}/${fid}`);
     const f: DataFile = {
       id: fid, name: clean, file: copyName(fid, clean), kind: isDataKind(kind) ? kind : guessKind(clean), bytes: bytes.length,
       type: dataTypeOf(ext), at: clock(), steps: [{ id: 'read', status: 'running', detail: 'Reading the file…' }],
@@ -105,10 +106,12 @@ export async function dropDataFile(
     reopenData(data, { summary: true });
     return f;
   });
-  await fs.mkdir(await dataFolder(root, id), { recursive: true });
-  await writeFileAtomic(await copyPath(root, id, rec.file), bytes);
-  await appendHistory(await ideaDir(root, id), { at: clock(), action: 'data', by: 'operator', detail: `Data dropped: ${clean} (${KIND_LABELS[rec.kind]})`, source: `data-files/${rec.file}` });
-  progress?.({ file: rec });
+  try {
+    await fs.mkdir(await dataFolder(root, id), { recursive: true });
+    await writeFileAtomic(await copyPath(root, id, rec.file), bytes);
+    await appendHistory(await ideaDir(root, id), { at: clock(), action: 'data', by: 'operator', detail: `Data dropped: ${clean} (${KIND_LABELS[rec.kind]})`, source: `data-files/${rec.file}` });
+    progress?.({ file: rec });
+  } catch (e) { LIVE_RUNS.delete(`${id}/${rec.id}`); throw e; }
   return runDataFile(root, id, rec.id, 'read', ai, clock, progress);
 }
 
@@ -117,6 +120,14 @@ export async function dropDataFile(
  * check stops the run; Continue (releaseDataFile) runs it again from the profile.
  */
 export async function runDataFile(
+  root: string, id: string, fid: string, from: 'read' | 'profile' | 'understand', ai: Connector | null | undefined, clock: Clock, progress?: DataProgress,
+): Promise<DataFile> {
+  // While it runs, its "running" steps are this process's own (a restart shows them as stopped: settleInterrupted).
+  LIVE_RUNS.add(`${id}/${fid}`);
+  try { return await runSteps(root, id, fid, from, ai, clock, progress); } finally { LIVE_RUNS.delete(`${id}/${fid}`); }
+}
+
+async function runSteps(
   root: string, id: string, fid: string, from: 'read' | 'profile' | 'understand', ai: Connector | null | undefined, clock: Clock, progress?: DataProgress,
 ): Promise<DataFile> {
   const data0 = (await readData(root, id));
@@ -276,7 +287,10 @@ export function checkUnderstanding(
   const dropped: string[] = [];
   const seen = new Set<string>();
   const columns: DataUnderstanding['columns'] = [];
-  for (const c of out.columns) {
+  // A document or a picture has no profiled columns: a table the AI read in it (a report's columns) is one of its
+  // facts, not a column the code drops as "not in the file".
+  const docColumns = own.size ? [] : out.columns.map((c) => one(c.name, 40)).filter(Boolean);
+  for (const c of own.size ? out.columns : []) {
     const hit = find(own, c.name);
     if (!hit) { dropped.push(c.name); continue; }
     const key = `${hit.table}\u0001${hit.name}`;
@@ -295,7 +309,7 @@ export function checkUnderstanding(
     what: one(out.what, 200),
     ...(out.kindHint && out.kindHint !== f.kind ? { kindHint: out.kindHint } : {}),
     columns,
-    points: out.points.map((p) => one(p, 200)).filter(Boolean),
+    points: [...out.points.map((p) => one(p, 200)).filter(Boolean), ...(docColumns.length ? [one(`Columns of the table in it: ${docColumns.join(', ')}`, 200)] : [])],
     rules: out.rules.map((r) => ({ rule: one(r.rule, 240), columns: real(r.columns) })).filter((r) => r.rule),
     derivations,
     serves: [...new Set(out.serves.map((s) => feats.get(s.trim().toLowerCase())).filter((x): x is string => !!x))],

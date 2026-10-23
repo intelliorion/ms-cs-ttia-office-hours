@@ -65,7 +65,7 @@ function makeExport() {
 const CAPS = ['Document parsing', 'Workflow routing', 'Classification', 'Summarisation', 'Anomaly detection', 'Search over policies', 'Form filling',
   'Scheduling', 'Status tracking', 'Q&A over FAQs', 'Data extraction', 'Notification'];
 const SYSTEMS = ['Shared mailbox', 'SharePoint list', 'Service Catalogue', 'ServiceNow', 'Expense system', 'Contract repository', 'HR system', 'Excel tracker'];
-const TOOLS = ['Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'Microsoft Copilot', 'custom app', 'Power Automate'];
+const TOOLS = ['Copilot Studio', 'Power Apps', 'Dataiku', 'Microsoft Copilot', 'custom app', 'Power Automate'];
 const PAINS = ['Manual triage', 'Re-keying data', 'Missed deadlines', 'Repeated questions', 'No visibility of status', 'Slow approvals'];
 const slug = (s) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
 

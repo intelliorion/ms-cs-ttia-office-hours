@@ -164,18 +164,6 @@ const KITS: Record<string, KitWriter> = {
       features.map((f, i) => `${i + 2}. ${bold(f.name)}: a recipe for this step${mdLine(f.what) ? ` (${mdLine(f.what)})` : ''}.`),
       [`${features.length + 2}. **Output**: a dataset, chart or dashboard that shows the one thing to show.`, '']),
   }),
-  'UiPath': (idea, tool, features, tasks) => ({
-    'process.md': join(head('Process outline', idea, tool, features, tasks), ['## Processes', ''],
-      ...orOne(features, 'First process').map((f) => [
-        `### Process: ${mdLine(f.name)}`, '',
-        `- Does: ${mdLine(f.what) || '(write one line)'}`,
-        '- Input: the synthetic sample files, in a test folder.',
-        '- Steps: one line per click or keystroke the robot copies.',
-        '- Exceptions: what the robot does when a step fails (stop and tell a person).',
-        '- Output: what it leaves behind to show.', '',
-      ]),
-      ['## Run it', '', '- Attended, on a test machine, against the sample only.', `- ${DATA_RULE}`, '']),
-  }),
   'Microsoft Copilot': (idea, tool, features, tasks) => ({
     'prompts.md': join(head('Prompts', idea, tool, features, tasks),
       ['## No build', '', 'Microsoft Copilot needs no build: write the prompts, try them on the sample and keep the ones that work.', '', '## Prompts to try', ''],

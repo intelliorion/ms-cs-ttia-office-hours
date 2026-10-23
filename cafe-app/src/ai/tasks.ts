@@ -470,7 +470,6 @@ export const TOOL_GUIDE: Record<string, string> = {
   'Copilot Studio': 'A guided chat agent or Q&A over approved documents in SharePoint or Teams, built by a citizen builder (Citizen-Led).',
   'Power Apps': 'A simple form, tracker or approval flow on Microsoft data such as SharePoint lists, built by a citizen builder (Citizen-Led).',
   'Dataiku': 'Join, clean or analyse spreadsheets and extracts, with sample or aggregated data (Citizen-Led). Approved tool does not mean a live integration is allowed.',
-  'UiPath': 'Repeat the same clicks and keystrokes in desktop or web screens (Citizen-Led). A live connection to a non-Microsoft system is still a flag.',
   'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
 };
 

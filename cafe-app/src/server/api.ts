@@ -40,7 +40,7 @@ import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
-import { edgeId, APPROVED_TOOLS, MERGEABLE } from '../graph/ontology';
+import { edgeId, APPROVED_TOOLS, MERGEABLE, retiredToolNote } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -336,6 +336,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const idea = await loadIdea(root, params.id);
     const state = await readDesign(root, idea.id);
     if (!state.approvedAt) throw new DesignError(NOT_APPROVED);
+    const retired = retiredToolNote(state.tool?.tool);
+    if (retired) throw new DesignError(retired);
     let output;
     try { ({ output } = await ai.runWith(designPlanTask, designPlanInput(idea, state))); } catch { throw new DesignError(PLAN_NEEDS_AI); }
     const { files } = await writePlan(root, idea, state, output);

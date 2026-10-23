@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
-  mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, STALE_NOTE, toolView,
+  mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, retiredNote, STALE_NOTE, toolView,
   scopeLabel, type FeatureRow, type ToolView,
 } from './designHelpers';
 import { TodoList, Updates, updatesFrom } from './ReviewSelect';
@@ -183,6 +183,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
           </select>
           {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
         </div>
+        {!choice && retiredNote(savedTool, tools) && <div className="hint warn" data-testid="tool-retired">{retiredNote(savedTool, tools)}</div>}
         {prep && !open.length && answered.length > 0 && <div className="hint">Answers are in: Re-evaluate to check them.</div>}
         {choice && (
           <div className={`tp-choice${dirty && choice.by === 'ai' ? ' suggested' : ''}`} data-testid="tool-choice" data-tool={choice.tool} data-by={choice.by}>

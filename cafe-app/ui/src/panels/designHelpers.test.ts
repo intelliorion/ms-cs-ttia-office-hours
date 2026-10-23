@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   approvedTools, buildInstruction, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
-  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel,
+  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel, retiredNote,
 } from './designHelpers';
 
 // The features route's mixed reply: a saved DesignFeature first, then AI suggestions (and an older row with a tool).
@@ -79,13 +79,24 @@ describe('the one tool', () => {
   });
   it('overrideTool: the operator\'s tool with no AI: pros, cons and fit cleared, evaluated for the rows there now', () => {
     const rows = featureRows([{ name: 'A' }, { name: 'B' }]);
-    expect(overrideTool('UiPath', rows)).toEqual({ tool: 'UiPath', by: 'operator', reason: '', pros: [], cons: [], context: [], flags: [], fit: [], evaluatedFor: ['A', 'B'], needsAi: true });
+    expect(overrideTool('Dataiku', rows)).toEqual({ tool: 'Dataiku', by: 'operator', reason: '', pros: [], cons: [], context: [], flags: [], fit: [], evaluatedFor: ['A', 'B'], needsAi: true });
   });
   it('outOfDate: true once the feature names differ from the ones the tool was evaluated for', () => {
     const t = toolView({ tool: 'Power Apps', evaluatedFor: ['A', 'B'] })!;
     expect(outOfDate([{ name: 'b' }, { name: 'A' }], t)).toBe(false);
     expect(outOfDate([{ name: 'A' }], t)).toBe(true);
     expect(outOfDate([{ name: 'A' }], null)).toBe(false);
+  });
+});
+
+describe('a tool no longer approved', () => {
+  it('UiPath is off the list: an older record that chose it shows the note and no tool, never another one', () => {
+    expect(APPROVED_TOOLS).not.toContain('UiPath' as any);
+    expect(toolView({ tool: 'UiPath', by: 'operator' })).toBeNull();
+    expect(retiredNote({ tool: 'UiPath' })).toBe('UiPath is no longer on the approved list: pick another tool');
+    expect(retiredNote({ tool: 'Dataiku' })).toBeNull();
+    expect(retiredNote(undefined)).toBeNull();
+    expect(pathwayText('UiPath')).toBe('');
   });
 });
 

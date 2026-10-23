@@ -1,8 +1,9 @@
 /** Pure helpers for the Tool picker, Design and Plan sections of an idea's details. */
 export { outOfDate } from '../../../src/design/choice';
+import { noLongerApproved } from '../../../src/graph/ontology';
 
 /** The approved tools, canonical labels in the server's order (src/graph/ontology.ts APPROVED_TOOLS). */
-export const APPROVED_TOOLS = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'] as const;
+export const APPROVED_TOOLS = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'custom app'] as const;
 export const CUSTOM_APP = 'custom app';
 
 /** The approved tools: the server's list from /api/state when it sent one, else the local copy. */
@@ -13,6 +14,14 @@ export function approvedTools(state?: { approvedTools?: unknown } | null): strin
     if (tools.length) return tools;
   }
   return [...APPROVED_TOOLS];
+}
+/**
+ * An older record's saved tool that has left the approved list (UiPath did): the note to show, or null. The tool is
+ * never swapped for another; the picker shows no tool until a new one is picked.
+ */
+export function retiredNote(saved: unknown, tools: readonly string[] = APPROVED_TOOLS): string | null {
+  const t = saved && typeof saved === 'object' ? (saved as { tool?: unknown }).tool : undefined;
+  return typeof t === 'string' && t.trim() && !tools.includes(t) ? noLongerApproved(t) : null;
 }
 /** The server rejects a longer summary (POST …/design/finish). */
 export const SUMMARY_MAX = 600;
@@ -25,7 +34,6 @@ const PATHWAYS: Record<string, string> = {
   'Copilot Studio': 'Citizen-Led',
   'Power Apps': 'Citizen-Led',
   'Dataiku': 'Citizen-Led',
-  'UiPath': 'Citizen-Led',
   'custom app': 'TTIA-Led (CSIC Repository)',
 };
 

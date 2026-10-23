@@ -217,12 +217,12 @@ import { extractTask } from '../src/ai/tasks';
 
 describe('approved tools', () => {
   it('maps variants to canonical labels and detects unapproved tools', () => {
-    expect(APPROVED_TOOLS).toHaveLength(6);
+    expect(APPROVED_TOOLS).toHaveLength(5);
     expect(canonicalTool('Microsoft Copilot Studio')).toBe('Copilot Studio');
     expect(canonicalTool('  power  APPS ')).toBe('Power Apps');
     expect(canonicalTool('Custom app')).toBe('custom app');
     expect(canonicalTool('custom code')).toBe('custom app');
-    expect(isApprovedTool('UiPath')).toBe(true);
+    expect(isApprovedTool('UiPath')).toBe(false);
     for (const t of ['Microsoft Planner', 'Power Automate', 'Microsoft Teams']) expect(isApprovedTool(t)).toBe(false);
   });
   it('never takes a tool from the AI: Tool stars and BUILT_WITH links are dropped, the rest is kept', () => {

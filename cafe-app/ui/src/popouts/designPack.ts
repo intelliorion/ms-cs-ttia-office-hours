@@ -6,7 +6,6 @@ const KIT_FILES: Record<string, string> = {
   'topics.md': 'The topics the Copilot Studio agent answers, to build one by one.',
   'screens.md': 'The Power Apps screens to make, and what each shows.',
   'flow.md': 'The steps of the Power Automate flow.',
-  'process.md': 'The UiPath process, step by step.',
   'prompts.md': 'Prompts to try in Microsoft Copilot on the sample data.',
 };
 

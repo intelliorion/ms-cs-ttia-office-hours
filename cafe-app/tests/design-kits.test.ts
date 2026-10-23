@@ -152,13 +152,12 @@ describe('plan.md and kits (renderers)', () => {
     expect(Object.keys(all).sort()).toEqual([
       'kit/copilot-studio/README.md', 'kit/copilot-studio/topics.md',
       'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md',
-      'kit/dataiku/flow.md', 'kit/microsoft-copilot/prompts.md', 'kit/power-apps/screens.md', 'kit/uipath/process.md',
+      'kit/dataiku/flow.md', 'kit/microsoft-copilot/prompts.md', 'kit/power-apps/screens.md',
     ]);
     expect(all['kit/dataiku/flow.md']).toMatch(/## Flow\n\n1\. \*\*Synthetic data\*\*/);
     expect(all['kit/microsoft-copilot/prompts.md']).toContain('## No build');
     expect(all['kit/copilot-studio/topics.md']).toContain('### Topic: Feature 1');
     expect(all['kit/power-apps/screens.md']).toContain('### Screen: Feature 2');
-    expect(all['kit/uipath/process.md']).toContain('### Process: Feature 0');
     // Templates only: no code files anywhere.
     expect(Object.keys(all).every((p) => p.endsWith('.md'))).toBe(true);
     // No tool, no kit.

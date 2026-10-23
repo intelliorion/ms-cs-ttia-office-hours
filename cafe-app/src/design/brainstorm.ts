@@ -10,6 +10,7 @@ import { DESIGN_TAGS, type DesignDiagramInput, type DesignStepInput, type Design
 import { isDesignTag, pointOf, POINT_MAX } from './points';
 import { basisOf, checkDiagram, type DiagramSpec } from './diagram';
 import { csicFlags, scopeWords } from './choice';
+import { retiredToolNote } from '../graph/ontology';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
   type DesignState, type DesignStep, type DesignTag, type StepSource,
@@ -360,6 +361,9 @@ export async function approveDesign(
   root: string, id: string, clock: Clock,
 ): Promise<{ state: DesignState; designMd: string; notice: string; suggest?: Suggest }> {
   const idea = await loadIdea(root, id);
+  // A tool that has left the approved list (an older record's UiPath) is not approved with the design: pick another first.
+  const retired = retiredToolNote((await readDesign(root, id)).tool?.tool);
+  if (retired) throw new DesignError(retired);
   const out = await applyDesignEvent(root, idea, { t: 'approve' }, clock);
   // Straight from the tool choice's flags (a custom app, a live system, personal data).
   const flags = csicFlags(out.state);

@@ -449,8 +449,8 @@ nothing is saved until you press a button, and you can do everything except plan
      features with AI** fills the list from the idea, the team's answers and the Submission's **Learned since the
      form** brief (people's names are coded before the AI sees them). It never drops or changes a row you have; it
      only adds features with new names.
-   - **Tool.** ONE tool from the approved list (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or
-     custom app) for the whole list. **Suggest a tool** asks the AI for it, with a reason, its **Pros** (what the tool
+   - **Tool.** ONE tool from the approved list (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku or custom
+     app) for the whole list. **Suggest a tool** asks the AI for it, with a reason, its **Pros** (what the tool
      does well for this idea), its **Cons** (each part it cannot do, or does poorly, and how to cover it, such as "add
      Power Automate"), how it fits **each feature** (✓, partly or ✗, with a note on what is missing), and a folded "Why
      this tool" list (the facts it relied on). The drop-down is yours: pick another tool and the AI evaluates THAT tool
@@ -468,7 +468,11 @@ nothing is saved until you press a button, and you can do everything except plan
      other tool is Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the features and
      the tool, approach.md and design.md, ticks "Tool picked", and links every feature to the one tool in the
      universe. A tool that is not on the approved list is refused. Older records that had a tool on each feature open
-     with one tool: the most common one, with its pros and cons, as your choice.
+     with one tool: the most common one, with its pros and cons, as your choice. UiPath is no longer on the approved
+     list: an older record that chose it opens as it was (never swapped for another tool), the picker shows no tool
+     and says "UiPath is no longer on the approved list: pick another tool", design.md and approach.md say the same,
+     the universe marks the link as not on the approved list, and neither approval nor the plan goes ahead until a
+     new tool is picked.
 2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
    input it needs, who builds it, and so on. The questions build on the features and the tool: the AI gets the
    feature list, the tool, its cons and the features it covers only partly or not at all, and asks first how to

@@ -8,7 +8,7 @@ import { Modal } from './Modal';
 import { fileNote, packFiles, pointRows, ROADSHOW_PACK_FILES } from './designPack';
 import { DeckLinks } from '../panels/RoadshowSection';
 import { roadshowNote, type RoadshowViewLike } from '../panels/roadshowHelpers';
-import { FIT_MARK, scopeLabel } from '../panels/designHelpers';
+import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
@@ -102,6 +102,7 @@ export function DesignPackPopout({ id }: { id: string }) {
               <h3>The tool</h3>
               <div className="dp-tool">
                 <div className="dp-tool-h"><b>{tool?.tool ?? 'No tool yet'}</b>{tool?.pathway && <span className="sec-n"> {tool.pathway}</span>}</div>
+                {retiredNote(tool, approvedTools(state)) && <div className="hint warn" data-testid="pack-tool-retired">{retiredNote(tool, approvedTools(state))}</div>}
                 {tool?.reason && <div className="dp-why">{tool.reason}</div>}
                 {(tool?.pros?.length > 0 || tool?.cons?.length > 0) && (
                   <div className="tp-pc">

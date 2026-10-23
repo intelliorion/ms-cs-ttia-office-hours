@@ -91,6 +91,14 @@ describe('ToolPickerSection', () => {
   };
   const names = () => [...el.querySelectorAll('.tp-row .tp-name')].map((i) => (i as HTMLInputElement).value);
 
+  it('an older record that chose UiPath: no tool shown, the drop-down waits for a new pick and says why', async () => {
+    await mount({ state: designState({ tool: { ...designState().tool, tool: 'UiPath' } }) });
+    expect(el.querySelector('[data-testid="tool-choice"]')).toBeNull();
+    expect((el.querySelector('[data-action="tool"]') as HTMLSelectElement).value).toBe('');
+    expect([...el.querySelectorAll('[data-action="tool"] option')].map((o) => o.textContent)).not.toContain('UiPath');
+    expect(el.querySelector('[data-testid="tool-retired"]')!.textContent).toBe('UiPath is no longer on the approved list: pick another tool');
+  });
+
   it('features first, then the tool: two steps in that order', async () => {
     await mount();
     const steps = [...el.querySelectorAll('[data-testid="tool-picker"] .tp-step')].map((x) => x.getAttribute('data-testid'));
@@ -133,15 +141,15 @@ describe('ToolPickerSection', () => {
     let finish!: (v: unknown) => void;
     api.designPost.mockImplementation(() => new Promise((r) => { finish = r; }));
     await mount();
-    await choose('UiPath');
-    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }], tool: 'UiPath' }]);
+    await choose('Dataiku');
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }], tool: 'Dataiku' }]);
     // While the AI works the drop-down shows the tool picked.
-    expect((el.querySelector('[data-action="tool"]') as HTMLSelectElement).value).toBe('UiPath');
-    await act(async () => { finish({ provider: 'fake', tool: { tool: 'UiPath', by: 'operator', reason: 'Clicks', pros: ['Copies the clicks'], cons: ['Cannot read a form'], context: ['c'], flags: [],
+    expect((el.querySelector('[data-action="tool"]') as HTMLSelectElement).value).toBe('Dataiku');
+    await act(async () => { finish({ provider: 'fake', tool: { tool: 'Dataiku', by: 'operator', reason: 'Clicks', pros: ['Copies the clicks'], cons: ['Cannot read a form'], context: ['c'], flags: [],
       fit: [{ feature: 'Request form', fit: 'partly', note: 'Needs a sample form' }], evaluatedFor: ['Request form'] }, state: designState() }); });
     await flush();
     const c = el.querySelector('[data-testid="tool-choice"]')!;
-    expect(c.getAttribute('data-tool')).toBe('UiPath');
+    expect(c.getAttribute('data-tool')).toBe('Dataiku');
     expect(c.getAttribute('data-by')).toBe('operator');
     expect(c.textContent).toContain('Your choice');
     expect(c.querySelector('.tp-cons li')!.textContent).toBe('Cannot read a form');

@@ -7,6 +7,7 @@ import type { Idea, PrepNeed } from '../ideas/idea';
 import { csicFlags, legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
+import { retiredToolNote } from '../graph/ontology';
 
 export type { Pathway, ToolChoice, DesignTag, StoredDiagram, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
@@ -174,6 +175,8 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   out.push('## Features and tools', '');
   const t = state.tool;
   if (t) out.push(`One tool for the whole proof of concept: **${t.tool}** (${t.pathway})${t.reason ? `: ${mdLine(t.reason)}` : ''}`, '');
+  const retired = retiredToolNote(t?.tool);
+  if (retired) out.push(`**${retired}.**`, '');
   if (state.features.length === 0) out.push(t ? '(no features listed yet)' : NOT_ANSWERED);
   for (const f of toolFeatures(state)) out.push(featureMdLine(f, state));
   // A custom app, or a live system or personal data the tool picker flagged, goes to the CSIC Repository.

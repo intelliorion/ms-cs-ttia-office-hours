@@ -2,7 +2,7 @@ import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type OperatorEdit, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, NOT_APPROVED_NOTE, edgeId, isApprovedTool, nodeId, type AiLink, type GEdge, type GNode, type OperatorEdit, type Relation } from './ontology';
 export { nodeId } from './ontology';
 
 /** Longer than this, a choice-column answer is free text, not a choice other ideas could share. */
@@ -98,7 +98,8 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
       edge(ideaId, 'NEEDS', cid, tool ? 'Feature' : 'Feature, not covered by the tool', `${src}:approach.md`);
       if (!tool) continue;
       const tid = node({ id: nodeId('Tool', tool), type: 'Tool', label: tool });
-      edge(cid, 'BUILT_WITH', tid, 'Tool pick', `${src}:approach.md`);
+      // An older record's tool that has left the approved list (UiPath) stays as it was, marked so.
+      edge(cid, 'BUILT_WITH', tid, isApprovedTool(tool) ? 'Tool pick' : `Tool pick${NOT_APPROVED_NOTE}`, `${src}:approach.md`);
     }
   }
 

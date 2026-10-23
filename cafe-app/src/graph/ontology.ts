@@ -65,13 +65,12 @@ export function nodeId(type: NodeType, label: string): string {
 export const edgeId = (from: string, rel: Relation, to: string) => `${from}|${rel}|${to}`;
 
 /** The Café's approved tools (app design section 6). Anything else is "not on the approved list". */
-export const APPROVED_TOOLS: string[] = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'];
+export const APPROVED_TOOLS: string[] = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'custom app'];
 const TOOL_ALIASES: Record<string, string> = {
   'microsoft copilot': 'Microsoft Copilot', 'copilot': 'Microsoft Copilot', 'm365 copilot': 'Microsoft Copilot', 'microsoft 365 copilot': 'Microsoft Copilot',
   'copilot studio': 'Copilot Studio', 'microsoft copilot studio': 'Copilot Studio',
   'power apps': 'Power Apps', 'powerapps': 'Power Apps', 'microsoft power apps': 'Power Apps',
   'dataiku': 'Dataiku', 'dataiku dss': 'Dataiku',
-  'uipath': 'UiPath', 'ui path': 'UiPath',
   'custom app': 'custom app', 'custom application': 'custom app', 'custom code': 'custom app', 'custom-built app': 'custom app', 'bespoke app': 'custom app',
 };
 /** The canonical approved label for a tool name, or undefined when it is not on the list. */
@@ -80,3 +79,10 @@ export function canonicalTool(label: string): string | undefined {
 }
 export const isApprovedTool = (label: string) => canonicalTool(label) !== undefined;
 export const NOT_APPROVED_NOTE = ' — not on the approved list';
+/**
+ * Said wherever an older record's tool is shown that has since left the approved list (UiPath did). The record loads
+ * as it is: the tool is never swapped for another one; the picker needs a new pick.
+ */
+export const noLongerApproved = (tool: string) => `${tool} is no longer on the approved list: pick another tool`;
+/** The stored tool's note when it is not (or no longer) approved; undefined for an approved tool or none. */
+export const retiredToolNote = (tool: string | undefined) => (tool && !isApprovedTool(tool) ? noLongerApproved(tool) : undefined);

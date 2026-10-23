@@ -160,7 +160,7 @@ describe('one tool for the whole proof of concept', () => {
       { feature: 'List', fit: 'yes', note: '' },
     ]);
     // A tie goes to the first feature's tool; a record with no tools has no tool.
-    expect(legacyChoice([{ name: 'A', tool: 'custom app' }, { name: 'B', tool: 'UiPath' }], 'x').tool).toMatchObject({ tool: 'custom app', flags: ['custom-app'], pathway: 'TTIA-Led' });
+    expect(legacyChoice([{ name: 'A', tool: 'custom app' }, { name: 'B', tool: 'Dataiku' }], 'x').tool).toMatchObject({ tool: 'custom app', flags: ['custom-app'], pathway: 'TTIA-Led' });
     expect(legacyChoice([{ name: 'A' }], 'x').tool).toBeUndefined();
   });
 });

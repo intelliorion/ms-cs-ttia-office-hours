@@ -95,10 +95,10 @@ describe('toolPickTask', () => {
     expect(designStepTask.prompt(designStepInput(sampleIdea(), emptyDesign()))).toMatch(/Follow this Café design guide/);
   });
   it('prompt, evaluating the operator\'s tool: that tool, fixed; the AI may not change it', () => {
-    const p = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], features: [{ name: 'Form' }], evaluate: 'UiPath' });
+    const p = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], features: [{ name: 'Form' }], evaluate: 'Dataiku' });
     expect(p).toMatch(/The operator has chosen the tool: DATA.evaluate/);
-    expect(p).toContain('"pick.tool" must be exactly "UiPath": never change it');
-    expect(p).toContain('"evaluate": "UiPath"');
+    expect(p).toContain('"pick.tool" must be exactly "Dataiku": never change it');
+    expect(p).toContain('"evaluate": "Dataiku"');
     expect(p).not.toMatch(/Pick the one approved tool/);
   });
 });
@@ -168,7 +168,7 @@ describe('features, the one tool and approach.md', () => {
     const features = validateFeatures(FEATURES);
     const stale = validateChoice({ ...TOOL, evaluatedFor: ['Request intake form'] }, features, undefined, 'd');
     expect(renderApproachMd(sampleIdea(), { features, tool: stale })).toContain('Re-evaluate the tool for the new features');
-    const bare = validateChoice({ tool: 'UiPath', needsAi: true }, features, undefined, 'd');
+    const bare = validateChoice({ tool: 'Dataiku', needsAi: true }, features, undefined, 'd');
     expect(renderApproachMd(sampleIdea(), { features, tool: bare })).toContain('- Note: Pros, cons and fit need the AI');
   });
   it('collapses whitespace in every text field, so AI text cannot add a heading, a field or a table column to approach.md', () => {
@@ -253,15 +253,15 @@ describe('the one tool: suggested, or the operator\'s evaluated', () => {
   it('the operator\'s own tool is evaluated: the AI is told to keep it, and pros, cons and fit come back for THAT tool, by the operator', async () => {
     const sp = spy();
     const s = await server(sp.provider);
-    const r = await s.post(`/api/ideas/${ID}/tools/suggest`, { features: FEATURES, tool: 'uipath' });
+    const r = await s.post(`/api/ideas/${ID}/tools/suggest`, { features: FEATURES, tool: 'dataiku dss' });
     expect(r.status).toBe(200);
     const { tool } = await json(r);
-    expect(sp.data('tool-pick').evaluate).toBe('UiPath');
-    expect(sp.prompts.at(-1)).toContain('"pick.tool" must be exactly "UiPath"');
-    expect(tool).toMatchObject({ tool: 'UiPath', by: 'operator', pathway: 'Assisted Citizen', cons: ['UiPath cannot work out send slots on its own: add Power Automate'] });
+    expect(sp.data('tool-pick').evaluate).toBe('Dataiku');
+    expect(sp.prompts.at(-1)).toContain('"pick.tool" must be exactly "Dataiku"');
+    expect(tool).toMatchObject({ tool: 'Dataiku', by: 'operator', pathway: 'Assisted Citizen', cons: ['Dataiku cannot work out send slots on its own: add Power Automate'] });
     expect(tool.fit).toEqual([
       { feature: 'Request intake form', fit: 'yes', note: '' },
-      { feature: 'Draft replies', fit: 'partly', note: 'UiPath cannot do all of this on its own: add Power Automate' },
+      { feature: 'Draft replies', fit: 'partly', note: 'Dataiku cannot do all of this on its own: add Power Automate' },
     ]);
   });
 

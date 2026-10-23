@@ -11,7 +11,7 @@ import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { writeFileAtomic } from '../workspace/files';
-import { canonicalTool, nodeId, slug } from '../graph/ontology';
+import { canonicalTool, nodeId, retiredToolNote, slug } from '../graph/ontology';
 import { rebuildGraph } from '../graph/store';
 import { wordOverlap } from '../inbox/conflicts';
 import {
@@ -28,7 +28,6 @@ export const PATHWAYS: Record<string, string> = {
   'Copilot Studio': 'Citizen-Led',
   'Power Apps': 'Citizen-Led',
   'Dataiku': 'Citizen-Led',
-  'UiPath': 'Citizen-Led',
   'custom app': 'TTIA-Led (CSIC Repository)',
 };
 export const ASSISTED_NOTE = 'Assisted Citizen until a builder is named';
@@ -161,6 +160,8 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
   const t = state.tool;
   if (!t) { out.push('Not picked yet.', ''); return out.join('\n'); }
   out.push(`- Tool: ${t.tool}`);
+  const retired = retiredToolNote(t.tool);
+  if (retired) out.push(`- Note: ${retired}.`);
   out.push(`- Pathway: ${pathwayLabel(t.tool, builder)}`);
   out.push(`- Chosen by: ${t.by === 'ai' ? 'the AI (suggested), saved by the operator' : 'the operator'}`);
   out.push(`- Reason: ${mdLine(t.reason) || '(none given)'}`);

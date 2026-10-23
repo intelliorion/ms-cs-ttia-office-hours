@@ -70,8 +70,8 @@ export function Snowfall({ floorY, reach, lite = false }: { floorY: number; reac
   );
 }
 
-/** Soft daylight plus a room reflected in the baubles' gloss (built in code: no image to download). */
-function FrostLight() {
+/** A room for shiny things to reflect (built in code: no image to download). Frost's baubles and Mech's metal use it. */
+export function StudioEnvironment() {
   const { gl, scene } = useThree();
   useLayoutEffect(() => {
     const pm = new PMREMGenerator(gl);
@@ -80,8 +80,14 @@ function FrostLight() {
     scene.environment = env;
     return () => { scene.environment = before; env.dispose(); pm.dispose(); };
   }, [gl, scene]);
+  return null;
+}
+
+/** Soft daylight plus the room reflected in the baubles' gloss. */
+function FrostLight() {
   return (
     <>
+      <StudioEnvironment />
       <hemisphereLight args={['#ffffff', '#c9d6e3', 0.9]} />
       <directionalLight position={[120, 260, 180]} intensity={1.1} />
     </>

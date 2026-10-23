@@ -13,6 +13,7 @@ import type { Quality } from '../state/store';
 import { DIM, bounds, degrees, dimFromHide, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
 import { Snowfall } from './Snowfall';
 import { DraftingTable } from './DraftingTable';
+import { Workshop } from './Workshop';
 
 export interface UniverseProps {
   graph: Graph;
@@ -180,7 +181,9 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
 
   return (
     <>
-      {palette.blueprint
+      {palette.mech
+        ? <Workshop floorY={-radius * 1.3} reach={radius * 4.5} />
+        : palette.blueprint
         ? <DraftingTable floorY={-radius * 1.3} reach={radius * 4.5} />
         : palette.frost
         ? <Snowfall floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
@@ -201,7 +204,8 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
       {/* Bloom makes light glow, which only works on dark: Frost has none. */}
       {!lite && !palette.frost && !palette.blueprint && (
         <EffectComposer multisampling={4}>
-          <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
+          {/* Mech: only the LEDs (well over the metal's brightness) glow. */}
+          <Bloom intensity={palette.mech ? 0.9 : 1.1} luminanceThreshold={palette.mech ? 0.85 : 0.2} luminanceSmoothing={0.25} mipmapBlur />
         </EffectComposer>
       )}
     </>

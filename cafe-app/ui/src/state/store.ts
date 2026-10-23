@@ -18,15 +18,16 @@ export type Drawer = 'ideas' | 'charts' | null;
 /** Pill label for the Focus button. */
 export const focusLabel = (on: boolean) => (on ? 'Show panels' : 'Focus');
 /** The look: Default (the night sky) or Frost (a light winter morning). Remembered in this browser only. */
-export type Theme = 'default' | 'frost' | 'blueprint';
+export type Theme = 'default' | 'frost' | 'blueprint' | 'mech';
 export const THEMES: { id: Theme; name: string; note: string }[] = [
   { id: 'default', name: 'Default', note: 'Night sky: glowing stars on dark' },
   { id: 'frost', name: 'Frost', note: 'Winter morning: baubles on light' },
   { id: 'blueprint', name: 'Blueprint', note: 'Drafting table: wireframes on blue' },
+  { id: 'mech', name: 'Mech', note: 'Robot workshop: steel and LEDs' },
 ];
 const THEME_KEY = 'cafe-theme';
 export function readTheme(): Theme {
-  try { const t = localStorage.getItem(THEME_KEY); return t === 'frost' || t === 'blueprint' ? t : 'default'; } catch { return 'default'; }
+  try { const t = localStorage.getItem(THEME_KEY); return t === 'frost' || t === 'blueprint' || t === 'mech' ? t : 'default'; } catch { return 'default'; }
 }
 function writeTheme(t: Theme) { try { localStorage.setItem(THEME_KEY, t); } catch { /* storage unavailable */ } }
 const FOCUS_KEY = 'cafe-focus';

@@ -240,7 +240,9 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="tool-picker"]')).toBeTruthy();
     await click('[data-action="edit-review-card"]');
     expect(el.querySelector('[data-testid="review-card"]')).toBeNull();
-    expect(el.querySelector('[data-testid="review"] textarea.reason')).toBeTruthy();
+    // The saved decision is picked, with no reason box (the record keeps the reason it was saved with).
+    expect((el.querySelector('[data-testid="review"] input[value="select"]') as HTMLInputElement).checked).toBe(true);
+    expect(el.querySelector('[data-testid="review"] textarea.reason')).toBeNull();
   });
 
   it('stage 4 shows cards for tools, design and plan, with no editable form', async () => {

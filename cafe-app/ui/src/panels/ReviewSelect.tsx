@@ -114,31 +114,45 @@ function Need({ need, answers, disabled, onAnswer }: { need: any; answers: any[]
 }
 
 function DecisionForm({ idea, state, prep, disabled, onSave }: { idea: any; state: any; prep: any; disabled: boolean; onSave: ReviewSelectProps['onSave'] }) {
-  // Filled from the suggestion (or the saved decision); "Ask first" is what the to-do list does now, so it is not a choice here.
-  const start = idea.review?.decision ?? (prep?.decision !== 'ask' ? prep?.decision : '') ?? '';
+  // The latest suggestion is picked for you (not saved); without one, the decision saved before. "Ask first" is what the
+  // to-do list does now, so it is not a choice here.
+  const suggested = prep?.decision && prep.decision !== 'ask' ? prep.decision : '';
+  const start = suggested || idea.review?.decision || '';
   const [decision, setDecision] = useState<string>(start);
-  const [reason, setReason] = useState<string>(idea.review?.reason ?? (prep?.decision !== 'ask' ? prep?.reason : '') ?? '');
-  useEffect(() => { setDecision(start); setReason(idea.review?.reason ?? (prep?.decision !== 'ask' ? prep?.reason : '') ?? ''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [idea.id, prep?.at, idea.review?.at]);
+  useEffect(() => { setDecision(start); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [idea.id, prep?.at, prep?.decision, prep?.reason, idea.review?.at, idea.review?.decision]);
   const choices = Object.entries(state.decisions ?? {}).filter(([k]) => k !== 'ask' || idea.review?.decision === 'ask');
   const email = DECISION_EMAIL[decision];
+  const saved = idea.review?.decision === decision;
+  const label = (k: string) => String(state.decisions?.[k] ?? k);
   return (
     <div className="rs-form" data-testid="rs-form">
       <div className="decisions" role="radiogroup" aria-label="Decision" data-action="decision">
         {choices.map(([k, v]) => (
           <label key={k} className={`dc${decision === k ? ' on' : ''}`}>
             <input type="radio" name={`decision-${idea.id}`} value={k} checked={decision === k} disabled={disabled} onChange={() => setDecision(k)} />
-            <span className="dc-l">{String(v)}</span>
+            <span className="dc-l">{String(v)}{k === suggested && <span className="dc-s">suggested</span>}</span>
             <span className="dc-h">{DECISION_HINTS[k] ?? ''}</span>
           </label>
         ))}
       </div>
-      <textarea className="reason" rows={2} placeholder="Reason, in a sentence the team will read" value={reason} disabled={disabled}
-        onChange={(e) => setReason(e.target.value)} aria-label="Reason" />
       <div className="rv-foot">
-        <span className="hint">{email ? `Saves the decision and opens ${email} in Outlook. Nothing moves until you say yes.` : 'Pick a decision and give a reason.'}</span>
-        <button className="btn primary" data-action="save-review" disabled={disabled || !decision || !reason.trim()}
-          onClick={() => onSave({ criteria: prep?.criteria ?? idea.review?.criteria ?? {}, decision, reason })}>Save decision</button>
+        <span className="hint" data-testid="rs-saved">{!decision ? 'Pick a decision.'
+          : saved ? `Saved ${shortDate(idea.review.at)}.`
+          : `Not saved yet. Saving opens ${email} in Outlook; nothing moves until you say yes.`}</span>
+        <button className="btn primary" data-action="save-review" disabled={disabled || !decision || saved}
+          onClick={() => onSave({ criteria: prep?.criteria ?? idea.review?.criteria ?? {}, decision, reason: reasonFor(decision, prep, idea.review, label) })}>Save decision</button>
       </div>
     </div>
   );
+}
+
+/**
+ * The reason kept with the decision (review.md, the CSIC handoff); the emails leave [REASON] for you to write in Outlook.
+ * The suggestion's own reason when you take it; when you pick something else, the record says so.
+ */
+export function reasonFor(decision: string, prep: any, review: any, label: (k: string) => string): string {
+  if (prep?.reason && prep.decision === decision) return prep.reason;
+  if (prep?.reason) return `${label(decision)}, chosen by the operator (the suggestion was ${label(prep.decision)}: ${prep.reason})`;
+  if (review?.reason && review.decision === decision) return review.reason;
+  return `${label(decision)}, chosen by the operator`;
 }

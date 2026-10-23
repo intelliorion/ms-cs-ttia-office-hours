@@ -925,3 +925,4 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .em-note{margin-left:auto;font-size:11px;color:var(--amber);border:1px solid rgba(var(--rgb-warm),.45);border-radius:999px;padding:0 6px}
 .em-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--amber);margin-left:5px;vertical-align:middle}
 .rnd-emails{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 4px}
+.dc-s{margin-left:8px;font-size:11px;font-weight:500;color:var(--amber);border:1px solid rgba(var(--rgb-warm),.45);border-radius:999px;padding:0 6px}

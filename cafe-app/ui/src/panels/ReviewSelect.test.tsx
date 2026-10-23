@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { ReviewSelect, needStatus } from './ReviewSelect';
+import { ReviewSelect, needStatus, reasonFor } from './ReviewSelect';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 const state = { decisions: { select: 'Select for the design series (E3)', notnow: 'Not this round (E6)', ask: 'Ask first (E2)' } };
@@ -64,16 +64,36 @@ describe('Review and Select', () => {
     expect(q('[data-testid="rs-form"]')).toBeTruthy();
   });
 
-  it('all clear: Save decision appears with the suggestion filled in, and "Ask first" is not a choice', async () => {
+  it('all clear: the suggested decision is picked but not saved, there is no reason box, and Save keeps the suggestion\'s reason', async () => {
     const onSave = vi.fn();
     await show(idea({ ...prep([{ ...builder, met: true, note: 'A builder is named' }], 'select'), reason: 'Builder named, sample data.' }), { onSave });
     expect(q('[data-testid="rs-count"]')?.textContent).toBe('all clear');
     expect(q('.rs-note')?.textContent).toBe('A builder is named');
     expect([...el.querySelectorAll('input[type="radio"]')].map((r) => (r as HTMLInputElement).value)).toEqual(['select', 'notnow']);
     expect((q('input[value="select"]') as HTMLInputElement).checked).toBe(true);
-    expect((q('textarea.reason') as HTMLTextAreaElement).value).toBe('Builder named, sample data.');
+    expect(q('textarea.reason')).toBeNull();
+    expect(q('[data-testid="rs-saved"]')?.textContent).toMatch(/^Not saved yet/);
     await act(async () => q('[data-action="save-review"]')!.click());
     expect(onSave).toHaveBeenCalledWith({ criteria: { builder: false }, decision: 'select', reason: 'Builder named, sample data.' });
+  });
+
+  it('a newer suggestion wins over a decision saved before; the saved one says Saved and cannot be saved twice', async () => {
+    const onSave = vi.fn();
+    const saved = { review: { decision: 'notnow', reason: 'Old reason', at: '2026-10-20', criteria: {} } };
+    await show(idea({ ...prep([], 'select'), reason: 'Ready now.' }, saved), { onSave });
+    expect((q('input[value="select"]') as HTMLInputElement).checked).toBe(true);
+    expect(q('[data-testid="rs-saved"]')?.textContent).toMatch(/^Not saved yet/);
+    // Picking something else is recorded as the operator's choice.
+    await act(async () => (q('input[value="notnow"]') as HTMLInputElement).click());
+    expect(q('[data-testid="rs-saved"]')?.textContent).toBe('Saved 20 Oct.');
+    expect(q('[data-action="save-review"]')).toHaveProperty('disabled', true);
+  });
+
+  it('records a different pick as the operator\'s choice, quoting the suggestion', () => {
+    const label = (k: string) => ({ select: 'Select', notnow: 'Not this round' } as any)[k];
+    expect(reasonFor('select', { decision: 'select', reason: 'Ready.' }, null, label)).toBe('Ready.');
+    expect(reasonFor('notnow', { decision: 'select', reason: 'Ready.' }, null, label)).toBe('Not this round, chosen by the operator (the suggestion was Select: Ready.)');
+    expect(reasonFor('notnow', null, { decision: 'notnow', reason: 'Old' }, label)).toBe('Old');
   });
 
   it('labels each item open, answered or met', () => {

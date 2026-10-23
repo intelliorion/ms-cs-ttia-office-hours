@@ -7,7 +7,7 @@ import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import { checkDeck } from '../src/roadshow/deck';
-import { expenseCsv, outputCsv, rulesXlsx } from './dataFixtures';
+import { expenseCsv, outputCsv, personalCsv, rulesXlsx } from './dataFixtures';
 
 const ID = 'CAFE-2026-004';
 let close: (() => Promise<void>) | undefined;
@@ -65,5 +65,10 @@ describe('the roadshow tells the data', () => {
     // The before-after opens with the files: the sample output is what it makes.
     expect(html).toContain('It makes: flagged.csv');
     expect((await readFile(path.join(dir, 'deck.pptx'))).length).toBeGreaterThan(10_000);
+    // A file held at the personal-data check changes nothing the deck uses: the deck is not out of date for it.
+    expect(view.stale).toEqual({ record: false, photos: false });
+    const held: any = await drop('contacts.csv', personalCsv(), 'input');
+    expect(held.state.data.files.at(-1).check.status).toBe('held');
+    expect(((await (await fetch(`${s.base}/api/ideas/${ID}/roadshow`)).json()) as any).stale).toEqual({ record: false, photos: false });
   });
 });

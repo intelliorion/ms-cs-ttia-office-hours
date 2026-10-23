@@ -20,6 +20,7 @@ import type { Coded } from '../command/names';
 import type { DeckVisual, RoadshowInput } from '../ai/tasks';
 import { fingerprint, presentersOf, readRoadshow, rosterOf, ROLE_WORDS, type RoadshowState } from './store';
 import { codedDataBrief } from '../data/brief';
+import { isUsable } from '../data/model';
 import { dataLane } from '../design/diagram';
 
 export type Answer = { question: string; answer: string; source?: string };
@@ -112,7 +113,8 @@ export function recordBasis(src: RoadshowSource): string {
     design.features, design.tool ?? null, design.summary ?? '', design.steps.map((s) => [s.question, s.answer ?? '']), design.settled ?? {},
     design.diagram?.spec ?? null, design.approvedAt ?? '', src.planMd ?? '', datesOf(src), src.round?.name ?? '', src.round?.roadshow ?? '',
     // The confirmed data only when there is some, so a deck built before the Data step is not out of date for it.
-    ...(design.data?.confirmedAt ? [design.data.confirmedAt, design.data.files.map((f) => [f.name, f.kind])] : []),
+    // Only the files the deck can use: a file held at the check (or unreadable) changes nothing in it.
+    ...(design.data?.confirmedAt ? [design.data.confirmedAt, design.data.files.filter(isUsable).map((f) => [f.name, f.kind])] : []),
   ]);
 }
 

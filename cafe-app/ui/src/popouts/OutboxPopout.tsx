@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { copyText, post } from '../api';
 import { Modal } from './Modal';
+import { downloadEml, openedText } from '../panels/outlook';
 import { APPROVED_NOTICE, TEMPLATE_TITLES, approveAndCopy, clipText, emailAction, emailStatus } from './ideaHelpers';
 import { groupOutbox } from './titleHelpers';
 
@@ -85,12 +86,16 @@ export function OutboxPopout() {
                       <span className="hint">{m.status !== 'sent' && left > 0 ? `${left} placeholder${left > 1 ? 's' : ''} to fill in Outlook` : ''}</span>
                       <span className="acts">
                         {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Rounds" onClick={() => openPopout({ kind: 'round' })}>{a.label}</button>}
-                        {a.kind === 'approve' && <button className="btn primary sm" data-action="approve" disabled={busy} onClick={() => void approve(m.key)}>{a.label}</button>}
+                        {(a.kind === 'approve' || a.kind === 'sent') && (
+                          <button className="btn primary sm" data-action="open-outlook" disabled={busy} title="Opens it as a new Outlook message; counts as sent"
+                            onClick={() => void act(async () => { const o = await post('/api/outbox/open', { key: m.key }); downloadEml(o); return o; }, (o: any) => openedText(o.email.template))}>Open in Outlook</button>
+                        )}
+                        {a.kind === 'approve' && <button className="btn sm" data-action="approve" disabled={busy} onClick={() => void approve(m.key)}>{a.label}</button>}
                         {a.kind === 'sent' && (
                           <>
                             <button className="btn sm" data-action="copy" disabled={busy}
                               onClick={async () => { const t = clipText(m.view); if (await copyText(t)) setNotice({ text: `${m.template} copied again.`, kind: 'ok' }); else setFallback(t); }}>Copy again</button>
-                            <button className="btn primary sm" data-action="sent" disabled={busy}
+                            <button className="btn sm" data-action="sent" disabled={busy}
                               onClick={() => void act(() => post('/api/outbox/sent', { key: m.key }), (r: any) => `${r.template} marked sent.`)}>{a.label}</button>
                           </>
                         )}

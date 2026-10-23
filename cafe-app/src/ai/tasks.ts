@@ -36,8 +36,15 @@ export interface ReviewSuggestInput {
   flags?: string[];
   /** What the knowledge graph holds for the idea: its pain points, capabilities and systems, and how many other ideas need each. */
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
+  todo?: { need: string; ask: string }[];
 }
-export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string }
+/** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
+export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
+export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string; needs: ReviewNeed[] }
+export const NEED_MAX = 120;
+export const ASK_MAX = 220;
+export const NEED_ANSWER_MAX = 200;
 
 const asObj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
 
@@ -74,7 +81,7 @@ export const EXTRACT_SCHEMA: JsonSchema = {
 };
 
 export const REVIEW_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason'],
+  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs'],
   properties: {
     criteria: {
       type: 'object', additionalProperties: false, required: CRITERIA.map((c) => c.id),
@@ -82,6 +89,18 @@ export const REVIEW_SCHEMA: JsonSchema = {
     },
     decision: { type: 'string', enum: Object.keys(DECISION_LABELS) },
     reason: { type: 'string', minLength: 1, maxLength: 300 },
+    needs: {
+      type: 'array', maxItems: 8,
+      items: {
+        type: 'object', additionalProperties: false, required: ['need', 'ask', 'met'],
+        properties: {
+          need: { type: 'string', minLength: 1, maxLength: NEED_MAX },
+          ask: { type: 'string', minLength: 1, maxLength: ASK_MAX },
+          met: { type: 'boolean' },
+          answer: { type: 'string', maxLength: NEED_ANSWER_MAX },
+        },
+      },
+    },
   },
 };
 
@@ -144,9 +163,23 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'Suggest one decision:',
       ...Object.entries(DECISION_LABELS).map(([id, label]) => `- ${id}: ${label}`),
       'Give a plain-English reason of at most 300 characters. Do not estimate value or return on investment.',
+      'needs: what the operator still needs to know before deciding, as a to-do list. Each item: need (what is needed, a few words,',
+      `at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters),`,
+      'met (true only if DATA now covers it), and, when met, answer (what covered it in a few words, such as "Analyst named, attends all sessions").',
+      'Keep every item in DATA.todo, in the same words, in the same order, marking each met or not; then add new open items only for real gaps,',
+      'at most 5 open items in all. Only ask what changes the decision: never ask for personal, client or third-party data.',
+      'If the decision can be made from DATA as it is, every item is met (or there are none).',
     ], REVIEW_SCHEMA, { ...(input as ReviewSuggestInput), idea: ideaData(idea) });
   },
-  parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => { const o = asObj(v); if (o) o.reason = trimStrings(o.reason, 300); }),
+  parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => {
+    const o = asObj(v); if (!o) return;
+    o.reason = trimStrings(o.reason, 300);
+    if (Array.isArray(o.needs)) for (const n of o.needs) {
+      const x = asObj(n); if (!x) continue;
+      x.need = trimStrings(x.need, NEED_MAX); x.ask = trimStrings(x.ask, ASK_MAX);
+      if (x.answer !== undefined) x.answer = trimStrings(x.answer, NEED_ANSWER_MAX);
+    }
+  }),
 };
 
 export const PING_SCHEMA: JsonSchema = {

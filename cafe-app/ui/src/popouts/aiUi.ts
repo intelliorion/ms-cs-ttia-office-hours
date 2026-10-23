@@ -4,9 +4,6 @@ export interface AiStatus {
   note?: string;
   choices?: { id: string; label: string; available: boolean; note?: string }[];
 }
-export interface ReviewForm { criteria: Record<string, boolean>; decision: string; reason: string }
-/** A suggested decision; `basis` is the app's own line on what it was based on (the form, email answers, a builder…). */
-export interface ReviewSuggestion { criteria: Record<string, boolean>; decision: string; reason: string; provider?: string; basis?: string }
 
 export const NO_AI_TIP = 'No AI connected: working by hand';
 const NAMES: Record<string, string> = { claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', fake: 'Fake (test)' };
@@ -27,13 +24,6 @@ export function extractNotice(r: { added?: number; held?: unknown[]; suggestions
   const held = r.held?.length ?? 0;
   if (added === 0 && held === 0) return 'Added 0 links: nothing new to add.';
   return `${added} link${added === 1 ? '' : 's'} added to the universe${held ? `, ${held} waiting on you` : ''}.`;
-}
-
-/** The review form with the AI's suggestion laid over it. Only known criteria and a non-empty decision or reason are taken. */
-export function applySuggestion(form: ReviewForm, s: ReviewSuggestion): ReviewForm {
-  const criteria = { ...form.criteria };
-  for (const [k, v] of Object.entries(s.criteria ?? {})) if (typeof v === 'boolean') criteria[k] = v;
-  return { criteria, decision: s.decision || form.decision, reason: s.reason?.trim() ? s.reason : form.reason };
 }
 
 /** The radio value after a save attempt: the server's saved value on success, the previous one on failure. */

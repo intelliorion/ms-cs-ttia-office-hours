@@ -15,19 +15,3 @@ describe('Details', () => {
     expect(html).not.toContain('Additional context');
   });
 });
-
-import { createRoot } from 'react-dom/client';
-import { act } from 'react';
-import { Review } from './IdeaSections';
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-describe('Review: a suggested decision', () => {
-  it('says what it was based on, so a new email visibly changes it', async () => {
-    const el = document.createElement('div'); document.body.appendChild(el);
-    const root = createRoot(el);
-    const state = { decisions: { select: 'Select', ask: 'Ask' }, criteria: [{ id: 'builder', text: 'A builder is named' }] };
-    await act(async () => root.render(<Review idea={{ ...base, stage: 2 }} state={state} busy={false} onSave={() => {}} aiName="Claude Code" onClearAi={() => {}} aiBar={null}
-      aiReview={{ criteria: { builder: true }, decision: 'select', reason: 'A builder is named in the reply.', basis: 'Based on the form, 2 email answers and a builder named' }} />));
-    expect(el.querySelector('[data-testid="ai-review-by"]')?.textContent).toBe('Suggested by Claude Code. Based on the form, 2 email answers and a builder named. Check it, change what you like, then save.');
-    act(() => root.unmount()); el.remove();
-  });
-});

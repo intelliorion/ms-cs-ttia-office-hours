@@ -24,6 +24,9 @@ const REVIEW = {
   criteria: { feasible: true, builder: false, data: true, theme: true, reuse: true },
   decision: 'ask',
   reason: 'Looks feasible with sample data and could be reused, but no builder is named yet. Ask the team who will build it.',
+  needs: [
+    { need: 'A builder who can attend every session', ask: 'Who in your team would build the proof of concept, and can they attend every session?', met: false },
+  ],
 };
 
 /** Fits tests/fixtures/inbox/reply.eml: Person 2 answering the two E2 questions on CAFE-2026-001. */

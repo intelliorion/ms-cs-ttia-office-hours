@@ -11,6 +11,7 @@ import { TOKENS, type Round } from '../round/round';
 import { withTick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
+import { toEml, emlName } from './eml';
 
 export type EmailStatus = 'draft' | 'approved' | 'sent';
 
@@ -26,6 +27,8 @@ export interface EmailRecord {
   to: string;
   subject: string;
   body: string;
+  /** Set when it was opened in Outlook (and so counted as sent): what Undo puts back. */
+  opened?: { approved: boolean; sent?: string; due?: string; ticked?: string };
 }
 
 export interface OutboxItem extends EmailRecord {
@@ -231,6 +234,60 @@ export async function updateDraft(
     ...(typeof patch.subject === 'string' ? { subject: patch.subject } : {}),
     ...(typeof patch.body === 'string' ? { body: patch.body } : {}),
   };
+  await save(root, next);
+  return next;
+}
+
+/**
+ * Open in Outlook: approve the email (its text and the round's dates are fixed), hand it back as an Outlook draft
+ * file, and count it as sent, since the app cannot see Outlook. What it changed is kept on the email for Undo.
+ */
+export async function openEmail(
+  root: string, key: string, clock: Clock, steps: StepDef[],
+): Promise<{ email: EmailRecord; eml: string; filename: string; suggest?: Suggest }> {
+  let r = await load(root, key);
+  if (r.status === 'sent') {
+    // Already sent: open it again for reference, with nothing counted twice.
+    return { email: r, eml: toEml(r), filename: emlName(r.template, r.subject) };
+  }
+  const approved = r.status === 'approved';
+  const before = r.idea ? await loadIdea(root, r.idea) : undefined;
+  if (!approved) r = await approve(root, key, clock);
+  const sent = await markSent(root, key, clock, steps);
+  const { suggest, ...email } = sent;
+  let opened: NonNullable<EmailRecord['opened']> = { approved };
+  if (before && r.idea) {
+    const after = await loadIdea(root, r.idea);
+    const ticked = Object.keys(after.checklist).find((k) => after.checklist[k]?.done && !before.checklist[k]?.done && after.checklist[k]?.source === key);
+    opened = {
+      approved,
+      ...(before.sent[r.template] ? { sent: before.sent[r.template] } : {}),
+      ...(before.due.s2d ? { due: before.due.s2d } : {}),
+      ...(ticked ? { ticked } : {}),
+    };
+  }
+  const saved: EmailRecord = { ...email, opened };
+  await save(root, saved);
+  return { email: saved, eml: toEml(saved), filename: emlName(saved.template, saved.subject), ...(suggest ? { suggest } : {}) };
+}
+
+/** Undo "opened in Outlook": the email is a draft again (or approved, if it was), and the idea is as it was. */
+export async function unopenEmail(root: string, key: string, clock: Clock): Promise<EmailRecord> {
+  const r = await load(root, key);
+  if (r.status !== 'sent' || !r.opened) throw new Error('Only an email just opened in Outlook can be undone');
+  const { opened, sentAt: _s, ...rest } = r;
+  const next: EmailRecord = opened.approved ? { ...rest, status: 'approved' } : (({ approvedAt: _a, ...d }) => ({ ...d, status: 'draft' as const }))(rest);
+  if (r.idea) {
+    const idea = await loadIdea(root, r.idea);
+    const sent = { ...idea.sent };
+    if (opened.sent) sent[r.template] = opened.sent; else delete sent[r.template];
+    const due = { ...idea.due };
+    if (r.template === 'E2' || r.template === 'E2R') { if (opened.due) due.s2d = opened.due; else delete due.s2d; }
+    const checklist = { ...idea.checklist };
+    if (opened.ticked && checklist[opened.ticked]?.source === key) delete checklist[opened.ticked];
+    await saveIdea(root, { ...idea, sent, due, checklist });
+    await appendHistory(await ideaDir(root, r.idea), { at: clock(), action: 'unsent', by: 'operator', detail: r.template, source: key });
+  }
   await save(root, next);
   return next;
 }

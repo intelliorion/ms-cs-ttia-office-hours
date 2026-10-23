@@ -34,6 +34,33 @@ export interface ReviewRecord {
   at: string;
 }
 
+/** One item on the Review and Select to-do list. */
+export interface PrepNeed {
+  id: string;
+  /** What is needed, in a few words. */
+  need: string;
+  /** The question for the team. */
+  ask: string;
+  /** The last evaluation found it covered. */
+  met: boolean;
+  /** What covered it, in the AI's words (names restored). */
+  note?: string;
+  /** What the operator pasted or typed. */
+  answer?: string;
+  /** When it went to the team in an E2. */
+  askedAt?: string;
+}
+/** The last decision suggestion and its to-do list. Saved on the idea so answers survive a reload; the decision itself is saved only by Save decision. */
+export interface ReviewPrep {
+  at: string;
+  decision: Decision;
+  reason: string;
+  criteria: Record<string, boolean>;
+  needs: PrepNeed[];
+  basis: string;
+  provider?: string;
+}
+
 export interface Idea {
   id: string;
   slug: string;
@@ -62,6 +89,7 @@ export interface Idea {
   /** template id → ISO date it was marked sent */
   sent: Record<string, string>;
   review?: ReviewRecord;
+  prep?: ReviewPrep;
   flags: string[];
   route?: string;
   /** feature name → approved tool, derived from approach.md (the tool picker). Replaced whole on every save. */

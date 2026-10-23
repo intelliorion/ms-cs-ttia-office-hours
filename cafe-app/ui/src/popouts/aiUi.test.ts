@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextProviderChoice, chipText, extractNotice, applySuggestion, providerName, aiTestText } from './aiUi';
+import { nextProviderChoice, chipText, extractNotice, providerName, aiTestText } from './aiUi';
 
 describe('chipText', () => {
   it('names the connected provider', () => {
@@ -20,19 +20,6 @@ describe('extractNotice', () => {
   it('handles one link and none', () => {
     expect(extractNotice({ added: 1, held: [], suggestions: { newNodes: [] } })).toBe('1 link added to the universe.');
     expect(extractNotice({ added: 0, held: [] })).toMatch(/nothing new/);
-  });
-});
-
-describe('applySuggestion', () => {
-  const form = { criteria: { a: false, b: true }, decision: '', reason: 'old' };
-  it('overlays criteria, decision and reason', () => {
-    expect(applySuggestion(form, { criteria: { a: true, b: false }, decision: 'csic', reason: 'new' }))
-      .toEqual({ criteria: { a: true, b: false }, decision: 'csic', reason: 'new' });
-  });
-  it('keeps the form when the suggestion is empty, and does not mutate', () => {
-    const r = applySuggestion(form, { criteria: {}, decision: '', reason: ' ' });
-    expect(r).toEqual(form);
-    expect(r.criteria).not.toBe(form.criteria);
   });
 });
 

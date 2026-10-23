@@ -17,7 +17,9 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * reply or attendance, flags, and what the knowledge graph holds for the idea. People's names are coded throughout.
  * `basis` says, in the app's words, what the suggestion was based on, so a new email visibly changes it.
  */
-export async function reviewInput(root: string, id: string): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
+export async function reviewInput(
+  root: string, id: string, added: { question: string; answer: string }[] = [],
+): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
   const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string }[]; people: Idea['people'] & { builder?: string } };
   const graph = await rebuildGraph(root);
   // Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet).
@@ -41,7 +43,9 @@ export async function reviewInput(root: string, id: string): Promise<{ input: Re
     business_impact: coded(text.business_impact), additional_context: coded(text.additional_context),
   };
 
-  const answers = (idea.answers ?? []).slice(-20).map((a) => ({ question: a.question, answer: coded(a.answer)! }));
+  // The team's emailed answers, then what the operator pasted against the to-do list.
+  const answers = [...(idea.answers ?? []).slice(-20), ...added].map((a) => ({ question: a.question, answer: coded(a.answer)! }));
+  const emailed = (idea.answers ?? []).slice(-20).length;
   const progress = {
     builderNamed: !!idea.people.builder?.trim(),
     replyReceived: !!idea.checklist.s2d?.done,
@@ -75,7 +79,7 @@ export async function reviewInput(root: string, id: string): Promise<{ input: Re
   };
   const parts = [
     'the form',
-    answers.length ? plural(answers.length, 'email answer') : '',
+    emailed ? plural(emailed, 'email answer') : '',
     progress.builderNamed ? 'a builder named' : '',
     progress.replyReceived ? 'a reply received' : '',
     progress.attendanceConfirmed ? 'attendance confirmed' : '',

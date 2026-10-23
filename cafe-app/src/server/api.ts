@@ -12,7 +12,8 @@ import { tick } from '../checklist/checklist';
 import { setStage } from '../ideas/stage';
 import { writeFileAtomic, readHistory } from '../workspace/files';
 import { importExport } from '../import/importRows';
-import { draftEmail, listOutboxChecked, approve, markSent, updateDraft } from '../comms/outbox';
+import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
+import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
@@ -131,6 +132,13 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
 
   add('POST', '/api/outbox/approve', async ({ body }) => approve(root, String(body.key), clock));
   add('POST', '/api/outbox/sent', async ({ body }) => markSent(root, String(body.key), clock, await steps()));
+  add('POST', '/api/outbox/open', async ({ body }) => openEmail(root, String(body.key), clock, await steps()));
+  add('POST', '/api/outbox/unopen', async ({ body }) => {
+    const before = (await listOutbox(root)).find((m) => m.key === String(body.key));
+    const out = await unopenEmail(root, String(body.key), clock);
+    if (before?.idea && before.template === 'E2' && before.sentAt) await unmarkAsked(root, before.idea, before.sentAt);
+    return out;
+  });
   add('POST', '/api/outbox/update', async ({ body }) => updateDraft(root, String(body.key), body));
 
   add('POST', '/api/review-pack', async () => ({ file: await writeReviewPack(root, clock) }));
@@ -153,13 +161,23 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return { ok: true, provider, label, ms: Date.now() - t0 };
   })());
   add('POST', '/api/ai/extract', async ({ body }) => byHand(() => growIdea(root, ai, String(body.id)))());
-  add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(async () => {
-    // Everything the idea now holds, not only the form: email answers, a builder, a reply, flags and its graph links.
-    const { input, basis, codes } = await reviewInput(root, String(body.id));
-    const { provider, output } = await ai.runWith(reviewSuggestTask, input);
-    // The AI wrote people as codes: put the names back for the operator.
-    return { ...output, reason: showNames(output.reason, codes), provider, basis };
-  })());
+  // Suggest a decision with its to-do list, or re-evaluate both: everything the idea now holds (email answers, what the
+  // operator pasted, a builder, flags, its graph links) is read; names are coded on the way out and restored on the way back.
+  add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(() =>
+    suggestPrep(root, String(body.id), (input) => ai.runWith(reviewSuggestTask, input), clock))());
+  add('POST', '/api/ideas/:id/prep/answer', async ({ params, body }) => answerNeed(root, params.id, String(body.need ?? ''), body.answer));
+  // Draft email: the open to-dos become the questions email (E2), opened in Outlook and counted as sent.
+  add('POST', '/api/ideas/:id/prep/email', async ({ params }) => {
+    const rec = await draftNeedsEmail(root, params.id, clock);
+    const out = await openEmail(root, rec.key, clock, await steps());
+    await markAsked(root, params.id, out.email.sentAt ?? clock());
+    return out;
+  });
+  // Any of an idea's emails, from the header's Email menu: drafted if need be, then opened in Outlook.
+  add('POST', '/api/ideas/:id/email-open', async ({ params, body }) => {
+    const rec = await draftEmail(root, { template: String(body.template), ideaId: params.id }, clock);
+    return openEmail(root, rec.key, clock, await steps());
+  });
   // Design series: the tool picker. The AI only suggests; the operator's save is what counts.
   add('GET', '/api/ideas/:id/design', async ({ params }) => {
     const idea = await loadIdea(root, params.id);

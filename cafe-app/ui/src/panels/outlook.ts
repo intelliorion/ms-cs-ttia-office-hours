@@ -1,0 +1,23 @@
+/** Hands an Outlook draft file (.eml marked unsent) to the browser; opening it makes a new Outlook message to send. */
+export function downloadEml(r: { eml: string; filename: string }): void {
+  const url = URL.createObjectURL(new Blob([r.eml], { type: 'message/rfc822' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = r.filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+/** What the notice says once an email went to Outlook. */
+export const openedText = (template: string) =>
+  `${template} is ready for Outlook: open the downloaded file, check it and send. It counts as sent.`;
+
+/**
+ * The emails the Email menu offers for an idea: its current stage's emails (from the steps), without the ones
+ * the stage's own buttons make (the questions, the decision), plus the reminder when it is due.
+ */
+export function stageEmails(idea: any, steps: any[]): string[] {
+  const own = new Set(['E2']);
+  const out = steps.filter((s) => s.stage === idea.stage && s.email && s.email !== 'decision' && !own.has(s.email)).map((s) => s.email as string);
+  if (idea.offerE2R) out.push('E2R');
+  return [...new Set(out)];
+}

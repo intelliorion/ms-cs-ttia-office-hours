@@ -218,11 +218,13 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="design"]')?.textContent).not.toContain('Loading');
   });
 
-  it('stage 2 (Review and Select, the first stage) shows the Decision form at once and nothing from the design series', async () => {
+  it('stage 2 (Review and Select, the first stage) shows Suggest a decision at once, the Email menu, no Emails section and nothing from the design series', async () => {
     useStore.setState({ state: { ...STATE, decisions: { select: 'Select (E3)' }, ideas: [{ ...IDEA, stage: 2 }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    expect(el.querySelector('[data-testid="review"] input[type="radio"][value="select"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="review"] [data-action="ai-suggest-review"]')).toBeTruthy();
+    expect(el.querySelector('[data-action="email-menu"]')).toBeTruthy();
+    expect([...el.querySelectorAll('h3')].map((h) => h.textContent)).not.toContain('Emails');
     expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
     expect(el.textContent).not.toContain('The decision opens');
   });

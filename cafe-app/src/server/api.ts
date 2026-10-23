@@ -29,8 +29,8 @@ import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolN
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
-import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
-import { codedKitInput, decodeKit } from '../design/kitInput';
+import { writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
+import { codedKitInput, codedPlanInput, decodeKit, decodePlan } from '../design/kitInput';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { suggestRoadshowPrep, answerRoadshowNeed, draftRoadshowNeedsEmail, markRoadshowAsked } from '../roadshow/prep';
 import { setPhotoFromPath, setPhotoFromUpload, removePhoto } from '../roadshow/photos';
@@ -343,7 +343,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const retired = retiredToolNote(state.tool?.tool);
     if (retired) throw new DesignError(retired);
     let output;
-    try { ({ output } = await ai.runWith(designPlanTask, designPlanInput(idea, state))); } catch { throw new DesignError(PLAN_NEEDS_AI); }
+    // Names coded on the way out (as every other task), put back in the reply.
+    const plan = await codedPlanInput(root, idea, state);
+    try { output = decodePlan((await ai.runWith(designPlanTask, plan.input)).output, plan.codes); } catch { throw new DesignError(PLAN_NEEDS_AI); }
     // The kits' content: the AI fills them in from the design (names coded, then put back). If it fails, the kits are
     // still written from the design alone, and say so.
     let kit: DesignKitOutput | undefined;

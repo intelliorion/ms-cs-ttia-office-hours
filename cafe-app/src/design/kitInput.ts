@@ -4,13 +4,14 @@
  * becomes "Person 1", "Person 2" and an email address is dropped.
  */
 import type { Idea } from '../ideas/idea';
-import type { DesignKitInput, DesignKitOutput, DesignPlanOutput } from '../ai/tasks';
+import type { DesignKitInput, DesignKitOutput, DesignPlanInput, DesignPlanOutput } from '../ai/tasks';
 import { reviewInput } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
 import { DESIGN_TAGS, pointOf } from './points';
 import { scopeWords } from './choice';
 import { DESIGN_SOURCE } from './brainstorm';
 import type { DesignState } from './store';
+import { designPlanInput } from './kits';
 
 /** The tools the design uses for its gaps (features done outside the build), in the order the features name them. */
 export const outsideToolsOf = (state: Pick<DesignState, 'features'>): string[] =>
@@ -79,6 +80,45 @@ export async function codedKitInput(root: string, idea: Idea, state: DesignState
 
 const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/g;
 const LEFTOVER_CODE = /\[[A-Z]\d{1,3}\]/g;
+
+/**
+ * The plan AI's input (designPlanInput), coded the same way: the idea's text, the summary, each feature's line and each
+ * answered question and its answer ride in through reviewInput, so no name reaches the prompt. The codes come back so
+ * the reply can be decoded (decodePlan).
+ */
+export async function codedPlanInput(root: string, idea: Idea, state: DesignState): Promise<{ input: DesignPlanInput; codes: Map<string, Coded> }> {
+  const base = designPlanInput(idea, state);
+  const blocks: string[][] = [
+    [base.summary],
+    base.features.map((f) => f.what ?? ''),
+    base.steps.flatMap((s) => [s.question, s.answer]),
+  ];
+  const flat = blocks.flat();
+  const { input: seen, codes } = await reviewInput(root, idea.id, flat.map((answer) => ({ question: 'T', answer })), { skipSource: DESIGN_SOURCE });
+  const all = (seen.answers ?? []).map((a) => a.answer);
+  const tail = all.slice(all.length - flat.length);
+  const summary = tail[0] ?? '';
+  const whats = tail.slice(1, 1 + base.features.length);
+  const steps = tail.slice(1 + base.features.length);
+  const input: DesignPlanInput = {
+    ...base,
+    idea: { ...base.idea, challenge: seen.idea.challenge, current_process: seen.idea.current_process },
+    summary,
+    features: base.features.map((f, i) => ({ ...f, ...(f.what ? { what: whats[i] } : {}) })),
+    steps: base.steps.map((_, i) => ({ question: steps[2 * i], answer: steps[2 * i + 1] })),
+  };
+  return { input, codes };
+}
+
+/** The plan reply with any person code turned back into the name (a code left over reads "the team"). */
+export function decodePlan(out: DesignPlanOutput, codes: Map<string, Coded>): DesignPlanOutput {
+  const prose = (s: string) => showNames(s, codes).replace(LEFTOVER_CODE, 'the team');
+  return {
+    tasks: out.tasks.map((x) => ({ ...x, title: prose(x.title), detail: prose(x.detail), done_when: prose(x.done_when) })),
+    risks: out.risks.map(prose),
+  };
+}
+
 
 /** A sample cell: a person's code becomes "Person N" (never the name), any other code its label, an email address goes. */
 export function sampleCell(text: string, codes: Map<string, Coded>): string {

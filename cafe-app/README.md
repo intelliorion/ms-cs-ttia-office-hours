@@ -538,7 +538,9 @@ nothing is saved until you press a button, and you can do everything except plan
    "Design started again". plan.md and the kits are not touched: when they exist, the Plan and kits section says they
    are out of date until they are written again from the new, approved design. It never moves the stage.
 4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, and the
-   CSIC note when the tool choice has a CSIC flag) and a filled-in starter kit for the picked tool. A second AI
+   CSIC note when the tool choice has a CSIC flag) and a filled-in starter kit for the picked tool. The plan task
+   (design-plan) reads the idea, the summary, the features and the answered questions with people's names coded,
+   like every other task, and the names are put back in plan.md. A second AI
    task (design-kit) reads the whole approved design (the features with their status and fit, the tool's pros and
    cons, every design answer and build point, the summary, the Learned since the form brief, the plan's tasks and
    risks; people's names coded) and writes the kit's content; the app checks it and writes the files. Where the

@@ -127,6 +127,7 @@ cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
+cafe-app/tests/design-plan-names.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-redesign.test.ts
 cafe-app/tests/design-retired-tool.test.ts

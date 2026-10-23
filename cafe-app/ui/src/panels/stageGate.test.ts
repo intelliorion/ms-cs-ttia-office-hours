@@ -12,21 +12,21 @@ describe('sectionsFor', () => {
   it('stage 2: the decision is the one active section', () => {
     expect(sectionsFor(idea(2), null, [])).toEqual({ review: 'active', tools: 'hidden', design: 'hidden', plan: 'hidden' });
   });
-  it('stage 3: the decision is a card, the tool picker is active, the design waits for features', () => {
-    expect(sectionsFor(idea(3, { review }), { features: [] }, [])).toEqual({ review: 'summary', tools: 'active', design: 'hidden', plan: 'hidden' });
-    expect(sectionsFor(idea(3, { review }), { features: feats }, [])).toEqual({ review: 'summary', tools: 'active', design: 'active', plan: 'hidden' });
+  it('stage 3: the decision is not shown (it belongs to Review and Select), the tool picker is active, the design waits for features', () => {
+    expect(sectionsFor(idea(3, { review }), { features: [] }, [])).toEqual({ review: 'hidden', tools: 'active', design: 'hidden', plan: 'hidden' });
+    expect(sectionsFor(idea(3, { review }), { features: feats }, [])).toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'hidden' });
     expect(sectionsFor(idea(3, { review }), { features: feats, summary: 's', approvedAt: '2026-10-20' }, []))
-      .toEqual({ review: 'summary', tools: 'active', design: 'active', plan: 'active' });
+      .toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'active' });
   });
-  it('after their home stage the decision and tools cards show even without data, so the gap is visible', () => {
-    expect(sectionsFor(idea(3), { features: [] }, []).review).toBe('summary');
+  it('after its home stage the tools card shows even without data, so the gap is visible; the decision never does', () => {
+    expect(sectionsFor(idea(3), { features: [] }, []).review).toBe('hidden');
     expect(sectionsFor(idea(4), { features: [] }, []).tools).toBe('summary');
   });
-  it('stage 4: everything that has data is a card, nothing is editable', () => {
+  it('stage 4: everything that has data is a card except the decision, nothing is editable', () => {
     expect(sectionsFor(idea(4, { review }), { features: feats, summary: 's', approvedAt: '2026-10-20' }, []))
-      .toEqual({ review: 'summary', tools: 'summary', design: 'summary', plan: 'summary' });
+      .toEqual({ review: 'hidden', tools: 'summary', design: 'summary', plan: 'summary' });
     expect(sectionsFor(idea(4, { review }), { features: [] }, []))
-      .toEqual({ review: 'summary', tools: 'summary', design: 'hidden', plan: 'hidden' });
+      .toEqual({ review: 'hidden', tools: 'summary', design: 'hidden', plan: 'hidden' });
   });
   it('closed: cards only, even at the home stage', () => {
     expect(sectionsFor(idea(2, { review, closed: { as: 'csic' } }), { features: feats }, ['review']))
@@ -39,13 +39,13 @@ describe('sectionsFor', () => {
   it('Edit reopens a card as the full form, unless the idea is closed', () => {
     expect(sectionsFor(idea(3, { review }), { features: [] }, ['review']).review).toBe('active');
     expect(sectionsFor(idea(4, { review }), { features: feats }, ['tools', 'design']))
-      .toEqual({ review: 'summary', tools: 'active', design: 'active', plan: 'hidden' });
+      .toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'hidden' });
   });
   it('stage 3 with questions but no features keeps the design open (data wins)', () => {
     expect(sectionsFor(idea(3, { review }), { features: [], steps: [{ n: 1 }] }, []).design).toBe('active');
   });
   it('design not loaded yet: the stage-3 picker still shows (it says Loading), the rest waits', () => {
-    expect(sectionsFor(idea(3, { review }), null, [])).toEqual({ review: 'summary', tools: 'active', design: 'hidden', plan: 'hidden' });
+    expect(sectionsFor(idea(3, { review }), null, [])).toEqual({ review: 'hidden', tools: 'active', design: 'hidden', plan: 'hidden' });
   });
   it('plan files written earlier stay visible after the design is reopened (approvedAt gone)', () => {
     expect(sectionsFor(idea(3, { review }), { features: feats, steps: [{ n: 1 }] }, [], { files: ['plan.md'] }).plan).toBe('active');

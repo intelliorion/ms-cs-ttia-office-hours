@@ -467,7 +467,7 @@ async function designShots(p) {
   await sleep(500);
   await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
   await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
-  assert((await p.locator(`${D} [data-testid="review-card"]`).count()) === 1, 'no decision card at stage 3');
+  assert((await p.locator(`${D} [data-testid="review-card"]`).count()) === 0, 'the decision card shows at stage 3: it belongs to Review and Select');
   assert((await p.locator(`${D} [data-testid="review"]`).count()) === 0, 'the decision form is still editable at stage 3');
   await sleep(2500);
   // Features and tool: the AI suggests the features, then the one tool for them, with why it picked it and how it
@@ -538,7 +538,7 @@ async function designShots(p) {
   await p.click('[data-action="stage-pick"][data-value="stage:4"]');
   await p.waitForSelector(`${D} [data-testid="plan-card"]`, { timeout: 10000 });
   assert((await p.locator(`${D} [data-testid="tool-picker"]`).count()) === 0, 'the tool picker is still a form at stage 4');
-  await into(`${D} [data-testid="review-card"]`);
+  await into(`${D} [data-testid="tools-card"]`);
   await sleep(400);
   await shot(p, '45-stage4-cards.png');
   // In Launch and Learn the design series is locked: its cards have no Edit.

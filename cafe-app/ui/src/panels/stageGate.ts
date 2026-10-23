@@ -1,6 +1,7 @@
 /**
  * Which action sections an idea's panel shows, by stage. Each section has one home stage: before it the section is
- * hidden, at it the section is the full form, after it (or once the idea is closed) a compact read-only card.
+ * hidden, at it the section is the full form, after it (or once the idea is closed) a compact read-only card — except
+ * the decision, which only shows in Review and Select (and on a closed idea).
  * Data wins over stage: anything already saved is never hidden. "Edit" on a card reopens the form while the idea is open.
  */
 export type Gate = 'hidden' | 'active' | 'summary';
@@ -31,7 +32,8 @@ export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefine
     if (closed) return has[k] ? 'summary' : 'hidden';
     if (editing.includes(k) && open[k]) return 'active';
     if (stage === home) return open[k] ? 'active' : 'hidden';
-    if (stage > home) return has[k] || k === 'review' || k === 'tools' ? 'summary' : 'hidden';
+    // The decision belongs to Review and Select: later stages do not show it (a closed idea still does, above).
+    if (stage > home) return k === 'review' ? 'hidden' : has[k] || k === 'tools' ? 'summary' : 'hidden';
     return has[k] ? 'summary' : 'hidden';
   };
   return { review: gate('review'), tools: gate('tools'), design: gate('design'), plan: gate('plan') };

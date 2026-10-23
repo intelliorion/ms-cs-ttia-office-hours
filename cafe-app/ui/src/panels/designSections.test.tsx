@@ -394,20 +394,14 @@ describe('IdeaDetails design sections', () => {
     expect(el.textContent).not.toContain('The decision opens');
   });
 
-  it('stage 3 shows the decision as a card above the tool picker; Edit reopens the form', async () => {
+  it('the Design series does not show the decision: it belongs to Review and Select', async () => {
     useStore.setState({ state: { ...STATE, decisions: { select: 'Select (E3)' },
       ideas: [{ ...IDEA, stage: 3, review: { decision: 'select', reason: 'Good fit.', criteria: {}, at: '2026-10-20' } }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    const card = el.querySelector('[data-testid="review-card"]')!;
-    expect(card.textContent).toContain('Select (E3)');
-    expect(card.textContent).toContain('Good fit.');
-    expect(el.querySelector('[data-testid="tool-picker"]')).toBeTruthy();
-    await click('[data-action="edit-review-card"]');
     expect(el.querySelector('[data-testid="review-card"]')).toBeNull();
-    // The saved decision is picked, with no reason box (the record keeps the reason it was saved with).
-    expect((el.querySelector('[data-testid="review"] input[value="select"]') as HTMLInputElement).checked).toBe(true);
-    expect(el.querySelector('[data-testid="review"] textarea.reason')).toBeNull();
+    expect(el.querySelector('[data-testid="review"]')).toBeNull();
+    expect(el.querySelector('[data-testid="tool-picker"]')).toBeTruthy();
   });
 
   it('stage 4 shows cards for tools, design and plan, with no editable form', async () => {
@@ -423,16 +417,17 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="plan-card"]')!.textContent).toContain('plan.md');
     expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
     expect(el.querySelector('[data-action="write-plan"]')).toBeNull();
-    expect(el.querySelector('[data-testid="review-card"]')!.textContent).toContain('No decision recorded');
+    expect(el.querySelector('[data-testid="review-card"]')).toBeNull();
   });
 
-  it('in Launch and Learn the decision, the tool and the design are shown without Edit; the plan can still be written again', async () => {
+  it('in Launch and Learn the tool and the design are shown without Edit, the decision not at all; the plan can still be written again', async () => {
     api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design'
       ? { state: designState({ summary: 'Done.', approvedAt: '2026-10-20' }), designMd: '# Design' } : { files: ['plan.md'] }));
     useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 4 }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    for (const card of ['review-card', 'tools-card', 'design-card']) {
+    expect(el.querySelector('[data-testid="review-card"]')).toBeNull();
+    for (const card of ['tools-card', 'design-card']) {
       expect(el.querySelector(`[data-testid="${card}"]`)).toBeTruthy();
       expect(el.querySelector(`[data-action="edit-${card}"]`)).toBeNull();
     }

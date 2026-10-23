@@ -256,16 +256,15 @@ async function aiShots(p) {
   await sleep(3500);
   await shot(p, '14-grown.png');
   await p.click('[data-action="assistant-open"]'); // close it again: the Connections panel comes back
-  // A confirmed AI link still has Remove.
+  // No link is removed from the panel; a click on one goes to the star at its other end.
   const row = p.locator('[data-testid="ctx-connections"] li[data-edge]').first();
   await row.scrollIntoViewIfNeeded();
-  await row.evaluate((el) => { el.style.outline = '1px solid #f5b36b'; });
-  await sleep(500);
-  await shot(p, '17-ai-link-remove.png');
-  await row.evaluate((el) => { el.style.outline = ''; });
-  await row.locator('[data-action="remove-link"]').click();
-  await p.waitForSelector('[data-testid="idea-details"] .pop-notice:has-text("Link removed.")');
-  await p.waitForSelector('[data-testid="idea-details"] li[data-edge="idea:CAFE-2026-002|NEEDS|capability:ai-solution-brainstorming"]', { state: 'detached' });
+  if (await row.locator('[data-action="remove-link"]').count()) throw new Error('Connections still offers Remove');
+  await row.locator('[data-action="go-link"]').click();
+  await sleep(1500);
+  await shot(p, '17-link-go.png');
+  await p.evaluate(() => window.__cafe.openIdea('CAFE-2026-002'));
+  await p.waitForSelector('[data-testid="idea-details"]');
   await p.click('[data-testid="idea-details"] [data-action="back"]');
 }
 
@@ -402,8 +401,7 @@ async function agenticShots(p, restart) {
   const C = '[data-testid="ctx-connections"]';
   await sleep(500);
   const waiting = await p.locator(`${C} ul.links .tag:has-text("Waiting on you")`).count();
-  const aiRows = await p.locator(`${C} ul.links [data-action="remove-link"]`).count();
-  console.log(`  idea links: ${waiting} waiting on you, ${aiRows} AI links with Remove`);
+  console.log(`  idea links: ${waiting} waiting on you`);
   await shot(p, '64-link-waiting.png');
   await p.click(`${D} [data-action="back"]`);
 

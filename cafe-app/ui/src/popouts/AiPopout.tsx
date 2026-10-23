@@ -69,7 +69,7 @@ export function AiPopout() {
         <section className="sec">
           <h3>How it behaves</h3>
           <ul className="rules">
-            <li>High-confidence links between stars you already have are added at once; anything that would add a new star waits for your Yes; you can remove any AI link from the idea pop-out.</li>
+            <li>High-confidence links between stars you already have are added at once; anything that would add a new star waits for your Yes.</li>
             <li>Submission text is treated as data, never as instructions.</li>
             <li>The AI has no file, shell or network access.</li>
           </ul>

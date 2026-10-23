@@ -82,7 +82,7 @@ function IdeaSubmission({ id }: { id: string }) {
 
 /** An idea in the universe: its links and its history, as two tabs. To grow it, ask the command bar ("grow it"). */
 function IdeaConnections({ id }: { id: string }) {
-  const { graph, state, refresh } = useStore();
+  const { graph, state, refresh, clickStar } = useStore();
   const [tab, setTab] = useState<'links' | 'history'>('links');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
@@ -106,7 +106,7 @@ function IdeaConnections({ id }: { id: string }) {
       {tab === 'links' ? <>
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
-          onRemove={(edgeId) => act(() => post('/api/graph/remove', { edgeId }), 'Link removed.')} />
+          onOpen={clickStar} />
       </> : <History history={history} steps={state?.steps} />}
     </div>
   );
@@ -114,7 +114,7 @@ function IdeaConnections({ id }: { id: string }) {
 
 /** Any star that is not an idea: what it is, its links and where each came from. */
 function StarLinks({ nodeId }: { nodeId: string }) {
-  const { graph, refresh, select } = useStore();
+  const { graph, refresh, select, clickStar } = useStore();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   useEffect(() => setMsg(null), [nodeId]);
@@ -122,9 +122,9 @@ function StarLinks({ nodeId }: { nodeId: string }) {
   if (!node) return null;
   const rows = nodeLinks(graph, nodeId);
   const unconfirmed = rows.filter((r) => !r.confirmed).length;
-  const act = async (what: 'confirm' | 'remove', edgeId: string) => {
+  const confirm = async (edgeId: string) => {
     setBusy(true);
-    try { await post(`/api/graph/${what}`, { edgeId }); setMsg({ text: what === 'confirm' ? 'Link confirmed.' : 'Link removed.', kind: 'ok' }); }
+    try { await post('/api/graph/confirm', { edgeId }); setMsg({ text: 'Link confirmed.', kind: 'ok' }); }
     catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
     await refresh(); setBusy(false);
   };
@@ -141,7 +141,7 @@ function StarLinks({ nodeId }: { nodeId: string }) {
         <button className="x" aria-label="Back to the overview" title="Back to the overview" onClick={() => select(null)}>✕</button>
       </div>
       {msg && <div className={`pop-notice ${msg.kind}`} role="status">{msg.text}</div>}
-      <LinkTable rows={rows} busy={busy} compact onConfirm={(id) => act('confirm', id)} onRemove={(id) => act('remove', id)} />
+      <LinkTable rows={rows} busy={busy} compact onConfirm={(id) => void confirm(id)} onOpen={clickStar} />
     </div>
   );
 }

@@ -8,41 +8,39 @@ import type { LinkRow } from './ideaHelpers';
 
 const row = (id: string, source: string, confirmed: boolean): LinkRow => ({
   edge: { id, from: 'idea:CAFE-2026-001', to: id, rel: 'NEEDS', description: '', source, confidence: confirmed ? 0.9 : 0.6, confirmed } as any,
-  rel: 'NEEDS', out: true, other: { id, label: id, type: 'Capability' }, source, confidence: confirmed ? 0.9 : 0.6, confirmed,
+  rel: 'NEEDS', out: true, other: { id: `capability:${id}`, label: id, type: 'Capability' }, source, confidence: confirmed ? 0.9 : 0.6, confirmed,
 });
 
 describe('LinkTable', () => {
-  it('every AI link can be removed; only unconfirmed ones can be confirmed; form links have no actions', () => {
+  it('no link can be removed; only a waiting link has an action, "Add it anyway"', () => {
     const el = document.createElement('div');
-    const removed: string[] = [];
     act(() => createRoot(el).render(
-      <LinkTable busy={false} onConfirm={() => {}} onRemove={(id) => removed.push(id)} rows={[
+      <LinkTable busy={false} onConfirm={() => {}} onOpen={() => {}} rows={[
         row('ai-pending', 'ai:claude:challenge', false),
         row('ai-confirmed', 'ai:claude:challenge', true),
         row('form', 'form:CAFE-2026-001:Support Requested', true),
       ]} />,
     ));
-    const acts = (id: string) => [...el.querySelectorAll(`li[data-edge="${id}"] button`)].map((b) => b.getAttribute('data-action'));
-    expect(acts('ai-pending')).toEqual(['confirm-link', 'remove-link']);
-    expect(acts('ai-confirmed')).toEqual(['remove-link']);
+    expect(el.querySelector('[data-action="remove-link"]')).toBeNull();
+    const acts = (id: string) => [...el.querySelectorAll(`li[data-edge="${id}"] .lk-acts button`)].map((b) => b.getAttribute('data-action'));
+    expect(acts('ai-pending')).toEqual(['confirm-link']);
+    expect(acts('ai-confirmed')).toEqual([]);
     expect(acts('form')).toEqual([]);
-    act(() => (el.querySelector('li[data-edge="ai-confirmed"] [data-action="remove-link"]') as HTMLButtonElement).click());
-    expect(removed).toEqual(['ai-confirmed']);
+    expect(el.querySelector('li[data-edge="ai-pending"] [data-action="confirm-link"]')?.textContent).toBe('Add it anyway');
+    expect(el.querySelector('li[data-edge="ai-pending"] .tag')?.textContent).toBe('Waiting on you');
     expect(el.querySelector('li[data-edge="ai-confirmed"] .tag')).toBeNull();
   });
 
-  it('a confirmed AI link has Remove only; a waiting link says "Waiting on you" and offers "Add it anyway"', () => {
+  it('a click on a link goes to the star at its other end', () => {
     const el = document.createElement('div');
+    const opened: string[] = [];
+    const confirmed: string[] = [];
     act(() => createRoot(el).render(
-      <LinkTable busy={false} onConfirm={() => {}} onRemove={() => {}} rows={[
-        row('ai-ok', 'ai:fake:x', true),
-        row('ai-wait', 'ai:fake:x', false),
-      ]} />,
+      <LinkTable busy={false} onConfirm={(id) => confirmed.push(id)} onOpen={(id) => opened.push(id)} rows={[row('ai-ok', 'ai:fake:x', true), row('ai-wait', 'ai:fake:x', false)]} />,
     ));
-    expect(el.querySelector('li[data-edge="ai-ok"] [data-action="confirm-link"]')).toBeNull();
-    expect(el.querySelector('li[data-edge="ai-ok"] [data-action="remove-link"]')).not.toBeNull();
-    const c = el.querySelector('li[data-edge="ai-wait"] [data-action="confirm-link"]');
-    expect(c?.textContent).toBe('Add it anyway');
-    expect(el.querySelector('li[data-edge="ai-wait"] .tag')?.textContent).toBe('Waiting on you');
+    act(() => (el.querySelector('li[data-edge="ai-ok"] [data-action="go-link"]') as HTMLButtonElement).click());
+    act(() => (el.querySelector('li[data-edge="ai-wait"] [data-action="confirm-link"]') as HTMLButtonElement).click());
+    expect(opened).toEqual(['capability:ai-ok']);
+    expect(confirmed).toEqual(['ai-wait']);
   });
 });

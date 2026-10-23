@@ -256,9 +256,10 @@ describe('the Café assistant: stars', () => {
       : propose([{ op: 'add_star', type: 'Capability', name: 'Contract clause finding', b: code(d, 'Idea', 'Desk booking assistant') }, { op: 'remove_star', a: 'P1' }])({}))]);
     await saveIdea(root, { ...IDEAS[0], support: ['Agent Design Guidance'] });
     const add = await runCommand(root, 'add a capability Contract clause finding to the desk booking assistant and drop Avery Chen', ai, clock);
-    expect(add.actions.map((a) => a.label)).toEqual(['New capability: Contract clause finding, linked from Desk booking assistant (needs)']);
-    expect(add.problems).toEqual(["People come from the ideas' teams: take Avery Chen off a team instead."]);
-    await doActions(root, add.id, undefined, clock);
+    // Removing a person takes them off each idea's team; a submitter stays the submitter.
+    expect(add.actions.map((a) => a.label)).toEqual(['New capability: Contract clause finding, linked from Desk booking assistant (needs)', "Take Avery Chen off Desk booking assistant's team"]);
+    expect(add.problems).toEqual(['Avery Chen submitted Desk booking assistant; the submitter stays, so their star stays too.']);
+    await doActions(root, add.id, 'a1', clock);
     expect(await rels(root)).toContain('idea:CAFE-2026-001 NEEDS capability:contract-clause-finding');
     const rm = await runCommand(root, 'remove the star Agent Design Guidance', ai, clock, { thread: add.thread });
     expect(rm.actions.map((a) => a.label)).toEqual(['Remove Agent Design Guidance and its 1 link']);
@@ -266,6 +267,18 @@ describe('the Café assistant: stars', () => {
     expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'support:agent-design-guidance')).toBe(false);
     await undoChatAction(root, rm.id, 'a1', clock);
     expect(await rels(root)).toContain('idea:CAFE-2026-001 ASKS_FOR support:agent-design-guidance');
+  });
+
+  it('remove a person: off every team they are on, and gone from the universe; Undo brings them back', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'remove_star', a: 'P1' }])({})]);
+    const rm = await runCommand(root, 'remove Zainab Okafor', ai, clock);
+    expect(rm.actions.map((a) => a.label)).toEqual(["Take Zainab Okafor off Procurement FAQ bot's team"]);
+    expect(rm.problems).toEqual([]);
+    await doActions(root, rm.id, undefined, clock);
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team.map((p) => p.name)).toEqual(['Kwame Mensah']);
+    expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'person:zainab-okafor')).toBe(false);
+    await undoChatAction(root, rm.id, 'a1', clock);
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team.map((p) => p.name)).toEqual(['Kwame Mensah', 'Zainab Okafor']);
   });
 
   it('unlink hides a form link and merge moves links; both undo', async () => {

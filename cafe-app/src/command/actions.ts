@@ -197,9 +197,18 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
     } else if (s.op === 'remove_star') {
       const a = star(s.a);
       if (!a) { missing(s); continue; }
+      if (a.type === 'Person') {
+        // A person is on ideas' teams: removing them takes them off each team (one step each, each with Undo).
+        // Whoever submitted an idea stays its submitter, so their star stays while that idea does.
+        const on = ctx.ideas.filter((i) => personOn(i, a.label));
+        const submitted = ctx.ideas.filter((i) => i.people.submitter?.trim().toLowerCase() === a.label.trim().toLowerCase());
+        for (const i of on) { const n = nodes.get(`idea:${i.id}`); if (n) roleProposal(a, n, null); }
+        for (const i of submitted) problems.push(`${a.label} submitted ${i.title}; the submitter stays, so their star stays too.`);
+        if (!on.length && !submitted.length) problems.push(`${a.label} is not on any idea's team.`);
+        continue;
+      }
       if (!OPERATOR_STARS.includes(a.type)) {
-        problems.push(a.type === 'Person' ? `People come from the ideas' teams: take ${a.label} off a team instead.`
-          : a.type === 'Idea' ? `Ideas are not removed: close ${a.label} with its stage button.`
+        problems.push(a.type === 'Idea' ? `Ideas are not removed: close ${a.label} with its stage button.`
             : OWNED_ELSEWHERE[a.type]!(a.label));
         continue;
       }

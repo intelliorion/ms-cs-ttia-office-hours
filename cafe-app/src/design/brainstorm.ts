@@ -182,8 +182,6 @@ export function designStepInput(
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     features: toolFeatures(state).map((f) => ({
       name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}), ...(f.scope ? { scope: scopeWords(f.scope, t?.tool) } : {}),
-      // What an existing thing already does for the feature, so the questions ask how it is used, not how to rebuild it.
-      ...(f.reuses ? { reuses: f.reuses } : {}),
     })),
     ...(t ? { tool: { tool: t.tool, pathway: t.pathway, cons: t.cons, gaps: t.fit.filter((x) => x.fit !== 'yes') } } : {}),
     ...(extra.learned?.length ? { learned: extra.learned } : {}),

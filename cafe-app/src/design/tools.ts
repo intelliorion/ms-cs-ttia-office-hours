@@ -20,7 +20,7 @@ import {
 } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, mdLine, type DesignFeature, type DesignState, skillGuidance } from './store';
 
-import { bareReuse, FIT_LEVELS, flagText, inScope, REUSES_MAX, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, withReuse, type FitLevel, type ToolChoice, type ToolFit } from './choice';
+import { FIT_LEVELS, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
 
 /** Where each approved tool lands on the pathway ladder (Café skill, Part 3). */
 export const PATHWAYS: Record<string, string> = {
@@ -45,7 +45,7 @@ export function pathwayLabel(tool: string, builder?: string): string {
   return pathwayOf(tool, builder) === 'Assisted Citizen' ? `${base} (${ASSISTED_NOTE})` : base;
 }
 
-export interface FeatureInput { id?: string; name: string; what?: string; flags?: string[]; reuses?: unknown; scope?: unknown }
+export interface FeatureInput { id?: string; name: string; what?: string; flags?: string[]; scope?: unknown }
 
 /** One line of plain text: every whitespace run (newlines too) becomes one space, so AI text can never start a heading or field. */
 const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -54,10 +54,8 @@ const nameKey = (n: string) => str(n, 60).toLowerCase();
 
 /**
  * Checks the operator's feature list: a name each (no two alike), at most 12, feature flags only. No tool here.
- * The reuse flag stays only with what it reuses named; `legacyBare` lists the saved features (by name, lower case) of an older record
- * whose flag names nothing, kept as they are until the features are suggested again.
  */
-export function validateFeatures(raw: unknown, legacyBare: ReadonlySet<string> = new Set()): DesignFeature[] {
+export function validateFeatures(raw: unknown): DesignFeature[] {
   if (!Array.isArray(raw)) throw new Error('Send the features as a list');
   if (raw.length > FEATURES_MAX) throw new Error(`At most ${FEATURES_MAX} features`);
   const out: DesignFeature[] = [];
@@ -76,9 +74,7 @@ export function validateFeatures(raw: unknown, legacyBare: ReadonlySet<string> =
     const what = str(r.what, 160);
     // Where the design moved the feature (out of scope, or another tool outside the build) rides along with the row.
     const scope = scopeOf(r.scope);
-    // The reuse flag stays only with what it reuses named (withReuse), or as an older record saved it.
-    const reuse = legacyBare.has(key) && !str(r.reuses, REUSES_MAX) ? { flags: [...new Set(flags)] } : withReuse([...new Set(flags)], r.reuses);
-    out.push({ id, name, ...(what ? { what } : {}), flags: reuse.flags, ...(reuse.reuses ? { reuses: reuse.reuses } : {}), ...(scope ? { scope } : {}) });
+    out.push({ id, name, ...(what ? { what } : {}), flags: [...new Set(flags)], ...(scope ? { scope } : {}) });
   }
   return out;
 }
@@ -111,13 +107,11 @@ export function validateChoice(raw: unknown, features: { name: string }[], build
   const tool = approvedTool(r.tool);
   const flags = (Array.isArray(r.flags) ? r.flags : []).map(String).filter((f): f is FeatureFlag => (FEATURE_FLAGS as readonly string[]).includes(f));
   const custom = tool === 'custom app';
-  const reuse = withReuse([...new Set([...(custom ? ['custom-app'] : []), ...flags.filter((f) => f !== 'custom-app')])], r.reuses);
-  const flagSet = reuse.flags;
+  const flagSet = [...new Set([...(custom ? ['custom-app'] : []), ...flags.filter((f) => f !== 'custom-app')])];
   const evaluatedFor = lines(r.evaluatedFor, FEATURES_MAX, 60);
   return {
     tool, pathway: pathwayOf(tool, builder), by: r.by === 'ai' ? 'ai' : 'operator', reason: str(r.reason, 160),
     pros: lines(r.pros, 5, 200), cons: lines(r.cons, 5, 200), context: lines(r.context, 6, 160), flags: flagSet,
-    ...(reuse.reuses ? { reuses: reuse.reuses } : {}),
     fit: fitFor(r.fit, features),
     evaluatedFor: Array.isArray(r.evaluatedFor) ? evaluatedFor : features.map((f) => f.name),
     ...(r.needsAi ? { needsAi: true } : {}),
@@ -162,7 +156,7 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
     const name = mdLine(f.name).replace(/[*~]/g, '');
     const why = f.scope?.why ? ` (${mdLine(f.scope.why)})` : '';
     if (f.scope?.status === 'out') out.push(`- ~~**${name}**~~ — out of scope${why}`);
-    else out.push(`- **${name}**${f.scope ? ` (${mdLine(scopeWords(f.scope, state.tool?.tool))})` : ''}: ${mdLine(f.what) || '(not yet said)'}${f.flags.length ? ` [${f.flags.map((x) => mdLine(flagText(x, f.reuses))).join(', ')}]` : ''}${why}`);
+    else out.push(`- **${name}**${f.scope ? ` (${mdLine(scopeWords(f.scope, state.tool?.tool))})` : ''}: ${mdLine(f.what) || '(not yet said)'}${f.flags.length ? ` [${f.flags.map((x) => mdLine(x)).join(', ')}]` : ''}${why}`);
   }
   out.push('', '## Tool', '');
   const t = state.tool;
@@ -173,7 +167,7 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
   out.push(`- Pathway: ${pathwayLabel(t.tool, builder)}`);
   out.push(`- Chosen by: ${t.by === 'ai' ? 'the AI (suggested), saved by the operator' : 'the operator'}`);
   out.push(`- Reason: ${mdLine(t.reason) || '(none given)'}`);
-  out.push(`- Flags: ${t.flags.length ? t.flags.map((x) => mdLine(flagText(x, t.reuses))).join(', ') : 'none'}`);
+  out.push(`- Flags: ${t.flags.length ? t.flags.map((x) => mdLine(x)).join(', ') : 'none'}`);
   if (t.needsAi) out.push(`- Note: ${NEEDS_AI_NOTE}`);
   if (outOfDate(state.features, t)) out.push('- Note: the feature list changed after the tool was evaluated: Re-evaluate the tool for the new features.');
   if (t.pros.length) { out.push('- Pros:'); for (const c of t.pros) out.push(`  - ${mdLine(c)}`); }
@@ -203,14 +197,14 @@ export function teamAnswers(idea: Idea, state: DesignState): { question: string;
 }
 
 /** The tool picker's input for the AI: the idea, its support, the team's replies and the feature list. */
-export function toolPickInput(idea: Idea, state: DesignState, features: { name: string; what?: string; reuses?: string }[] = state.features): ToolPickInput {
+export function toolPickInput(idea: Idea, state: DesignState, features: { name: string; what?: string }[] = state.features): ToolPickInput {
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     support: idea.support,
     builderNamed: Boolean(builderOf(idea)),
     ...(teamAnswers(idea, state).length ? { teamAnswers: teamAnswers(idea, state) } : {}),
     guidance: skillGuidance('cafe-design'),
-    ...(features.length ? { features: features.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.reuses ? { reuses: f.reuses } : {}) })) } : {}),
+    ...(features.length ? { features: features.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}) })) } : {}),
   };
 }
 
@@ -241,8 +235,7 @@ export async function suggestFeatures(
 ): Promise<{ features: (DesignFeature | FeatureSuggestion)[]; provider: string }> {
   const idea = await loadIdea(root, id);
   const state = await readDesign(root, id);
-  // Suggesting again clears an older record's reuse flag that names nothing: the AI is now asked to name it.
-  const have = (rows === undefined ? state.features : validateFeatures(rows)).map((f) => ({ ...f, ...withReuse(f.flags, f.reuses) }));
+  const have = rows === undefined ? state.features : validateFeatures(rows);
   // The brief rides in as extra answers, so its names get the same codes as everything else, then comes back out.
   const brief = idea.learned?.points ?? [];
   const { input: seen, codes } = await reviewInput(root, id, brief.map((p) => ({ question: p.topic, answer: p.text })));
@@ -257,9 +250,8 @@ export async function suggestFeatures(
   });
   const name = (t: string) => showNames(t, codes);
   const suggested = output.features.map((f) => {
-    // The reuse flag only with what it reuses named; otherwise it is dropped (withReuse).
-    const reuse = withReuse(f.flags.filter((x) => (FEATURE_ONLY_FLAGS as readonly string[]).includes(x)), f.reuses === undefined ? '' : name(f.reuses));
-    return { name: str(name(f.name), 60), what: str(name(f.what), 160), ...reuse } as FeatureSuggestion;
+    const flags = f.flags.filter((x) => (FEATURE_ONLY_FLAGS as readonly string[]).includes(x));
+    return { name: str(name(f.name), 60), what: str(name(f.what), 160), flags } as FeatureSuggestion;
   }).filter((f) => f.name);
   return { features: mergeSuggestions(have, suggested).slice(0, FEATURES_MAX), provider };
 }
@@ -303,7 +295,7 @@ export async function suggestTools(
   await saveIdea(root, { ...idea, ...(await takeInAnswers(root, idea, output, codes, provider, at, answers.length, 'tools')) });
   const p = output.pick;
   const tool = p && validateChoice({
-    tool: p.tool, by: evaluate ? 'operator' : 'ai', reason: name(p.reason), flags: p.flags, ...(p.reuses ? { reuses: name(p.reuses) } : {}),
+    tool: p.tool, by: evaluate ? 'operator' : 'ai', reason: name(p.reason), flags: p.flags,
     context: p.context.map(name), pros: p.pros.map(name), cons: p.cons.map(name),
     fit: p.fit.map((f) => ({ ...f, note: name(f.note) })), evaluatedFor: features.map((f) => f.name), provider,
   }, features, builderOf(idea), at);
@@ -329,7 +321,7 @@ export async function saveToolPicks(
     rawTool = legacy.tool;
   }
   const prev = await readDesign(root, id);
-  const features = validateFeatures(rawFeatures, bareReuse(prev.features));
+  const features = validateFeatures(rawFeatures);
   const tool = rawTool ? validateChoice(rawTool, features, builderOf(idea), at) : undefined;
   // Changing the features or the tool of an approved design reopens it: the approval was for the old ones.
   const changed = JSON.stringify([prev.features, prev.tool ?? null]) !== JSON.stringify([features, tool ?? null]);

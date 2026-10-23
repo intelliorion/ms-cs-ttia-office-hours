@@ -461,7 +461,7 @@ export const triageTask = understandTask;
 
 /* ---------- Tool picker ---------- */
 
-export const FEATURE_FLAGS = ['needs-live-system', 'personal-data', 'custom-app', 'reuse-existing', 'no-build'] as const;
+export const FEATURE_FLAGS = ['needs-live-system', 'personal-data', 'custom-app', 'no-build'] as const;
 export type FeatureFlag = (typeof FEATURE_FLAGS)[number];
 
 /** When to reach for each approved tool, at Café depth (Café skill, Part 3). */
@@ -473,14 +473,8 @@ export const TOOL_GUIDE: Record<string, string> = {
   'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
 };
 
-/** What the reuse flag carries: the existing thing, named (see withReuse; a flag with nothing named is dropped). */
-export const REUSES_MAX = 80;
-const REUSE_NAMING = 'name the existing thing in "reuses" (at most 80 characters, for example "the team\'s rules spreadsheet" or "EKG Expenses\' duplicate check"); never name a person. Without a "reuses" the flag is dropped.';
-export const REUSE_RULE_FEATURE = `"reuse-existing" only when something that already exists (named in DATA: a system, a spreadsheet, a check, a report) already does THIS feature or part of it; then ${REUSE_NAMING} Never put it on a feature that still has to be built because nothing that exists does it.`;
-export const REUSE_RULE_TOOL = `"reuse-existing" (on the pick) only when something that already exists already does part of this proof of concept; then ${REUSE_NAMING} Never use it for a part that still has to be built.`;
-
 /** Flags a feature can carry; the tool's own flags (custom-app, no-build) belong to the tool. */
-export const FEATURE_ONLY_FLAGS = ['needs-live-system', 'personal-data', 'reuse-existing'] as const;
+export const FEATURE_ONLY_FLAGS = ['needs-live-system', 'personal-data'] as const;
 export const FIT_VALUES = ['yes', 'partly', 'no'] as const;
 export const FEATURES_MAX = 12;
 export const FEATURES_SUGGEST_MAX = 8;
@@ -499,7 +493,7 @@ export interface FeatureListInput {
   existingFeatures?: { name: string; what?: string }[];
   guidance?: string;
 }
-export interface FeatureSuggestion { name: string; what: string; flags: (typeof FEATURE_ONLY_FLAGS)[number][]; reuses?: string }
+export interface FeatureSuggestion { name: string; what: string; flags: (typeof FEATURE_ONLY_FLAGS)[number][] }
 export interface FeatureListOutput { features: FeatureSuggestion[] }
 
 export const FEATURE_LIST_SCHEMA: JsonSchema = {
@@ -513,7 +507,6 @@ export const FEATURE_LIST_SCHEMA: JsonSchema = {
           name: { type: 'string', minLength: 1, maxLength: 60 },
           what: { type: 'string', maxLength: 160 },
           flags: { type: 'array', maxItems: FEATURE_ONLY_FLAGS.length, items: { type: 'string', enum: FEATURE_ONLY_FLAGS } },
-          reuses: { type: 'string', maxLength: REUSES_MAX },
         },
       },
     },
@@ -545,7 +538,6 @@ export const featureListTask: Task<FeatureListOutput> = {
       ...(data.learned ? ['"learned" is the brief of what the team\'s answers added since the form (Learned since the form). It outranks the form where they differ.'] : []),
       ...(data.existingFeatures ? ['"existingFeatures" are the operator\'s features. Keep them out of your list (the app keeps them); add only features that are missing, under new names.'] : []),
       'Flags: "needs-live-system" when the feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data.',
-      REUSE_RULE_FEATURE,
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data. Never name people.",
       ...(inp.guidance ? ['Guidance from the Café design guide (guidance, not data):', cap(inp.guidance, 6000)] : []),
     ], FEATURE_LIST_SCHEMA, data, "a Café idea, the team's answers and the operator's features");
@@ -554,7 +546,7 @@ export const featureListTask: Task<FeatureListOutput> = {
     const o = asObj(v);
     if (o && Array.isArray(o.features)) for (const f of o.features) {
       const x = asObj(f);
-      if (x) { x.name = trimStrings(oneLine(x.name), 60); x.what = trimStrings(oneLine(x.what), 160); if (x.reuses !== undefined) x.reuses = trimStrings(oneLine(x.reuses), REUSES_MAX); }
+      if (x) { x.name = trimStrings(oneLine(x.name), 60); x.what = trimStrings(oneLine(x.what), 160); }
     }
   }),
 };
@@ -563,7 +555,7 @@ export const featureListTask: Task<FeatureListOutput> = {
 
 /** The one tool for the whole feature list: why, its pros and cons, and how it covers each feature. */
 export interface ToolPickChoice {
-  tool: string; reason: string; flags: FeatureFlag[]; reuses?: string; context: string[]; pros: string[]; cons: string[];
+  tool: string; reason: string; flags: FeatureFlag[]; context: string[]; pros: string[]; cons: string[];
   fit: { feature: string; fit: (typeof FIT_VALUES)[number]; note: string }[];
 }
 export interface ToolPickInput {
@@ -573,8 +565,8 @@ export interface ToolPickInput {
   builderNamed?: boolean;
   /** The team's replies to questions sent earlier (Import answers and answered design steps): part of the form now. */
   teamAnswers?: { question: string; answer: string }[];
-  /** The feature list the tool is for (the operator's, saved or not); `reuses` names what an existing thing already does. */
-  features?: { name: string; what?: string; reuses?: string }[];
+  /** The feature list the tool is for (the operator's, saved or not). */
+  features?: { name: string; what?: string }[];
   /** The operator's own tool: evaluate THIS tool for the features, never change it. Absent: suggest one. */
   evaluate?: string;
   /** The Café design guide's text (skillGuidance('cafe-design')). Guidance, not data. */
@@ -600,7 +592,6 @@ export const TOOL_PICK_SCHEMA: JsonSchema = {
         tool: { type: 'string', enum: APPROVED_TOOLS },
         reason: { type: 'string', maxLength: 160 },
         flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
-        reuses: { type: 'string', maxLength: REUSES_MAX },
         context: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 160 } },
         pros: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
         cons: { type: 'array', maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
@@ -638,7 +629,6 @@ function trimToolPick(v: unknown): void {
   const x = asObj(o.pick);
   if (x) {
     x.reason = trimStrings(x.reason, 160);
-    if (x.reuses !== undefined) x.reuses = trimStrings(oneLine(x.reuses), REUSES_MAX);
     if (Array.isArray(x.context)) x.context = x.context.map((c) => trimStrings(c, 160));
     for (const k of ['pros', 'cons']) if (Array.isArray(x[k])) x[k] = (x[k] as unknown[]).map((c) => trimStrings(c, 200));
     if (Array.isArray(x.fit)) for (const f of x.fit) { const y = asObj(f); if (y) { y.feature = trimStrings(oneLine(y.feature), 60); y.note = trimStrings(oneLine(y.note), 200); } }
@@ -664,7 +654,7 @@ function toolPickData(input: ToolPickInput) {
     ...(input.form?.participation ? { form: { participation: cap(input.form.participation, 40) } } : {}),
     ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
     ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
-    ...(input.features?.length ? { features: input.features.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.reuses ? { reuses: cap(f.reuses, REUSES_MAX) } : {}) })) } : {}),
+    ...(input.features?.length ? { features: input.features.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}) })) } : {}),
     ...(input.evaluate ? { evaluate: cap(input.evaluate, 40) } : {}),
   };
 }
@@ -699,8 +689,6 @@ export const toolPickTask: Task<ToolPickOutput> = {
       'Capability goes up, autonomy goes down: prefer the simplest tool that can show the idea works.',
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data.",
       'Flags: "needs-live-system" when it needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
-      REUSE_RULE_TOOL,
-      ...(data.features?.some((f) => f.reuses) ? ['A feature in DATA.features with "reuses" is done (wholly or in part) by that existing thing: the tool works with it, it is not built again.'] : []),
       '"context": 1 to 6 short lines listing the facts from DATA you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
       'reason: why this tool, at most 160 characters. In the pick, never name people.',
       ...answerRules('teamAnswers'),
@@ -722,7 +710,7 @@ export interface FeatureChange { name: string; change: FeatureChangeKind; what?:
 export interface DesignStepInput {
   idea: IdeaText;
   /** The feature list; `scope` says when an earlier answer already moved one ("out of scope", or "<tool>, outside the build"). */
-  features: { name: string; what?: string; tool?: string; scope?: string; reuses?: string }[];
+  features: { name: string; what?: string; tool?: string; scope?: string }[];
   /** The one tool chosen in the Tool picker: its cons and the features it fits partly or not at all are what to design around. */
   tool?: { tool: string; pathway?: string; cons: string[]; gaps: { feature: string; fit: string; note: string }[] };
   /** "Learned since the form": what the team's answers added (names coded). Settled; never asked again. */
@@ -843,7 +831,7 @@ function designStepData(input: DesignStepInput) {
     idea: ideaData(input.idea),
     features: (Array.isArray(input.features) ? input.features : []).slice(0, 12).map((f) => ({
       name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.tool ? { tool: cap(f.tool, 40) } : {}),
-      ...(f.scope ? { scope: cap(f.scope, 120) } : {}), ...(f.reuses ? { reuses: cap(f.reuses, REUSES_MAX) } : {}),
+      ...(f.scope ? { scope: cap(f.scope, 120) } : {}),
     })),
     ...(input.tool?.tool ? {
       tool: {
@@ -880,7 +868,6 @@ export const designStepTask: Task<DesignStepOutput> = {
       'Keep it short: aim for about 8 questions in all on a typical idea. When one question can settle two points, ask it once and tag it with the one it settles most; never ask what the answers, the brief or the team already settle. Use tag null for any other question.',
       '"stepsSoFar" are the questions already asked and the answers. Never ask one of them again. An answer of "(not known yet; asked the team)" means move on.',
       '"features" are the operator\'s feature list for the proof of concept: design for those features, not others.',
-      ...(data.features.some((f) => f.reuses) ? ['A feature with "reuses" is done, wholly or in part, by that existing thing: ask how the proof of concept uses it (what it takes from it, what it adds), not how to build it again.'] : []),
       ...(data.tool ? [
         `"tool" is the one tool already chosen for the whole proof of concept (${data.tool.tool}). Do not ask which tool to use. Aim your questions at what it means for this build:`,
         'how to cover each feature in "tool.gaps" (the tool does it only partly, or not at all; the note says what is missing) and each of "tool.cons". Ask how the team wants to cover a gap (a second step, a manual stand-in, leaving it out of the proof of concept) before smaller points.',

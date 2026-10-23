@@ -2,7 +2,7 @@ import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool,
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
 
-/** What the extract task is told already exists, so it reuses those labels. */
+/** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
   const labels = (t: NodeType) => nodes.filter((n) => n.type === t).map((n) => n.label).slice(0, 200);
   return {

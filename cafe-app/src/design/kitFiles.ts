@@ -10,7 +10,7 @@ import { isApprovedTool } from '../graph/ontology';
 import { CSIC_NOTE, mdLine, type DesignFeature, type DesignState } from './store';
 import { builderOf, pathwayLabel } from './tools';
 import { rolesText } from '../ideas/people';
-import { csicFlags, REUSE_FLAG } from './choice';
+import { csicFlags } from './choice';
 import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
 import { checkFlow, FLOW_DIAGRAM_FILE, FLOW_FILE, FLOW_KIND_WORD, renderFlowHtml, type RecipeFlow } from './recipeFlow';
@@ -138,15 +138,6 @@ function sampleSection(c: KitContext): string[] {
   ];
 }
 
-/** What already exists that the build starts from (the reuse flag with what it reuses named): the features', then the tool's. */
-function startFrom(c: KitContext): string[] {
-  const lines = [
-    ...[...c.built, ...c.outside].filter((f) => f.reuses && f.flags.includes(REUSE_FLAG)).map((f) => `- Start from ${mdLine(f.reuses)} for ${bold(f.name)}: it already does this, or part of it. Build only what it does not do.`),
-    ...(c.state.tool?.reuses && c.state.tool.flags.includes(REUSE_FLAG) ? [`- Start from ${mdLine(c.state.tool.reuses)}: it already does part of the proof of concept.`] : []),
-  ];
-  return lines.length ? ['## Start from what exists', '', ...lines, ''] : [];
-}
-
 function readme(c: KitContext, extra: string[] = []): string {
   const builder = builderOf(c.idea);
   const order = (ORDER[c.tool] ?? []).filter(([f]) => c.files?.has(f));
@@ -166,7 +157,6 @@ function readme(c: KitContext, extra: string[] = []): string {
     `- [../../approach.md](../../approach.md): why ${c.tool}, what it does well and what it cannot do.`,
     '- [../../plan.md](../../plan.md): the build plan, task by task.', '',
     '## What it must show', '', c.mustShow, '',
-    ...startFrom(c),
     '## The build at a glance', '',
     ...BUILD_TAGS.map((t) => `- **${POINT_LABELS[t]}**: ${point(c, t)}`), '',
     '## Features', '', ...featureLines(c), '',

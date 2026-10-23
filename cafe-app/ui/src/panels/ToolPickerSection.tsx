@@ -3,7 +3,7 @@ import { designPost } from '../api';
 import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
-  AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, dropBareReuse, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
+  AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
   mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, retiredNote, STALE_NOTE, toolView,
   scopeLabel, type FeatureRow, type ToolView,
 } from './designHelpers';
@@ -61,7 +61,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
         return `Suggested by ${aiName(x.provider)}: ${added > 0 ? `${features(added)} added below` : 'nothing new to add'}. Nothing is saved until you Save.`;
       },
     });
-    if (r?.features) { setRows((rs) => mergeRows(rs.map(dropBareReuse), featureRows(r.features, { fromAi: true }))); setDirty(true); }
+    if (r?.features) { setRows((rs) => mergeRows(rs, featureRows(r.features, { fromAi: true }))); setDirty(true); }
   };
   /** Suggest (no tool given) or evaluate the operator's tool for the features as they are now. */
   const askTool = async (evaluate?: string) => {
@@ -129,7 +129,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                 </div>
                 <input type="text" className="tp-what" value={r.what} placeholder="What it does, in one line" aria-label="What it does" disabled={off}
                   onChange={(e) => edit(r.key, { what: e.target.value })} />
-                {r.flags.length > 0 && <div className="tp-r3">{r.flags.map((f) => <span key={f} className="tp-flag" data-flag={f}>{flagWord(f, r.reuses)}</span>)}</div>}
+                {r.flags.length > 0 && <div className="tp-r3">{r.flags.map((f) => <span key={f} className="tp-flag" data-flag={f}>{flagWord(f)}</span>)}</div>}
                 {r.scope && (
                   <div className="tp-scope" data-testid="feature-scope">
                     <span className={`tp-scope-b ${r.scope.status}`}>{scopeLabel(r.scope, choice?.tool)}</span>
@@ -190,7 +190,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
             <div className="tp-r3">
               <span className="tp-path">{pathwayText(choice.tool, builder)}</span>
               <span className="tp-by">{choice.by === 'ai' ? 'Suggested by the AI' : 'Your choice'}</span>
-              {choice.flags.map((f) => <span key={f} className="tp-flag" data-flag={f}>{flagWord(f, choice.reuses)}</span>)}
+              {choice.flags.map((f) => <span key={f} className="tp-flag" data-flag={f}>{flagWord(f)}</span>)}
             </div>
             {stale && (
               <div className="hint warn tp-stale" data-testid="tool-stale">

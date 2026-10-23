@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   approvedTools, buildInstruction, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
   picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel, retiredNote,
-  flagWord, dropBareReuse, REUSE_NOT_NAMED,
+  flagWord,
 } from './designHelpers';
 
 // The features route's mixed reply: a saved DesignFeature first, then AI suggestions (and an older row with a tool).
@@ -207,23 +207,12 @@ describe('a feature the design moved', () => {
   });
 });
 
-describe('the reuse flag', () => {
-  it('the tag says what is reused; an older bare flag says it names nothing', () => {
-    expect(flagWord('reuse-existing', "the team's rules spreadsheet")).toBe("Reuses: the team's rules spreadsheet");
-    expect(flagWord('reuse-existing')).toBe('Reuses something that exists (not named)');
-    expect(REUSE_NOT_NAMED).toBe('Reuses something that exists (not named)');
-    expect(flagWord('personal-data', 'ignored')).toBe('Personal data');
-  });
-  it('rows keep what is reused only with the flag, send it on, and suggesting again clears a bare flag', () => {
-    const rows = featureRows([
-      { id: 'a', name: 'Dup', flags: ['reuse-existing'], reuses: "EKG Expenses' duplicate check" },
-      { id: 'b', name: 'Old', flags: ['reuse-existing', 'personal-data'] },
-      { id: 'c', name: 'Odd', flags: [], reuses: 'nothing' },
-    ]);
-    expect(rows.map((r) => r.reuses)).toEqual(["EKG Expenses' duplicate check", undefined, undefined]);
-    expect(featuresBody(rows)[0]).toEqual({ name: 'Dup', flags: ['reuse-existing'], reuses: "EKG Expenses' duplicate check" });
-    expect(featuresBody(rows)[1]).toEqual({ name: 'Old', flags: ['reuse-existing', 'personal-data'] });
-    expect(rows.map(dropBareReuse).map((r) => r.flags)).toEqual([['reuse-existing'], ['personal-data'], []]);
-    expect(toolView({ tool: 'Dataiku', flags: ['reuse-existing'], reuses: 'the sheet', by: 'ai' })!.reuses).toBe('the sheet');
+describe('flags as tags', () => {
+  it('a flag in words; rows keep feature flags only', () => {
+    expect(flagWord('personal-data')).toBe('Personal data');
+    expect(flagWord('needs-live-system')).toBe('Needs a live system');
+    const rows = featureRows([{ id: 'a', name: 'Dup', flags: ['personal-data', 'custom-app', 'something-else'] }]);
+    expect(rows[0].flags).toEqual(['personal-data']);
+    expect(featuresBody(rows)[0]).toEqual({ name: 'Dup', flags: ['personal-data'] });
   });
 });

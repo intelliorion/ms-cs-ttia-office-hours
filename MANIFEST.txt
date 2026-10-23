@@ -127,11 +127,11 @@ cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
+cafe-app/tests/design-old-flags.test.ts
 cafe-app/tests/design-plan-names.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-redesign.test.ts
 cafe-app/tests/design-retired-tool.test.ts
-cafe-app/tests/design-reuse.test.ts
 cafe-app/tests/design-scope.test.ts
 cafe-app/tests/design-store.test.ts
 cafe-app/tests/design-tools.test.ts
@@ -298,8 +298,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-BdnGwUDv.js
 cafe-app/web/assets/index-CnGPjLzT.css
+cafe-app/web/assets/index-DWjEN5Dq.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

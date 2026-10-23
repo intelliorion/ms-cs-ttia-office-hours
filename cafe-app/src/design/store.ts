@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
-import { csicFlags, flagText, legacyChoice, REUSE_FLAG, REUSES_MAX, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
+import { csicFlags, dropRetiredFlags, legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 import { retiredToolNote } from '../graph/ontology';
@@ -19,10 +19,8 @@ export interface DesignFeature {
   name: string;
   /** One line on what the feature does. */
   what?: string;
-  /** Feature flags (needs-live-system, personal-data, reuse-existing). */
+  /** Feature flags (needs-live-system, personal-data). */
   flags: string[];
-  /** With reuse-existing only: the existing thing that already does this feature or part of it (at most 80 characters). */
-  reuses?: string;
   /** Set when a design answer moved the feature out of the build: dropped, or done with another tool outside it. */
   scope?: FeatureScope;
 }
@@ -87,13 +85,19 @@ function toolPrepOf(raw: Partial<DesignState>): Pick<DesignState, 'toolPrep'> {
   return { toolPrep: { at: q.at, needs: q.questions.map((x, i) => ({ id: `n${i + 1}`, need: x, ask: x, met: false, askedAt: q.at })) } };
 }
 
+/** An older record's choice may carry a retired field (what the old reuse tag named): dropped. */
+const withoutRetired = <T extends object>(t: T): T => {
+  const { reuses: _r, ...rest } = t as T & { reuses?: unknown };
+  return rest as T;
+};
+
 /** A stored choice with its lists made safe; null when it names no tool. */
 function choiceOf(raw: unknown): ToolChoice | undefined {
   const t = raw as Partial<ToolChoice> | undefined;
   if (!t || typeof t !== 'object' || typeof t.tool !== 'string' || !t.tool) return undefined;
   return {
-    ...t, tool: t.tool, pathway: t.pathway ?? 'Assisted Citizen', by: t.by === 'ai' ? 'ai' : 'operator', reason: String(t.reason ?? ''),
-    pros: arr<string>(t.pros), cons: arr<string>(t.cons), context: arr<string>(t.context), flags: arr<string>(t.flags),
+    ...withoutRetired(t), tool: t.tool, pathway: t.pathway ?? 'Assisted Citizen', by: t.by === 'ai' ? 'ai' : 'operator', reason: String(t.reason ?? ''),
+    pros: arr<string>(t.pros), cons: arr<string>(t.cons), context: arr<string>(t.context), flags: dropRetiredFlags(arr<string>(t.flags)),
     fit: arr<ToolChoice['fit'][number]>(t.fit), evaluatedFor: arr<string>(t.evaluatedFor), at: String(t.at ?? ''),
   };
 }
@@ -119,12 +123,11 @@ function normalize(raw: Partial<DesignState>): DesignState {
   const tool = legacy?.tool ?? choiceOf(raw.tool);
   const features: DesignFeature[] = rawFeatures.map((f) => {
     const scope = scopeOf(f.scope);
-    const flags = arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build'));
-    // An older record's bare reuse flag is kept as it is (it reads "not named" until suggested again).
-    const reuses = flags.includes(REUSE_FLAG) && typeof f.reuses === 'string' ? f.reuses.replace(/\s+/g, ' ').trim().slice(0, REUSES_MAX) : '';
+    // An older record's retired flags (and the name that came with them) are dropped.
+    const flags = dropRetiredFlags(arr<string>(f.flags)).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build'));
     return {
       id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
-      flags, ...(reuses ? { reuses } : {}),
+      flags,
       ...(scope ? { scope } : {}),
     };
   });
@@ -162,7 +165,7 @@ export const mdLine = (text: string | undefined): string => (text ?? '').replace
 /** One feature as a design.md line: its tool and fit, or, once the design moved it, out of scope (struck through) or outside the build. */
 export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<DesignState, 'tool'>): string {
   const name = mdLine(f.name).replace(/[*~]/g, '');
-  const flags = f.flags.length ? ` [${f.flags.map((x) => mdLine(flagText(x, f.reuses))).join('; ')}]` : '';
+  const flags = f.flags.length ? ` [${f.flags.map((x) => mdLine(x)).join('; ')}]` : '';
   const why = f.scope?.why ? ` (${mdLine(f.scope.why)})` : '';
   if (f.scope?.status === 'out') return `- ~~**${name}**~~ — out of scope${why}${f.what ? `: ~~${mdLine(f.what)}~~` : ''}`;
   if (f.scope?.status === 'outside') return `- **${name}** (${mdLine(f.scope.by)}, outside the ${state.tool?.tool ?? 'main'} build)${f.what ? `: ${mdLine(f.what)}` : ''}${why}${flags}`;

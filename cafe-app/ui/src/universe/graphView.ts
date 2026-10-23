@@ -65,7 +65,7 @@ export const BLUEPRINT: ScenePalette = {
 /** Blueprint draws each kind in its full colour (no lightening): solid stars that stand out on the blue. */
 export const BLUEPRINT_TINT = 0;
 export const WORKSHOP: ScenePalette = {
-  frost: false, workshop: true, bg: '#d8bf98', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', linkBoost: 2.2,
+  frost: false, workshop: true, bg: '#efe3cf', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', linkBoost: 2.2,
   ring: { 2: '#f96302', 3: '#2e7d32', 4: '#1f4e8c', closed: '#8a7f73' },
 };
 export const paletteFor = (theme?: string): ScenePalette =>

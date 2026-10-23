@@ -2,20 +2,17 @@ import type { Clock } from '../clock';
 import type { Idea, PrepNeed, ReviewPrep } from '../ideas/idea';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
 import { appendHistory } from '../workspace/files';
-import { sameQuestion } from '../inbox/question';
 import { showNames } from '../command/names';
 import { NEED_ANSWER_MAX, type ReviewSuggestInput, type ReviewSuggestOutput } from '../ai/tasks';
 import { addQuestion } from '../design/brainstorm';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { reviewInput } from './suggestInput';
 import { planUpdates } from './updates';
-import { emailAnswerFor, isOpenNeed, type EmailAnswer } from './needs';
+import { emailAnswerFor, isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from './needs';
 
 type WithAnswers = Idea & { answers?: EmailAnswer[] };
 export type RunReview = (input: ReviewSuggestInput) => Promise<{ provider: string; output: ReviewSuggestOutput }>;
 
-const sameNeed = (a: { need: string; ask: string }, b: { need: string; ask: string }) =>
-  a.need.trim().toLowerCase() === b.need.trim().toLowerCase() || sameQuestion(a.ask, b.ask);
 
 /**
  * Suggest a decision and its to-do list, or re-evaluate them: the AI reads the form, the email answers, what
@@ -30,17 +27,7 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
   const pasted = prev.filter((n) => n.answer?.trim()).map((n) => ({ question: n.ask, answer: n.answer! }));
   const { input, basis, codes } = await reviewInput(root, id, pasted);
   const { provider, output } = await run({ ...input, ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}) });
-  let n = Math.max(0, ...prev.map((p) => Number(/^n(\d+)$/.exec(p.id)?.[1] ?? 0)));
-  const needs: PrepNeed[] = output.needs.map((o) => {
-    const p = prev.find((x) => sameNeed(x, o));
-    const note = o.met && o.answer?.trim() ? showNames(o.answer, codes) : undefined;
-    return {
-      id: p?.id ?? `n${++n}`, need: o.need, ask: o.ask, met: o.met,
-      ...(note ? { note } : {}),
-      ...(p?.answer ? { answer: p.answer } : {}),
-      ...(p?.askedAt ? { askedAt: p.askedAt } : {}),
-    };
-  });
+  const needs: PrepNeed[] = mergeNeeds(prev, output.needs, (s) => showNames(s, codes));
   // What the answers would change in the record: proposed only, each waiting for the operator's Yes.
   const updates = await planUpdates(root, idea, output.updates, codes, provider, idea.prep?.updates);
   const prep: ReviewPrep = {
@@ -67,13 +54,7 @@ export async function answerNeed(root: string, id: string, needId: string, raw: 
   const idea = await loadIdea(root, id);
   const prep = idea.prep;
   if (!prep?.needs.some((x) => x.id === needId)) throw new Error('That to-do is gone; suggest a decision again');
-  const answer = typeof raw === 'string' ? raw.trim().slice(0, 4000) : '';
-  const needs = prep.needs.map((x) => {
-    if (x.id !== needId) return x;
-    const { answer: _old, ...rest } = x;
-    return answer ? { ...rest, answer } : rest;
-  });
-  const next = { ...prep, needs };
+  const next = { ...prep, needs: withAnswer(prep.needs, needId, raw) };
   await saveIdea(root, { ...idea, prep: next });
   return next;
 }
@@ -87,11 +68,16 @@ const LEFTOVER_SLOT = /^\s*\d{1,2}[.)]\s*\[QUESTION \d+[^\]\n]*\]\s*$/;
 export async function draftNeedsEmail(root: string, id: string, clock: Clock): Promise<EmailRecord> {
   const idea = await loadIdea(root, id) as WithAnswers;
   const open = (idea.prep?.needs ?? []).filter((x) => isOpenNeed(x, idea.answers));
-  if (!open.length) throw new Error('Nothing is open to ask the team');
+  return draftQuestionsEmail(root, id, open.map((x) => x.ask), clock);
+}
+
+/** The questions email (E2) with these questions in it (each once), for any to-do list: the decision's or the tool picker's. */
+export async function draftQuestionsEmail(root: string, id: string, asks: string[], clock: Clock): Promise<EmailRecord> {
+  if (!asks.length) throw new Error('Nothing is open to ask the team');
   let rec = await draftEmail(root, { template: 'E2', ideaId: id }, clock);
   if (rec.status === 'draft') {
     let body = rec.body;
-    for (const x of open) body = addQuestion(body, x.ask);
+    for (const ask of asks) body = addQuestion(body, ask);
     // Renumber after taking out the unused example questions, so the team sees 1, 2, 3.
     let k = 0;
     body = body.split('\n').filter((l) => !LEFTOVER_SLOT.test(l))

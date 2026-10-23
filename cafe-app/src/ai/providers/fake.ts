@@ -142,13 +142,14 @@ const TOOL_PICK = {
       'The scheduling logic needs code, which no approved low-code tool provides → custom app, TTIA-Led, CSIC flag',
     ],
   },
+  needs: [],
 };
 const TOOL_QUESTIONS = {
-  questions: [
-    'What does a request look like when it arrives: an email, a form, a chat message?',
-    'What must the proof of concept show working on a sample: the intake, the sorting, or the scheduling?',
-    'Is any live non-Microsoft system involved, or can a published extract in SharePoint stand in?',
-    'Who on the team would build it and attend the sessions?',
+  needs: [
+    { need: 'How a request arrives', ask: 'What does a request look like when it arrives: an email, a form, a chat message?', met: false },
+    { need: 'What the proof of concept must show', ask: 'What must the proof of concept show working on a sample: the intake, the sorting, or the scheduling?', met: false },
+    { need: 'Whether a live system is involved', ask: 'Is any live non-Microsoft system involved, or can a published extract in SharePoint stand in?', met: false },
+    { need: 'Who builds it', ask: 'Who on the team would build it and attend the sessions?', met: false },
   ],
 };
 

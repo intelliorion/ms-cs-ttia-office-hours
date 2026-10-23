@@ -55,18 +55,7 @@ export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName,
           <div className="rs-by">By {aiName} on {shortDate(prep.at)}. {prep.basis}.</div>
         </div>
       )}
-      {prep && (
-        <div className="rs-todo">
-          <div className="rs-th">
-            <span>What you need</span>
-            <span className="sec-n" data-testid="rs-count">{needs.length === 0 ? 'nothing' : open.length ? `${open.length} open` : waiting.length ? `${waiting.length} to re-evaluate` : 'all clear'}</span>
-          </div>
-          {needs.length === 0 && <div className="hint">Nothing more is needed to decide.</div>}
-          <ol className="rs-list">
-            {needs.map((n) => <Need key={n.id} need={n} answers={answers} disabled={off} onAnswer={onAnswer} />)}
-          </ol>
-        </div>
-      )}
+      {prep && <TodoList needs={needs} answers={answers} disabled={off} onAnswer={onAnswer} none="Nothing more is needed to decide." />}
       {prep && <Updates updates={prep.updates ?? []} disabled={off} onUpdate={onUpdate} />}
       <div className="rs-acts">
         {!prep ? (
@@ -125,6 +114,29 @@ export function Updates({ updates, disabled, onUpdate }: { updates: any[]; disab
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The to-do list the AI keeps: what is needed, the question for the team, and a box for the answer. Shared by the
+ * decision and the tool picker.
+ */
+export function TodoList({ needs, answers, disabled, onAnswer, none }: {
+  needs: any[]; answers: any[]; disabled: boolean; onAnswer: (need: string, answer: string) => Promise<void>; none: string;
+}) {
+  const open = needs.filter((n) => isOpenNeed(n, answers));
+  const waiting = needs.filter((n) => awaitsReevaluation(n, answers));
+  return (
+    <div className="rs-todo">
+      <div className="rs-th">
+        <span>What you need</span>
+        <span className="sec-n" data-testid="rs-count">{needs.length === 0 ? 'nothing' : open.length ? `${open.length} open` : waiting.length ? `${waiting.length} to re-evaluate` : 'all clear'}</span>
+      </div>
+      {needs.length === 0 && <div className="hint">{none}</div>}
+      <ol className="rs-list">
+        {needs.map((n) => <Need key={n.id} need={n} answers={answers} disabled={disabled} onAnswer={onAnswer} />)}
+      </ol>
     </div>
   );
 }

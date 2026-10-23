@@ -23,7 +23,7 @@ import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask, designPlanTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
-import { saveToolPicks, toolPickInput, mergeSuggestions , askToolQuestions, clearToolQuestions } from '../design/tools';
+import { saveToolPicks, suggestTools, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
@@ -174,7 +174,10 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/outbox/unopen', async ({ body }) => {
     const before = (await listOutbox(root)).find((m) => m.key === String(body.key));
     const out = await unopenEmail(root, String(body.key), clock);
-    if (before?.idea && before.template === 'E2' && before.sentAt) await unmarkAsked(root, before.idea, before.sentAt);
+    if (before?.idea && before.template === 'E2' && before.sentAt) {
+      await unmarkAsked(root, before.idea, before.sentAt);
+      await markToolAsked(root, before.idea, before.sentAt, false);
+    }
     return out;
   });
   add('POST', '/api/outbox/update', async ({ body }) => updateDraft(root, String(body.key), body));
@@ -226,17 +229,17 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const folder = `data/${dataKey(root, await ideaDir(root, idea.id))}`;
     return { state, designMd: renderDesignMd(idea, state), folder };
   });
-  add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => {
-    const idea = await loadIdea(root, params.id);
-    const state = await readDesign(root, idea.id);
-    return byHand(async () => {
-      const { provider, output } = await ai.runWith(toolPickTask, toolPickInput(idea, state));
-      // Not enough in the form: every question goes to the team in one E2 draft; nothing is suggested.
-      if (output.questions?.length) return { ...(await askToolQuestions(root, idea, output.questions, clock)), provider };
-      return { features: mergeSuggestions(state.features, output.pick ? [output.pick] : []), provider };
-    })();
+  // Suggest with AI, or Re-evaluate: the pick it can stand behind and the to-do list of what it still needs, as the decision's.
+  add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => byHand(() =>
+    suggestTools(root, params.id, (input) => ai.runWith(toolPickTask, input), clock))());
+  add('POST', '/api/ideas/:id/tools/prep/answer', async ({ params, body }) => ({ state: await answerToolNeed(root, params.id, String(body.need ?? ''), body.answer) }));
+  // Draft email: the picker's open questions as the questions email (E2), opened in Outlook and counted as sent.
+  add('POST', '/api/ideas/:id/tools/prep/email', async ({ params }) => {
+    const rec = await draftToolNeedsEmail(root, params.id, clock);
+    const out = await inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
+    await markToolAsked(root, params.id, out.email.sentAt ?? clock());
+    return out;
   });
-  add('POST', '/api/ideas/:id/tools/questions/clear', async ({ params }) => ({ state: await clearToolQuestions(root, params.id) }));
   add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
     const { state, designFile } = await saveToolPicks(root, params.id, body.features, { clock, steps: await steps() });
     return { state, designMd: await readFile(designFile, 'utf8') };

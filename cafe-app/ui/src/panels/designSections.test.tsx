@@ -298,40 +298,44 @@ describe('IdeaDetails design sections', () => {
     expect(saveCall[2].features[0].context).toEqual(['Form-shaped input', 'No live system → Power Apps']);
   });
 
-  it('questions out to the team: listed in the picker, Suggest disabled until the reply is marked received, Forget clears', async () => {
-    const tq = { questions: ['What arrives?', 'Who builds?'], emailKey: 'k9', at: '2026-10-21' };
-    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
-    api.designPost.mockImplementation(async () => ({ state: designState({ features: [] }) }));
+  const toolPrep = (needs: any[]) => ({ at: '2026-10-21', provider: 'fake', needs });
+  const OPEN = [{ id: 'n1', need: 'How a request arrives', ask: 'What does a request look like when it arrives?', met: false }, { id: 'n2', need: 'Who builds it', ask: 'Who builds?', met: false }];
+  const withPrep = (needs: any[]) => api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolPrep: toolPrep(needs) }), designMd: '# Design' } : { files: [] }));
+
+  it('the picker keeps a to-do list like the decision\'s: each item with its question and an answer box; Draft email and Re-evaluate', async () => {
+    withPrep(OPEN);
+    api.designPost.mockImplementation(async () => ({ state: designState({ features: [], toolPrep: toolPrep(OPEN) }), email: { template: 'E2' } }));
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    const box = el.querySelector('[data-testid="tool-questions"]')!;
-    expect(box.textContent).toContain('Who builds?');
-    expect(box.textContent).toContain('waiting for the reply');
-    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(true);
-    await click('[data-action="tools-forget"]');
+    const todo = el.querySelector('[data-testid="tool-todo"]')!;
+    expect([...todo.querySelectorAll('[data-need]')].map((n) => n.getAttribute('data-need'))).toEqual(['n1', 'n2']);
+    expect(todo.querySelector('[data-testid="rs-count"]')!.textContent).toBe('2 open');
+    expect(el.querySelector('[data-action="tools-suggest"]')).toBeNull();
+    await click('[data-action="tools-draft-questions"]');
     await flush();
-    expect(api.designPost.mock.calls.some((c: any[]) => c[1] === 'tools/questions/clear')).toBe(true);
+    expect(api.designPost.mock.calls.some((c: any[]) => c[1] === 'tools/prep/email')).toBe(true);
+    // An answer typed in the box is saved against its item.
+    const box = todo.querySelector('[data-need="n2"] textarea') as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Person 2');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { box.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    await flush();
+    expect(api.designPost.mock.calls.find((c: any[]) => c[1] === 'tools/prep/answer')?.[2]).toEqual({ need: 'n2', answer: 'Person 2' });
+    await click('[data-action="tools-reevaluate"]');
+    await flush();
+    expect(api.designPost.mock.calls.filter((c: any[]) => c[1] === 'tools/suggest')).toHaveLength(1);
   });
 
-  it('with the reply marked received the picker says so and Suggest is enabled again', async () => {
-    const tq = { questions: ['What arrives?'], emailKey: 'k9', at: '2026-10-21' };
-    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
-    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, checklist: { s2d: { done: true } } }] } } as any);
-    await act(async () => root.render(<IdeaDetails id={ID} />));
-    await flush();
-    expect(el.querySelector('[data-testid="tool-questions"]')!.textContent).toContain('reply received');
-    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('answers the Import recorded show under the asked questions and re-enable Suggest', async () => {
-    const tq = { questions: ['What does a request look like when it arrives?', 'Who builds?'], emailKey: 'k9', at: '2026-10-21' };
-    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], toolQuestions: tq }), designMd: '# Design' } : { files: [] }));
+  it('an answer from a team email counts against its item: it waits for Re-evaluate, and Draft email has nothing left to ask', async () => {
+    withPrep([OPEN[0]]);
     useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, answers: [{ question: 'What does a request look like when it arrives', answer: 'An email to the shared mailbox', source: 'r.eml' }] }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    expect(el.querySelector('[data-testid="tool-answer"]')!.textContent).toContain('An email to the shared mailbox');
-    expect(el.querySelectorAll('[data-testid="tool-answer"]')).toHaveLength(1);
-    expect((el.querySelector('[data-action="tools-suggest"]') as HTMLButtonElement).disabled).toBe(false);
-    expect(el.querySelector('[data-testid="tool-questions"]')!.textContent).toContain('press Suggest with AI again');
+    expect(el.querySelector('[data-testid="tool-todo"] [data-testid="rs-from-email"]')!.textContent).toContain('An email to the shared mailbox');
+    expect(el.querySelector('[data-testid="tool-todo"] [data-testid="rs-count"]')!.textContent).toBe('1 to re-evaluate');
+    expect((el.querySelector('[data-action="tools-draft-questions"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(el.querySelector('[data-action="tools-reevaluate"]')!.className).toContain('primary');
   });
 });

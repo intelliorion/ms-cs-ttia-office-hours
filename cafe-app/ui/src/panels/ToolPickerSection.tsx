@@ -4,15 +4,19 @@ import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, flagsFor, flagWord, mergeRows,
-  askedWithAnswers, pathwayText, picksBody, picksProblem, suggestWaiting, type FeatureRow,
+  pathwayText, picksBody, picksProblem, type FeatureRow,
 } from './designHelpers';
+import { TodoList } from './ReviewSelect';
+import { openedText } from './outlook';
+import { isOpenNeed, awaitsReevaluation } from '../../../src/review/needs';
 import type { DesignCall, DesignView } from './DesignSection';
 import { buildersOf } from '../popouts/IdeaSections';
 
 /**
  * Tool picker: one row per feature (name, what, approved tool, pathway, flags, why this tool). "Suggest with AI" asks
- * for the one tool for the proof of concept: it comes back as one suggested row with the context it rests on, or, when
- * the form says too little, as the questions the team must answer, all of them in one E2 draft. Nothing is saved until
+ * for the one tool for the proof of concept, as the decision does: the pick it can stand behind (one suggested row with
+ * the context it rests on) and a to-do list of what it still needs, each with its question and a box for the answer.
+ * Draft email sends the open questions (E2) in Outlook; Re-evaluate reads the answers again. Nothing is saved until
  * Save, and the tool drop-down is always the operator's. A custom-app pick carries the CSIC note.
  */
 export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName, call }: {
@@ -32,18 +36,25 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch, flags: patch.tool !== undefined ? flagsFor(patch.tool, r.flags) : r.flags } : r)));
     setDirty(true);
   };
+  const prep = design?.state.toolPrep;
+  const answers: any[] = idea.answers ?? [];
+  const needs: any[] = prep?.needs ?? [];
+  const open = needs.filter((n) => isOpenNeed(n, answers));
+  const answered = needs.filter((n) => awaitsReevaluation(n, answers));
   const suggest = async () => {
+    const again = !!prep;
     const r = await call(() => designPost(idea.id, 'tools/suggest'), {
       ai: 'tools',
-      ok: (x: any) => (x.questions?.length
-        ? `${aiName(x.provider)} needs ${x.questions.length} answer${x.questions.length === 1 ? '' : 's'} first. The questions are in one questions email (E2): send it from ✉ Emails. Nothing is suggested until the team replies.`
-        : `One tool suggested by ${aiName(x.provider)}. Check why below, change the tool if you like, then Save.`),
+      ok: (x: any) => {
+        const left = (x.state?.toolPrep?.needs ?? []).filter((n: any) => !n.met).length;
+        const picked = x.features?.some((f: any) => !(design?.state.features ?? []).some((s: any) => s.name === f.name));
+        return `${again ? 'Re-evaluated' : 'Suggested'} by ${aiName(x.provider)}: ${picked ? 'one tool suggested below' : 'no tool yet'}${left ? `, ${left} thing${left > 1 ? 's' : ''} to find out` : ''}. Nothing is saved until you Save.`;
+      },
     });
     if (r?.features) { setRows((rs) => mergeRows(rs, featureRows(r.features, { fromAi: true, tools }))); setDirty(true); }
   };
-  const forget = () => call(() => designPost(idea.id, 'tools/questions/clear'), { ok: () => 'Questions forgotten. You can ask the AI again.' });
-  const asked: { questions: string[]; at: string } | undefined = design?.state.toolQuestions;
-  const waiting = suggestWaiting(design?.state, idea);
+  const answer = async (need: string, text: string) => { await call(() => designPost(idea.id, 'tools/prep/answer', { need, answer: text }), { ok: () => undefined }); };
+  const draftEmail = () => call(() => designPost(idea.id, 'tools/prep/email'), { ok: (o: any) => openedText(o.email.template) });
   const problem = dirty ? picksProblem(rows) : null;
   const save = async () => {
     const body = picksBody(rows);
@@ -58,23 +69,28 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
   return (
     <section className="sec" data-testid="tool-picker">
       <h3>Tool picker <span className="sec-n">{saved?.length ? `${features(saved.length)} saved` : 'nothing saved yet'}</span></h3>
-      <div className="ai-row">
-        <button className="btn" data-action="tools-suggest" disabled={noAi || off || !design || waiting}
-          title={noAi ? NO_AI_TIP : waiting ? 'Questions are out to the team. Mark the reply received in Emails, or forget the questions below.' : undefined} onClick={() => void suggest()}>
-          {aiWorking ? 'Working…' : 'Suggest with AI'}</button>
+      {prep && (
+        <div data-testid="tool-todo">
+          <TodoList needs={needs} answers={answers} disabled={off} onAnswer={answer} none="Nothing more is needed to pick the tool." />
+          <div className="rs-by">By {aiName(prep.provider)} on {prep.at}.</div>
+        </div>
+      )}
+      <div className="ai-row rs-acts">
+        {!prep ? (
+          <button className="btn" data-action="tools-suggest" disabled={noAi || off || !design}
+            title={noAi ? NO_AI_TIP : undefined} onClick={() => void suggest()}>{aiWorking ? 'Working…' : 'Suggest with AI'}</button>
+        ) : (
+          <>
+            <button className="btn" data-action="tools-draft-questions" disabled={off || !open.length}
+              title={open.length ? 'The open questions as one email, opened in Outlook' : 'Nothing open to ask'} onClick={() => void draftEmail()}>✉ Draft email</button>
+            <button className={`btn${answered.length ? ' primary' : ''}`} data-action="tools-reevaluate" disabled={noAi || off || !design}
+              title={noAi ? NO_AI_TIP : 'Read everything again, with the answers'} onClick={() => void suggest()}>{aiWorking ? 'Working…' : 'Re-evaluate'}</button>
+          </>
+        )}
         <button className="btn" data-action="tools-add" disabled={off || rows.length >= 12} onClick={() => { setRows((rs) => [...rs, emptyRow()]); setDirty(true); }}>Add feature</button>
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
-      {asked && (
-        <div className="tp-asked" data-testid="tool-questions">
-          <div className="tp-asked-h">Asked the team {asked.at} <span className="sec-n">{waiting ? 'waiting for the reply' : 'reply received'}</span></div>
-          <ol>{askedWithAnswers(asked.questions, idea).map((x, i) => (
-            <li key={i}>{x.question}{x.answer && <div className="tp-answer" data-testid="tool-answer">↳ {x.answer}</div>}</li>
-          ))}</ol>
-          <div className="hint">All in one questions email (E2), sent from ✉ Emails. {waiting ? 'The AI suggests nothing until the team replies; you can still pick by hand.' : 'The answers go to the AI with the form: press Suggest with AI again, or pick by hand.'}
-            {' '}<button className="link-btn" data-action="tools-forget" disabled={off} onClick={() => void forget()}>Forget these questions</button></div>
-        </div>
-      )}
+      {prep && !open.length && answered.length > 0 && <div className="hint">Answers are in: Re-evaluate to check them.</div>}
       {!design ? <div className="hint">Loading…</div> : rows.length === 0 ? (
         <div className="hint">No features yet. Add one by hand, or ask the AI to suggest some.</div>
       ) : (

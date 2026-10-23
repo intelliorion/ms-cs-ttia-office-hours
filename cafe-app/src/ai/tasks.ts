@@ -453,12 +453,14 @@ export interface ToolPickInput {
   existingFeatures?: { name: string; what?: string; tool?: string; reason?: string }[];
   /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
   guidance?: string;
+  /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
+  todo?: { need: string; ask: string }[];
 }
-/** Exactly one of: the one pick, or the questions the AI needs answered before it can pick. */
-export interface ToolPickOutput { pick?: ToolPickFeature; questions?: string[] }
+/** The pick when enough is known, and what is still needed to be sure (the same to-do list as the decision's). */
+export interface ToolPickOutput { pick?: ToolPickFeature; needs: ReviewNeed[] }
 
 export const TOOL_PICK_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false,
+  type: 'object', additionalProperties: false, required: ['needs'],
   properties: {
     pick: {
       type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags', 'context'],
@@ -471,7 +473,18 @@ export const TOOL_PICK_SCHEMA: JsonSchema = {
         context: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 160 } },
       },
     },
-    questions: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 1, maxLength: 200 } },
+    needs: {
+      type: 'array', maxItems: 8,
+      items: {
+        type: 'object', additionalProperties: false, required: ['need', 'ask', 'met'],
+        properties: {
+          need: { type: 'string', minLength: 1, maxLength: NEED_MAX },
+          ask: { type: 'string', minLength: 1, maxLength: ASK_MAX },
+          met: { type: 'boolean' },
+          answer: { type: 'string', maxLength: NEED_ANSWER_MAX },
+        },
+      },
+    },
   },
 };
 
@@ -483,10 +496,14 @@ function trimToolPick(v: unknown): void {
     x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160);
     if (Array.isArray(x.context)) x.context = x.context.map((c) => trimStrings(c, 160));
   }
-  if (Array.isArray(o.questions)) o.questions = o.questions.map((q) => trimStrings(q, 200));
-  // The one-of rule, which the schema cannot say: exactly one of pick or questions.
-  const has = (k: string) => o[k] !== undefined && o[k] !== null && !(Array.isArray(o[k]) && o[k].length === 0);
-  if (has('pick') === has('questions')) throw new AiError('invalid output: give either "pick" or "questions", not both and not neither');
+  if (Array.isArray(o.needs)) for (const n of o.needs) {
+    const y = asObj(n); if (!y) continue;
+    y.need = trimStrings(y.need, NEED_MAX); y.ask = trimStrings(y.ask, ASK_MAX);
+    if (y.answer !== undefined) y.answer = trimStrings(y.answer, NEED_ANSWER_MAX);
+  }
+  // With nothing open, there must be a pick: an empty reply helps no one.
+  const open = Array.isArray(o.needs) && o.needs.some((n) => asObj(n)?.met === false);
+  if (!o.pick && !open) throw new AiError('invalid output: give a "pick", or the open "needs" that stop you picking');
 }
 
 function toolPickData(input: ToolPickInput) {
@@ -495,6 +512,7 @@ function toolPickData(input: ToolPickInput) {
     support: (Array.isArray(input.support) ? input.support : []).slice(0, 20).map((s) => cap(s, 200)),
     builderNamed: Boolean(input.builderNamed),
     ...(input.teamAnswers?.length ? { teamAnswers: input.teamAnswers.slice(0, 12).map((a) => ({ question: cap(a.question, 200), answer: cap(a.answer, 500) })) } : {}),
+    ...(input.todo?.length ? { todo: input.todo.slice(0, 8).map((t) => ({ need: cap(t.need, NEED_MAX), ask: cap(t.ask, ASK_MAX) })) } : {}),
     ...(input.existingFeatures?.length ? {
       existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
         name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
@@ -514,7 +532,12 @@ export const toolPickTask: Task<ToolPickOutput> = {
       "Pick the one approved tool to build a proof of concept of this Creators' Café idea, or say what you need to know first. The operator decides; you only suggest, and the operator can change the tool.",
       'First judge whether the form says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty.',
       'If enough is known, return "pick": exactly one feature, the whole proof of concept, with the one tool for it. Do not split the idea into several features.',
-      'If not enough is known, return "questions": every question you would need answered, all at once (2 to 8), each one short and answerable by the team in a sentence. The questions go to the team in one email; you will be asked again when the answers are in. Do not also return a pick.',
+      'needs: what you still need to know to be sure of the tool, as a to-do list. Each item: need (what is needed, a few words,',
+      `at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters),`,
+      'met (true only if DATA now covers it), and, when met, answer (what covered it in a few words). Keep every item in DATA.todo, in the same',
+      'words, in the same order, marking each met or not; then add new open items only for real gaps, at most 5 open in all. Only ask what changes',
+      'the tool; never ask for personal, client or third-party data. If something is open but you can already pick, give the pick too; if you',
+      'cannot pick at all, give no pick and the open needs. When everything is known, every item is met (or there are none) and there is a pick.',
       ...(data.teamAnswers ? ['"teamAnswers" are the team\'s replies to questions sent earlier. Treat them as part of the form. Never ask again anything answered there, even in other words; if what you would have asked is answered, pick.'] : []),
       ...(inp.guidance ? ['Guidance from the brainstorming skill on telling a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
       ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. If one has a tool, keep it unless clearly wrong, and return it as the pick.'] : []),

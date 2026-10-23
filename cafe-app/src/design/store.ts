@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
-import type { Idea } from '../ideas/idea';
+import type { Idea, PrepNeed } from '../ideas/idea';
 import { cafeCheck, type CafeCheck } from './cafecheck';
 
 export type Pathway = 'Citizen-Led' | 'Assisted Citizen' | 'TTIA-Led';
@@ -49,7 +49,10 @@ export interface DesignState {
   summary?: string;
   cafeCheck?: CafeCheck;
   approvedAt?: string;
+  /** Older records: the picker's questions as sent. Read into toolPrep. */
   toolQuestions?: ToolQuestions;
+  /** The tool picker's to-do list (what the AI needs to be sure of the tool), as the decision has. */
+  toolPrep?: { at: string; provider?: string; needs: PrepNeed[] };
 }
 
 /** Said in design.md and on approval when the Café check has a CSIC flag. */
@@ -62,12 +65,23 @@ export function emptyDesign(): DesignState {
 const STATUSES: DesignStatus[] = ['not-started', 'picking', 'designing', 'approved'];
 const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+/** Questions the picker sent before it had a to-do list become open items, asked on the day they went out. */
+function toolPrepOf(raw: Partial<DesignState>): Pick<DesignState, 'toolPrep'> {
+  if (raw.toolPrep) return { toolPrep: { ...raw.toolPrep, needs: arr<PrepNeed>(raw.toolPrep.needs) } };
+  const q = raw.toolQuestions;
+  if (!q?.questions?.length) return {};
+  return { toolPrep: { at: q.at, needs: q.questions.map((x, i) => ({ id: `n${i + 1}`, need: x, ask: x, met: false, askedAt: q.at })) } };
+}
+
 function normalize(raw: Partial<DesignState>): DesignState {
+  // The old questions live on as the to-do list.
+  const { toolQuestions: _old, ...rest } = raw;
   return {
-    ...raw,
+    ...rest,
     version: 1,
     status: STATUSES.includes(raw.status as DesignStatus) ? (raw.status as DesignStatus) : 'not-started',
     features: arr<DesignFeature>(raw.features).map((f) => ({ ...f, flags: arr<string>(f.flags), ...(f.context ? { context: arr<string>(f.context) } : {}) })),
+    ...toolPrepOf(raw),
     steps: arr<DesignStep>(raw.steps).map((s) => ({ ...s, suggested: arr<string>(s.suggested) })),
   };
 }

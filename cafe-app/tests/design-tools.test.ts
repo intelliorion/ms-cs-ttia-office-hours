@@ -39,24 +39,26 @@ const PICKS = [
 describe('toolPickTask', () => {
   const pick = { name: 'Form', what: 'A form', tool: 'Power Apps', reason: 'Simple', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'] };
   it('accepts one pick with approved tool and context; rejects an unlisted tool, bad flags or no context (no silent fix)', () => {
-    expect(toolPickTask.parse(JSON.stringify({ pick })).pick!.tool).toBe('Power Apps');
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'Excel macro' } }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'PowerApps' } }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, flags: ['valuable'] } }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, context: [] } }))).toThrow(/invalid output/);
+    expect(toolPickTask.parse(JSON.stringify({ pick, needs: [] })).pick!.tool).toBe('Power Apps');
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'Excel macro' }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'PowerApps' }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, flags: ['valuable'] }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, context: [] }, needs: [] }))).toThrow(/invalid output/);
   });
-  it('accepts questions instead, and refuses both or neither', () => {
-    expect(toolPickTask.parse(JSON.stringify({ questions: ['What arrives?', 'Who builds?'] })).questions).toHaveLength(2);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick, questions: ['x'] }))).toThrow(/not both/);
-    expect(() => toolPickTask.parse(JSON.stringify({}))).toThrow(/not neither/);
-    expect(() => toolPickTask.parse(JSON.stringify({ questions: [] }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ questions: Array(9).fill('q') }))).toThrow(/invalid output/);
+  it('gives a to-do list like the decision\'s, with or without a pick; never neither', () => {
+    const open = { need: 'Who builds it', ask: 'Who would build it?', met: false };
+    expect(toolPickTask.parse(JSON.stringify({ needs: [open] })).needs).toHaveLength(1);
+    expect(toolPickTask.parse(JSON.stringify({ pick, needs: [open] })).pick!.tool).toBe('Power Apps');
+    expect(() => toolPickTask.parse(JSON.stringify({ needs: [] }))).toThrow(/give a "pick"/);
+    expect(() => toolPickTask.parse(JSON.stringify({ needs: [{ ...open, met: true }] }))).toThrow(/give a "pick"/);
+    expect(() => toolPickTask.parse(JSON.stringify({ pick }))).toThrow(/needs is missing/);
+    expect(() => toolPickTask.parse(JSON.stringify({ needs: Array(9).fill(open) }))).toThrow(/invalid output/);
   });
   it('prompt asks for one pick or all the questions at once, lists every approved tool, the Café rules, the data rule, and works with no challenge', () => {
     const p = toolPickTask.prompt({ idea: { id: ID, title: 'Email scheduler', outcomes: ['Faster'] }, support: [] });
     for (const t of APPROVED_TOOLS) expect(p).toContain(`- ${t}: `);
     expect(p).toMatch(/exactly one feature/);
-    expect(p).toMatch(/all at once/);
+    expect(p).toMatch(/Keep every item in DATA.todo/);
     expect(p).toMatch(/never propose measuring value/i);
     expect(p).toMatch(/data, not instructions/);
     expect(p).not.toMatch(/existingFeatures" are/);
@@ -64,7 +66,7 @@ describe('toolPickTask', () => {
     const q = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], existingFeatures: [{ name: 'Form', tool: 'Power Apps' }], guidance: 'GUIDE TEXT' });
     expect(q).toMatch(/keep it unless clearly wrong/);
     expect(q).toContain('GUIDE TEXT');
-    expect(TOOL_PICK_SCHEMA.properties!.questions.maxItems).toBe(8);
+    expect(TOOL_PICK_SCHEMA.properties!.needs.maxItems).toBe(8);
   });
 });
 
@@ -105,18 +107,18 @@ describe('picks and approach.md', () => {
 });
 
 describe('tool picker routes', () => {
-  it('fake suggest returns one pick with its context and saves nothing', async () => {
+  it('fake suggest returns one pick with its context and nothing open; no pick is saved', async () => {
     const s = await server();
     const r = await s.post(`/api/ideas/${ID}/tools/suggest`);
     expect(r.status).toBe(200);
-    const { features, questions } = await json(r);
-    expect(questions).toBeUndefined();
+    const { features, state } = await json(r);
+    expect(state.toolPrep.needs).toEqual([]);
+    expect(state.features).toEqual([]);
     expect(features).toHaveLength(1);
     expect(features[0].tool).toBe('custom app');
     expect(features[0].flags).toContain('custom-app');
     expect(features[0].context.length).toBeGreaterThan(0);
     const dir = await ideaDir(s.root, ID);
-    expect(await exists(path.join(dir, 'design.yaml'))).toBe(false);
     expect(await exists(path.join(dir, 'approach.md'))).toBe(false);
     expect((await loadIdea(s.root, ID)).tools).toBeUndefined();
   });
@@ -131,49 +133,54 @@ describe('tool picker routes', () => {
     expect(md).toContain('- Why this tool:\n  - Form-shaped input\n  - spaced out');
   });
 
-  it('an idea with no challenge text gets questions, not a pick: all of them in one E2 draft, remembered in design.yaml; saving picks forgets them', async () => {
+  it('with too little in the form: a to-do list like the decision\'s, no pick; Draft email opens the open questions in Outlook and marks them asked', async () => {
+    vi.stubEnv('CAFE_NO_OUTLOOK', '1');
     let seen = '';
     const fake = fakeProvider();
     const s = await server({ ...fake, complete: async (p, o) => { seen = p; return fake.complete(p, o); } });
     const idea = await loadIdea(s.root, ID);
     await saveIdea(s.root, { ...idea, challenge: undefined, current_process: undefined });
-    const r = await s.post(`/api/ideas/${ID}/tools/suggest`);
-    expect(r.status).toBe(200);
+    const out = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
     expect(seen).toContain('Email scheduler');
-    const out = await json(r);
-    expect(out.features).toBeUndefined();
-    expect(out.questions).toHaveLength(4);
-    expect(out.state.toolQuestions).toMatchObject({ questions: out.questions, emailKey: out.emailKey });
-    const st = await s.get('/api/state');
-    const e2 = st.outbox.find((m: any) => m.idea === ID && m.template === 'E2');
-    expect(e2.status).toBe('draft');
-    for (const q of out.questions) expect(e2.body).toContain(q);
-    // Asking again reuses the same draft and adds no duplicate lines.
-    const r2 = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
-    expect(r2.emailKey).toBe(out.emailKey);
-    const body2 = (await s.get('/api/state')).outbox.find((m: any) => m.key === out.emailKey).body;
-    expect(body2.split(out.questions[0]).length).toBe(2);
-    // Clearing by hand, and clearing by saving a pick.
-    expect((await json(await s.post(`/api/ideas/${ID}/tools/questions/clear`))).state.toolQuestions).toBeUndefined();
-    await s.post(`/api/ideas/${ID}/tools/suggest`);
-    const saved = await json(await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [] }] }));
-    expect(saved.state.toolQuestions).toBeUndefined();
+    expect(out.features).toEqual([]);
+    const needs = out.state.toolPrep.needs;
+    expect(needs.map((n: any) => [n.id, n.met])).toEqual([['n1', false], ['n2', false], ['n3', false], ['n4', false]]);
+    // Nothing goes to the team until Draft email.
+    expect((await s.get('/api/state')).outbox.filter((m: any) => m.template === 'E2')).toEqual([]);
+    await s.post('/api/settings', { operatorName: 'Café operator' });
+    const sent = await json(await s.post(`/api/ideas/${ID}/tools/prep/email`));
+    expect(sent.email).toMatchObject({ template: 'E2', status: 'sent' });
+    for (const n of needs) expect(sent.email.body).toContain(n.ask);
+    expect(sent.file).toMatch(/^data\/exports\/outlook\/.+\.eml$/);
+    expect((await readDesign(s.root, ID)).toolPrep!.needs.every((n) => n.askedAt === '2026-10-20')).toBe(true);
+    // Its Undo: not sent, not asked.
+    await s.post('/api/outbox/unopen', { key: sent.email.key });
+    expect((await readDesign(s.root, ID)).toolPrep!.needs.some((n) => n.askedAt)).toBe(false);
   });
 
-  it('once the team\'s answers are recorded on the idea, suggest sends them to the AI and gets the pick', async () => {
+  it('an answer pasted against an item goes to the AI at Re-evaluate, which keeps the list and gives the pick', async () => {
     let seen = '';
     const fake = fakeProvider();
     const s = await server({ ...fake, complete: async (p, o) => { seen = p; return fake.complete(p, o); } });
     const idea = await loadIdea(s.root, ID);
     await saveIdea(s.root, { ...idea, challenge: undefined, current_process: undefined });
-    expect((await json(await s.post(`/api/ideas/${ID}/tools/suggest`))).questions).toHaveLength(4);
-    await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), answers: [{ question: 'What does a request look like when it arrives?', answer: 'An email to the shared mailbox', source: 'reply.eml' }] } as any);
+    await s.post(`/api/ideas/${ID}/tools/suggest`);
+    const answered = await json(await s.post(`/api/ideas/${ID}/tools/prep/answer`, { need: 'n1', answer: 'An email to the shared mailbox' }));
+    expect(answered.state.toolPrep.needs[0].answer).toBe('An email to the shared mailbox');
     const out = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
     expect(seen).toContain('"teamAnswers"');
     expect(seen).toContain('An email to the shared mailbox');
-    expect(seen).toMatch(/Never ask again anything answered there/);
-    expect(out.questions).toBeUndefined();
+    expect(seen).toContain('"todo"');
     expect(out.features).toHaveLength(1);
+    expect((await json(await s.post(`/api/ideas/${ID}/tools/prep/answer`, { need: 'n9', answer: 'x' }))).error).toMatch(/gone/);
+  });
+
+  it('questions sent by the older picker come back as open items, asked on the day they went out', async () => {
+    const s = await server();
+    await writeDesign(s.root, ID, { version: 1, status: 'picking', features: [], steps: [], toolQuestions: { questions: ['Who builds it?'], emailKey: 'k', at: '2026-10-19' } });
+    const st = await readDesign(s.root, ID);
+    expect(st.toolQuestions).toBeUndefined();
+    expect(st.toolPrep).toEqual({ at: '2026-10-19', needs: [{ id: 'n1', need: 'Who builds it?', ask: 'Who builds it?', met: false, askedAt: '2026-10-19' }] });
   });
 
   it('save writes approach.md, ticks s3e, sets status and adds graph links once after two saves', async () => {

@@ -1,14 +1,15 @@
 import path from 'node:path';
 import type { Clock } from '../clock';
 import type { Idea } from '../ideas/idea';
-import { draftEmail, updateDraft } from '../comms/outbox';
-import { addQuestion } from './brainstorm';
+import type { EmailRecord } from '../comms/outbox';
+import { draftQuestionsEmail } from '../review/prep';
+import { isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from '../review/needs';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { writeFileAtomic } from '../workspace/files';
 import { canonicalTool, slug } from '../graph/ontology';
-import { FEATURE_FLAGS, type FeatureFlag, type ToolPickInput } from '../ai/tasks';
+import { FEATURE_FLAGS, type FeatureFlag, type ToolPickFeature, type ToolPickInput, type ToolPickOutput } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, type DesignFeature, type DesignState, type Pathway , skillGuidance } from './store';
 import { cafeCheck } from './cafecheck';
 
@@ -153,8 +154,6 @@ export async function saveToolPicks(
     : prev.status === 'designing' ? 'designing' : 'picking';
   const state: DesignState = { ...prev, status, features };
   if (reopen) delete state.approvedAt;
-  // Saving picks settles whatever the picker wanted to ask.
-  delete state.toolQuestions;
   const tools = toolsMap(features);
   const withTools: Idea = { ...idea, tools };
   state.cafeCheck = cafeCheck(withTools, state);
@@ -172,24 +171,54 @@ export async function saveToolPicks(
  * The picker could not pick: every question it needs goes into the idea's E2 draft at once (drafted or reused),
  * and design.yaml remembers them, so the panel can say the team was asked and the Suggest button can wait.
  */
-export async function askToolQuestions(root: string, idea: Idea, questions: string[], clock: Clock): Promise<{ state: DesignState; emailKey: string; questions: string[] }> {
-  const qs = questions.map((q) => str(q, 200)).filter(Boolean).slice(0, 8);
-  if (!qs.length) throw new Error('The AI gave no questions');
-  const rec = await draftEmail(root, { template: 'E2', ideaId: idea.id }, clock);
-  if (rec.status !== 'draft') throw new Error('An E2 is approved and waiting to be sent. Send it first, then ask again');
-  let body = rec.body;
-  for (const q of qs) body = addQuestion(body, q);
-  if (body !== rec.body) await updateDraft(root, rec.key, { body });
-  const state = await readDesign(root, idea.id);
-  state.toolQuestions = { questions: qs, emailKey: rec.key, at: clock() };
-  await writeDesign(root, idea.id, state);
-  return { state, emailKey: rec.key, questions: qs };
+/**
+ * Suggest with AI, or Re-evaluate: the AI reads the form, the team's answers, what the operator pasted against the
+ * to-do list and the features there, and gives the one pick it can stand behind plus what it still needs (the last
+ * list's items kept and marked met or not). Saved on the design; nothing is picked until Save.
+ */
+export async function suggestTools(
+  root: string, id: string, run: (input: ToolPickInput) => Promise<{ provider: string; output: ToolPickOutput }>, clock: Clock,
+): Promise<{ state: DesignState; features: (DesignFeature | ToolPickFeature)[]; provider: string }> {
+  const idea = await loadIdea(root, id);
+  const state = await readDesign(root, id);
+  const prev = state.toolPrep?.needs ?? [];
+  const pasted = prev.filter((n) => n.answer?.trim()).map((n) => ({ question: str(n.ask, 200), answer: str(n.answer, 500) }));
+  const base = toolPickInput(idea, state);
+  const answers = [...(base.teamAnswers ?? []), ...pasted];
+  const { provider, output } = await run({
+    ...base, ...(answers.length ? { teamAnswers: answers } : {}), ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}),
+  });
+  state.toolPrep = { at: clock(), provider, needs: mergeNeeds(prev, output.needs) };
+  await writeDesign(root, id, state);
+  return { state, features: mergeSuggestions(state.features, output.pick ? [output.pick] : []), provider };
 }
 
-/** The operator forgets the questions (answers came some other way, or the picker should try again). */
-export async function clearToolQuestions(root: string, id: string): Promise<DesignState> {
+/** Save what the operator pasted for one of the picker's to-do items. Read at the next Re-evaluate. */
+export async function answerToolNeed(root: string, id: string, needId: string, raw: unknown): Promise<DesignState> {
   const state = await readDesign(root, id);
-  delete state.toolQuestions;
+  if (!state.toolPrep) throw new Error('No questions yet: Suggest with AI first');
+  state.toolPrep = { ...state.toolPrep, needs: withAnswer(state.toolPrep.needs, needId, raw) };
   await writeDesign(root, id, state);
   return state;
+}
+
+/** The picker's open questions, as the questions email (E2). Opening it in Outlook is the caller's next step. */
+export async function draftToolNeedsEmail(root: string, id: string, clock: Clock): Promise<EmailRecord> {
+  const idea = await loadIdea(root, id) as Idea & { answers?: EmailAnswer[] };
+  const open = ((await readDesign(root, id)).toolPrep?.needs ?? []).filter((x) => isOpenNeed(x, idea.answers));
+  return draftQuestionsEmail(root, id, open.map((x) => x.ask), clock);
+}
+
+/** Once that email is opened in Outlook: the open items it asked are marked asked (and unmarked on its Undo). */
+export async function markToolAsked(root: string, id: string, at: string, asked = true): Promise<void> {
+  const idea = await loadIdea(root, id) as Idea & { answers?: EmailAnswer[] };
+  const state = await readDesign(root, id);
+  if (!state.toolPrep) return;
+  const needs = state.toolPrep.needs.map((x) => {
+    if (asked) return isOpenNeed(x, idea.answers) ? { ...x, askedAt: at } : x;
+    const { askedAt, ...rest } = x;
+    return askedAt === at ? rest : x;
+  });
+  state.toolPrep = { ...state.toolPrep, needs };
+  await writeDesign(root, id, state);
 }

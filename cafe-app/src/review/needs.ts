@@ -21,3 +21,38 @@ export function isOpenNeed(need: PrepNeed, answers: EmailAnswer[] = []): boolean
 export function awaitsReevaluation(need: PrepNeed, answers: EmailAnswer[] = []): boolean {
   return !need.met && (!!need.answer?.trim() || !!emailAnswerFor(need, answers));
 }
+
+/** The same to-do item, by its words or its question. */
+export const sameNeed = (a: { need: string; ask: string }, b: { need: string; ask: string }) =>
+  a.need.trim().toLowerCase() === b.need.trim().toLowerCase() || sameQuestion(a.ask, b.ask);
+
+/**
+ * A fresh to-do list from the AI, laid over the last one: an item it kept keeps its id, what the operator pasted and
+ * when it was asked; new items get the next ids. `note` turns the AI's "what covered it" into words for the page.
+ */
+export function mergeNeeds(
+  prev: PrepNeed[], out: { need: string; ask: string; met: boolean; answer?: string }[], note: (s: string) => string = (s) => s,
+): PrepNeed[] {
+  let n = Math.max(0, ...prev.map((p) => Number(/^n(\d+)$/.exec(p.id)?.[1] ?? 0)));
+  return out.map((o) => {
+    const p = prev.find((x) => sameNeed(x, o));
+    const said = o.met && o.answer?.trim() ? note(o.answer) : undefined;
+    return {
+      id: p?.id ?? `n${++n}`, need: o.need, ask: o.ask, met: o.met,
+      ...(said ? { note: said } : {}),
+      ...(p?.answer ? { answer: p.answer } : {}),
+      ...(p?.askedAt ? { askedAt: p.askedAt } : {}),
+    };
+  });
+}
+
+/** Save what the operator pasted or typed for one item (an empty answer clears it). */
+export function withAnswer(needs: PrepNeed[], needId: string, raw: unknown): PrepNeed[] {
+  if (!needs.some((x) => x.id === needId)) throw new Error('That to-do is gone; ask the AI again');
+  const answer = typeof raw === 'string' ? raw.trim().slice(0, 4000) : '';
+  return needs.map((x) => {
+    if (x.id !== needId) return x;
+    const { answer: _old, ...rest } = x;
+    return answer ? { ...rest, answer } : rest;
+  });
+}

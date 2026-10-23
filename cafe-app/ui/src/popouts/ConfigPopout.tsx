@@ -57,7 +57,9 @@ export function ConfigPopout() {
             {settingFields.map(([k, label]) => (
               <label key={k} className="rf">
                 <span className="rf-h"><span className="rf-l">{label}</span><span className="rf-u">{roundFieldsUnblock(k)}</span></span>
-                <input type="text" value={settings[k] ?? ''} data-field={k} onChange={(e) => setSettings((x) => ({ ...x, [k]: e.target.value }))} />
+                {k === 'operatorName'
+                  ? <textarea rows={4} value={settings[k] ?? ''} data-field={k} placeholder={'Your name\nYour title\nPhone or Teams'} onChange={(e) => setSettings((x) => ({ ...x, [k]: e.target.value }))} />
+                  : <input type="text" value={settings[k] ?? ''} data-field={k} onChange={(e) => setSettings((x) => ({ ...x, [k]: e.target.value }))} />}
               </label>
             ))}
             <div className="rf-foot"><button className="btn primary" type="submit" data-action="save-settings" disabled={busy}>Save</button></div>

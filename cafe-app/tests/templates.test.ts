@@ -29,7 +29,7 @@ describe('templates', () => {
     expect(r.body.startsWith('Hi Person,')).toBe(true);
     expect(r.body).toContain('[REVIEW DATE]');
     expect(r.to).toBe('Person 1');
-    expect(r.missingSettings.map((m) => m.label)).toEqual(['Decisions by', 'Your name (email signature)']);
+    expect(r.missingSettings.map((m) => m.label)).toEqual(['Decisions by', 'Your email signature']);
   });
 
   it('fills round and settings values once they are set', async () => {

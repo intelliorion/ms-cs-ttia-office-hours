@@ -22,6 +22,12 @@ describe('workspace', () => {
     expect((await initWorkspace(root)).created).toEqual([]);
     expect((await loadSettings(root)).operatorName).toBe('Café operator');
   });
+
+  it('the email signature keeps its lines; other settings stay on one line', async () => {
+    const root = await tmpWorkspace();
+    await saveSettings(root, { operatorName: '  Café operator  \r\nTTIA lead   \r\n\r\n', formLink: '  https://form.example  ' });
+    expect(await loadSettings(root)).toMatchObject({ operatorName: 'Café operator\nTTIA lead', formLink: 'https://form.example' });
+  });
 });
 
 describe('ideas', () => {

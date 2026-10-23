@@ -3,7 +3,7 @@ import { readFile, access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, FIXTURE } from './helpers';
 import { importExport } from '../src/import/importRows';
-import { saveReview, writeReviewPack } from '../src/review/review';
+import { saveReview } from '../src/review/review';
 import { loadIdea, saveIdea, ideaDir } from '../src/ideas/store';
 import { createRound, saveSettings, setIdeaRound } from '../src/round/store';
 import { paths } from '../src/workspace/paths';
@@ -127,41 +127,5 @@ describe('saveReview', () => {
   it('refuses an unknown decision', async () => {
     const root = await setup();
     await expect(saveReview(root, 'CAFE-2026-001', { decision: 'maybe', reason: 'a' }, ctx)).rejects.toThrow('Pick a decision');
-  });
-});
-
-describe('writeReviewPack', () => {
-  it('lists the open ideas for the TTIA meeting', async () => {
-    const root = await setup();
-    await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx);
-    await setStage(root, 'CAFE-2026-002', { closeAs: 'csic' }, clock);
-    await createRound(root, 'Older', fixedClock('2026-09-01'));
-    await createRound(root, 'Autumn', clock);
-    await setIdeaRound(root, 'CAFE-2026-001', 'ROUND-002', clock);
-    const file = await writeReviewPack(root, clock);
-    expect(path.relative(root, file)).toBe(path.join('data', 'rounds', 'ROUND-002', 'review-pack-2026-10-19.md'));
-    const md = await readFile(file, 'utf8');
-    expect(md).toContain('2 ideas to decide');
-    // Grouped by round, newest first; a round with no open idea is left out; ideas in no round come last.
-    const headings = md.split('\n').filter((l) => /^##? /.test(l));
-    expect(headings).toEqual(['# Review pack', '## Autumn (ROUND-002)', '## No round yet']);
-    expect(md.indexOf('CAFE-2026-001')).toBeLessThan(md.indexOf('## No round yet'));
-    expect(md.indexOf('CAFE-2026-003')).toBeGreaterThan(md.indexOf('## No round yet'));
-    expect(md).toContain('\n### CAFE-2026-001 Email scheduler\n');
-    expect(md).toContain('\n### CAFE-2026-003 Third Party Invoice Assessment\n');
-    expect(md).not.toContain('CAFE-2026-002');
-    expect(md).toContain('Participation is Individual but 6 people are listed');
-    expect(md).toContain('- Where it is: Review and Select');
-    expect(md).not.toMatch(/ of 25/);
-  });
-
-  it('with no round at all it still builds: one "No round yet" group and a notice to create a round', async () => {
-    const root = await setup();
-    const file = await writeReviewPack(root, clock);
-    expect(path.relative(root, file)).toBe(path.join('data', 'exports', 'review-pack-2026-10-19.md'));
-    const md = await readFile(file, 'utf8');
-    expect(md.split('\n').filter((l) => /^##? /.test(l))).toEqual(['# Review pack', '## No round yet']);
-    expect(md).toContain('\nCreate a round first (Rounds button).\n');
-    for (const id of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) expect(md).toContain(`\n### ${id} `);
   });
 });

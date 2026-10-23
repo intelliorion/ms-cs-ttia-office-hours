@@ -20,4 +20,15 @@ describe('Project configuration', () => {
     expect(fetch).toHaveBeenCalledWith('/api/workspace/open', expect.objectContaining({ method: 'POST' }));
     expect(useStore.getState().notice?.text).toBe('Opened the data folder.');
   });
+
+  it('the signature is a box of several lines; the other settings are one line', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    useStore.setState({ state: { workspace: '/w', dataFolder: '/w/data', fields: { settings: [['operatorName', 'Signature'], ['formLink', 'Form']] }, settings: { operatorName: 'A\nB' } }, notice: null, refresh: async () => {} } as any);
+    el = document.createElement('div'); document.body.appendChild(el); root = createRoot(el);
+    await act(async () => root.render(<ConfigPopout />));
+    const sig = document.querySelector('[data-field="operatorName"]') as HTMLTextAreaElement;
+    expect(sig.tagName).toBe('TEXTAREA');
+    expect(sig.value).toBe('A\nB');
+    expect(document.querySelector('[data-field="formLink"]')?.tagName).toBe('INPUT');
+  });
 });

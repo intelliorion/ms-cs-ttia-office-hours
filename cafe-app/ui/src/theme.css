@@ -201,8 +201,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .hint.lead{margin:-4px 0 12px}
 .rf{display:grid;grid-template-columns:1fr;gap:3px;margin-bottom:12px}
 .rf-l{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
-.rf input{background:rgba(var(--rgb-s2),.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:15px;padding:8px 10px;outline:none;color-scheme:dark;min-width:0}
-.rf input:focus{border-color:var(--teal)}
+.rf input,.rf textarea{background:rgba(var(--rgb-s2),.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:15px;padding:8px 10px;outline:none;color-scheme:dark;min-width:0}
+.rf input:focus,.rf textarea:focus{border-color:var(--teal)}
+.rf textarea{resize:vertical;line-height:1.4;min-height:84px}
 .rf-u{font-size:12px;color:var(--amber);min-height:15px}
 .rf-foot{display:flex;justify-content:flex-end;margin-top:6px}
 .problems{border:1px solid rgba(var(--rgb-danger),.5);border-left:3px solid var(--danger);border-radius:4px;padding:8px 12px;background:rgba(var(--rgb-danger),.08)}

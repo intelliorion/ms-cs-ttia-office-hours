@@ -113,7 +113,7 @@ describe('api', () => {
     const res = await post(base, '/api/outbox/approve', { key: draft.key });
     expect(res.status).toBe(400);
     // The idea is in no round yet, so the round's dates are one note.
-    expect((await j(res)).missing).toEqual(['Put this idea in a round to fill the dates', 'Your name (email signature)']);
+    expect((await j(res)).missing).toEqual(['Put this idea in a round to fill the dates', 'Your email signature']);
   });
 
   it('refuses paths and IDs outside the workspace', async () => {

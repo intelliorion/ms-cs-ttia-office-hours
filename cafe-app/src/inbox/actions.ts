@@ -201,9 +201,9 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   return { actions };
 }
 
-/** From the operator (settings.operatorName) → out; anyone else → in. */
+/** From the operator (the first line of the signature, settings.operatorName) → out; anyone else → in. */
 export async function directionOf(root: string, item: InboxItem): Promise<'in' | 'out'> {
-  const me = key((await loadSettings(root)).operatorName ?? '');
+  const me = key(((await loadSettings(root)).operatorName ?? '').split('\n')[0]);
   const rawFrom = item.meta?.from ?? '';
   const from = key(displayName(rawFrom));
   if (me && from && from === me) return 'out';

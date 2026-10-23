@@ -470,7 +470,8 @@ describe('processDrop and filing (final review 6, 7)', () => {
   it('an email from the operator is filed under out, anyone else under in', async () => {
     const root = await tmpWorkspace('2026-10-19');
     for (const i of IDEAS) await saveIdea(root, i);
-    await saveSettings(root, { operatorName: 'Person 2' });
+    // A signature over several lines: its first line is the operator's name.
+    await saveSettings(root, { operatorName: 'Person 2\nTTIA lead' });
     const { item } = await processDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), connectorFor(FULL), clock);
     expect(rec(item, 'file_email').action).toMatchObject({ direction: 'out' });
     expect(await readdir(path.join(await ideaDir(root, 'CAFE-2026-001'), 'emails', 'out'))).toHaveLength(2);

@@ -33,9 +33,9 @@ describe('outbox', () => {
     const { key } = await draftEmail(root, { template: 'E1', ideaId: 'CAFE-2026-001' }, clock);
     const err = await approve(root, key, clock).catch((e) => e);
     expect(err).toBeInstanceOf(MissingSettingsError);
-    expect(err.message).toBe('Set first: Decisions by, Your name (email signature)');
+    expect(err.message).toBe('Set first: Decisions by, Your email signature');
     const [item] = await listOutbox(root);
-    expect(item.missingSettings.map((m) => m.label)).toEqual(['Decisions by', 'Your name (email signature)']);
+    expect(item.missingSettings.map((m) => m.label)).toEqual(['Decisions by', 'Your email signature']);
   });
 
   it('fills settings into drafts, and freezes them on approval', async () => {
@@ -95,7 +95,7 @@ describe('outbox', () => {
     await saveSettings(root, { distList: 'CS all staff' });
     const item = (await listOutbox(root)).find((m) => m.key === e0.key)!;
     expect(item.view.to).toBe('CS all staff');
-    expect(item.missingSettings.map((m) => m.label)).toEqual(['Submission deadline', 'Café form link', 'Your name (email signature)']);
+    expect(item.missingSettings.map((m) => m.label)).toEqual(['Submission deadline', 'Café form link', 'Your email signature']);
   });
 
   it('drafts for an idea in no round, and says to put it in one for the dates', async () => {
@@ -105,7 +105,7 @@ describe('outbox', () => {
     expect(draft.round).toBe('');
     const [item] = await listOutbox(root);
     expect(item.view.body).toContain('[REVIEW DATE]');
-    expect(item.missingSettings.map((m) => m.label)).toEqual(['Put this idea in a round to fill the dates', 'Your name (email signature)']);
+    expect(item.missingSettings.map((m) => m.label)).toEqual(['Put this idea in a round to fill the dates', 'Your email signature']);
   });
 
   it('fills the dates once the idea is put in a round, and drafting again returns that draft', async () => {

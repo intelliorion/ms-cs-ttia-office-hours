@@ -44,7 +44,7 @@ export const ROUND_FIELDS = [
 ] as const;
 
 export const SETTING_FIELDS = [
-  ['operatorName', 'Your name (email signature)'],
+  ['operatorName', 'Your email signature (first line: your name)'],
   ['formLink', 'Café form link'],
   ['csicLink', 'CSIC Repository intake link'],
   ['teamsLink', 'Teams link for sessions'],
@@ -66,7 +66,7 @@ export const TOKENS: Record<string, TokenDef> = {
   '[CSIC REPOSITORY INTAKE LINK]': { from: 'settings', key: 'csicLink', label: 'CSIC Repository intake link' },
   '[ROOM OR TEAMS LINK]': { from: 'settings', key: 'teamsLink', label: 'Teams link for sessions' },
   '[DISTRIBUTION LIST]': { from: 'settings', key: 'distList', label: 'Distribution list for the call for ideas' },
-  '[YOUR NAME]': { from: 'settings', key: 'operatorName', label: 'Your name (email signature)' },
+  '[YOUR NAME]': { from: 'settings', key: 'operatorName', label: 'Your email signature' },
 };
 
 export function resolveToken(token: string, round: Partial<Round>, settings: Settings): string | undefined {

@@ -1,13 +1,12 @@
 import path from 'node:path';
 import { formatDate, type Clock } from '../clock';
 import type { Decision, Idea, ReviewRecord } from '../ideas/idea';
-import { loadIdea, saveIdea, ideaDir, listIdeas } from '../ideas/store';
+import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
 import { writeFileAtomic, appendHistory } from '../workspace/files';
-import { paths } from '../workspace/paths';
-import { loadSettings, listRounds, NO_ROUND } from '../round/store';
+import { loadSettings } from '../round/store';
 import type { Settings } from '../round/round';
 import { withTick } from '../checklist/checklist';
-import { suggestion, whereLabel, type StageTarget, type Suggest } from '../ideas/suggest';
+import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
 import { draftEmail, type EmailRecord } from '../comms/outbox';
 
@@ -127,42 +126,4 @@ export async function saveReview(
   if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
   await appendHistory(dir, { at: today, action: 'review', by: 'operator', detail: `${decision}: ${reason}`, source: 'review.md' });
   return { idea, email, warnings, ...(handoff ? { handoff } : {}), ...(suggest ? { suggest } : {}) };
-}
-
-/** The open ideas of every round, grouped by round (newest first); ideas not yet in a round come last. */
-export async function writeReviewPack(root: string, clock: Clock): Promise<string> {
-  const rounds = await listRounds(root);
-  const today = clock();
-  const open = (await listIdeas(root)).ideas.filter((i) => !i.closed && i.stage <= 2);
-  const known = new Set(rounds.map((r) => r.id));
-  const groups = [
-    ...rounds.map((r) => ({ heading: `${r.name} (${r.id})`, ideas: open.filter((i) => i.round === r.id) })),
-    { heading: 'No round yet', ideas: open.filter((i) => !known.has(i.round)) },
-  ].filter((g) => g.ideas.length);
-  const lines = [
-    '# Review pack', '',
-    `Written ${formatDate(today)} for the TTIA review meeting. ${open.length} idea${open.length === 1 ? '' : 's'} to decide.`, '',
-    // With no rounds at all the pack still builds (one group) and says what to do first.
-    ...(rounds.length ? [] : [`${NO_ROUND}.`, '']),
-  ];
-  for (const g of groups) {
-    lines.push(`## ${g.heading}`, '');
-    for (const i of g.ideas) lines.push(...packEntry(i));
-  }
-  const file = path.join(rounds.length ? path.join(paths(root).rounds, rounds[0].id) : paths(root).exports, `review-pack-${today}.md`);
-  await writeFileAtomic(file, lines.join('\n'));
-  return file;
-}
-
-function packEntry(i: Idea): string[] {
-  const r = i.review;
-  return [
-    `### ${i.id} ${i.title}`, '',
-    [i.function, i.region, i.participation, i.experimented ? `experimented: ${i.experimented}` : undefined].filter(Boolean).join(' · '), '',
-    `- Support requested: ${i.support.join(', ') || 'none given'}`,
-    `- Flags: ${i.flags.join('; ') || 'none'}`,
-    `- Criteria: ${r ? CRITERIA.map((c) => `${r.criteria[c.id] ? 'yes' : 'no'}: ${c.text}`).join('; ') : 'not reviewed yet'}`,
-    `- Decision: ${r ? `${DECISION_LABELS[r.decision]}. ${r.reason}` : 'not decided yet'}`,
-    `- Where it is: ${whereLabel(i)}`, '',
-  ];
 }

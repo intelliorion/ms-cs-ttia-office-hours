@@ -15,7 +15,7 @@ import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder } from '../workspace/reveal';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
-import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
+import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
@@ -156,7 +156,6 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
   add('POST', '/api/outbox/update', async ({ body }) => updateDraft(root, String(body.key), body));
 
-  add('POST', '/api/review-pack', async () => ({ file: await writeReviewPack(root, clock) }));
   add('GET', '/api/graph', async () => {
     const graph = await rebuildGraph(root);
     const layout = await layoutFor(root, graph);

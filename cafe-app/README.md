@@ -2,7 +2,7 @@
 
 A local app for the person who runs the CS TTIA Creators' Café. It imports the submission export, tracks
 each idea's 25 steps, drafts the emails, blocks any email that still needs a date or link, shows replies
-that are late, and writes the review pack for TTIA. It never sends anything: you approve, copy, send
+that are late. It never sends anything: you approve, copy, send
 from Outlook, then mark the email as sent.
 
 The design is in `docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md` (the one-screen UI) and
@@ -45,8 +45,8 @@ panels, large white titles and pill buttons at the bottom.
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
 - **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
-  Rounds, Review pack (this writes the file), and ⚙ Settings: the AI connector (a dot shows whether an
-  AI is answering), Project configuration (your name for the signature, the form, CSIC and Teams links, the
+  Rounds, and ⚙ Settings: the AI connector (a dot shows whether an
+  AI is answering), Project configuration (your email signature, several lines, the first being your name; the form, CSIC and Teams links, the
   distribution list; kept in rules/settings.yaml; it also shows where the data folder is, with
   **Open data folder** to show it in Finder or File Explorer) and the theme: Default (the night sky), Frost (a
   light winter morning: the stars become glossy baubles with gold caps on silver threads, with snow falling) or
@@ -81,7 +81,7 @@ README.txt in the workspace says the same.
 
 ```
 data/                 the Café's data: safe to delete
-  rounds/             one folder per round you make (ROUND-001, ...): its name and dates; the review pack
+  rounds/             one folder per round you make (ROUND-001, ...): its name and dates
   inbox/              dropped files and exports (see Import: drop anything); inbox/held/ keeps files the app will not read
   ideas/              one folder per idea: the submission, its emails, its history
   cohorts/  roadshows/
@@ -131,7 +131,6 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
 - **In the universe.** Every round is a cream star with its name, and each of its ideas links to it (`IN_ROUND`),
   so you can see which ideas are in which round. A round with no ideas yet is a star on its own. Click a round's
   star and switch **Only related** on to see just its ideas. The AI never adds or moves rounds.
-- **The review pack** groups ideas by round, newest first, with ideas in no round under "No round yet".
 
 ## A round, by hand
 
@@ -153,7 +152,6 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    newer one (another decision, say) replaces it. E2 starts a five-day reply clock. Sending E3, E4, E5, E6 or
    E10 suggests a move too. A missing date or link stops the email opening until you set it (Project
    configuration, or the round's dates in Rounds); it then waits under ✉ Emails.
-6. **Review pack** (title bar): write the review pack for TTIA, grouped by round.
 
 ## Café assistant: ask, or tell the Café what to do
 

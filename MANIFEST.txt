@@ -69,6 +69,7 @@ cafe-app/src/review/needs.ts
 cafe-app/src/review/prep.ts
 cafe-app/src/review/review.ts
 cafe-app/src/review/suggestInput.ts
+cafe-app/src/review/updates.ts
 cafe-app/src/round/round.ts
 cafe-app/src/round/store.ts
 cafe-app/src/rules/stages.ts
@@ -136,6 +137,7 @@ cafe-app/tests/people.test.ts
 cafe-app/tests/reveal.test.ts
 cafe-app/tests/review-prep.test.ts
 cafe-app/tests/review-suggest.test.ts
+cafe-app/tests/review-updates.test.ts
 cafe-app/tests/review.test.ts
 cafe-app/tests/rounds.test.ts
 cafe-app/tests/rules.test.ts
@@ -181,6 +183,7 @@ cafe-app/ui/src/panels/IdeasList.tsx
 cafe-app/ui/src/panels/IdeasPane.tsx
 cafe-app/ui/src/panels/ReviewSelect.test.tsx
 cafe-app/ui/src/panels/ReviewSelect.tsx
+cafe-app/ui/src/panels/ReviewUpdates.test.tsx
 cafe-app/ui/src/panels/StageSummaries.tsx
 cafe-app/ui/src/panels/StarDetails.tsx
 cafe-app/ui/src/panels/ToolPickerSection.tsx
@@ -253,8 +256,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-D0ctT_JQ.css
-cafe-app/web/assets/index-Da5zmKf9.js
+cafe-app/web/assets/index-B6TxroBH.css
+cafe-app/web/assets/index-DhqqEh-y.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

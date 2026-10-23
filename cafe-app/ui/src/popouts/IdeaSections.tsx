@@ -181,7 +181,9 @@ export function Details({ idea }: { idea: any }) {
         <Field label="Tried it already">{idea.experimented || <span className="none">Not given</span>}</Field>
       </div>
       <div className="field-row">
-        <Field label="Builder">{buildersOf(idea).join(', ') || <span className="none">Not named yet</span>}</Field>
+        <Field label="Builder">{buildersOf(idea).length
+          ? <div className="tags">{buildersOf(idea).map((n) => <span key={n} className="tg person" data-builder={n}>{n}</span>)}</div>
+          : <span className="none">Not named yet</span>}</Field>
       </div>
     </section>
   );

@@ -504,7 +504,7 @@ async function designShots(p) {
   const outbox = (await (await fetch(`${base}/api/state`)).json()).outbox.filter((m) => m.idea === 'CAFE-2026-002' && m.template === 'E2' && m.status === 'draft');
   assert(outbox.length === 1, 'no E2 draft after "I don\'t know"');
   await into(`${D} .ds-step[data-step="2"]`);
-  await p.locator(`${D} .ds-step[data-step="1"]`).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  // The questions are a carousel now: only the current one (2) is on the page.
   await sleep(300);
   await shot(p, '42-design-idk.png');
   assert(await p.locator(`${D} .ds-step[data-step="2"] [data-action="send-questions"]`).count() === 1, 'no way to send the questions email');
@@ -527,7 +527,6 @@ async function designShots(p) {
   await p.click(`${D} [data-action="write-plan"]`);
   await p.waitForSelector(`${D} .pk-files li`, { timeout: 90000 });
   assert(await p.isVisible(`${D} [data-action="copy-instruction"]`), 'no Copy build instruction for the custom-app kit');
-  await p.click(`${D} [data-action="toggle-plan-md"]`);
   await into(`${D} [data-testid="plan-kits"]`);
   await shot(p, '44-plan-kits.png');
   const stage = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.id === 'CAFE-2026-002');
@@ -542,8 +541,8 @@ async function designShots(p) {
   await into(`${D} [data-testid="review-card"]`);
   await sleep(400);
   await shot(p, '45-stage4-cards.png');
-  await p.click(`${D} [data-action="edit-tools-card"]`);
-  await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
+  // In Launch and Learn the design series is locked: its cards have no Edit.
+  assert((await p.locator(`${D} [data-action="edit-tools-card"]`).count()) === 0, 'the tools card can be edited in Launch and Learn');
   // Review and Select, the first stage: a fresh idea shows the Decision at once and nothing from the design series.
   await p.click(`${D} [data-action="back"]`);
   await p.waitForSelector(D, { state: 'detached' });

@@ -30,7 +30,7 @@ export function SettingsMenu() {
           <div className="set-h">Project</div>
           <button className="set-row" role="menuitem" data-action="config" onClick={() => { setOpen(false); openPopout({ kind: 'config' }); }}>
             <span className="set-ico" aria-hidden="true">⚙</span>
-            <span className="set-main"><b>Project configuration</b><small>Your name, form and Teams links, capacity</small></span>
+            <span className="set-main"><b>Project configuration</b><small>Your name, form and Teams links, data folder</small></span>
           </button>
           <div className="set-h">Theme</div>
           {THEMES.map((t) => (

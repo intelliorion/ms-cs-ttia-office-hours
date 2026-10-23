@@ -72,7 +72,7 @@ const fixture = () => ({
   ],
   outbox: [],
   fields: { round: [['open', 'Round opens'], ['deadline', 'Submission deadline']], settings: [['operatorName', 'Your name']] },
-  settings: { capacity: { ideasPerRound: 3, sessionsPerWeek: 2 } },
+  settings: {},
 });
 
 /** Types into a controlled input or select the way React hears it. */

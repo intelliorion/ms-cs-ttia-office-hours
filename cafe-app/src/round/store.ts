@@ -130,8 +130,10 @@ export async function setIdeaRound(root: string, ideaId: string, round: string, 
 }
 
 export async function loadSettings(root: string): Promise<Settings> {
-  const raw = (await readYaml<Partial<Settings>>(paths(root).settings)) ?? {};
-  return { ...DEFAULT_SETTINGS, ...raw, capacity: { ...DEFAULT_SETTINGS.capacity, ...(raw.capacity ?? {}) } };
+  // An older settings.yaml may still carry capacity limits; the app no longer has them, so they are left out (and
+  // dropped from the file at the next save).
+  const { capacity: _gone, ...raw } = ((await readYaml<Partial<Settings> & { capacity?: unknown }>(paths(root).settings)) ?? {});
+  return { ...DEFAULT_SETTINGS, ...raw };
 }
 
 export async function saveSettings(root: string, patch: Record<string, unknown>): Promise<Settings> {
@@ -141,17 +143,6 @@ export async function saveSettings(root: string, patch: Record<string, unknown>)
     const value = String(patch[key] ?? '').trim();
     if (value) settings[key] = value;
     else delete settings[key];
-  }
-  const capacity = patch.capacity as Record<string, unknown> | undefined;
-  if (capacity) {
-    for (const key of ['ideasPerRound', 'sessionsPerWeek'] as const) {
-      if (!(key in capacity)) continue;
-      const n = Number(capacity[key]);
-      if (!Number.isInteger(n) || n < 1) {
-        throw new Error(`${key === 'ideasPerRound' ? 'Ideas per round' : 'Sessions per week'} must be a whole number of 1 or more`);
-      }
-      settings.capacity[key] = n;
-    }
   }
   await writeYaml(paths(root).settings, settings);
   return settings;

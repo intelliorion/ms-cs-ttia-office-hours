@@ -113,13 +113,6 @@ export async function saveReview(
   const ticksS2a = decision !== 'ask' && Boolean(s2a) && !idea.checklist.s2a?.done;
   if (ticksS2a && s2a) idea = withTick(idea, s2a, true, 'operator', today, 'review.md');
 
-  if (decision === 'select') {
-    const { ideas } = await listIdeas(root);
-    const selected = ideas.filter((i) => i.id !== id && i.round === idea.round && i.review?.decision === 'select').length + 1;
-    const cap = (await loadSettings(root)).capacity.ideasPerRound;
-    if (selected > cap) warnings.push(`This makes ${selected} ideas selected this round; your limit is ${cap}.`);
-  }
-
   // A review never moves or closes the idea; it only suggests the move.
   const handoff = decision === 'csic' ? path.join(dir, 'csic-handoff.md') : undefined;
   const suggest = suggestion(idea, DECISION_SUGGESTS[decision]);

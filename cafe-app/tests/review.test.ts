@@ -104,15 +104,6 @@ describe('saveReview', () => {
     expect(r.suggest).toBeUndefined();
   });
 
-  it('warns when a selection goes over capacity', async () => {
-    const root = await setup();
-    await saveSettings(root, { capacity: { ideasPerRound: 1 } });
-    const first = await saveReview(root, 'CAFE-2026-001', { decision: 'select', reason: 'a' }, ctx);
-    const second = await saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'b' }, ctx);
-    expect(first.warnings).toEqual([]);
-    expect(second.warnings).toEqual(['This makes 2 ideas selected this round; your limit is 1.']);
-  });
-
   it('a failed email draft leaves the idea open and writes nothing', async () => {
     const root = await setup();
     await rm(path.join(paths(root).templates, 'E5.md'));

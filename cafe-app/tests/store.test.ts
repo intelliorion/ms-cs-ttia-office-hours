@@ -56,12 +56,13 @@ describe('ideas', () => {
 });
 
 describe('settings', () => {
-  it('merges settings and checks capacity', async () => {
+  it('merges settings; old capacity limits are ignored and dropped at the next save', async () => {
     const root = await tmpWorkspace();
+    await writeFile(path.join(root, 'rules', 'settings.yaml'), 'capacity:\n  ideasPerRound: 3\n  sessionsPerWeek: 2\noperatorName: Café operator\n');
+    expect(await loadSettings(root)).toEqual({ operatorName: 'Café operator' });
     await saveSettings(root, { csicLink: 'https://csic.example/intake', capacity: { ideasPerRound: 4 } });
-    const s = await loadSettings(root);
-    expect(s.capacity).toEqual({ ideasPerRound: 4, sessionsPerWeek: 2 });
-    await expect(saveSettings(root, { capacity: { sessionsPerWeek: 0 } })).rejects.toThrow('Sessions per week');
-    expect(await readFile(path.join(root, 'rules', 'settings.yaml'), 'utf8')).toContain('csic.example');
+    const file = await readFile(path.join(root, 'rules', 'settings.yaml'), 'utf8');
+    expect(file).toContain('csic.example');
+    expect(file).not.toContain('capacity');
   });
 });

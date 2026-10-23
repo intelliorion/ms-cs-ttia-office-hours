@@ -938,3 +938,5 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 :root[data-theme="blueprint"] .flat-sub{fill:#a9c4e6}
 :root[data-theme="blueprint"] .universe-vignette{background:radial-gradient(ellipse 65% 72% at 50% 48%,rgba(43,95,150,0) 62%,rgba(20,58,100,.45) 100%)}
 .sw-blueprint i:nth-child(1){background:#2b5f96}.sw-blueprint i:nth-child(2){background:#eef5ff}.sw-blueprint i:nth-child(3){background:#ffd166}
+.data-dir{display:flex;align-items:center;gap:10px;margin-top:6px}
+.data-dir code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left;font-family:var(--mono);font-size:12.5px;padding:7px 10px;border:1px solid rgba(var(--rgb-line),.25);border-radius:6px;background:rgba(var(--rgb-s2),.35)}

@@ -13,6 +13,7 @@ import { setStage } from '../ideas/stage';
 import { writeFileAtomic, readHistory } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
+import { openFolder } from '../workspace/reveal';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, writeReviewPack, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -62,7 +63,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     ]);
     const today = clock();
     return {
-      today, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
+      today, workspace: root, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
         return {
@@ -109,6 +110,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
   add('POST', '/api/ideas/:id/round', async ({ params, body }) => setIdeaRound(root, params.id, String(body.round ?? ''), clock));
   add('POST', '/api/settings', async ({ body }) => saveSettings(root, body));
+  // Project configuration: show the workspace (the data folder) in Finder or File Explorer, on this computer.
+  add('POST', '/api/workspace/open', async () => { await openFolder(root); return { folder: root }; });
 
   add('POST', '/api/import', async ({ raw, headers }) => {
     const name = fileNameOf(headers['x-filename']);

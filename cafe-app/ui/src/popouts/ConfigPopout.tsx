@@ -33,12 +33,24 @@ export function ConfigPopout() {
     } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
     finally { setBusy(false); }
   };
+  const openData = async () => {
+    try { await post('/api/workspace/open'); setNotice({ text: 'Opened the data folder.', kind: 'ok' }); }
+    catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+  };
   const title = <><div className="pop-id">Settings</div><h2>Project configuration</h2></>;
   return (
     <Modal title={title} label="Project configuration" onClose={closePopout} width={720} height={820}>
       {notice && <div className="pop-strip"><div className={`pop-notice ${notice.kind ?? 'ok'}`} role="status">{notice.text}</div></div>}
       <div className="pop-grid one">
         <div className="pop-col">
+        <section className="sec">
+          <h3>Data folder</h3>
+          <p className="hint lead">Everything the Café keeps (ideas, rounds, emails, the graph, settings) is in this folder on this computer.</p>
+          <div className="data-dir">
+            <code title={state?.workspace ?? ''}><bdi>{state?.workspace ?? ''}</bdi></code>
+            <button className="btn" type="button" data-action="open-data-folder" disabled={busy} onClick={() => void openData()}>Open data folder</button>
+          </div>
+        </section>
         <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
           <section className="sec">
             <h3>Filled into emails</h3>

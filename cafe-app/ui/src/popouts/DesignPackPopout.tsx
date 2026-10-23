@@ -5,11 +5,9 @@ import { NO_AI_TIP } from './aiUi';
 import { DesignDiagram } from './DesignDiagram';
 import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
-import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, ROADSHOW_PACK_FILES } from './designPack';
+import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows } from './designPack';
 import { RecipeFlowDiagram } from './RecipeFlowDiagram';
 import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
-import { DeckLinks } from '../panels/RoadshowSection';
-import { roadshowNote, type RoadshowViewLike } from '../panels/roadshowHelpers';
 import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
 
 /**
@@ -23,7 +21,6 @@ export function DesignPackPopout({ id }: { id: string }) {
   const idea = (state?.ideas ?? []).find((i: any) => i.id === id);
   const [design, setDesign] = useState<any>(null);
   const [plan, setPlan] = useState<{ files: string[] } | null>(null);
-  const [roadshow, setRoadshow] = useState<RoadshowViewLike | null>(null);
   const [open, setOpen] = useState<Record<string, string | undefined>>({});
   const [flow, setFlow] = useState<RecipeFlow | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -31,16 +28,15 @@ export function DesignPackPopout({ id }: { id: string }) {
     let live = true;
     ideaGet(id, 'design').then((d) => { if (live) setDesign(d); }, () => {});
     ideaGet(id, 'plan').then((p) => { if (live) setPlan(p); }, () => {});
-    ideaGet(id, 'roadshow').then((r) => { if (live) setRoadshow(r); }, () => {});
     return () => { live = false; };
   }, [id]);
   const s = design?.state;
   const steps: any[] = s?.steps ?? [];
   const features: any[] = s?.features ?? [];
   const tool: any = s?.tool;
-  const deck = roadshow?.deck;
   const main = kitSlug(tool?.tool);
-  const files = [...packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main), ...(deck ? ROADSHOW_PACK_FILES.filter((f) => deck.files.includes(f.replace('roadshow/', ''))) : [])];
+  // The design's files only: the roadshow has its own section in Launch and Learn, with Present, the script and the exports.
+  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main);
   // The Dataiku kit's recipe flow, drawn here from its flow.json (checked again, as the server checked it).
   const hasFlow = (plan?.files ?? []).includes(FLOW_JSON);
   const featureNames = features.map((f) => String(f.name)).join('\n');
@@ -157,13 +153,6 @@ export function DesignPackPopout({ id }: { id: string }) {
               <h3>Starter kit: the Dataiku recipe flow <span className="sec-n">{FLOW_HTML}</span></h3>
               <p className="dp-summary">The recipes in the Dataiku kit, as Dataiku draws its Flow: the sample and the rules sheet go in, each recipe's steps are in flow.md, and the outputs come out.</p>
               <RecipeFlowDiagram flow={flow} />
-            </section>
-          )}
-          {deck && (
-            <section className="sec dp-sec" data-testid="pack-roadshow">
-              <h3>The roadshow <span className="sec-n">{roadshowNote(roadshow)}</span></h3>
-              <p className="dp-summary">{deck.title}</p>
-              <DeckLinks id={id} />
             </section>
           )}
           <section className="sec dp-sec">

@@ -57,4 +57,20 @@ describe('the design pack', () => {
     expect(el.querySelector('[data-testid="pack-tool-retired"]')!.textContent).toBe('UiPath is no longer on the approved list: pick another tool');
     expect(el.querySelector('[data-testid="pack-recipe-flow"]')).toBeNull();
   });
+
+  it('shows no roadshow, in any stage, even when a deck is built: the roadshow has its own section', async () => {
+    const DECK = { title: 'Claims check roadshow', files: ['deck.html', 'deck.pptx', 'script.md', 'run-of-show.md'], slides: [] };
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: state('Dataiku') }
+      : what === 'plan' ? { files: ['plan.md', 'roadshow/script.md'] } : { deck: DECK }));
+    for (const stage of [3, 4]) {
+      useStore.setState({ state: { ideas: [{ id: ID, title: 'Claims check', stage }], approvedTools: ['Dataiku'] } } as any);
+      await act(async () => root.render(<DesignPackPopout key={stage} id={ID} />));
+      await flush();
+      expect(el.querySelector('[data-testid="design-pack"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="pack-roadshow"]')).toBeNull();
+      expect(el.querySelector('[data-file^="roadshow/"]')).toBeNull();
+      expect(el.textContent).not.toMatch(/roadshow/i);
+    }
+    expect(api.ideaGet.mock.calls.some((c) => c[1] === 'roadshow')).toBe(false);
+  });
 });

@@ -20,7 +20,7 @@ import { RoadshowSection } from './RoadshowSection';
 import type { DesignCall } from './DesignSection';
 import { deckFileUrl, mmss, roadshowNote, roadshowUrl, staleText } from './roadshowHelpers';
 import { roadshowGate } from './stageGate';
-import { fileNote } from '../popouts/designPack';
+import { fileNote, packFiles } from '../popouts/designPack';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
@@ -79,16 +79,18 @@ describe('the roadshow helpers', () => {
     expect(roadshowNote(view())).toBe('not started');
     expect(mmss(10.5)).toBe('10:30');
   });
-  it('the section lives in Launch and Learn; elsewhere it is a card once it holds something', () => {
+  it('the section lives in Launch and Learn only; in the Design series it is hidden even with a deck', () => {
     expect(roadshowGate({ stage: 4 }, null)).toBe('active');
     expect(roadshowGate({ stage: 3 }, null)).toBe('hidden');
-    expect(roadshowGate({ stage: 3 }, { deck: {} })).toBe('summary');
+    expect(roadshowGate({ stage: 3 }, { deck: {}, prep: {} })).toBe('hidden');
+    expect(roadshowGate({ stage: 2 }, { deck: {} })).toBe('hidden');
+    expect(roadshowGate({ stage: 3, closed: {} }, { deck: {} })).toBe('hidden');
     expect(roadshowGate({ stage: 4, closed: {} }, { prep: {} })).toBe('hidden');
     expect(roadshowGate({ stage: 4, closed: {} }, { deck: {} })).toBe('summary');
   });
-  it('the design pack names the roadshow files', () => {
-    expect(fileNote('roadshow/script.md').title).toBe('The roadshow script');
-    expect(fileNote('roadshow/run-of-show.md').use).toMatch(/four feedback questions/);
+  it('the design pack leaves the roadshow files to the Roadshow section', () => {
+    expect(fileNote('roadshow/script.md').title).toBe('roadshow/script.md');
+    expect(packFiles(['plan.md', 'roadshow/script.md', 'roadshow/run-of-show.md'], true)).toEqual(['design.md', 'approach.md', 'plan.md']);
   });
 });
 

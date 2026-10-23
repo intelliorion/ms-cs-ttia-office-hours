@@ -34,8 +34,6 @@ export function fileNote(path: string, main?: string): { title: string; use: str
   if (path === 'design.md') return { title: 'The design', use: 'The proof of concept on one page: what it shows, with what input, for whom, built by whom, and how to build it. Share it with the team before the first session.' };
   if (path === 'approach.md') return { title: 'The tool and why', use: 'The tool picked, with its pros and cons and the facts it rests on. The builder starts here.' };
   if (path === 'plan.md') return { title: 'The build plan', use: 'The build tasks in order, each with its tool and when it is done, plus the risks. Work through it in the design sessions.' };
-  if (path === 'roadshow/script.md') return { title: 'The roadshow script', use: 'What to say on each slide of the roadshow deck, with timings and cues. Read it aloud once before the day.' };
-  if (path === 'roadshow/run-of-show.md') return { title: 'The roadshow run of show', use: 'Who does what, when: the demo cue, the one question for the room and the four feedback questions.' };
   const m = /^kit\/([^/]+)\/(.+)$/.exec(path);
   if (m) {
     const tool = m[1].replace(/-/g, ' ');
@@ -62,9 +60,6 @@ export function pointRows(state: { steps?: any[]; settled?: Record<string, strin
     return { tag, label, text: text ?? NOT_ANSWERED, open: !text, ...(which === 'build' ? { hint: BUILD_HINTS[tag as keyof typeof BUILD_HINTS] } : {}) };
   });
 }
-
-/** The roadshow's files the pack can show (the deck itself opens with Present). */
-export const ROADSHOW_PACK_FILES = ['roadshow/script.md', 'roadshow/run-of-show.md'];
 
 /**
  * The pack's files in reading order: the design, the tool, the plan, then the picked tool's kit (README first, then

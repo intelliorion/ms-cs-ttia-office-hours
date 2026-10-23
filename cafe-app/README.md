@@ -644,8 +644,9 @@ script to talk, in three steps.
    open as text; **Export PowerPoint** downloads deck.pptx; **Export PDF** opens the deck's print window: choose
    **Save as PDF**. **Open the folder** shows the files. When the record changes after a build (an answer, the team,
    the design, the plan) the section says the deck is out of date and offers **Rebuild**; when only the photos changed,
-   **Update the files** draws them again with no AI. The deck is also reachable from **See the design** (the design
-   pack), which can read the script and the run of show.
+   **Update the files** draws them again with no AI. The roadshow lives in Launch and Learn only: the section shows
+   in no other stage (not even as a card in the Design series), and **See the design** (the design pack) is about the
+   design alone, with no roadshow, deck or script in it in any stage.
 
 **The firm template.** pptxgenjs cannot fill a PowerPoint template's slide masters, so the app never claims to. When
 Settings → Project configuration → Firm deck template holds the full path of a .potx, .pptx or .thmx file, the app reads

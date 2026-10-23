@@ -141,8 +141,12 @@ const TOOL_PICK = {
       'builderNamed is true, so a Citizen-Led pathway would be possible for a simpler tool',
       'The scheduling logic needs code, which no approved low-code tool provides → custom app, TTIA-Led, CSIC flag',
     ],
+    pros: ['Can hold the time-zone scheduling logic the idea needs', 'One place for every request'],
+    cons: ['Not a Café build: a custom app is TTIA-Led and goes to the CSIC Repository', 'Needs a developer; no citizen builder can run it'],
   },
   needs: [],
+  updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
+  learned: [],
 };
 const TOOL_QUESTIONS = {
   needs: [
@@ -151,6 +155,8 @@ const TOOL_QUESTIONS = {
     { need: 'Whether a live system is involved', ask: 'Is any live non-Microsoft system involved, or can a published extract in SharePoint stand in?', met: false },
     { need: 'Who builds it', ask: 'Who on the team would build it and attend the sessions?', met: false },
   ],
+  updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
+  learned: [],
 };
 
 /** A scripted brainstorm: must-show, smallest input, builder, then done. Which one depends on how many Q/A pairs the prompt carries. */

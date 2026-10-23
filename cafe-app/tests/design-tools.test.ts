@@ -37,27 +37,31 @@ const PICKS = [
 ];
 
 describe('toolPickTask', () => {
-  const pick = { name: 'Form', what: 'A form', tool: 'Power Apps', reason: 'Simple', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'] };
+  const NONE = { updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } }, learned: [] };
+  const pick = { name: 'Form', what: 'A form', tool: 'Power Apps', reason: 'Simple', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'], pros: ['Quick to build'], cons: ['Cannot send reminders on its own: add Power Automate'] };
   it('accepts one pick with approved tool and context; rejects an unlisted tool, bad flags or no context (no silent fix)', () => {
-    expect(toolPickTask.parse(JSON.stringify({ pick, needs: [] })).pick!.tool).toBe('Power Apps');
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'Excel macro' }, needs: [] }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, tool: 'PowerApps' }, needs: [] }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, flags: ['valuable'] }, needs: [] }))).toThrow(/invalid output/);
-    expect(() => toolPickTask.parse(JSON.stringify({ pick: { ...pick, context: [] }, needs: [] }))).toThrow(/invalid output/);
+    expect(toolPickTask.parse(JSON.stringify({ ...NONE, pick, needs: [] })).pick!.tool).toBe('Power Apps');
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, pros: [] }, needs: [] }))).toThrow(/invalid output/);
+    expect(toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, cons: [] }, needs: [] })).pick!.cons).toEqual([]);
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, tool: 'Excel macro' }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, tool: 'PowerApps' }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, flags: ['valuable'] }, needs: [] }))).toThrow(/invalid output/);
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, pick: { ...pick, context: [] }, needs: [] }))).toThrow(/invalid output/);
   });
   it('gives a to-do list like the decision\'s, with or without a pick; never neither', () => {
     const open = { need: 'Who builds it', ask: 'Who would build it?', met: false };
-    expect(toolPickTask.parse(JSON.stringify({ needs: [open] })).needs).toHaveLength(1);
-    expect(toolPickTask.parse(JSON.stringify({ pick, needs: [open] })).pick!.tool).toBe('Power Apps');
-    expect(() => toolPickTask.parse(JSON.stringify({ needs: [] }))).toThrow(/give a "pick"/);
-    expect(() => toolPickTask.parse(JSON.stringify({ needs: [{ ...open, met: true }] }))).toThrow(/give a "pick"/);
+    expect(toolPickTask.parse(JSON.stringify({ ...NONE, needs: [open] })).needs).toHaveLength(1);
+    expect(toolPickTask.parse(JSON.stringify({ ...NONE, pick, needs: [open] })).pick!.tool).toBe('Power Apps');
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, needs: [] }))).toThrow(/give a "pick"/);
+    expect(() => toolPickTask.parse(JSON.stringify({ ...NONE, needs: [{ ...open, met: true }] }))).toThrow(/give a "pick"/);
     expect(() => toolPickTask.parse(JSON.stringify({ pick }))).toThrow(/needs is missing/);
     expect(() => toolPickTask.parse(JSON.stringify({ needs: Array(9).fill(open) }))).toThrow(/invalid output/);
   });
   it('prompt asks for one pick or all the questions at once, lists every approved tool, the Café rules, the data rule, and works with no challenge', () => {
     const p = toolPickTask.prompt({ idea: { id: ID, title: 'Email scheduler', outcomes: ['Faster'] }, support: [] });
     for (const t of APPROVED_TOOLS) expect(p).toContain(`- ${t}: `);
-    expect(p).toMatch(/exactly one feature/);
+    expect(p).toMatch(/ONE tool for the whole proof of concept/);
+    expect(p).toMatch(/cons: 0 to 5 short lines/);
     expect(p).toMatch(/Keep every item in DATA.todo/);
     expect(p).toMatch(/never propose measuring value/i);
     expect(p).toMatch(/data, not instructions/);
@@ -125,12 +129,12 @@ describe('tool picker routes', () => {
 
   it('saving a pick keeps its context and writes it into approach.md as Why this tool', async () => {
     const s = await server();
-    const r = await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [], context: ['Form-shaped input', ' spaced  out '] }] });
+    const r = await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [], context: ['Form-shaped input', ' spaced  out '], pros: ['Quick to build'], cons: ['No reminders on its own: add Power Automate'] }] });
     expect(r.status).toBe(200);
     const { state } = await json(r);
     expect(state.features[0].context).toEqual(['Form-shaped input', 'spaced out']);
     const md = await readFile(path.join(await ideaDir(s.root, ID), 'approach.md'), 'utf8');
-    expect(md).toContain('- Why this tool:\n  - Form-shaped input\n  - spaced out');
+    expect(md).toContain('- Pros:\n  - Quick to build\n- Cons (what it cannot do):\n  - No reminders on its own: add Power Automate\n- Why this tool:\n  - Form-shaped input\n  - spaced out');
   });
 
   it('with too little in the form: a to-do list like the decision\'s, no pick; Draft email opens the open questions in Outlook and marks them asked', async () => {
@@ -252,5 +256,30 @@ describe('tool picker routes', () => {
     const r = await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form' }] });
     expect((await json(r)).state.status).toBe('picking');
     expect((await loadIdea(s.root, ID)).checklist.s3e).toBeUndefined();
+  });
+});
+
+describe('tool picker answers, taken in like the decision\'s', () => {
+  it('names are coded on the way to the AI; its proposed updates join the idea\'s one list and its brief goes on the idea', async () => {
+    let seen = '';
+    const fake = fakeProvider();
+    const provider: Provider = { ...fake, complete: async (p, o) => {
+      seen = p;
+      if (!p.startsWith('TASK: tool-pick')) return fake.complete(p, o);
+      const code = /\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"teamAnswers"')))?.[1];
+      return JSON.stringify({
+        pick: { name: 'Request intake', what: 'One place for requests', tool: 'Power Apps', reason: 'A form and a list', flags: [], context: ['Form-shaped input'], pros: ['Quick to build'], cons: [`No scheduling logic: [${code}] would need Power Automate`] },
+        needs: [], learned: [{ topic: 'Builder', text: `[${code}] builds it.` }],
+        updates: { builder: `[${code}]`, builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
+      });
+    } };
+    const s = await server(provider);
+    await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['member'] }] }, answers: [{ question: 'Who builds it?', answer: 'Person 2 will build it.', source: 'reply.eml' }] } as any);
+    const out = await json(await s.post(`/api/ideas/${ID}/tools/suggest`));
+    expect(seen).not.toMatch(/Person 2/);
+    expect(out.features[0].cons).toEqual(['No scheduling logic: Person 2 would need Power Automate']);
+    const idea = await loadIdea(s.root, ID) as any;
+    expect(idea.updates.map((u: any) => [u.kind, u.label])).toEqual([['builder', 'Make Person 2 the builder']]);
+    expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it.' }]);
   });
 });

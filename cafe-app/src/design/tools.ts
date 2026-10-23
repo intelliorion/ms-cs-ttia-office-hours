@@ -4,6 +4,9 @@ import type { Idea } from '../ideas/idea';
 import type { EmailRecord } from '../comms/outbox';
 import { draftQuestionsEmail } from '../review/prep';
 import { isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from '../review/needs';
+import { reviewInput } from '../review/suggestInput';
+import { takeInAnswers } from '../review/updates';
+import { showNames } from '../command/names';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
@@ -42,7 +45,7 @@ export function pathwayLabel(tool: string, builder?: string): string {
   return pathwayOf(tool, builder) === 'Assisted Citizen' ? `${base} (${ASSISTED_NOTE})` : base;
 }
 
-export interface PickInput { id?: string; name: string; what?: string; tool?: string; reason?: string; flags?: string[]; context?: string[] }
+export interface PickInput { id?: string; name: string; what?: string; tool?: string; reason?: string; flags?: string[]; context?: string[]; pros?: string[]; cons?: string[] }
 
 /** One line of plain text: every whitespace run (newlines too) becomes one space, so AI text can never start a heading or field. */
 const str = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -74,10 +77,13 @@ export function validatePicks(raw: unknown, builder?: string): DesignFeature[] {
     ids.add(id);
     const what = str(r.what, 160);
     const reason = str(r.reason, 160);
-    const context = (Array.isArray(r.context) ? r.context : []).map((c) => str(c, 160)).filter(Boolean).slice(0, 6);
+    const lines = (v: unknown, max: number) => (Array.isArray(v) ? v : []).map((c) => str(c, 200)).filter(Boolean).slice(0, max);
+    const context = lines(r.context, 6).map((c) => c.slice(0, 160));
+    const pros = lines(r.pros, 5); const cons = lines(r.cons, 5);
     out.push({
       id, name, ...(what ? { what } : {}), ...(tool ? { tool, pathway: pathwayOf(tool, builder) } : {}),
-      ...(reason ? { reason } : {}), ...(context.length ? { context } : {}), flags: [...new Set(flags)],
+      ...(reason ? { reason } : {}), ...(context.length ? { context } : {}), ...(pros.length ? { pros } : {}), ...(cons.length ? { cons } : {}),
+      flags: [...new Set(flags)],
     });
   }
   return out;
@@ -98,6 +104,8 @@ export function renderApproachMd(idea: Idea, features: DesignFeature[]): string 
     out.push(`- Pathway: ${f.tool ? pathwayLabel(f.tool, builder) : '(after a tool is picked)'}`);
     out.push(`- Reason: ${f.reason || '(none given)'}`);
     out.push(`- Flags: ${f.flags.length ? f.flags.join(', ') : 'none'}`);
+    if (f.pros?.length) { out.push('- Pros:'); for (const c of f.pros) out.push(`  - ${c}`); }
+    if (f.cons?.length) { out.push('- Cons (what it cannot do):'); for (const c of f.cons) out.push(`  - ${c}`); }
     if (f.context?.length) { out.push('- Why this tool:'); for (const c of f.context) out.push(`  - ${c}`); }
     out.push('');
   }
@@ -183,14 +191,29 @@ export async function suggestTools(
   const state = await readDesign(root, id);
   const prev = state.toolPrep?.needs ?? [];
   const pasted = prev.filter((n) => n.answer?.trim()).map((n) => ({ question: str(n.ask, 200), answer: str(n.answer, 500) }));
+  // The same coded view of the idea the decision gets (names hidden), so the answers can propose a builder too.
+  const { input: seen, codes } = await reviewInput(root, id, pasted);
   const base = toolPickInput(idea, state);
-  const answers = [...(base.teamAnswers ?? []), ...pasted];
+  const steps = state.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: str(s.question, 200), answer: str(s.answer, 500) }));
+  const answers = [...(seen.answers ?? []), ...steps];
   const { provider, output } = await run({
-    ...base, ...(answers.length ? { teamAnswers: answers } : {}), ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}),
+    ...base, idea: seen.idea,
+    ...(answers.length ? { teamAnswers: answers } : { teamAnswers: undefined }),
+    ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}),
+    ...(seen.form?.participation ? { form: { participation: seen.form.participation } } : {}),
+    ...(seen.flags ? { flags: seen.flags } : {}), ...(seen.graph ? { graph: seen.graph } : {}),
   });
-  state.toolPrep = { at: clock(), provider, needs: mergeNeeds(prev, output.needs) };
+  const at = clock();
+  const name = (t: string) => showNames(t, codes);
+  state.toolPrep = { at, provider, needs: mergeNeeds(prev, output.needs, name) };
   await writeDesign(root, id, state);
-  return { state, features: mergeSuggestions(state.features, output.pick ? [output.pick] : []), provider };
+  // What the answers change (proposed, each waiting for Yes) and the brief of what they add, as after the decision.
+  await saveIdea(root, { ...idea, ...(await takeInAnswers(root, idea, output, codes, provider, at, answers.length)) });
+  const pick = output.pick && {
+    ...output.pick, name: name(output.pick.name), what: name(output.pick.what), reason: name(output.pick.reason),
+    context: output.pick.context.map(name), pros: output.pick.pros.map(name), cons: output.pick.cons.map(name),
+  };
+  return { state, features: mergeSuggestions(state.features, pick ? [pick] : []), provider };
 }
 
 /** Save what the operator pasted for one of the picker's to-do items. Read at the next Re-evaluate. */

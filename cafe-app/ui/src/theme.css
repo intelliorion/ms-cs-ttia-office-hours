@@ -1000,3 +1000,11 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .learned-stale{color:var(--amber)}
 .learned-raw summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin:2px 0 4px}
 .learned-raw .learned-a{font-size:14px}
+/* The suggested tool's pros and cons. */
+.tp-pc{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 2px}
+.tp-pc ul{margin:2px 0 0;padding-left:18px;font-size:13.5px;line-height:1.4}
+.tp-pc-h{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}
+.tp-pros .tp-pc-h{color:var(--teal)}
+.tp-cons .tp-pc-h{color:var(--amber)}
+.tp-pros li::marker{color:var(--teal)}
+.tp-cons li::marker{color:var(--amber)}

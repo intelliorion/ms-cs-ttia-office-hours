@@ -279,23 +279,26 @@ describe('IdeaDetails design sections', () => {
     expect(plan.textContent).toContain('approve it again');
   });
 
-  it('a suggested pick shows its "why this tool" lines open, and Save posts them with the row', async () => {
+  it('the one suggested tool shows its pros and cons (why this tool folded), and Save posts them with the row', async () => {
     api.designPost.mockImplementation(async (_id: string, route: string, body: any) => (route === 'tools/suggest'
-      ? { features: [{ name: 'Intake', what: 'Takes requests', tool: 'Power Apps', reason: 'Form-shaped', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'] }], provider: 'fake' }
+      ? { features: [{ name: 'Intake', what: 'Takes requests', tool: 'Power Apps', reason: 'Form-shaped', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'], pros: ['Quick to build'], cons: ["Can't send reminders on its own: add Power Automate"] }], provider: 'fake' }
       : { state: designState({ features: body.features.map((f: any, i: number) => ({ id: `f${i}`, ...f })) }), designMd: '# Design' }));
     api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [] }), designMd: '# Design' } : { files: [] }));
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
     await click('[data-action="tools-suggest"]');
     await flush();
+    const pc = el.querySelector('[data-testid="tool-pros-cons"]')!;
+    expect(pc.querySelector('.tp-pros li')!.textContent).toBe('Quick to build');
+    expect(pc.querySelector('.tp-cons li')!.textContent).toBe("Can't send reminders on its own: add Power Automate");
     const ctx = el.querySelector('[data-testid="tool-context"]') as HTMLDetailsElement;
-    expect(ctx.open).toBe(true);
+    expect(ctx.open).toBe(false);
     expect(ctx.textContent).toContain('No live system → Power Apps');
     expect(el.querySelectorAll('.tp-row')).toHaveLength(1);
     await click('[data-action="tools-save"]');
     await flush();
     const saveCall = api.designPost.mock.calls.find((c: any[]) => c[1] === 'tools')!;
-    expect(saveCall[2].features[0].context).toEqual(['Form-shaped input', 'No live system → Power Apps']);
+    expect(saveCall[2].features[0]).toMatchObject({ context: ['Form-shaped input', 'No live system → Power Apps'], pros: ['Quick to build'], cons: ["Can't send reminders on its own: add Power Automate"] });
   });
 
   const toolPrep = (needs: any[]) => ({ at: '2026-10-21', provider: 'fake', needs });

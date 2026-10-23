@@ -55,6 +55,9 @@ export interface FeatureRow {
   flags: string[];
   /** "Why this tool": the facts and the rule the suggestion rested on; kept with the saved pick. */
   context: string[];
+  /** What the tool does well for the idea, and what it cannot do (each part named); kept with the saved pick. */
+  pros: string[];
+  cons: string[];
   /** Filled by the AI and not saved yet: shown with a highlighted border. */
   suggested: boolean;
 }
@@ -73,6 +76,8 @@ export function flagsFor(tool: string, flags: string[]): string[] {
  * Rows from either shape: a saved DesignFeature ({id, name, what?, tool?, reason?, pathway?, flags}) or an AI
  * ToolPickFeature ({name, what, tool, reason, flags}). `suggested` marks the rows the AI added (no saved id).
  */
+const lines = (v: unknown, max: number): string[] => (Array.isArray(v) ? v.filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '').slice(0, max) : []);
+
 export function featureRows(raw: unknown, opts: { fromAi?: boolean; tools?: readonly string[] } = {}): FeatureRow[] {
   if (!Array.isArray(raw)) return [];
   const known: readonly string[] = opts.tools ?? APPROVED_TOOLS;
@@ -83,16 +88,16 @@ export function featureRows(raw: unknown, opts: { fromAi?: boolean; tools?: read
       key: str(f.id) || newKey(),
       name: str(f.name), what: str(f.what), tool, reason: str(f.reason),
       flags: flagsFor(tool, flags),
-      context: Array.isArray(f.context) ? f.context.filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 6) : [],
+      context: lines(f.context, 6), pros: lines(f.pros, 5), cons: lines(f.cons, 5),
       suggested: Boolean(opts.fromAi) && !str(f.id),
     };
   });
 }
 
-export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', tool: '', reason: '', flags: [], context: [], suggested: false });
+export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', tool: '', reason: '', flags: [], context: [], pros: [], cons: [], suggested: false });
 
 /** The body for POST …/tools: name, what, tool, reason, flags and the context lines; rows with no name and nothing else are dropped. */
-export function picksBody(rows: FeatureRow[]): { features: { name: string; what?: string; tool?: string; reason?: string; flags: string[]; context?: string[] }[] } {
+export function picksBody(rows: FeatureRow[]): { features: { name: string; what?: string; tool?: string; reason?: string; flags: string[]; context?: string[]; pros?: string[]; cons?: string[] }[] } {
   return {
     features: rows
       .filter((r) => r.name.trim() || r.what.trim() || r.tool)
@@ -103,6 +108,8 @@ export function picksBody(rows: FeatureRow[]): { features: { name: string; what?
         ...(r.reason.trim() ? { reason: r.reason.trim() } : {}),
         flags: flagsFor(r.tool, r.flags),
         ...(r.context.length ? { context: r.context } : {}),
+        ...(r.pros.length ? { pros: r.pros } : {}),
+        ...(r.cons.length ? { cons: r.cons } : {}),
       })),
   };
 }

@@ -90,7 +90,7 @@ export async function planUpdates(
 /** Yes, No or Undo on one proposed update. Each change goes in the idea's history; Undo puts back only what it changed. */
 export async function decideUpdate(root: string, id: string, uid: string, act: unknown, clock: Clock): Promise<PrepUpdate> {
   const idea = await loadIdea(root, id) as WithAnswers;
-  const all = idea.prep?.updates ?? [];
+  const all = idea.updates ?? [];
   const u = all.find((x) => x.id === uid);
   if (!u) throw new Error('That update is gone; re-evaluate again');
   const at = clock();
@@ -98,7 +98,7 @@ export async function decideUpdate(root: string, id: string, uid: string, act: u
   const log = (detail: string) => appendHistory(dir, { at, action: 'review-update', by: 'operator', detail, source: REVIEW_SOURCE });
   const save = async (next: PrepUpdate, changed?: WithAnswers) => {
     const base = changed ?? (await loadIdea(root, id) as WithAnswers);
-    await saveIdea(root, { ...base, prep: { ...base.prep!, updates: (base.prep?.updates ?? all).map((x) => (x.id === uid ? next : x)) } } as Idea);
+    await saveIdea(root, { ...base, updates: (base.updates ?? all).map((x) => (x.id === uid ? next : x)) } as Idea);
     return next;
   };
   if (act === 'no') {
@@ -192,4 +192,19 @@ export async function removeAnswer(root: string, id: string, question: string, a
   await saveIdea(root, { ...idea, answers: list.filter((_, k) => k !== i), ...(idea.learned ? { learned: { ...idea.learned, stale: true } } : {}) } as Idea);
   await appendHistory(await ideaDir(root, id), { at: clock(), action: 'answer-removed', by: 'operator', detail: `Answer removed: ${answer}`, ...(list[i].source ? { source: list[i].source } : {}) });
   return { removed: true };
+}
+
+/**
+ * What a suggestion read in the answers, taken into the idea: its proposed updates (checked, each waiting for Yes,
+ * on the one list the decision and the tool picker share) and its brief of what the answers add. Returns the fields
+ * to save on the idea; a suggestion that wrote no brief keeps the one there.
+ */
+export async function takeInAnswers(
+  root: string, idea: WithAnswers, out: { updates?: ReviewUpdates; learned?: { topic: string; text: string }[] },
+  codes: Map<string, Coded>, provider: string, at: string, read: number,
+): Promise<Pick<Idea, 'updates' | 'learned'>> {
+  const updates = await planUpdates(root, idea, out.updates, codes, provider, idea.updates);
+  const points = (out.learned ?? []).map((p) => ({ topic: p.topic.trim(), text: showNames(p.text, codes).trim() })).filter((p) => p.topic && p.text);
+  const learned = points.length ? { at, provider, from: read, points } : idea.learned;
+  return { ...(updates.length ? { updates } : {}), ...(learned ? { learned } : {}) };
 }

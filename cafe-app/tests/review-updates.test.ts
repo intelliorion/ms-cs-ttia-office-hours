@@ -40,7 +40,7 @@ async function setup() {
   await answerNeed(root, idea.id, 'n1', 'Person 2 will build it and can make every session. It is a team entry. Sample contracts are enough.');
   return root;
 }
-const updates = async (root: string) => (await loadIdea(root, idea.id)).prep?.updates ?? [];
+const updates = async (root: string) => (await loadIdea(root, idea.id)).updates ?? [];
 
 describe('what your answers change in the record', () => {
   it('re-evaluating proposes each change in plain words; nothing changes until Yes', async () => {
@@ -101,7 +101,7 @@ describe('what your answers change in the record', () => {
     await suggestPrep(root, idea.id, run, clock);
     expect((await updates(root)).map((y) => [y.kind, y.status])).toEqual([['participation', 'dismissed'], ['builder', 'proposed']]);
     // Already the form's value, or already the builder: nothing to propose.
-    await saveIdea(root, { ...(await loadIdea(root, idea.id)), prep: undefined, people: { ...idea.people, team: [{ name: 'Person 2', roles: ['builder'] }] } });
+    await saveIdea(root, { ...(await loadIdea(root, idea.id)), prep: undefined, updates: undefined, people: { ...idea.people, team: [{ name: 'Person 2', roles: ['builder'] }] } });
     await suggestPrep(root, idea.id, ai({ participation: 'Individual', builder: 'Person 2' }).run, clock);
     expect(await updates(root)).toEqual([]);
   });

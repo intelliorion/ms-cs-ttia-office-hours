@@ -7,7 +7,7 @@ import { NEED_ANSWER_MAX, type ReviewSuggestInput, type ReviewSuggestOutput } fr
 import { addQuestion } from '../design/brainstorm';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { reviewInput } from './suggestInput';
-import { planUpdates } from './updates';
+import { takeInAnswers } from './updates';
 import { emailAnswerFor, isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from './needs';
 
 type WithAnswers = Idea & { answers?: EmailAnswer[] };
@@ -28,19 +28,13 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
   const { input, basis, codes } = await reviewInput(root, id, pasted);
   const { provider, output } = await run({ ...input, ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}) });
   const needs: PrepNeed[] = mergeNeeds(prev, output.needs, (s) => showNames(s, codes));
-  // What the answers would change in the record: proposed only, each waiting for the operator's Yes.
-  const updates = await planUpdates(root, idea, output.updates, codes, provider, idea.prep?.updates);
   const prep: ReviewPrep = {
     at: clock(), decision: output.decision, reason: showNames(output.reason, codes), criteria: output.criteria,
     needs, basis: pasted.length ? `${basis}, with ${pasted.length} answer${pasted.length === 1 ? '' : 's'} you added` : basis, provider,
-    ...(updates.length ? { updates } : {}),
   };
-  // The answers as a brief for the Submission: rewritten each time, from every answer the AI read.
-  const points = (output.learned ?? []).map((p) => ({ topic: p.topic.trim(), text: showNames(p.text, codes).trim() })).filter((p) => p.topic && p.text);
-  const from = (input.answers ?? []).length;
-  const learned = points.length ? { at: prep.at, provider, from, points } : undefined;
-  const { learned: _old, ...rest } = idea;
-  await saveIdea(root, { ...rest, prep, ...(learned ? { learned } : idea.learned && from ? { learned: idea.learned } : {}) });
+  // What the answers would change (proposed, each waiting for Yes) and the brief of what they add.
+  const taken = await takeInAnswers(root, idea, output, codes, provider, prep.at, (input.answers ?? []).length);
+  await saveIdea(root, { ...idea, prep, ...taken });
   const open = needs.filter((x) => isOpenNeed(x, idea.answers)).length;
   await appendHistory(await ideaDir(root, id), {
     at: prep.at, action: 'review-suggest', by: 'app',

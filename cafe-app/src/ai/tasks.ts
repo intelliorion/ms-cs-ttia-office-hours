@@ -112,17 +112,53 @@ export const UPDATES_SCHEMA: JsonSchema = {
   },
 };
 
+/**
+ * What a suggestion does with the team's answers, the same for the decision and the tool picker: the updates they
+ * justify (for the operator's Yes) and a short brief of what they add. `key` is where DATA holds the answers.
+ */
+function answerRules(key: string): string[] {
+  return [
+    `updates: what DATA.${key} change in the idea's record, for the operator to say yes to; leave a field empty when nothing changes.`,
+    'builder: the person an answer names to build it, as their code alone when they have one (a code followed by a stray surname is that person), else the name as written; "" when none.',
+    'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
+    'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',
+    'settles, word for word. facts: each answer that tells us something, as the question it answers and the fact in one plain sentence',
+    '(names as written in DATA). graph: what the answers add to the knowledge graph. Every system or data source an answer names is a',
+    'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
+    'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
+    'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
+    `learned: what DATA.${key} add to the submission, written as a short brief for someone reading the idea, not the answers as given.`,
+    'One point per topic (such as Builder, Team, Data, Systems, Scope, What was tried, Existing tools), each a topic of one or two words',
+    'and one or two clear sentences. Merge answers on the same topic, drop repeats, and when answers disagree the later one wins.',
+    'Only what the form did not already say; no guesses, no figures that are not in DATA. Empty when there are no answers.',
+    'Names: write each person as their code alone. A code followed by a stray surname ("[P2] Viseiewki", a misspelling) is that one person: write [P2].',
+  ];
+}
+
+const LEARNED_SCHEMA: JsonSchema = {
+  type: 'array', maxItems: 8,
+  items: {
+    type: 'object', additionalProperties: false, required: ['topic', 'text'],
+    properties: { topic: { type: 'string', minLength: 1, maxLength: 30 }, text: { type: 'string', minLength: 1, maxLength: 280 } },
+  },
+};
+
+/** Trims the updates and the brief in place (shared by the decision's and the tool picker's replies). */
+function trimAnswerParts(o: Record<string, unknown>): void {
+  if (Array.isArray(o.learned)) for (const p of o.learned) { const x = asObj(p); if (x) { x.topic = trimStrings(x.topic, 30); x.text = trimStrings(x.text, 280); } }
+  const u = asObj(o.updates);
+  if (u) {
+    u.builder = trimStrings(u.builder, 80);
+    if (Array.isArray(u.facts)) for (const f of u.facts) { const x = asObj(f); if (x) { x.question = trimStrings(x.question, 220); x.answer = trimStrings(x.answer, 300); } }
+    trimExtract(u.graph);
+  }
+}
+
 export const REVIEW_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs', 'updates', 'learned'],
   properties: {
     updates: UPDATES_SCHEMA,
-    learned: {
-      type: 'array', maxItems: 8,
-      items: {
-        type: 'object', additionalProperties: false, required: ['topic', 'text'],
-        properties: { topic: { type: 'string', minLength: 1, maxLength: 30 }, text: { type: 'string', minLength: 1, maxLength: 280 } },
-      },
-    },
+    learned: LEARNED_SCHEMA,
     criteria: {
       type: 'object', additionalProperties: false, required: CRITERIA.map((c) => c.id),
       properties: Object.fromEntries(CRITERIA.map((c) => [c.id, { type: 'boolean' } as JsonSchema])),
@@ -209,32 +245,13 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'Keep every item in DATA.todo, in the same words, in the same order, marking each met or not; then add new open items only for real gaps,',
       'at most 5 open items in all. Only ask what changes the decision: never ask for personal, client or third-party data.',
       'If the decision can be made from DATA as it is, every item is met (or there are none).',
-      'updates: what DATA.answers change in the idea\'s record, for the operator to say yes to; leave a field empty when nothing changes.',
-      'builder: the person an answer names to build it, as their code alone when they have one (a code followed by a stray surname is that person), else the name as written; "" when none.',
-      'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
-      'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',
-      'settles, word for word. facts: each answer that tells us something, as the question it answers and the fact in one plain sentence',
-      '(names as written in DATA). graph: what the answers add to the knowledge graph. Every system or data source an answer names is a',
-      'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
-      'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
-      'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
-      'learned: what DATA.answers add to the submission, written as a short brief for someone reading the idea, not the answers as given.',
-      'One point per topic (such as Builder, Team, Data, Systems, Scope, What was tried, Existing tools), each a topic of one or two words',
-      'and one or two clear sentences. Merge answers on the same topic, drop repeats, and when answers disagree the later one wins.',
-      'Only what the form did not already say; no guesses, no figures that are not in DATA. Empty when there are no answers.',
-      'Names: write each person as their code alone. A code followed by a stray surname ("[P2] Viseiewki", a misspelling) is that one person: write [P2].',
+      ...answerRules('answers'),
     ], REVIEW_SCHEMA, { ...(input as ReviewSuggestInput), idea: ideaData(idea) });
   },
   parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => {
     const o = asObj(v); if (!o) return;
     o.reason = trimStrings(o.reason, 300);
-    if (Array.isArray(o.learned)) for (const p of o.learned) { const x = asObj(p); if (x) { x.topic = trimStrings(x.topic, 30); x.text = trimStrings(x.text, 280); } }
-    const u = asObj(o.updates);
-    if (u) {
-      u.builder = trimStrings(u.builder, 80);
-      if (Array.isArray(u.facts)) for (const f of u.facts) { const x = asObj(f); if (x) { x.question = trimStrings(x.question, 220); x.answer = trimStrings(x.answer, 300); } }
-      trimExtract(u.graph);
-    }
+    trimAnswerParts(o);
     if (Array.isArray(o.needs)) for (const n of o.needs) {
       const x = asObj(n); if (!x) continue;
       x.need = trimStrings(x.need, NEED_MAX); x.ask = trimStrings(x.ask, ASK_MAX);
@@ -442,7 +459,7 @@ export const TOOL_GUIDE: Record<string, string> = {
   'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
 };
 
-export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[]; context: string[] }
+export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[]; context: string[]; pros: string[]; cons: string[] }
 export interface ToolPickInput {
   idea: IdeaText;
   support: string[];
@@ -455,15 +472,21 @@ export interface ToolPickInput {
   guidance?: string;
   /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
   todo?: { need: string; ask: string }[];
+  /** For the updates the answers justify, as the decision has them: the form's participation, the flags, the graph. */
+  form?: { participation?: string };
+  flags?: string[];
+  graph?: { type: string; label: string; alsoNeededBy?: number }[];
 }
-/** The pick when enough is known, and what is still needed to be sure (the same to-do list as the decision's). */
-export interface ToolPickOutput { pick?: ToolPickFeature; needs: ReviewNeed[] }
+/** The pick when enough is known, what is still needed to be sure, and what the answers change (as the decision's). */
+export interface ToolPickOutput { pick?: ToolPickFeature; needs: ReviewNeed[]; updates?: ReviewUpdates; learned?: LearnedPoint[] }
 
 export const TOOL_PICK_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['needs'],
+  type: 'object', additionalProperties: false, required: ['needs', 'updates', 'learned'],
   properties: {
+    updates: UPDATES_SCHEMA,
+    learned: LEARNED_SCHEMA,
     pick: {
-      type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags', 'context'],
+      type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags', 'context', 'pros', 'cons'],
       properties: {
         name: { type: 'string', minLength: 1, maxLength: 60 },
         what: { type: 'string', maxLength: 160 },
@@ -471,6 +494,8 @@ export const TOOL_PICK_SCHEMA: JsonSchema = {
         reason: { type: 'string', maxLength: 160 },
         flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
         context: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 160 } },
+        pros: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
+        cons: { type: 'array', maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
       },
     },
     needs: {
@@ -495,12 +520,14 @@ function trimToolPick(v: unknown): void {
   if (x) {
     x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160);
     if (Array.isArray(x.context)) x.context = x.context.map((c) => trimStrings(c, 160));
+    for (const k of ['pros', 'cons']) if (Array.isArray(x[k])) x[k] = (x[k] as unknown[]).map((c) => trimStrings(c, 200));
   }
   if (Array.isArray(o.needs)) for (const n of o.needs) {
     const y = asObj(n); if (!y) continue;
     y.need = trimStrings(y.need, NEED_MAX); y.ask = trimStrings(y.ask, ASK_MAX);
     if (y.answer !== undefined) y.answer = trimStrings(y.answer, NEED_ANSWER_MAX);
   }
+  trimAnswerParts(o);
   // With nothing open, there must be a pick: an empty reply helps no one.
   const open = Array.isArray(o.needs) && o.needs.some((n) => asObj(n)?.met === false);
   if (!o.pick && !open) throw new AiError('invalid output: give a "pick", or the open "needs" that stop you picking');
@@ -513,6 +540,9 @@ function toolPickData(input: ToolPickInput) {
     builderNamed: Boolean(input.builderNamed),
     ...(input.teamAnswers?.length ? { teamAnswers: input.teamAnswers.slice(0, 12).map((a) => ({ question: cap(a.question, 200), answer: cap(a.answer, 500) })) } : {}),
     ...(input.todo?.length ? { todo: input.todo.slice(0, 8).map((t) => ({ need: cap(t.need, NEED_MAX), ask: cap(t.ask, ASK_MAX) })) } : {}),
+    ...(input.form?.participation ? { form: { participation: cap(input.form.participation, 40) } } : {}),
+    ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
+    ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
     ...(input.existingFeatures?.length ? {
       existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
         name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
@@ -531,7 +561,10 @@ export const toolPickTask: Task<ToolPickOutput> = {
     return build('tool-pick', [
       "Pick the one approved tool to build a proof of concept of this Creators' Café idea, or say what you need to know first. The operator decides; you only suggest, and the operator can change the tool.",
       'First judge whether the form says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty.',
-      'If enough is known, return "pick": exactly one feature, the whole proof of concept, with the one tool for it. Do not split the idea into several features.',
+      'If enough is known, return "pick": ONE tool for the whole proof of concept, as one feature that is the whole idea. Never split the idea into features with a tool each.',
+      'pros: 1 to 5 short lines on what this tool does well for this idea. cons: 0 to 5 short lines, each a part of the idea this tool cannot do or does',
+      'poorly, named, and how to cover it when there is a way (for example "Cannot send the reminder emails on its own: add Power Automate"). Be honest:',
+      'a con is how the operator sees the limits before choosing.',
       'needs: what you still need to know to be sure of the tool, as a to-do list. Each item: need (what is needed, a few words,',
       `at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters),`,
       'met (true only if DATA now covers it), and, when met, answer (what covered it in a few words). Keep every item in DATA.todo, in the same',
@@ -547,7 +580,8 @@ export const toolPickTask: Task<ToolPickOutput> = {
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data.",
       'Flags: "needs-live-system" when it needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "reuse-existing" when something that already exists could do it; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
       '"context": 1 to 6 short lines listing the facts from the form you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
-      'name: a short noun phrase, at most 60 characters. what: what it does, at most 160 characters. reason: why this tool, at most 160 characters. Never name people.',
+      'name: a short noun phrase, at most 60 characters. what: what it does, at most 160 characters. reason: why this tool, at most 160 characters. In the pick, never name people.',
+      ...answerRules('teamAnswers'),
     ], TOOL_PICK_SCHEMA, data, "a Café idea and the operator's current features");
   },
   parse: (raw) => parseChecked<ToolPickOutput>(raw, TOOL_PICK_SCHEMA, trimToolPick),

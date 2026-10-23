@@ -19,6 +19,10 @@ export interface DesignFeature {
   reason?: string;
   /** The facts and the rule the suggestion rested on ("why this tool"), 1 to 6 lines; the operator can edit or drop them. */
   context?: string[];
+  /** What this tool does well for the idea. */
+  pros?: string[];
+  /** What it cannot do, or does poorly, for the idea: the part named, and how to cover it when there is a way. */
+  cons?: string[];
   pathway?: Pathway;
   flags: string[];
 }

@@ -83,7 +83,7 @@ export interface ReviewPrep {
   needs: PrepNeed[];
   basis: string;
   provider?: string;
-  /** What the answers would change in the record, each waiting for the operator's Yes (or applied, or said no to). */
+  /** Older records only: the proposals now live on the idea (Idea.updates). */
   updates?: PrepUpdate[];
 }
 
@@ -114,6 +114,11 @@ export interface Idea {
    * suggestion or re-evaluation. `stale` once an answer it was written from is removed.
    */
   learned?: { at: string; provider?: string; from: number; points: { topic: string; text: string }[]; stale?: boolean };
+  /**
+   * What the answers would change in the record ("From your answers"), from the decision's and the tool picker's
+   * re-evaluations alike, each waiting for the operator's Yes (or applied, or said no to).
+   */
+  updates?: PrepUpdate[];
   /** What the form said for a field that was changed later (field → the form's value), so both can be shown. */
   formWas?: Record<string, string>;
   checklist: Record<string, StepState>;
@@ -153,6 +158,9 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     beneficiaries: arr(raw.beneficiaries),
     use_case_category: arr(raw.use_case_category),
     people: normalizePeople(raw.people),
+    // Proposals kept on the decision before they were shared with the tool picker.
+    ...(raw.updates === undefined && raw.prep?.updates?.length ? { updates: raw.prep.updates } : {}),
+    ...(raw.prep?.updates ? { prep: (({ updates: _u, ...p }) => p)(raw.prep) } : {}),
     checklist: raw.checklist ?? {},
     due: raw.due ?? {},
     sent: raw.sent ?? {},

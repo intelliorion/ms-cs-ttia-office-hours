@@ -443,12 +443,14 @@ nothing is saved until you press a button, and you can do everything except plan
 
 1. **Tool picker.** One row per feature: a name, one line on what it does, and a tool from the approved list
    (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** asks for
-   the one tool for the proof of concept: it comes back as one suggested row with a "Why this tool" list (the facts from
-   the form it relied on and the rule that led to the tool), and the tool drop-down stays yours to change. Like the
+   ONE tool for the whole proof of concept: one suggested row with its **Pros** (what the tool does well for this
+   idea) and **Cons** (each part of the idea it cannot do, or does poorly, and how to cover it, such as "add Power
+   Automate"), and a folded "Why this tool" list (the facts it relied on). The tool drop-down stays yours to change. Like the
    decision, it also keeps a **What you need** to-do list: what it still needs to be sure of the tool, each with the
    question for the team and a box for the answer. **✉ Draft email** opens the open questions (E2) in Outlook;
    **Re-evaluate** reads your answers (and any the Import recorded) and updates the list and the pick. When the form
-   says too little to pick at all, it gives only the list. **Add feature** adds an
+   says too little to pick at all, it gives only the list. As with the decision, the answers also propose updates to
+   the record under **From your answers** (one list for both) and rewrite the Submission's **Learned since the form**. **Add feature** adds an
    empty row. Each row shows
    its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any other tool is
    Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the picks and links each

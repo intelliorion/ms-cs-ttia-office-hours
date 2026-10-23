@@ -56,7 +56,7 @@ export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName,
         </div>
       )}
       {prep && <TodoList needs={needs} answers={answers} disabled={off} onAnswer={onAnswer} none="Nothing more is needed to decide." />}
-      {prep && <Updates updates={prep.updates ?? []} disabled={off} onUpdate={onUpdate} />}
+      <Updates updates={idea.updates ?? []} disabled={off} onUpdate={onUpdate} />
       <div className="rs-acts">
         {!prep ? (
           <button className="btn primary" data-action="ai-suggest-review" disabled={noAi || off} title={noAi ? noAiTip : undefined} onClick={onSuggest}>

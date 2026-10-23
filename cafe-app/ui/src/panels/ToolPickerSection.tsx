@@ -6,7 +6,8 @@ import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, flagsFor, flagWord, mergeRows,
   pathwayText, picksBody, picksProblem, type FeatureRow,
 } from './designHelpers';
-import { TodoList } from './ReviewSelect';
+import { TodoList, Updates } from './ReviewSelect';
+import { post } from '../api';
 import { openedText } from './outlook';
 import { isOpenNeed, awaitsReevaluation } from '../../../src/review/needs';
 import type { DesignCall, DesignView } from './DesignSection';
@@ -75,6 +76,10 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
           <div className="rs-by">By {aiName(prep.provider)} on {prep.at}.</div>
         </div>
       )}
+      {/* What the answers change in the record: the same list as the decision's, each waiting for Yes. */}
+      <Updates updates={idea.updates ?? []} disabled={off} onUpdate={(update, what) => void call(
+        () => post(`/api/ideas/${encodeURIComponent(idea.id)}/prep/update`, { update, do: what }),
+        { ok: (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`) })} />
       <div className="ai-row rs-acts">
         {!prep ? (
           <button className="btn" data-action="tools-suggest" disabled={noAi || off || !design}
@@ -117,8 +122,14 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                 </div>
               )}
               {r.reason && <div className="tp-why">{r.reason}</div>}
+              {(r.pros.length > 0 || r.cons.length > 0) && (
+                <div className="tp-pc" data-testid="tool-pros-cons">
+                  {r.pros.length > 0 && <div className="tp-pros"><div className="tp-pc-h">Pros</div><ul>{r.pros.map((c, i) => <li key={i}>{c}</li>)}</ul></div>}
+                  {r.cons.length > 0 && <div className="tp-cons"><div className="tp-pc-h">Cons: what it can't do</div><ul>{r.cons.map((c, i) => <li key={i}>{c}</li>)}</ul></div>}
+                </div>
+              )}
               {r.context.length > 0 && (
-                <details className="tp-ctx" open={r.suggested} data-testid="tool-context">
+                <details className="tp-ctx" data-testid="tool-context">
                   <summary>Why this tool</summary>
                   <ul>{r.context.map((c, i) => <li key={i}>{c}</li>)}</ul>
                 </details>

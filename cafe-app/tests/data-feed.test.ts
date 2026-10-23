@@ -61,7 +61,7 @@ describe('the confirmed data feeds the features, the tool and the design questio
     expect(tool).toMatch(/points to Dataiku/);
     await post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Weekend flag' }], tool: { tool: 'Dataiku' } });
     prompts.length = 0;
-    await post(`/api/ideas/${ID}/design/step`, {});
+    await post(`/api/ideas/${ID}/design/step`, { force: true });
     expect(prompts[0]).toMatch(/^TASK: design-step/);
     expect(prompts[0]).toMatch(/never ask for columns, fields or codes DATA.data already names/);
     expect(dataBlock(prompts[0]).data.answers.length).toBeGreaterThan(0);

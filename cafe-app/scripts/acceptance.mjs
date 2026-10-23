@@ -412,8 +412,12 @@ async function designPass() {
       && (saved.state.tool.context?.length ?? 0) > 0 && saved.state.tool.fit.length === feats.features.length
       && approach && built.length === feats.features.length && (await ideaOf(ID)).checklist?.s3e?.done);
 
-  // Brainstorm: three questions, one at a time; the second is "I don't know", which goes into an E2 draft.
-  const s1 = await api('POST', u('design/step'), {});
+  // Brainstorm: three questions, one at a time; the second is "I don't know", which goes into an E2 draft. No data was
+  // dropped here, so the readiness check refuses the start: first that, then "Design anyway" (force), recorded as such.
+  const refused = await fetch(`${base}${u('design/step')}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  check('(design) readiness', 'the start is refused with the missing list while the data is not confirmed',
+    `${refused.status} ${(refused.body.missing ?? []).join('; ')}`, refused.status === 400 && (refused.body.missing ?? []).includes('the confirmed data'));
+  const s1 = await api('POST', u('design/step'), { force: true });
   await api('POST', u('design/answer'), { n: s1.step.n, suggestedIndex: 0 });
   const s2 = await api('POST', u('design/step'), {});
   const idk = await api('POST', u('design/answer'), { n: s2.step.n, idk: true });

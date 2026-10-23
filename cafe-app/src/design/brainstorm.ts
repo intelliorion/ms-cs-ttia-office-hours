@@ -24,6 +24,8 @@ import { reviewInput } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
 import { writeDiagramFile } from './diagramFile';
 import { codedDataBrief } from '../data/brief';
+import { designReadiness } from './ready';
+import type { EmailAnswer } from '../review/needs';
 
 /** Where design.md is the source of a background tick. */
 export const DESIGN_FILE = 'design.md';
@@ -190,6 +192,8 @@ export function designStepInput(
     ...(extra.teamAnswers?.length ? { teamAnswers: extra.teamAnswers } : {}),
     stepsSoFar: state.steps.map((s) => ({ question: s.question, answer: s.answer?.trim() || ASKED_TEAM_ANSWER })),
     guidance: skillGuidance('cafe-design'),
+    // Started with "Design anyway": what was missing then, for the questions to aim at.
+    ...(state.forcedAt && state.forcedMissing?.length ? { missing: state.forcedMissing } : {}),
   };
 }
 
@@ -382,6 +386,32 @@ export async function approveDesign(
   return { ...out, notice, ...(suggest ? { suggest } : {}) };
 }
 
+/** The design-step route's refusal when the design would start with gaps and no `force`: it carries the missing list. */
+export class DesignNotReadyError extends DesignError {
+  constructor(readonly missing: string[]) {
+    super(`Not ready for the design: missing ${missing.join('; ')}. Do those first, or press Design anyway.`);
+  }
+}
+export const FORCED_LOG = 'Design anyway: started before';
+
+/**
+ * The readiness check at the start of a design (no questions and no summary yet). Ready: nothing happens. Not ready:
+ * refused, unless `force` (the operator's "Design anyway"); then when and what was missing are recorded in the design
+ * and its history, and design.md says "Designed before: …". Once the design has a question it is not checked again.
+ */
+export async function checkDesignStart(root: string, idea: Idea, state: DesignState, force: boolean, clock: Clock): Promise<DesignState> {
+  if (state.steps.length || isDone(state)) return state;
+  const r = designReadiness(state, { answers: (idea as Idea & { answers?: EmailAnswer[] }).answers });
+  if (r.ready) return state;
+  if (!force) throw new DesignNotReadyError(r.missing);
+  const at = clock();
+  const next: DesignState = { ...state, forcedAt: at, forcedMissing: r.missing };
+  await writeDesign(root, idea.id, next);
+  await writeDesignMd(root, idea, next);
+  await appendHistory(await ideaDir(root, idea.id), { at, action: 'design', by: 'operator', source: DESIGN_FILE, detail: `${FORCED_LOG} ${r.missing.join('; ')}` });
+  return next;
+}
+
 /** The design series' stage: Redesign is offered there only. */
 export const DESIGN_STAGE = 3;
 export const REDESIGN_LOG = 'Design started again';
@@ -399,7 +429,8 @@ export async function redesign(root: string, id: string, clock: Clock): Promise<
   if (idea.stage !== DESIGN_STAGE) throw new DesignError('The design can be started again in the Design series only');
   const prev = await readDesign(root, id);
   if (!prev.steps.length && !prev.summary) throw new DesignError('The design has no questions yet: nothing to start again');
-  const { summary: _s, settled: _t, approvedAt: _a, diagram: _d, planStale: _p, ...rest } = prev;
+  // A forced start goes too: the new design meets the readiness check again.
+  const { summary: _s, settled: _t, approvedAt: _a, diagram: _d, planStale: _p, forcedAt: _f, forcedMissing: _m, ...rest } = prev;
   const hasPlan = (await readPlan(root, id)).files.length > 0;
   const at = clock();
   const state: DesignState = {

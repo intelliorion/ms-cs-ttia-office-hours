@@ -19,6 +19,7 @@ import {
   FEATURE_FLAGS, FEATURE_ONLY_FLAGS, FEATURES_MAX, type FeatureFlag, type FeatureListInput, type FeatureListOutput,
   type FeatureSuggestion, type ToolPickInput, type ToolPickOutput,
 } from '../ai/tasks';
+import { DATA_STALE_NOTE, toolDataStale } from './ready';
 import { readDesign, writeDesign, writeDesignMd, mdLine, type DesignFeature, type DesignState, skillGuidance } from './store';
 
 import { FIT_LEVELS, FIT_STALE, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
@@ -116,6 +117,7 @@ export function validateChoice(raw: unknown, features: { name: string }[], build
     fit: fitFor(r.fit, features),
     evaluatedFor: Array.isArray(r.evaluatedFor) ? evaluatedFor : features.map((f) => f.name),
     ...(r.needsAi ? { needsAi: true } : {}),
+    ...(typeof r.dataFor === 'string' ? { dataFor: str(r.dataFor, 40) } : {}),
     at: str(r.at, 40) || at, ...(r.provider ? { provider: str(r.provider, 60) } : {}),
   };
 }
@@ -149,7 +151,7 @@ const FIT_WORD: Record<FitLevel, string> = { yes: 'Yes', partly: 'Partly', no: '
 const cell = (text: string | undefined) => mdLine(text).replace(/\|/g, '\\|');
 
 /** approach.md: the feature list, then the one tool with its pathway, reason, pros, cons, fit per feature and why. */
-export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features' | 'tool'>): string {
+export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features' | 'tool' | 'data'>): string {
   const builder = builderOf(idea);
   const out = [`# Approach — ${idea.title}`, '', '## Features', ''];
   if (!state.features.length) out.push('(no features yet)');
@@ -171,6 +173,7 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
   out.push(`- Flags: ${t.flags.length ? t.flags.map((x) => mdLine(x)).join(', ') : 'none'}`);
   if (t.needsAi) out.push(`- Note: ${NEEDS_AI_NOTE}`);
   if (outOfDate(state.features, t)) out.push('- Note: the feature list changed after the tool was evaluated: Re-evaluate the tool for the new features.');
+  else if (toolDataStale(state)) out.push(`- Note: ${DATA_STALE_NOTE} Re-evaluate the tool.`);
   if (t.pros.length) { out.push('- Pros:'); for (const c of t.pros) out.push(`  - ${mdLine(c)}`); }
   if (t.cons.length) { out.push('- Cons (what it cannot do):'); for (const c of t.cons) out.push(`  - ${mdLine(c)}`); }
   out.push('', '## How the tool fits each feature', '');
@@ -304,6 +307,8 @@ export async function suggestTools(
     tool: p.tool, by: evaluate ? 'operator' : 'ai', reason: name(p.reason), flags: p.flags,
     context: p.context.map(name), pros: p.pros.map(name), cons: p.cons.map(name),
     fit: p.fit.map((f) => ({ ...f, note: name(f.note) })), evaluatedFor: features.map((f) => f.name), provider,
+    // What the evaluation saw of the data: confirming it later marks this evaluation out of date.
+    dataFor: state.data?.confirmedAt ?? '',
   }, features, builderOf(idea), at);
   return { state, ...(tool ? { tool } : {}), provider };
 }

@@ -7,6 +7,7 @@ import type { Idea, PrepNeed } from '../ideas/idea';
 import { csicFlags, dropRetiredFlags, legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
+import { designedBeforeText } from './ready';
 import { retiredToolNote } from '../graph/ontology';
 import { columnsOf, dataOf, KIND_LABELS, meaningOf, settleInterrupted, sizeWords, TOPIC_WORDS, whatOf, type DataState } from '../data/model';
 
@@ -66,6 +67,13 @@ export interface DesignState {
    * it is written again from the new, approved design. Cleared when the plan is written.
    */
   planStale?: string;
+  /**
+   * Set when the operator started the design with "Design anyway" while the readiness check had gaps (src/design/ready):
+   * when, and what was missing then. design.md and the design pack say "Designed before: …"; the questions aim at the
+   * gaps. Cleared by Redesign (the new design is checked again).
+   */
+  forcedAt?: string;
+  forcedMissing?: string[];
   /** "Understand the data": the dropped files, what they hold, the data questions and the one confirmation (src/data). */
   data?: DataState;
 }
@@ -137,13 +145,15 @@ function normalize(raw: Partial<DesignState>): DesignState {
       ...(scope ? { scope } : {}),
     };
   });
-  const { settled: rawSettled, diagram: rawDiagram, data: rawData, ...others } = rest;
+  const { settled: rawSettled, diagram: rawDiagram, data: rawData, forcedAt: rawForcedAt, forcedMissing: rawMissing, ...others } = rest;
+  const forcedAt = typeof rawForcedAt === 'string' && rawForcedAt ? rawForcedAt : undefined;
   const settled = settledOf(rawSettled);
   const diagram = diagramOf(rawDiagram);
   const data = dataOf(rawData);
   return {
     ...others,
     ...(data ? { data } : {}),
+    ...(forcedAt ? { forcedAt, forcedMissing: arr<unknown>(rawMissing).map((x) => String(x ?? '').replace(/\s+/g, ' ').trim().slice(0, 160)).filter(Boolean).slice(0, 8) } : {}),
     ...(settled ? { settled } : {}),
     ...(diagram ? { diagram } : {}),
     version: 1,
@@ -187,6 +197,7 @@ export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<
 export function renderDesignMd(idea: Idea, state: DesignState): string {
   const out: string[] = [`# ${idea.title}`, ''];
   if (state.status === 'approved' && state.approvedAt) out.push(`Approved on ${state.approvedAt}.`, '');
+  if (state.forcedAt) out.push(`**${mdLine(designedBeforeText(state.forcedMissing ?? []))}** (Design anyway, ${mdLine(state.forcedAt)}.)`, '');
   const mustShow = mdLine(state.summary) || mdLine(pointOf(state, 'must-show'));
   out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || NOT_ANSWERED, '');
   out.push('## Smallest input', '', mdLine(pointOf(state, 'smallest-input')) || NOT_ANSWERED, '');

@@ -85,10 +85,10 @@ describe('the design runs until it is build-ready (fake AI)', () => {
     const post = (url: string, body: unknown = {}) => fetch(`${s.base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     await saveIdea(s.root, sampleIdea({ stage: 3, challenge: 'Requests arrive by email.' }));
     for (let n = 1; n <= 3; n++) {
-      await post(`/api/ideas/${ID}/design/step`);
+      await post(`/api/ideas/${ID}/design/step`, { force: true });
       await post(`/api/ideas/${ID}/design/answer`, { n, suggestedIndex: 0 });
     }
-    const done = await json(await post(`/api/ideas/${ID}/design/step`));
+    const done = await json(await post(`/api/ideas/${ID}/design/step`, { force: true }));
     expect(done.state.summary).toBeTruthy();
     const st = await readDesign(s.root, ID);
     expect(Object.keys(st.settled ?? {})).toEqual(['input-shape', 'logic', 'output', 'done-when', 'environment']);

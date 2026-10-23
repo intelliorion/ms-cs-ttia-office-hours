@@ -55,7 +55,7 @@ async function approvedDesign(s: Awaited<ReturnType<typeof server>>) {
   const idea = await loadIdea(s.root, ID);
   await applyDesignEvent(s.root, idea, { t: 'step', question: 'What must it show?', suggested: [], tag: 'must-show', source: 'ai-suggested' }, clock);
   await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: MUST_SHOW });
-  const fin = await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'Shows same-day slots.  Built on a\nsynthetic sample.' });
+  const fin = await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'Shows same-day slots.  Built on a\nsynthetic sample.' });
   expect(fin.status).toBe(200);
   expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
 }
@@ -261,11 +261,11 @@ describe('plan routes', () => {
 describe('Task 3 carry-overs', () => {
   it('design/finish: a hand-written summary finishes the design (no AI) and approval follows', async () => {
     const s = await server(DOWN);
-    expect((await s.post(`/api/ideas/${ID}/design/finish`, {})).status).toBe(400);
-    expect((await json(await s.post(`/api/ideas/${ID}/design/finish`, { summary: ' \n ' }))).error).toBe('Write the summary first');
-    expect((await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'x'.repeat(601) })).status).toBe(400);
+    expect((await s.post(`/api/ideas/${ID}/design/finish`, { force: true })).status).toBe(400);
+    expect((await json(await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: ' \n ' }))).error).toBe('Write the summary first');
+    expect((await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'x'.repeat(601) })).status).toBe(400);
     expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(400);
-    const r = await json(await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'Shows slots\n\non a   sample.' }));
+    const r = await json(await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'Shows slots\n\non a   sample.' }));
     expect(r.state.summary).toBe('Shows slots on a sample.');
     expect(r.designMd).toContain('Shows slots on a sample.');
     expect((await readDesign(s.root, ID)).summary).toBe('Shows slots on a sample.');
@@ -276,7 +276,7 @@ describe('Task 3 carry-overs', () => {
   it('design/step hand path: a question must be a non-empty string', async () => {
     const s = await server(DOWN);
     for (const question of [42, null, ['Q?'], '   ']) {
-      const r = await s.post(`/api/ideas/${ID}/design/step`, { question });
+      const r = await s.post(`/api/ideas/${ID}/design/step`, { force: true, question });
       expect(r.status, JSON.stringify(question)).toBe(400);
     }
     expect((await readDesign(s.root, ID)).steps).toEqual([]);
@@ -363,7 +363,7 @@ describe('Task 6 carry-overs', () => {
     expect(ai.designMd).not.toContain('Approved on');
     // Approve again, then finish by hand: the same.
     expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
-    const fin = await json(await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'A changed summary by hand.' }));
+    const fin = await json(await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'A changed summary by hand.' }));
     expect(fin.state.status).toBe('designing');
     expect(fin.state.approvedAt).toBeUndefined();
     expect(await readDesign(s.root, ID)).toMatchObject({ status: 'designing', summary: 'A changed summary by hand.' });

@@ -35,6 +35,11 @@ export interface ToolChoice {
   evaluatedFor: string[];
   /** Chosen with no AI to evaluate it: pros, cons and fit are empty until it is evaluated. */
   needsAi?: boolean;
+  /**
+   * The data confirmation the evaluation read: its date, or '' when no data was confirmed then. When the data is
+   * confirmed (again) later, the evaluation is out of date for it (see toolDataStale in ./ready).
+   */
+  dataFor?: string;
   at: string;
   provider?: string;
 }

@@ -141,16 +141,16 @@ describe('the feature list follows the design (fake AI)', () => {
     await saveIdea(s.root, sampleIdea({ stage: 3, challenge: 'Claims are checked by hand.' }));
     expect((await post(`/api/ideas/${ID}/tools`, { features: FEATURES, tool: TOOL })).status).toBe(200);
 
-    await post(`/api/ideas/${ID}/design/step`);
+    await post(`/api/ideas/${ID}/design/step`, { force: true });
     await post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Leave marking out; just show the flagged list' });
-    const r2 = await json(await post(`/api/ideas/${ID}/design/step`));
+    const r2 = await json(await post(`/api/ideas/${ID}/design/step`, { force: true }));
     expect(r2.featureChanges).toEqual(['Flagged claims review list: out of scope (Left out of the proof of concept)']);
     let st = await readDesign(s.root, ID);
     expect(st.features[1].scope).toMatchObject({ status: 'out', step: 1 });
     expect(r2.designMd).toContain('~~**Flagged claims review list**~~ — out of scope');
 
     await post(`/api/ideas/${ID}/design/answer`, { n: 2, answer: 'Draft with Copilot and log answers in a SharePoint list' });
-    const r3 = await json(await post(`/api/ideas/${ID}/design/step`));
+    const r3 = await json(await post(`/api/ideas/${ID}/design/step`, { force: true }));
     expect(r3.featureChanges).toEqual(['Claimant query drafting: done with Microsoft Copilot, outside the Dataiku build']);
     st = await readDesign(s.root, ID);
     expect(st.features[2].scope).toMatchObject({ status: 'outside', by: 'Microsoft Copilot', step: 2 });

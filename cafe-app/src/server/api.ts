@@ -27,7 +27,7 @@ import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd, writeDesign } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
-  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, checkDesignStart, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
 import { writePlan, readPlan, removeOlderKitFiles, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
 import { codedKitInput, codedPlanInput, decodeKit, decodePlan } from '../design/kitInput';
@@ -309,7 +309,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // Design series: the brainstorm. One question at a time; every change re-renders design.md.
   add('POST', '/api/ideas/:id/design/step', async ({ params, body }) => {
     const idea = await loadIdea(root, params.id);
-    const state = await readDesign(root, idea.id);
+    // The first question starts the design: the readiness check first (src/design/ready), "Design anyway" with force.
+    const state = await checkDesignStart(root, idea, await readDesign(root, idea.id), body.force === true, clock);
     if (body.question !== undefined) {
       // A hand-written question, for when no AI is available.
       if (typeof body.question !== 'string' || !body.question.trim()) throw new DesignError('Write the question first');
@@ -376,6 +377,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const summary = typeof body.summary === 'string' ? body.summary.replace(/\s+/g, ' ').trim() : '';
     if (!summary) throw new DesignError('Write the summary first');
     if (summary.length > SUMMARY_MAX) throw new DesignError(`Keep the summary to ${SUMMARY_MAX} characters`);
+    // A summary with no question before it starts the design too: the same readiness check.
+    await checkDesignStart(root, idea, await readDesign(root, idea.id), body.force === true, clock);
     return applyDesignEvent(root, idea, { t: 'done', summary }, clock);
   });
   add('POST', '/api/ideas/:id/design/approve', async ({ params }) => approveDesign(root, params.id, clock));

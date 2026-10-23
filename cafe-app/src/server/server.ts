@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Clock } from '../clock';
 import { APP_DIR } from '../workspace/paths';
 import { MissingSettingsError } from '../comms/outbox';
+import { DesignNotReadyError } from '../design/brainstorm';
 import { registerApi } from './api';
 import { FileReply, FILE_CSP } from './fileReply';
 
@@ -137,7 +138,7 @@ export function createApp({ root, clock, connector }: ServerOptions): http.Serve
       return out instanceof FileReply ? sendFile(res, out) : send(res, 200, out);
     } catch (e) {
       const err = e as Error;
-      return send(res, 400, { error: err.message, ...(err instanceof MissingSettingsError ? { missing: err.labels } : {}) });
+      return send(res, 400, { error: err.message, ...(err instanceof MissingSettingsError ? { missing: err.labels } : err instanceof DesignNotReadyError ? { missing: err.missing } : {}) });
     }
   });
 }

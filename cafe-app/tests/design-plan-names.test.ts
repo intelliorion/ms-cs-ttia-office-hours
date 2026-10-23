@@ -68,7 +68,7 @@ describe('the design-plan task codes names', () => {
     await post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Weekend flag', what: 'Person 7 gets the flagged list' }], tool: { tool: 'Dataiku', by: 'operator', reason: 'Tables' } });
     await applyDesignEvent(s.root, await loadIdea(s.root, ID), { t: 'step', question: 'Does Person 8 have access to Dataiku?', suggested: [], source: 'operator' }, clock);
     await post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Yes, Person 8 has a project' });
-    await post(`/api/ideas/${ID}/design/finish`, { summary: 'Person 8 builds a check that Person 7 runs weekly.' });
+    await post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'Person 8 builds a check that Person 7 runs weekly.' });
     expect((await post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
     expect((await post(`/api/ideas/${ID}/plan`)).status).toBe(200);
     expect(prompts).toHaveLength(1);

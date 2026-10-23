@@ -492,7 +492,7 @@ describe('the design questions build on the features and the tool', () => {
     const { input } = await codedDesignInput(s.root, await loadIdea(s.root, ID), await readDesign(s.root, ID));
     expect(input.learned![0].text).toMatch(/^\[P\d+\] builds it\.$/);
     expect(input.teamAnswers![0].answer).toMatch(/^\[P\d+\] builds\.$/);
-    const r = await json(await s.post(`/api/ideas/${ID}/design/step`));
+    const r = await json(await s.post(`/api/ideas/${ID}/design/step`, { force: true }));
     const d = sp.data('design-step');
     expect(d.tool.gaps).toEqual([{ feature: 'Draft replies', fit: 'no', note: 'Add Copilot for the drafts' }]);
     expect(d.features.map((f: any) => f.name)).toEqual(['Request intake form', 'Draft replies']);
@@ -515,11 +515,11 @@ describe('design answers save themselves', () => {
     const s = await server(sp.provider);
     await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['member'] }] } } as any);
     await s.post(`/api/ideas/${ID}/tools`, PICKS);
-    await s.post(`/api/ideas/${ID}/design/step`, { question: 'Who builds it?', suggested: [] });
+    await s.post(`/api/ideas/${ID}/design/step`, { force: true, question: 'Who builds it?', suggested: [] });
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Person 2 will build it in Power Apps.' });
     // The answer is on the idea already, with the question, from the design questions.
     expect((await loadIdea(s.root, ID) as any).answers).toEqual([{ question: 'Who builds it?', answer: 'Person 2 will build it in Power Apps.', source: 'design questions' }]);
-    const r = await json(await s.post(`/api/ideas/${ID}/design/step`));
+    const r = await json(await s.post(`/api/ideas/${ID}/design/step`, { force: true }));
     expect(r.step.question).toBe('What is the smallest input?');
     const d = sp.data('design-step');
     expect(d.stepsSoFar[0].answer).toMatch(/^\[P\d+\] will build it in Power Apps\.$/);

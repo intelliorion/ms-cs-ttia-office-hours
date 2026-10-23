@@ -86,9 +86,9 @@ describe('Redesign', () => {
     expect(await readFile(path.join(dir, 'kit', 'power-apps', 'README.md'), 'utf8')).toBe('kit\n');
     expect((await readHistory(dir)).at(-1)?.detail).toMatch(/^Design started again; the plan and kits are out of date/);
     // A new design, approved, and the plan written again: no longer out of date.
-    await s.post(`/api/ideas/${ID}/design/step`, { question: 'What must it show?' });
+    await s.post(`/api/ideas/${ID}/design/step`, { force: true, question: 'What must it show?' });
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Slots' });
-    await s.post(`/api/ideas/${ID}/design/finish`, { summary: 'Shows slots.' });
+    await s.post(`/api/ideas/${ID}/design/finish`, { force: true, summary: 'Shows slots.' });
     expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
     expect((await readDesign(s.root, ID)).planStale).toBe('2026-10-20');
     expect((await s.post(`/api/ideas/${ID}/plan`)).status).toBe(200);

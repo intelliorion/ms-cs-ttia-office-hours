@@ -53,6 +53,7 @@ cafe-app/src/design/kitFiles.ts
 cafe-app/src/design/kitInput.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
+cafe-app/src/design/ready.ts
 cafe-app/src/design/recipeFlow.ts
 cafe-app/src/design/sampleData.ts
 cafe-app/src/design/scaffold.ts
@@ -149,6 +150,7 @@ cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-old-flags.test.ts
 cafe-app/tests/design-plan-names.test.ts
 cafe-app/tests/design-points.test.ts
+cafe-app/tests/design-ready.test.ts
 cafe-app/tests/design-redesign.test.ts
 cafe-app/tests/design-retired-tool.test.ts
 cafe-app/tests/design-scaffold.test.ts
@@ -321,7 +323,7 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-B0i8L7lq.js
+cafe-app/web/assets/index-BPFJ9M9X.js
 cafe-app/web/assets/index-H1orLPF3.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md

@@ -735,6 +735,8 @@ export interface DesignStepInput {
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
   /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
   data?: DataBrief;
+  /** The design was started with "Design anyway": what the readiness check found missing then. */
+  missing?: string[];
 }
 /** The next question (or done), and what the design answers change in the record, as the decision's and the tool picker's. */
 export interface DesignStepOutput {
@@ -859,6 +861,7 @@ function designStepData(input: DesignStepInput) {
     ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
     ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
     ...dataBriefData(input.data),
+    ...(input.missing?.length ? { missing: input.missing.slice(0, 8).map((m) => cap(m, 160)) } : {}),
   };
 }
 
@@ -885,6 +888,7 @@ export const designStepTask: Task<DesignStepOutput> = {
         `"tool" is the one tool already chosen for the whole proof of concept (${data.tool.tool}). Do not ask which tool to use. Aim your questions at what it means for this build:`,
         'how to cover each feature in "tool.gaps" (the tool does it only partly, or not at all; the note says what is missing) and each of "tool.cons". Ask how the team wants to cover a gap (a second step, a manual stand-in, leaving it out of the proof of concept) before smaller points.',
       ] : ['No tool is chosen yet: never pick or ask for one; design what the features must do.']),
+      ...(data.missing ? ['"missing" is what was not there when the operator started the design anyway (the data, the features, the tool or its to-do list). Aim the early questions at those gaps, so the design does not rest on guesses: for the data, what goes in and what must come out (fields, a sample row); for the features, what it must do; for the tool, what still has to be found out. Never pick or ask for a tool.'] : []),
       ...(data.learned || data.teamAnswers ? ['"learned" (the brief of what the team told us since the form) and "teamAnswers" are settled. Never ask anything they already answer, even in other words; build on them.'] : []),
       'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
       'When the five points AND the five build points are settled (by a question, or already by the answers, the brief or the team), reply {"done": true, "summary": "...", "settled": {...}}: summary is what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',

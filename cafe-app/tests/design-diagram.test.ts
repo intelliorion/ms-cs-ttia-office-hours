@@ -95,10 +95,10 @@ describe('drawn when the design completes, and on Redraw', () => {
   }
   const finish = async (s: Awaited<ReturnType<typeof server>>) => {
     for (let n = 1; n <= 3; n++) {
-      await s.post(`/api/ideas/${ID}/design/step`);
+      await s.post(`/api/ideas/${ID}/design/step`, { force: true });
       await s.post(`/api/ideas/${ID}/design/answer`, { n, answer: n === 3 ? 'Person 1 builds it' : 'A sample sheet' });
     }
-    return json(await s.post(`/api/ideas/${ID}/design/step`));
+    return json(await s.post(`/api/ideas/${ID}/design/step`, { force: true }));
   };
 
   it('the done step draws it (names coded on the way out), stores it with its basis; Redraw draws again', async () => {

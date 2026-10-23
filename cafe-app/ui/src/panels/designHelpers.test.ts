@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   approvedTools, buildInstruction, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
   picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel, retiredNote,
+  flagWord, dropBareReuse, REUSE_NOT_NAMED,
 } from './designHelpers';
 
 // The features route's mixed reply: a saved DesignFeature first, then AI suggestions (and an older row with a tool).
@@ -203,5 +204,26 @@ describe('a feature the design moved', () => {
     expect(featuresBody([{ ...rows[0], scope: undefined }])[0]).not.toHaveProperty('scope');
     expect(scopeLabel(rows[0].scope)).toBe('Out of scope');
     expect(scopeLabel(rows[1].scope, 'Dataiku')).toBe('Microsoft Copilot + SharePoint, outside the Dataiku build');
+  });
+});
+
+describe('the reuse flag', () => {
+  it('the tag says what is reused; an older bare flag says it names nothing', () => {
+    expect(flagWord('reuse-existing', "the team's rules spreadsheet")).toBe("Reuses: the team's rules spreadsheet");
+    expect(flagWord('reuse-existing')).toBe('Reuses something that exists (not named)');
+    expect(REUSE_NOT_NAMED).toBe('Reuses something that exists (not named)');
+    expect(flagWord('personal-data', 'ignored')).toBe('Personal data');
+  });
+  it('rows keep what is reused only with the flag, send it on, and suggesting again clears a bare flag', () => {
+    const rows = featureRows([
+      { id: 'a', name: 'Dup', flags: ['reuse-existing'], reuses: "EKG Expenses' duplicate check" },
+      { id: 'b', name: 'Old', flags: ['reuse-existing', 'personal-data'] },
+      { id: 'c', name: 'Odd', flags: [], reuses: 'nothing' },
+    ]);
+    expect(rows.map((r) => r.reuses)).toEqual(["EKG Expenses' duplicate check", undefined, undefined]);
+    expect(featuresBody(rows)[0]).toEqual({ name: 'Dup', flags: ['reuse-existing'], reuses: "EKG Expenses' duplicate check" });
+    expect(featuresBody(rows)[1]).toEqual({ name: 'Old', flags: ['reuse-existing', 'personal-data'] });
+    expect(rows.map(dropBareReuse).map((r) => r.flags)).toEqual([['reuse-existing'], ['personal-data'], []]);
+    expect(toolView({ tool: 'Dataiku', flags: ['reuse-existing'], reuses: 'the sheet', by: 'ai' })!.reuses).toBe('the sheet');
   });
 });

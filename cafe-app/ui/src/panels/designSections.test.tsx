@@ -99,6 +99,16 @@ describe('ToolPickerSection', () => {
     expect(el.querySelector('[data-testid="tool-retired"]')!.textContent).toBe('UiPath is no longer on the approved list: pick another tool');
   });
 
+  it('the reuse tag says what is reused, or that an older record named nothing', async () => {
+    await mount({ state: designState({ features: [
+      { id: 'dup', name: 'Duplicate check', what: 'Finds duplicates', flags: ['reuse-existing'], reuses: "EKG Expenses' duplicate check" },
+      { id: 'weekend', name: 'Weekend check', what: 'Flags weekend spend', flags: ['reuse-existing'] },
+    ] }) });
+    const tags = [...el.querySelectorAll('.tp-row .tp-flag[data-flag="reuse-existing"]')].map((t) => t.textContent);
+    expect(tags).toEqual(["Reuses: EKG Expenses' duplicate check", 'Reuses something that exists (not named)']);
+    expect(el.textContent).not.toContain('Reuse what exists');
+  });
+
   it('features first, then the tool: two steps in that order', async () => {
     await mount();
     const steps = [...el.querySelectorAll('[data-testid="tool-picker"] .tp-step')].map((x) => x.getAttribute('data-testid'));

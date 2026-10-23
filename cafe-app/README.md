@@ -473,6 +473,13 @@ nothing is saved until you press a button, and you can do everything except plan
      and says "UiPath is no longer on the approved list: pick another tool", design.md and approach.md say the same,
      the universe marks the link as not on the approved list, and neither approval nor the plan goes ahead until a
      new tool is picked.
+   - **Reuses.** A feature (or the tool) can carry the reuse flag only with what it reuses named, for example
+     "Reuses: the team's rules spreadsheet" or "Reuses: EKG Expenses' duplicate check" (at most 80 characters). The AI
+     adds it only when something that already exists does THAT feature or part of it, never on a feature that still
+     has to be built; a flag with nothing named is dropped by the app. What is reused goes on into the design
+     questions (which ask how the proof of concept uses it, not how to build it again), design.md, approach.md and the
+     kit README ("Start from …"). An older record whose flag names nothing shows "Reuses something that exists (not
+     named)" and keeps it on save; **Suggest features with AI** clears it, so the AI can name it.
 2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
    input it needs, who builds it, and so on. The questions build on the features and the tool: the AI gets the
    feature list, the tool, its cons and the features it covers only partly or not at all, and asks first how to

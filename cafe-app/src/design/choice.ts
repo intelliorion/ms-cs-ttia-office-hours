@@ -23,6 +23,8 @@ export interface ToolChoice {
   /** The facts and the rule the evaluation rested on ("why this tool"). */
   context: string[];
   flags: string[];
+  /** With the reuse-existing flag only: the existing thing the proof of concept reuses (see withReuse). */
+  reuses?: string;
   /** One entry per feature the evaluation saw. */
   fit: ToolFit[];
   /** The feature names the evaluation was for: when the list changes, the evaluation is out of date. */
@@ -41,9 +43,34 @@ export interface ToolChoice {
 export interface FeatureScope { status: 'out' | 'outside'; by?: string; why?: string; at?: string; step?: number }
 
 /** A feature as stored now: no tool of its own. */
-export interface FeatureLike { id?: string; name: string; what?: string; flags?: string[]; scope?: FeatureScope }
+export interface FeatureLike { id?: string; name: string; what?: string; flags?: string[]; reuses?: string; scope?: FeatureScope }
 
 const one = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+export const REUSE_FLAG = 'reuse-existing';
+export const REUSES_MAX = 80;
+/** Said for an older record's bare reuse flag, which names nothing, until the features or the tool are suggested again. */
+export const REUSE_NOT_NAMED = 'Reuses something that exists (not named)';
+
+/**
+ * The reuse flag carries what is reused: it stays only with `reuses` naming the existing thing (at most 80 characters),
+ * and `reuses` stays only with the flag. A flag with nothing named is dropped (it would read as "don't build this").
+ */
+export function withReuse(flags: string[], reuses: unknown): { flags: string[]; reuses?: string } {
+  const named = one(reuses, REUSES_MAX);
+  if (!flags.includes(REUSE_FLAG)) return { flags };
+  return named ? { flags, reuses: named } : { flags: flags.filter((f) => f !== REUSE_FLAG) };
+}
+
+/** The names (lower case) of saved features whose reuse flag names nothing (older records). */
+export const bareReuse = (features: FeatureLike[]): Set<string> =>
+  new Set(features.filter((f) => f.flags?.includes(REUSE_FLAG) && !f.reuses).map((f) => f.name.trim().toLowerCase()));
+
+/** A flag in words for the Markdown files: the reuse flag names what it reuses. */
+export function flagText(flag: string, reuses?: string): string {
+  if (flag !== REUSE_FLAG) return flag;
+  return reuses ? `reuses ${reuses}` : REUSE_NOT_NAMED.toLowerCase();
+}
 
 /** A stored or sent scope made safe; undefined when it says nothing (an "outside" scope needs the other tool). */
 export function scopeOf(raw: unknown): FeatureScope | undefined {

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
-import { csicFlags, legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
+import { csicFlags, flagText, legacyChoice, REUSE_FLAG, REUSES_MAX, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 import { retiredToolNote } from '../graph/ontology';
@@ -21,6 +21,8 @@ export interface DesignFeature {
   what?: string;
   /** Feature flags (needs-live-system, personal-data, reuse-existing). */
   flags: string[];
+  /** With reuse-existing only: the existing thing that already does this feature or part of it (at most 80 characters). */
+  reuses?: string;
   /** Set when a design answer moved the feature out of the build: dropped, or done with another tool outside it. */
   scope?: FeatureScope;
 }
@@ -117,9 +119,12 @@ function normalize(raw: Partial<DesignState>): DesignState {
   const tool = legacy?.tool ?? choiceOf(raw.tool);
   const features: DesignFeature[] = rawFeatures.map((f) => {
     const scope = scopeOf(f.scope);
+    const flags = arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build'));
+    // An older record's bare reuse flag is kept as it is (it reads "not named" until suggested again).
+    const reuses = flags.includes(REUSE_FLAG) && typeof f.reuses === 'string' ? f.reuses.replace(/\s+/g, ' ').trim().slice(0, REUSES_MAX) : '';
     return {
       id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
-      flags: arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build')),
+      flags, ...(reuses ? { reuses } : {}),
       ...(scope ? { scope } : {}),
     };
   });
@@ -157,7 +162,7 @@ export const mdLine = (text: string | undefined): string => (text ?? '').replace
 /** One feature as a design.md line: its tool and fit, or, once the design moved it, out of scope (struck through) or outside the build. */
 export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<DesignState, 'tool'>): string {
   const name = mdLine(f.name).replace(/[*~]/g, '');
-  const flags = f.flags.length ? ` [${f.flags.join('; ')}]` : '';
+  const flags = f.flags.length ? ` [${f.flags.map((x) => mdLine(flagText(x, f.reuses))).join('; ')}]` : '';
   const why = f.scope?.why ? ` (${mdLine(f.scope.why)})` : '';
   if (f.scope?.status === 'out') return `- ~~**${name}**~~ — out of scope${why}${f.what ? `: ~~${mdLine(f.what)}~~` : ''}`;
   if (f.scope?.status === 'outside') return `- **${name}** (${mdLine(f.scope.by)}, outside the ${state.tool?.tool ?? 'main'} build)${f.what ? `: ${mdLine(f.what)}` : ''}${why}${flags}`;

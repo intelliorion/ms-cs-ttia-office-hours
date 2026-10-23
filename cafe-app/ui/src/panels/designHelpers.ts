@@ -49,10 +49,14 @@ const FLAG_WORDS: Record<string, string> = {
   'needs-live-system': 'Needs a live system',
   'personal-data': 'Personal data',
   'custom-app': 'Custom app',
-  'reuse-existing': 'Reuse what exists',
   'no-build': 'No build',
 };
-export const flagWord = (f: string) => FLAG_WORDS[f] ?? f;
+export const REUSE_FLAG = 'reuse-existing';
+/** An older record's reuse flag names nothing: said so, until the features or the tool are suggested again. */
+export const REUSE_NOT_NAMED = 'Reuses something that exists (not named)';
+/** A flag as a tag. The reuse flag says what it reuses ("Reuses: the team's rules spreadsheet"). */
+export const flagWord = (f: string, reuses?: string) =>
+  (f === REUSE_FLAG ? (reuses?.trim() ? `Reuses: ${reuses.trim()}` : REUSE_NOT_NAMED) : FLAG_WORDS[f] ?? f);
 
 /** One feature row of the Tool picker, as the operator edits it. Features have no tool: the one tool is the ToolView. */
 export interface FeatureRow {
@@ -61,6 +65,8 @@ export interface FeatureRow {
   what: string;
   /** Feature flags (live system, personal data, reuse what exists). */
   flags: string[];
+  /** With the reuse flag: the existing thing that already does the feature, or part of it. */
+  reuses?: string;
   /** Filled by the AI and not saved yet: shown with a highlighted border. */
   suggested: boolean;
   /** Where the design moved it: out of scope, or another tool outside the build. Kept on save; "Put it back" clears it. */
@@ -86,6 +92,8 @@ export interface ToolView {
   cons: string[];
   context: string[];
   flags: string[];
+  /** With the reuse flag: the existing thing the proof of concept reuses. */
+  reuses?: string;
   fit: { feature: string; fit: 'yes' | 'partly' | 'no'; note: string }[];
   evaluatedFor: string[];
   needsAi?: boolean;
@@ -116,6 +124,7 @@ export function featureRows(raw: unknown, opts: { fromAi?: boolean } = {}): Feat
     key: str(f.id) || newKey(),
     name: str(f.name), what: str(f.what),
     flags: lines(f.flags, 5).filter((x) => FEATURE_FLAGS.includes(x)),
+    ...(str(f.reuses).trim() && lines(f.flags, 5).includes(REUSE_FLAG) ? { reuses: str(f.reuses).trim().slice(0, 80) } : {}),
     suggested: Boolean(opts.fromAi) && !str(f.id),
     ...(f.scope && (f.scope.status === 'out' || (f.scope.status === 'outside' && str(f.scope.by))) ? { scope: { ...f.scope } } : {}),
   }));
@@ -132,6 +141,7 @@ export function toolView(raw: any, tools: readonly string[] = APPROVED_TOOLS): T
   return {
     tool: raw.tool, ...(str(raw.pathway) ? { pathway: raw.pathway } : {}), by: raw.by === 'ai' ? 'ai' : 'operator', reason: str(raw.reason),
     pros: lines(raw.pros, 5), cons: lines(raw.cons, 5), context: lines(raw.context, 6), flags: flagsFor(raw.tool, lines(raw.flags, 5)),
+    ...(str(raw.reuses).trim() && lines(raw.flags, 5).includes(REUSE_FLAG) ? { reuses: str(raw.reuses).trim().slice(0, 80) } : {}),
     fit, evaluatedFor: lines(raw.evaluatedFor, 12), ...(raw.needsAi ? { needsAi: true } : {}),
     ...(str(raw.at) ? { at: raw.at } : {}), ...(str(raw.provider) ? { provider: raw.provider } : {}),
   };
@@ -151,10 +161,13 @@ export const FIT_MARK: Record<string, string> = { yes: '✓', partly: 'partly', 
 export const FIT_WORD: Record<string, string> = { yes: 'Does it', partly: 'Partly', no: "Can't do it" };
 
 /** The features to send: name, what and flags, trimmed; rows with no name and nothing else are dropped. */
-export function featuresBody(rows: FeatureRow[]): { name: string; what?: string; flags: string[]; scope?: FeatureScope }[] {
+export function featuresBody(rows: FeatureRow[]): { name: string; what?: string; flags: string[]; reuses?: string; scope?: FeatureScope }[] {
   return rows
     .filter((r) => r.name.trim() || r.what.trim())
-    .map((r) => ({ name: r.name.trim(), ...(r.what.trim() ? { what: r.what.trim() } : {}), flags: r.flags, ...(r.scope ? { scope: r.scope } : {}) }));
+    .map((r) => ({
+      name: r.name.trim(), ...(r.what.trim() ? { what: r.what.trim() } : {}), flags: r.flags,
+      ...(r.reuses && r.flags.includes(REUSE_FLAG) ? { reuses: r.reuses } : {}), ...(r.scope ? { scope: r.scope } : {}),
+    }));
 }
 
 /** The body for POST …/tools: the features, and the one tool when there is one. */
@@ -225,6 +238,9 @@ export function mergeRows(local: FeatureRow[], incoming: FeatureRow[]): FeatureR
   const names = new Set(local.map((r) => r.name.trim().toLowerCase()).filter(Boolean));
   return [...local, ...incoming.filter((r) => !names.has(r.name.trim().toLowerCase()))];
 }
+
+/** Suggesting again clears an older record's reuse flag that names nothing (the AI is now asked to name it). */
+export const dropBareReuse = (r: FeatureRow): FeatureRow => (r.flags.includes(REUSE_FLAG) && !r.reuses ? { ...r, flags: r.flags.filter((f) => f !== REUSE_FLAG) } : r);
 
 /** "1 feature" / "3 features". */
 export const features = (n: number) => `${n} feature${n === 1 ? '' : 's'}`;

@@ -4,7 +4,8 @@ import { copyText, designPost } from '../api';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import { Updates, updatesFrom } from './ReviewSelect';
 import {
-  AI_WAIT, buildInstruction, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
+  AI_WAIT, buildInstruction, designedBeforeText, designPhase, designReadiness, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
+  type Readiness, type ReadyTarget,
 } from './designHelpers';
 
 /** GET …/design: the state, the live design.md and the idea folder relative to the workspace (newer servers). */
@@ -74,7 +75,57 @@ export function StepItem({ step, off, onAnswer, onIdk, onSendQuestions, prefix =
 
 /** The design series' stage: Redesign is offered there only. */
 const DESIGN_STAGE = 3;
-export const REDESIGN_ASK = 'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay.';
+export const REDESIGN_ASK = 'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay. The new design starts with the readiness check.';
+/** The confirm before a forced design: what it will be missing. */
+export const anywayAsk = (missing: string[]) => `The design will miss: ${missing.join('; ')}. It is recorded as designed before these were ready.`;
+
+/** Where each "Go to" lands: the section, or the part of it, the readiness item is about. */
+const GO_SELECTOR: Record<ReadyTarget, string> = { data: '[data-testid="data"]', features: '[data-testid="tp-features"]', tool: '[data-testid="tp-tool"]' };
+export const GO_WORDS: Record<ReadyTarget, string> = { data: 'Go to the data', features: 'Go to the features', tool: 'Go to the tool' };
+
+/** Scrolls the idea panel to that step (shown open in the Design series), focuses it and marks it for a moment. */
+export function goToStep(go: ReadyTarget, from?: Element | null): boolean {
+  const scope: ParentNode = from?.closest('.idea-detail') ?? document;
+  const el = scope.querySelector<HTMLElement>(GO_SELECTOR[go]);
+  if (!el) return false;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  el.focus({ preventScroll: true });
+  el.classList.remove('rd-flash');
+  void el.offsetWidth;
+  el.classList.add('rd-flash');
+  window.setTimeout(() => el.classList.remove('rd-flash'), 1600);
+  return true;
+}
+
+/**
+ * Ready for the design? The check before the first question (src/design/ready: the code decides): each item met (✓)
+ * or what is missing, with a button to that step, and the suggested next step when something is missing.
+ */
+export function ReadyCheck({ r, onGo }: { r: Readiness; onGo: (go: ReadyTarget) => void }) {
+  return (
+    <div className={`rd-check${r.ready ? ' ready' : ''}`} data-testid="design-ready" data-ready={r.ready} role="group" aria-label="Ready for the design?">
+      <div className="rd-h">{r.ready ? 'Ready for the design' : 'Before the design'}</div>
+      <ul className="rd-items">
+        {r.items.map((x) => (
+          <li key={x.key} className={x.ok ? 'ok' : 'gap'} data-item={x.key} data-ok={x.ok}>
+            <span className="rd-mark" aria-label={x.ok ? 'Done' : 'Missing'}>{x.ok ? '✓' : '○'}</span>
+            <span className="rd-l">{x.label}</span>
+            <span className="rd-t">{x.text}</span>
+            {!x.ok && <button className="link-btn" data-action={`go-${x.go}`} onClick={() => onGo(x.go)}>{GO_WORDS[x.go]}</button>}
+          </li>
+        ))}
+      </ul>
+      {r.next && (
+        <div className="suggest-bar rd-next" role="group" aria-label="Suggested next step" data-testid="design-next" data-go={r.next.go}>
+          <span className="sg-k">Suggested</span>
+          <span className="sg-t">{r.next.text}</span>
+          <button className="btn sm primary" data-action="go-next" onClick={() => onGo(r.next!.go)}>{GO_WORDS[r.next.go]}</button>
+        </div>
+      )}
+    </div>
+  );
+}
 /** What the plan says after a Redesign, until it is written again from the new design. */
 export const planStaleText = (at: string, approved: boolean) => `The design was started again on ${at}: plan.md and the kits are out of date. ${approved
   ? 'Write them again from the new design.' : 'Write them again once the new design is approved.'}`;
@@ -131,6 +182,10 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   const [finish, setFinish] = useState<string | null>(null);
   /** Redesign asks first: it clears the questions, the answers, the summary, the approval and the diagram. */
   const [redo, setRedo] = useState(false);
+  /** "Design anyway" asks first (what the design will miss); with no AI, confirming opens the hand question, sent with force. */
+  const [anyway, setAnyway] = useState(false);
+  const [forcing, setForcing] = useState(false);
+  const sec = useRef<HTMLElement>(null);
   const qRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (handQ && !handQ.question) qRef.current?.focus(); }, [handQ]);
   const id = idea.id;
@@ -140,18 +195,31 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   const phase = designPhase(s);
   const steps: any[] = s.steps ?? [];
   const waiting = openStep(steps);
+  // Before the first question (and after a Redesign): the readiness check. Not ready: no start, a red Design anyway.
+  const starting = steps.length === 0 && !s.summary && idea.stage === DESIGN_STAGE && !idea.closed;
+  const ready: Readiness = designReadiness(s, { answers: idea.answers ?? [] });
+  const blocked = starting && !ready.ready && !forcing;
+  const force = starting && !ready.ready ? { force: true } : {};
 
   const answer = (n: number, body: any) => call(() => designPost(id, 'design/answer', { n, ...body }), { ok: () => `Answer to question ${n} saved.` });
-  const next = () => call(() => designPost(id, 'design/step', {}), {
+  const next = () => call(() => designPost(id, 'design/step', force), {
     ai: 'design', ok: (r: any) => (r.step ? `Question ${r.step.n} added.` : r.state?.summary
       ? `Design complete. Check the summary, then approve it.${r.diagramError ? ' The diagram could not be drawn this time: open See the design and press Redraw.' : ''}` : undefined),
   });
   const addHand = async () => {
     if (!handQ) return;
-    const r = await call(() => designPost(id, 'design/step', { question: handQ.question, suggested: suggestedLines(handQ.suggested) }), {
+    const r = await call(() => designPost(id, 'design/step', { question: handQ.question, suggested: suggestedLines(handQ.suggested), ...(forcing ? force : {}) }), {
       ok: (x: any) => `Question ${x.step?.n ?? ''} added.`.replace('  ', ' '),
     });
-    if (r) setHandQ(null);
+    if (r) { setHandQ(null); setForcing(false); }
+  };
+  const doAnyway = async () => {
+    setAnyway(false);
+    // With no AI the design starts by hand: the hand question carries the force.
+    if (noAi) { setForcing(true); setHandQ({ question: '', suggested: '' }); return; }
+    await call(() => designPost(id, 'design/step', { force: true }), {
+      ai: 'design', ok: (r: any) => `Design started anyway${r.step ? `: question ${r.step.n} added` : ''}. It is recorded as designed before ${ready.missing.join('; ')}.`,
+    });
   };
   const doFinish = async () => {
     if (finish === null) return;
@@ -168,9 +236,10 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   };
 
   return (
-    <section className="sec" data-testid="design">
-      <h3>Design <span className="sec-n">{phase === 'approved' ? `approved ${s.approvedAt}` : phase === 'done' ? 'complete' : `${steps.length} question${steps.length === 1 ? '' : 's'}`}</span></h3>
-      {(!s.features?.length || !s.tool) && <div className="hint ds-lead">List the features and pick the tool first: the questions build on them, and on what the tool can't do.</div>}
+    <section className="sec" data-testid="design" ref={sec}>
+      <h3>Design <span className="sec-n">{phase === 'approved' ? `approved ${s.approvedAt}` : phase === 'done' ? 'complete' : starting ? (ready.ready ? 'ready to start' : 'not ready yet') : `${steps.length} question${steps.length === 1 ? '' : 's'}`}</span></h3>
+      {starting && <ReadyCheck r={ready} onGo={(go) => goToStep(go, sec.current)} />}
+      {s.forcedAt && <div className="hint warn ds-forced" data-testid="design-forced">{designedBeforeText(s.forcedMissing ?? [])}</div>}
       {steps.length > 0 && (
         <StepCarousel steps={steps} render={(st) => (
           <StepItem key={st.n} step={st} off={off} onSendQuestions={onSendQuestions}
@@ -193,7 +262,7 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
           <textarea rows={2} value={handQ.suggested} placeholder="Suggested answers, one per line (optional, up to 4)" aria-label="Suggested answers" disabled={off}
             onChange={(e) => setHandQ({ ...handQ, suggested: e.target.value })} />
           <div className="ds-form-acts">
-            <button className="btn ghost" onClick={() => setHandQ(null)}>Cancel</button>
+            <button className="btn ghost" onClick={() => { setHandQ(null); setForcing(false); }}>Cancel</button>
             <button className="btn primary" data-action="add-question" disabled={off || !handQ.question.trim()} onClick={() => void addHand()}>Add question</button>
           </div>
         </div>
@@ -220,18 +289,31 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
         </div>
       )}
       <div className="ai-row ds-acts">
-        {phase !== 'done' && phase !== 'approved' && (
+        {blocked && !anyway && (
+          <button className="btn anyway" data-action="design-anyway" disabled={off} title="Start the design now, without what the check above says is missing"
+            onClick={() => setAnyway(true)}>Design anyway</button>
+        )}
+        {!blocked && phase !== 'done' && phase !== 'approved' && (
           <button className="btn primary" data-action="next-question" disabled={noAi || off || Boolean(waiting)}
             title={noAi ? NO_AI_TIP : waiting ? `Answer question ${waiting.n} first, or say "I don't know"` : undefined} onClick={() => void next()}>
             {aiWorking ? 'Working…' : steps.length ? 'Next question' : 'Start with the first question'}</button>
         )}
-        {!handQ && <button className="btn" data-action="hand-question" disabled={off} onClick={() => setHandQ({ question: '', suggested: '' })}>Add a question by hand</button>}
+        {!handQ && !blocked && <button className="btn" data-action="hand-question" disabled={off} onClick={() => setHandQ({ question: '', suggested: '' })}>Add a question by hand</button>}
         {finish === null && steps.length > 0 && (
           <button className="btn" data-action="hand-finish" disabled={off} onClick={() => setFinish(s.summary ?? '')}>Finish by hand</button>
         )}
         {canRedo && !redo && <button className="btn" data-action="redesign" disabled={off} onClick={() => setRedo(true)}>Redesign</button>}
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
+      {blocked && anyway && (
+        <div className="ds-form ds-anyway" data-testid="design-anyway-confirm" role="group" aria-label="Design anyway">
+          <div>{anywayAsk(ready.missing)}</div>
+          <div className="ds-form-acts">
+            <button className="btn ghost" data-action="design-anyway-cancel" onClick={() => setAnyway(false)}>Cancel</button>
+            <button className="btn anyway" data-action="design-anyway-yes" disabled={off} onClick={() => void doAnyway()}>Design anyway</button>
+          </div>
+        </div>
+      )}
       {canRedo && redo && (
         <div className="ds-form ds-redo" data-testid="redesign-confirm" role="group" aria-label="Start the design again">
           <div>{REDESIGN_ASK}</div>

@@ -1,5 +1,6 @@
 /** Pure helpers for the Tool picker, Design and Plan sections of an idea's details. */
 export { outOfDate } from '../../../src/design/choice';
+export { designReadiness, designedBeforeText, toolDataStale, DATA_STALE_NOTE, type Readiness, type ReadyItem, type ReadyTarget } from '../../../src/design/ready';
 import { noLongerApproved } from '../../../src/graph/ontology';
 
 /** The approved tools, canonical labels in the server's order (src/graph/ontology.ts APPROVED_TOOLS). */
@@ -89,6 +90,8 @@ export interface ToolView {
   fit: { feature: string; fit: 'yes' | 'partly' | 'no'; note: string; stale?: boolean }[];
   evaluatedFor: string[];
   needsAi?: boolean;
+  /** The data confirmation the evaluation read ('' for none): kept as it came, so a save does not change the tool. */
+  dataFor?: string;
   at?: string;
   provider?: string;
 }
@@ -133,6 +136,7 @@ export function toolView(raw: any, tools: readonly string[] = APPROVED_TOOLS): T
     tool: raw.tool, ...(str(raw.pathway) ? { pathway: raw.pathway } : {}), by: raw.by === 'ai' ? 'ai' : 'operator', reason: str(raw.reason),
     pros: lines(raw.pros, 5), cons: lines(raw.cons, 5), context: lines(raw.context, 6), flags: flagsFor(raw.tool, lines(raw.flags, 5)),
     fit, evaluatedFor: lines(raw.evaluatedFor, 12), ...(raw.needsAi ? { needsAi: true } : {}),
+    ...(typeof raw.dataFor === 'string' ? { dataFor: raw.dataFor } : {}),
     ...(str(raw.at) ? { at: raw.at } : {}), ...(str(raw.provider) ? { provider: raw.provider } : {}),
   };
 }

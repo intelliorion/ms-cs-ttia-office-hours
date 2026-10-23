@@ -435,8 +435,8 @@ Each action section has a home stage. Before it, the section is hidden; at it, t
 | Stage | Editable | Cards |
 |---|---|---|
 | 1 Review and Select | Decision (the choice first, the five checks fold away under it); the acknowledgement (E1) is sent from Emails | |
-| 2 Design series | Understand the data, then Features and tool, then Design, then Plan and kits | Decision |
-| 3 Launch and Learn | Roadshow (photos, what the story needs, the deck) | Decision, The data, Features and tool, Design (no Edit); Plan |
+| 2 Design series | Understand the data and Features and tool (in either order), then Design (after its readiness check), then Plan and kits | |
+| 3 Launch and Learn | Roadshow (photos, what the story needs, the deck) | The data, Features and tool, Design (no Edit); Plan (the decision is not shown after Review and Select) |
 
 There is no Submit Idea stage: an imported idea starts in Review and Select, and the checks that used to sit in
 Submit Idea (own words, no personal data, duplicates, acknowledgement) are Review and Select steps. In the files the
@@ -451,7 +451,13 @@ nothing is saved until you press a button, and you can do everything except plan
 
 **What you see**
 
-0. **Understand the data**, first. Drop the team's files on the section (or pick them): CSV, Excel, PDF, Word, text,
+The data and the features and tool can be done in **either order**; each feeds the other once it is there (Suggest
+features and Suggest a tool read the confirmed data; the data step reads the features). When the data is confirmed
+after the tool was evaluated (features first, data later), the tool picker, approach.md and the readiness check say
+the evaluation is out of date for the data and offer **Re-evaluate the tool**: an evaluation records which
+confirmation it saw.
+
+0. **Understand the data**. Drop the team's files on the section (or pick them): CSV, Excel, PDF, Word, text,
    an email (.eml, .msg) or a picture of a report, up to 10 MB each and 12 per idea. Each waits with a drop-down
    saying what it is (guessed from the name; you decide): **Sample input**, **Sample output** (what it should
    produce), **Today's output or report**, **Rules or reference**, **Process document**, **Example email** or
@@ -530,7 +536,21 @@ nothing is saved until you press a button, and you can do everything except plan
      and says "UiPath is no longer on the approved list: pick another tool", design.md and approach.md say the same,
      the universe marks the link as not on the approved list, and neither approval nor the plan goes ahead until a
      new tool is picked.
-2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
+2. **Design.** Before its first question (and again after a Redesign) the section shows **Ready for the design?**,
+   a check worked out by the app (src/design/ready.ts), never by the AI: **The data** (at least one file, the
+   understanding confirmed with Looks right and not reopened since), **The features** (at least one), **The tool**
+   (one approved tool, evaluated, not out of date for the features, the design or the data, its What you need list
+   all clear) and **Nothing waiting** (no file still being read, no data question with the team). Each item is ✓ or
+   one plain line saying what is missing, with **Go to the data / features / tool**, which scrolls the panel to that
+   step. When something is missing, a **Suggested** line names the next step ("Next: understand the data — drop the
+   sample input and output."): the first gap that can be worked on now, in the order data, features, tool. A gap that
+   only waits on the team's reply comes last. All clear: **Start with the first question**, as before. Not all clear:
+   no start, only a red **Design anyway**, which asks first ("The design will miss: …"). A forced design records when
+   and what was missing (design.yaml `forcedAt`, `forcedMissing`, and the idea's history). design.md and the design
+   pack say "Designed before: …", and the AI's questions aim at the missing pieces first. The design-step route
+   applies the same check: with gaps and no `force: true` it refuses with the missing list (`missing`). Once the
+   design has a question it is not checked again. Redesign clears the forced mark.
+   A short brainstorm, one question at a time: what the proof of concept must show, the smallest
    input it needs, who builds it, and so on. The questions build on the features and the tool: the AI gets the
    feature list, the tool, its cons and the features it covers only partly or not at all, and asks first how to
    cover those. It never asks again what the team's answers or the Learned since the form brief already settle
@@ -587,7 +607,8 @@ nothing is saved until you press a button, and you can do everything except plan
    needs approving again.
    **Redesign** (in the Design series, once the design has questions, whether in progress, complete or approved)
    starts the design again from the first question. It asks first ("Start the design again? The questions, answers,
-   summary, approval and diagram are cleared; the features and the tool stay."), then clears the questions and
+   summary, approval and diagram are cleared; the features and the tool stay. The new design starts with the readiness
+   check."), then clears the questions and
    answers, the summary and what it said was settled, the approval and the diagram, and the design's own answers on
    the idea; the feature list (as it is now) and the tool stay, design.md is rewritten and the idea's history says
    "Design started again". plan.md and the kits are not touched: when they exist, the Plan and kits section says they

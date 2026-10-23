@@ -452,7 +452,8 @@ async function agenticShots(p, restart) {
   await fs.rm(empty, { recursive: true, force: true });
 }
 
-// The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the brainstorm one question at a time
+// The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the readiness check (no data, so
+// Design anyway), the brainstorm one question at a time
 // (a suggested answer, "I don't know" to the E2, a typed answer), done, Approve with the CSIC
 // suggestion, then plan.md and the kits. Needs CAFE_AI_FAKE=1.
 async function designShots(p) {
@@ -490,8 +491,17 @@ async function designShots(p) {
   const built = (graph.edges ?? graph.links ?? []).filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes('CAFE-2026-002:approach.md'));
   assert(built.length >= 1 && built.every((e) => e.confirmed !== false), 'the picks made no confirmed (solid) Capability → Tool links');
   console.log('  BUILT_WITH links from the picks:', built.length);
+  // The readiness check: no data was dropped here, so the design is not ready: the check says so, suggests the data
+  // step, and offers no start, only the red Design anyway (which asks first, saying what the design will miss).
+  await into(`${D} [data-testid="design"]`);
+  assert((await p.getAttribute(`${D} [data-testid="design-ready"]`, 'data-ready')) === 'false', 'the readiness check says ready with no data');
+  assert((await p.textContent(`${D} [data-testid="design-next"]`)).includes('Next: understand the data'), 'the suggestion does not name the data step');
+  assert((await p.locator(`${D} [data-action="next-question"]`).count()) === 0, 'the design can be started with gaps');
+  await shot(p, '40b-design-not-ready.png');
+  await p.click(`${D} [data-action="design-anyway"]`);
+  assert((await p.textContent(`${D} [data-testid="design-anyway-confirm"]`)).includes('The design will miss: the confirmed data'), 'Design anyway does not say what is missing');
   // Brainstorm: the first question, with its why and suggested answers.
-  await p.click(`${D} [data-action="next-question"]`);
+  await p.click(`${D} [data-action="design-anyway-yes"]`);
   await p.waitForSelector(`${D} .ds-step[data-step="1"]`, { timeout: 90000 });
   await into(`${D} [data-testid="design"]`);
   await shot(p, '41-design-step.png');

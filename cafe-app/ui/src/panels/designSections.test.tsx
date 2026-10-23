@@ -151,6 +151,20 @@ describe('ToolPickerSection', () => {
     expect(el.querySelector('[data-testid="tool-fit-stale"]')).toBeNull();
   });
 
+  it('features first, data later: data confirmed after the evaluation marks the tool out of date, with Re-evaluate', async () => {
+    const data = { files: [], steps: [], confirmedAt: '2026-10-21' };
+    api.designPost.mockImplementation(async () => ({ provider: 'fake', tool: { ...designState().tool, dataFor: '2026-10-21' }, state: designState() }));
+    await mount({ state: designState({ data, tool: { ...designState().tool, dataFor: '' } }) });
+    expect(el.querySelector('[data-testid="tool-data-stale"]')!.textContent).toMatch(/^The data was confirmed after the tool was evaluated.*Re-evaluate the tool$/);
+    await click('[data-action="tools-reevaluate-data"]');
+    await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }], tool: 'Power Apps' }]);
+    expect(el.querySelector('[data-testid="tool-data-stale"]')).toBeNull();
+    // Data first: the evaluation saw it, nothing to say.
+    await mount({ state: designState({ data, tool: { ...designState().tool, dataFor: '2026-10-21' } }) });
+    expect(el.querySelector('[data-testid="tool-data-stale"]')).toBeNull();
+  });
+
   it('overriding the tool asks the AI to evaluate THAT tool, and shows its pros, cons and fit as the operator\'s choice', async () => {
     let finish!: (v: unknown) => void;
     api.designPost.mockImplementation(() => new Promise((r) => { finish = r; }));
@@ -218,7 +232,7 @@ describe('DesignSection', () => {
     expect(el.querySelector('[data-testid="redesign-confirm"]')).toBeNull();
     await click('[data-action="redesign"]');
     expect(el.querySelector('[data-testid="redesign-confirm"]')!.textContent).toContain(
-      'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay.');
+      'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay. The new design starts with the readiness check.');
     await click('[data-action="redesign-cancel"]');
     expect(el.querySelector('[data-testid="redesign-confirm"]')).toBeNull();
     expect(api.designPost).not.toHaveBeenCalled();
@@ -242,6 +256,91 @@ describe('DesignSection', () => {
     expect(el.querySelector('[data-action="redesign"]')).toBeNull();
     await render({ ...IDEA, closed: { as: 'csic' } }, designState());
     expect(el.querySelector('[data-action="redesign"]')).toBeNull();
+  });
+});
+
+describe('Design readiness: the check before the first question', () => {
+  const FILE = { id: 'f1', name: 'requests.csv', file: 'f1-requests.csv', kind: 'input', bytes: 1, type: 'table', at: '2026-10-19',
+    steps: [{ id: 'saved', status: 'done', detail: '' }], tables: [{ name: 't', rows: 3, columns: [], examples: [], issues: [] }] };
+  const DATA = { files: [FILE], steps: [], summary: { text: 'ok', open: [], gapsClosed: [] }, confirmedAt: '2026-10-19' };
+  const fresh = (extra: any = {}) => designState({ steps: [], status: 'picking', data: DATA, tool: { ...designState().tool, dataFor: '2026-10-19' }, ...extra });
+  const render = async (state: any, opts: { noAi?: boolean; calls?: string[] } = {}) => {
+    const call: DesignCall = async (fn, o) => { try { const r = await fn(); opts.calls?.push(o.ok(r) ?? ''); return r; } catch { return null; } };
+    await act(async () => root.render(<DesignSection idea={IDEA} design={{ state, designMd: '' }} busy={false} aiWorking={false} noAi={Boolean(opts.noAi)} call={call} onSendQuestions={() => {}} />));
+  };
+  const items = () => [...el.querySelectorAll('[data-testid="design-ready"] li')].map((li) => [li.getAttribute('data-item'), li.getAttribute('data-ok')]);
+
+  it('all clear: every item ticked, no suggestion, the normal start; no red button', async () => {
+    await render(fresh());
+    expect(el.querySelector('[data-testid="design-ready"]')!.getAttribute('data-ready')).toBe('true');
+    expect(items()).toEqual([['data', 'true'], ['features', 'true'], ['tool', 'true'], ['waiting', 'true']]);
+    expect(el.querySelector('[data-testid="design-next"]')).toBeNull();
+    expect(el.querySelector('[data-action="next-question"]')!.textContent).toBe('Start with the first question');
+    expect(el.querySelector('[data-action="hand-question"]')).not.toBeNull();
+    expect(el.querySelector('[data-action="design-anyway"]')).toBeNull();
+    api.designPost.mockImplementation(async () => ({ state: fresh(), designMd: '', step: { n: 1 } }));
+    await click('[data-action="next-question"]');
+    await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'design/step', {}]);
+  });
+
+  it('gaps: each says what is missing with a Go to button; the suggestion names the next step; no start, a red Design anyway', async () => {
+    await render(fresh({ data: undefined, tool: undefined }));
+    expect(items()).toEqual([['data', 'false'], ['features', 'true'], ['tool', 'false'], ['waiting', 'true']]);
+    expect(el.querySelector('[data-item="data"]')!.textContent).toContain('No data yet');
+    expect(el.querySelector('[data-item="data"] [data-action="go-data"]')!.textContent).toBe('Go to the data');
+    expect(el.querySelector('[data-item="tool"] [data-action="go-tool"]')!.textContent).toBe('Go to the tool');
+    expect(el.querySelector('[data-testid="design-next"] .sg-t')!.textContent).toBe('Next: understand the data — drop the sample input and output.');
+    expect(el.querySelector('[data-action="next-question"]')).toBeNull();
+    expect(el.querySelector('[data-action="hand-question"]')).toBeNull();
+    expect(el.querySelector('[data-action="design-anyway"]')!.className).toContain('anyway');
+  });
+
+  it('Go to scrolls to that step in the panel', async () => {
+    await render(fresh({ data: undefined }));
+    const target = document.createElement('section');
+    target.setAttribute('data-testid', 'data');
+    const seen: string[] = [];
+    target.scrollIntoView = () => { seen.push('scrolled'); };
+    document.body.appendChild(target);
+    await click('[data-action="go-next"]');
+    expect(seen).toEqual(['scrolled']);
+    expect(target.classList.contains('rd-flash')).toBe(true);
+    target.remove();
+  });
+
+  it('Design anyway asks first, saying what the design will miss; Cancel does nothing; yes starts it with force', async () => {
+    const calls: string[] = [];
+    await render(fresh({ features: [], tool: undefined }), { calls });
+    await click('[data-action="design-anyway"]');
+    expect(el.querySelector('[data-testid="design-anyway-confirm"]')!.textContent).toContain('The design will miss: the feature list; a picked tool.');
+    await click('[data-action="design-anyway-cancel"]');
+    expect(el.querySelector('[data-testid="design-anyway-confirm"]')).toBeNull();
+    expect(api.designPost).not.toHaveBeenCalled();
+    api.designPost.mockImplementation(async () => ({ state: fresh(), designMd: '', step: { n: 1 } }));
+    await click('[data-action="design-anyway"]');
+    await click('[data-action="design-anyway-yes"]');
+    await flush();
+    expect(api.designPost.mock.calls).toEqual([[ID, 'design/step', { force: true }]]);
+    expect(calls[0]).toBe('Design started anyway: question 1 added. It is recorded as designed before the feature list; a picked tool.');
+  });
+
+  it('with no AI, Design anyway opens the hand question, which goes with force', async () => {
+    await render(fresh({ data: undefined }), { noAi: true });
+    await click('[data-action="design-anyway"]');
+    await click('[data-action="design-anyway-yes"]');
+    const q = el.querySelector('[data-testid="hand-question"] input') as HTMLInputElement;
+    await type(q, 'What must it show?');
+    api.designPost.mockImplementation(async () => ({ state: fresh(), designMd: '', step: { n: 1 } }));
+    await click('[data-action="add-question"]');
+    await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'design/step', { question: 'What must it show?', suggested: [], force: true }]);
+  });
+
+  it('a forced design says what it was designed before; once started the check is gone', async () => {
+    await render(designState({ forcedAt: '2026-10-20', forcedMissing: ['the confirmed data'] }));
+    expect(el.querySelector('[data-testid="design-ready"]')).toBeNull();
+    expect(el.querySelector('[data-testid="design-forced"]')!.textContent).toBe('Designed before: the confirmed data. The design was started anyway, without them.');
   });
 });
 

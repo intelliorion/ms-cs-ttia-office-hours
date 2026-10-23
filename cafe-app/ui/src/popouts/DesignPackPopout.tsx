@@ -8,7 +8,7 @@ import { Modal } from './Modal';
 import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, opensInTab, diagramUrl } from './designPack';
 import { RecipeFlowDiagram } from './RecipeFlowDiagram';
 import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
-import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
+import { approvedTools, designedBeforeText, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
 import { columnRows, dataPhase, KIND_LABELS, meaningWithCodes, sizeWords, whatOf } from '../panels/dataHelpers';
 
 /**
@@ -88,6 +88,7 @@ export function DesignPackPopout({ id }: { id: string }) {
         <div className="dp-body" data-testid="design-pack">
           <section className="sec dp-sec">
             <h3>The proof of concept <span className="sec-n">{s.approvedAt ? `approved ${s.approvedAt}` : 'complete, not approved yet'}</span></h3>
+            {s.forcedAt && <div className="hint warn ds-forced" data-testid="pack-forced">{designedBeforeText(s.forcedMissing ?? [])}</div>}
             {s.summary && <p className="dp-summary">{s.summary}</p>}
             <dl className="dp-settles">
               {pointRows(s, 'base').filter((r) => !r.open).map((r) => <div key={r.tag} data-point={r.tag}><dt>{r.label}</dt><dd>{r.text}</dd></div>)}

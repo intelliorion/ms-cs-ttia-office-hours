@@ -12,8 +12,8 @@ describe('sectionsFor', () => {
   it('stage 2: the decision is the one active section', () => {
     expect(sectionsFor(idea(2), null, [])).toEqual({ review: 'active', tools: 'hidden', design: 'hidden', plan: 'hidden' });
   });
-  it('stage 3: the decision is not shown (it belongs to Review and Select), the tool picker is active, the design waits for features', () => {
-    expect(sectionsFor(idea(3, { review }), { features: [] }, [])).toEqual({ review: 'hidden', tools: 'active', design: 'hidden', plan: 'hidden' });
+  it('stage 3: the decision is not shown (it belongs to Review and Select), the tool picker and the design (its readiness check) are active from the start', () => {
+    expect(sectionsFor(idea(3, { review }), { features: [] }, [])).toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'hidden' });
     expect(sectionsFor(idea(3, { review }), { features: feats }, [])).toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'hidden' });
     expect(sectionsFor(idea(3, { review }), { features: feats, summary: 's', approvedAt: '2026-10-20' }, []))
       .toEqual({ review: 'hidden', tools: 'active', design: 'active', plan: 'active' });

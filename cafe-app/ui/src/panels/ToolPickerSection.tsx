@@ -5,7 +5,7 @@ import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
   mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, retiredNote, STALE_NOTE, FIT_STALE_NOTE, toolView,
-  scopeLabel, type FeatureRow, type ToolView,
+  scopeLabel, toolDataStale, DATA_STALE_NOTE, type FeatureRow, type ToolView,
 } from './designHelpers';
 import { TodoList, Updates, updatesFrom } from './ReviewSelect';
 import { post } from '../api';
@@ -15,7 +15,7 @@ import type { DesignCall, DesignView } from './DesignSection';
 import { buildersOf } from '../popouts/IdeaSections';
 
 /**
- * Features and tool, in that order. 1. Features: a list of rows (name, what it does), added and removed by hand, or
+ * Features and tool, in that order (before or after Understand the data: either order works). 1. Features: a list of rows (name, what it does), added and removed by hand, or
  * filled by "Suggest features with AI" (new names only; the operator's rows stay). 2. Tool: ONE approved tool for the
  * whole list. "Suggest a tool" asks the AI for it, with its reason, pros, cons and how it fits each feature, plus the
  * to-do list of what it still needs (Draft email sends the open questions as an E2; Re-evaluate reads the answers).
@@ -201,6 +201,14 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
               <div className="hint warn tp-stale" data-testid="tool-fit-stale">
                 {FIT_STALE_NOTE}{' '}
                 <button className="link-btn" data-action="tools-reevaluate-fit" disabled={noAi || off} title={noAi ? NO_AI_TIP : undefined}
+                  onClick={() => void askTool(choice.tool)}>Re-evaluate the tool</button>
+              </div>
+            )}
+            {!stale && !choice.needsAi && !choice.fit.some((x) => x.stale) && toolDataStale({ tool: { ...choice, at: choice.at ?? '' }, data: design?.state.data }) && (
+              // Features first, data later: the evaluation did not see the data as it is now confirmed.
+              <div className="hint warn tp-stale" data-testid="tool-data-stale">
+                {DATA_STALE_NOTE}{' '}
+                <button className="link-btn" data-action="tools-reevaluate-data" disabled={noAi || off} title={noAi ? NO_AI_TIP : undefined}
                   onClick={() => void askTool(choice.tool)}>Re-evaluate the tool</button>
               </div>
             )}

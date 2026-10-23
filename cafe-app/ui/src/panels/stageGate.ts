@@ -23,9 +23,10 @@ export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefine
     // Plan files outlive the approval: reopening the design drops approvedAt but keeps plan.md and the kits.
     plan: Boolean(design?.approvedAt) || Boolean(plan?.files?.length),
   };
-  // The design and the plan only open once the step before them is done, or once they hold data of their own.
+  // The design opens with the Design series (once read): before its first question it shows the readiness check, so
+  // the data and the features and tool can be done in either order. The plan opens once there is an approval or files.
   const open: Record<SectionKey, boolean> = {
-    review: true, tools: true, design: Boolean(design?.features?.length) || has.design, plan: has.plan,
+    review: true, tools: true, design: Boolean(design) || has.design, plan: has.plan,
   };
   const gate = (k: SectionKey): Gate => {
     const home = HOME_STAGE[k];

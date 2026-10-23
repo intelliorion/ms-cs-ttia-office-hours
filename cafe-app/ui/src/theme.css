@@ -1218,3 +1218,24 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .rf-ic{font-size:15px;font-weight:700;fill:rgb(var(--k))}
 .rf-list{margin:2px 0 0;padding-left:18px}
 .rf-list li{margin:1px 0}
+/* Design: the readiness check before the first question, and the red Design anyway. */
+.rd-check{margin:0 0 10px;padding:8px 12px;border:1px solid var(--panel-border);border-left:3px solid var(--amber);border-radius:4px;background:rgba(var(--rgb-warm),.06)}
+.rd-check.ready{border-left-color:var(--teal);background:rgba(var(--rgb-accent),.07)}
+.rd-h{font-size:13px;font-weight:700;letter-spacing:.03em;color:var(--amber);margin-bottom:6px}
+.rd-check.ready .rd-h{color:var(--teal)}
+.rd-items{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.rd-items li{display:grid;grid-template-columns:16px 112px 1fr;gap:2px 8px;align-items:baseline;font-size:13.5px;line-height:1.35}
+.rd-items li .link-btn{grid-column:3;justify-self:start;text-align:left}
+.rd-mark{font-weight:700;text-align:center}
+.rd-items li.ok .rd-mark{color:var(--teal)}
+.rd-items li.gap .rd-mark{color:var(--amber)}
+.rd-l{font-weight:600;color:var(--strong)}
+.rd-items li.ok .rd-t{color:var(--muted)}
+.rd-next{margin-top:10px}
+.btn.anyway{background:var(--danger);border-color:var(--danger);color:var(--black,#000);font-weight:600}
+.btn.anyway:hover:not(:disabled),.btn.anyway:focus-visible{border-color:var(--danger);filter:brightness(1.1)}
+.ds-anyway{border-left:3px solid var(--danger);background:rgba(var(--rgb-danger),.07)}
+.ds-forced{margin:0 0 8px}
+.rd-flash{animation:rd-flash 1.6s ease-out}
+@keyframes rd-flash{0%{box-shadow:0 0 0 3px rgba(var(--rgb-warm),.85)}100%{box-shadow:0 0 0 3px rgba(var(--rgb-warm),0)}}
+@media (max-width:560px){.rd-items li{grid-template-columns:16px 1fr}.rd-items li .rd-t,.rd-items li .link-btn{grid-column:2}}

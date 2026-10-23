@@ -513,7 +513,12 @@ nothing is saved until you press a button, and you can do everything except plan
    design is finished, and stored in design.yaml with what it was drawn from: when the design changes it says it is
    out of date and offers **Redraw**. With no AI, or before it has drawn one, the pack draws a plain diagram from the
    design itself (the input, the features the tool builds, the output, who uses it, any outside tool), so it never
-   shows nothing.
+   shows nothing. Once the plan and kits are written, a Dataiku kit's **recipe flow** shows in the pack too, as
+   Dataiku draws its Flow: dataset boxes (input, rules sheet, intermediate, output) go into recipe circles, then the
+   output datasets and the dashboard, in the same theme colours. Hover a part to light its path; click it for a
+   recipe's steps or a dataset's columns. The pack's **Files** list says what each kit file is and how to use it, the
+   picked tool's kit first in the order of work, then each outside tool's kit; **Read it** on flow-diagram.html shows
+   the flow here, and the file itself opens in any browser.
 3. **Approve design.** Once the design is finished, approve it. If the tool choice has a CSIC flag (a
    custom app, or the tool or a feature flagged as needing a live system or personal data), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it

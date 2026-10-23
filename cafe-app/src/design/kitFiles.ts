@@ -9,6 +9,7 @@ import { PA_COLUMN_TYPES } from '../ai/tasks';
 import { isApprovedTool } from '../graph/ontology';
 import { CSIC_NOTE, mdLine, type DesignFeature, type DesignState } from './store';
 import { builderOf, pathwayLabel } from './tools';
+import { rolesText } from '../ideas/people';
 import { csicFlags } from './choice';
 import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
@@ -28,6 +29,21 @@ export const KIT_NO_AI = 'The AI could not fill in this kit when it was written,
 
 /** The kit folder name for a tool: the canonical label in lower kebab case ("Power Apps" → "power-apps"). */
 export const toolSlug = (tool: string): string => tool.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tool';
+
+/**
+ * People appear by role in anything shared: every name the idea holds (the submitter and the team) becomes its role
+ * ("the builder", "the lead and builder", "the submitter"), wherever the design's own words or the AI's put it.
+ */
+export function peopleByRole(idea: Idea): (text: string) => string {
+  const people = [
+    ...idea.people.team.map((p) => ({ name: p.name.trim(), role: `the ${rolesText(p.roles)}` })),
+    ...(idea.people.submitter?.trim() && !idea.people.team.some((p) => p.name.trim().toLowerCase() === idea.people.submitter!.trim().toLowerCase())
+      ? [{ name: idea.people.submitter.trim(), role: 'the submitter' }] : []),
+  ].filter((p) => p.name.length > 1).sort((a, b) => b.name.length - a.name.length);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rules = people.map((p) => ({ re: new RegExp(`(?<![\\p{L}\\p{N}])${esc(p.name)}(?![\\p{L}\\p{N}])`, 'giu'), role: p.role }));
+  return (text: string) => rules.reduce((t, r) => t.replace(r.re, r.role), text);
+}
 
 /** Everything a kit is written from. */
 export interface KitContext {
@@ -149,7 +165,7 @@ function readme(c: KitContext, extra: string[] = []): string {
     '## The order of work', '',
     ...(c.tasks.length ? taskLines(c.tasks) : ['- (no plan task for this tool)']), '',
     '## Who does what', '',
-    `- **Builder**: ${mdLine(pointOf(c.state, 'builder')) || (builder ? mdLine(builder) : NOT_SETTLED)}${!builder && c.tool !== 'custom app' && c.tool !== 'Microsoft Copilot' ? ' (Assisted Citizen until a builder is named)' : ''}. Builds it from this kit, task by task, on the sample only.`,
+    `- **Builder**: ${mdLine(pointOf(c.state, 'builder')) || (builder ? 'the builder named on the idea' : NOT_SETTLED)}${!builder && c.tool !== 'custom app' && c.tool !== 'Microsoft Copilot' ? ' (Assisted Citizen until a builder is named)' : ''}. Builds it from this kit, task by task, on the sample only.`,
     `- **Who uses it**: ${point(c, 'users')}. Tries it on the sample in the last session and says whether it shows the one thing.`,
     '- **The Café team**: runs the design sessions, keeps the data rule, and ticks the test checklist with the builder.', '',
     ...sampleSection(c),
@@ -173,7 +189,7 @@ function testChecklist(c: KitContext): string {
     '## Features', '',
     ...(c.built.length ? c.built.flatMap((f) => {
       const mine = forFeature(k?.checks, f);
-      const fit = f.fit && f.fit !== 'yes' ? [`  Note: ${fitWords(f).replace(/^ \(|\)$/g, '')}.`] : [];
+      const fit = f.fit && f.fit !== 'yes' ? [`  Note: ${fitWords(f).replace(/^ \(|\)$/g, '').replace(/[.!?]$/, '')}.`] : [];
       if (!mine.length) return [`- [ ] ${bold(f.name)}: run it on the sample; it ${mdLine(f.what) || 'does what the design says'}. Expected: ${NOT_SETTLED}`, ...fit];
       return [...mine.map((x, i) => `- [ ] ${i ? '' : `${bold(f.name)}: `}${mdLine(x.check)} Expected: ${mdLine(x.expected)}`), ...fit];
     }) : ['- (no feature in the build)']), '',

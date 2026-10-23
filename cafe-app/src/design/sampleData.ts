@@ -10,7 +10,7 @@ export const SAMPLE_FILE = 'sample-data.csv';
 /** The column that marks a seeded test row (T1, T2 … as in test-checklist.md); empty on an ordinary row. */
 export const TEST_COLUMN = 'test_case';
 export const SAMPLE_ROWS_MAX = 200;
-/** How many ordinary rows the example rows make. */
+/** How many ordinary rows the example rows make, when they are records (an id or a date column). */
 export const ORDINARY_ROWS = 24;
 
 export interface SampleTable { columns: { name: string; kind: KitColumnKind; about: string }[]; rows: string[][]; seeded: { code: string; label: string; count: number; expect: string }[] }
@@ -65,10 +65,13 @@ export function sampleTable(sample: KitSample): SampleTable {
   const examples = sample.rows.map(pick).filter((r) => r.some((x) => one(x, 80)));
   const groups = sample.seeded.map((g, i) => ({ ...g, code: `T${i + 1}`, row: pick(g.row) }));
   const seededRows = Math.min(groups.reduce((s, g) => s + g.count, 0), SAMPLE_ROWS_MAX - (examples.length ? 1 : 0));
-  const ordinary = examples.length ? Math.max(examples.length, Math.min(ORDINARY_ROWS, SAMPLE_ROWS_MAX - seededRows)) : 0;
-  const rows: string[][] = [];
   const idCols = columns.map((c, i) => (c.kind === 'id' ? i : -1)).filter((i) => i >= 0);
   const dateCols = columns.map((c, i) => (c.kind === 'date' ? i : -1)).filter((i) => i >= 0);
+  // Records (an id or a date to tell them apart) are repeated up to ORDINARY_ROWS; a lookup table (hotel caps by
+  // city) is kept as given, so no row is there twice.
+  const repeat = idCols.length > 0 || dateCols.length > 0;
+  const ordinary = !examples.length ? 0 : repeat ? Math.max(examples.length, Math.min(ORDINARY_ROWS, SAMPLE_ROWS_MAX - seededRows)) : Math.min(examples.length, SAMPLE_ROWS_MAX - seededRows);
+  const rows: string[][] = [];
   const firstId = new Map(idCols.map((i) => [i, examples[0]?.[i] || groups[0]?.row[i] || 'R-001']));
   const add = (src: string[], weeks: number, code: string) => {
     const n = rows.length + 1;

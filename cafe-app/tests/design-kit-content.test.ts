@@ -95,6 +95,9 @@ describe('sample-data.csv', () => {
     expect(seeded.every((r) => new Date(`${r[1]}T00:00:00Z`).getUTCDay() === 6)).toBe(true);
     expect(t.seeded).toEqual([{ code: 'T1', label: 'Weekend claim', count: 10, expect: 'All flagged' }, { code: 'T2', label: 'Too many', count: 50, expect: 'e' }]);
     expect(t.rows.some((r) => r.join(',').includes('Jane'))).toBe(false);
+    // A lookup table (no id, no date) is kept as given: no row twice.
+    const lookup = sampleTable({ name: 'Caps', columns: [{ name: 'City', kind: 'text', about: '' }, { name: 'Cap', kind: 'money', about: '' }], rows: [['Paris', '180'], ['Berlin', '150']], seeded: [] });
+    expect(lookup.rows).toEqual([['Paris', '180', ''], ['Berlin', '150', '']]);
     const big = sampleTable({ name: 'S', columns: [{ name: 'id', kind: 'id', about: '' }], rows: [['A1']], seeded: Array(6).fill({ label: 'L', count: 50, row: ['A9'], expect: 'e' }) });
     expect(big.rows.length).toBe(SAMPLE_ROWS_MAX);
     expect(big.rows.filter((r) => !r[1])).toHaveLength(1);
@@ -183,6 +186,19 @@ describe('the kits, filled in', () => {
     expect(outside).toMatch(/not one of the Café's approved tools on its own/);
   });
 
+  it('people appear by role, never by name, wherever the design or the AI put a name', async () => {
+    const named = sampleIdea({ stage: 3, people: { submitter: 'Person 8', team: [{ name: 'Person 9', roles: ['builder'] }] } });
+    const state = design('Copilot Studio');
+    state.steps.push({ n: 3, question: 'Who builds it?', suggested: [], answer: 'Person 9, with help from Person 8', tag: 'builder', source: 'operator' });
+    const kit = await fakeKit('Copilot Studio');
+    kit.studio!.handover = ['Ask person 9 when unsure'];
+    const f = kitFiles(named, state, PLAN, kit);
+    const all = Object.values(f).join('\n');
+    expect(all).not.toMatch(/Person [89]\b/i);
+    expect(f['kit/copilot-studio/README.md']).toContain('- **Builder**: the builder, with help from the submitter. Builds it from this kit');
+    expect(f['kit/copilot-studio/instructions.md']).toContain('- Ask the builder when unsure');
+  });
+
   it('Copilot Studio: instructions to paste, a skill per feature with trigger phrases and its action, knowledge and tests', async () => {
     const f = await files('Copilot Studio');
     expect(f['kit/copilot-studio/instructions.md']).toContain('Name the agent **Request helper**');
@@ -242,6 +258,12 @@ describe('the recipe flow', () => {
     expect(flow.datasets.map((d) => d.id)).toEqual(['a', 'b']);
     expect(flow.dashboard).toEqual({ id: 'dashboard', name: 'Board', shows: ['x'], from: ['b'] });
     expect(checkFlow({ datasets: [], recipes: [] }, 'P')).toBeUndefined();
+    // A step that names a dataset by its code names it by its name.
+    const coded = checkFlow({
+      datasets: [{ id: 'EXP1', name: 'expense_export', kind: 'input', about: '', columns: [] }, { id: 'OUT', name: 'flags', kind: 'output', about: '', columns: [] }],
+      recipes: [{ id: 'R1', name: 'Flag', kind: 'prepare', inputs: ['EXP1'], outputs: ['OUT'], steps: ['Read EXP1 and write OUT; EXP10 and output stay; see R1'] }],
+    }, 'P')!;
+    expect(coded.recipes[0].steps).toEqual(['Read expense_export and write flags; EXP10 and output stay; see Flag']);
     const L = flowLayout(flow);
     const at = new Map(L.nodes.map((n) => [n.id, n]));
     expect(at.get('a')!.col).toBe(0);
@@ -250,6 +272,13 @@ describe('the recipe flow', () => {
     expect(at.get('dashboard')!.col).toBe(3);
     expect(L.edges).toHaveLength(3);
     expect(flowDetail(flow, 'r1')!.lines.find((l) => l.label === 'Steps')!.items).toEqual(['s']);
+    // A rules sheet read only by a later recipe sits just before it, not at the far left.
+    const late = flowLayout(checkFlow({
+      datasets: ['in', 'mid', 'rules', 'out'].map((id) => ({ id, name: id, kind: id === 'rules' ? 'rules' : 'intermediate', about: '', columns: [] })),
+      recipes: [{ id: 'p', name: 'P', kind: 'prepare', inputs: ['in'], outputs: ['mid'], steps: [] }, { id: 'j', name: 'J', kind: 'join', inputs: ['mid', 'rules'], outputs: ['out'], steps: [] }],
+    }, 'P')!);
+    const c = new Map(late.nodes.map((n) => [n.id, n.col]));
+    expect([c.get('in'), c.get('p'), c.get('mid'), c.get('rules'), c.get('j')]).toEqual([0, 1, 2, 2, 3]);
   });
 
   it('flow-diagram.html escapes every text, inside the SVG and the script', () => {

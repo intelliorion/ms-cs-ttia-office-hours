@@ -5,7 +5,7 @@ import { ideaDir } from '../ideas/store';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { APPROVED_TOOLS } from '../graph/ontology';
 import type { DesignKitOutput, DesignPlanInput, DesignPlanOutput } from '../ai/tasks';
-import { AGENT_DATA_LINE, AGENT_FILE, CUSTOM_APP_CSIC, DATA_RULE, KIT_NO_AI, renderKit, taskLines, toolSlug } from './kitFiles';
+import { AGENT_DATA_LINE, AGENT_FILE, CUSTOM_APP_CSIC, DATA_RULE, KIT_NO_AI, peopleByRole, renderKit, taskLines, toolSlug } from './kitFiles';
 
 export { AGENT_DATA_LINE, AGENT_FILE, CUSTOM_APP_CSIC, DATA_RULE, KIT_NO_AI, toolSlug };
 import { CSIC_NOTE, mdLine, skillGuidance, type DesignState } from './store';
@@ -93,6 +93,8 @@ export function renderPlanMd(idea: Idea, state: DesignState, plan: DesignPlanOut
 export function kitFiles(idea: Idea, state: DesignState, plan: DesignPlanOutput, kit?: DesignKitOutput): Record<string, string> {
   const out: Record<string, string> = {};
   const features = toolFeatures(state);
+  // The kits are shared with the builder and the team: people by role, never by name.
+  const byRole = peopleByRole(idea);
   for (const tool of APPROVED_TOOLS.filter((t) => pickedTools(state).includes(t))) {
     const fits = new Map((state.tool?.fit ?? []).map((x) => [x.feature.toLowerCase(), x]));
     const built = features.filter((f) => !f.scope).map((f) => {
@@ -105,7 +107,10 @@ export function kitFiles(idea: Idea, state: DesignState, plan: DesignPlanOutput,
       tasks: byTool(plan.tasks, tool), risks: plan.risks, mustShow: oneThingToShow(state), ...(kit ? { kit } : {}),
     });
     for (const [slug, files] of Object.entries(folders)) {
-      for (const [name, content] of Object.entries(files)) out[`${KIT_DIR}/${slug}/${name}`] = content.endsWith('\n') ? content : `${content}\n`;
+      for (const [name, content] of Object.entries(files)) {
+        const text = byRole(content);
+        out[`${KIT_DIR}/${slug}/${name}`] = text.endsWith('\n') ? text : `${text}\n`;
+      }
     }
   }
   return out;

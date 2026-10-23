@@ -50,6 +50,14 @@ export function checkFlow(raw: unknown, project: string, features: string[] = []
     if (datasets[i] && !byGiven.has(given)) byGiven.set(given, datasets[i].id);
   });
   const known = (list: unknown) => strs(list, 4, 30).map((x) => byGiven.get(x)).filter((x): x is string => !!x);
+  // A step that names a dataset or a recipe by its code ("join CLP1 to RLC1", "added in R4") names it by its name.
+  const isCode = (given: string) => /\d/.test(given) || /^[A-Z_]{2,}$/.test(given);
+  const codes = [
+    ...[...byGiven.entries()].map(([given, id]) => [given, datasets.find((d) => d.id === id)!.name] as const),
+    ...(Array.isArray(r.recipes) ? r.recipes : []).slice(0, 12).map((x) => [String(x?.id ?? ''), one(x?.name, 60)] as const),
+  ].filter(([given, name]) => ID.test(given) && isCode(given) && name);
+  const codeOf = codes.map(([given, name]) => ({ re: new RegExp(`(?<![\\w-])${given.replace(/[-]/g, '\\-')}(?![\\w-])`, 'g'), name }));
+  const named = (s: string) => codeOf.reduce((t, c) => t.replace(c.re, c.name), s);
   const made = new Set<string>();
   const recipes: FlowRecipe[] = [];
   for (const [i, x] of (Array.isArray(r.recipes) ? r.recipes : []).slice(0, 12).entries()) {
@@ -59,14 +67,14 @@ export function checkFlow(raw: unknown, project: string, features: string[] = []
     if (!name || !inputs.length || !outputs.length) continue;
     outputs.forEach((o) => made.add(o));
     const f = feat.get(one(x.feature, 60).toLowerCase());
-    recipes.push({ id: uniq(x.id, `r${i + 1}`), name, kind: one(x.kind, 12) || 'prepare', inputs, outputs, steps: strs(x.steps, 10, 240), ...(f ? { feature: f } : {}) });
+    recipes.push({ id: uniq(x.id, `r${i + 1}`), name, kind: one(x.kind, 12) || 'prepare', inputs, outputs, steps: strs(x.steps, 10, 240).map(named), ...(f ? { feature: f } : {}) });
   }
   if (!recipes.length) return undefined;
   // A dataset nothing reads and nothing makes is left out of the picture.
   const used = new Set(recipes.flatMap((x) => [...x.inputs, ...x.outputs]));
   const d = r.dashboard;
   const from = d ? [...new Set(known(d.from))].filter((x) => used.has(x)) : [];
-  const dashboard = d && one(d.name, 60) && from.length ? { id: uniq('dashboard', 'dashboard'), name: one(d.name, 60), shows: strs(d.shows, 6, 160), from } : undefined;
+  const dashboard = d && one(d.name, 60) && from.length ? { id: uniq('dashboard', 'dashboard'), name: one(d.name, 60), shows: strs(d.shows, 6, 160).map(named), from } : undefined;
   return { project: one(project, 80), datasets: datasets.filter((x) => used.has(x.id)), recipes, ...(dashboard ? { dashboard } : {}) };
 }
 
@@ -110,6 +118,13 @@ export function flowLayout(flow: RecipeFlow): FlowLayout {
   ];
   const edges = flowEdges(flow);
   const col = flowColumns({ lanes: [], nodes: raw.map((n) => ({ id: n.id, lane: '', label: '', kind: 'step' })), edges } as DiagramSpec);
+  // A dataset nothing makes (the sample, the rules sheet) sits just before the first recipe that reads it, as Dataiku
+  // draws it, so its arrow does not run the width of the flow.
+  for (const n of raw) {
+    if (edges.some((e) => e.to === n.id)) continue;
+    const next = edges.filter((e) => e.from === n.id).map((e) => col.get(e.to) ?? 1);
+    if (next.length) col.set(n.id, Math.max(0, Math.min(...next) - 1));
+  }
   const cols = Math.max(0, ...raw.map((n) => col.get(n.id) ?? 0)) + 1;
   const inCol = Array.from({ length: cols }, (_, c) => raw.filter((n) => (col.get(n.id) ?? 0) === c));
   const tallest = Math.max(1, ...inCol.map((c) => c.length));
@@ -223,7 +238,7 @@ svg{display:block;font-family:inherit;user-select:none}
 .card{position:absolute;top:10px;right:10px;width:300px;max-height:calc(100% - 20px);overflow:auto;box-sizing:border-box;background:var(--panel);border:1px solid rgba(var(--line),.35);border-radius:12px;box-shadow:0 12px 32px rgba(var(--shadow),.3);padding:12px 14px;display:none}
 .card.open{display:block}.card .k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .card h2{font-size:16px;margin:2px 0 8px}.card h3{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
-.card ul{margin:0;padding-left:18px}.card button{float:right;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+.card ul,.card ol{margin:0;padding-left:18px}.card button{float:right;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
 .hint{color:var(--muted);font-size:12.5px;margin-top:8px}
 @media (max-width:760px){.card{position:static;width:100%;max-height:none;margin-top:8px;box-shadow:none}}
 </style></head>
@@ -245,7 +260,7 @@ function light(id){var p=id&&D.paths[id];nodes.forEach(function(n){var on=p&&p.n
 edges.forEach(function(e){var on=p&&p.e.indexOf(e.getAttribute('data-e'))>=0;e.classList.toggle('on',!!on);e.classList.toggle('dim',!!p&&!on);});}
 function t(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function show(id){picked=id;var c=id&&D.cards[id];if(!c){card.className='card';card.innerHTML='';light(null);return;}
-card.innerHTML='<button aria-label="Close">×</button><div class="k">'+t(c.kind)+'</div><h2>'+t(c.title)+'</h2>'+c.lines.map(function(l){return '<h3>'+t(l.label)+'</h3><ul>'+l.items.map(function(i){return '<li>'+t(i)+'</li>';}).join('')+'</ul>';}).join('');
+card.innerHTML='<button aria-label="Close">×</button><div class="k">'+t(c.kind)+'</div><h2>'+t(c.title)+'</h2>'+c.lines.map(function(l){var o=l.label==='Steps'?'ol':'ul';return '<h3>'+t(l.label)+'</h3><'+o+'>'+l.items.map(function(i){return '<li>'+t(i)+'</li>';}).join('')+'</'+o+'>';}).join('');
 card.className='card open';card.querySelector('button').onclick=function(){show(null);};light(id);}
 nodes.forEach(function(n){var id=n.getAttribute('data-node');n.addEventListener('mouseenter',function(){light(id);});n.addEventListener('mouseleave',function(){light(picked);});
 n.addEventListener('focus',function(){light(id);});n.addEventListener('blur',function(){light(picked);});

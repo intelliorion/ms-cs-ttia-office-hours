@@ -31,7 +31,7 @@ describe('the design pack', () => {
       .toEqual(['design.md', 'approach.md', 'plan.md', 'kit/power-apps/README.md', 'kit/power-apps/screens.md']);
     expect(packFiles([], false)).toEqual(['design.md']);
     expect(fileNote('approach.md').title).toBe('The tool and why');
-    expect(fileNote('kit/power-apps/screens.md')).toEqual({ title: 'Starter kit: power apps · screens.md', use: 'The Power Apps screens to make, and what each shows.' });
+    expect(fileNote('kit/power-apps/screens.md')).toEqual({ title: 'Starter kit: power apps · screens.md', use: "Each screen's controls and the key Power Fx formulas, sketched. Build them once the lists are there." });
   });
   it('shows each build point from its tagged answer or the done reply, and "(not yet answered)" with a hint where open', () => {
     const state = {

@@ -227,7 +227,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
   // Files written earlier stay on screen after the design is reopened; writing again waits for a new approval.
   if (!design || (!approved && files.length === 0)) return null;
   const off = busy || aiWorking || !approved;
-  const write = () => call(() => designPost(idea.id, 'plan'), { ai: 'plan', ok: (r: any) => `Wrote ${r.files.length} file${r.files.length === 1 ? '' : 's'}: plan.md and the starter kits.` });
+  const write = () => call(() => designPost(idea.id, 'plan'), { ai: 'plan', ok: (r: any) => `Wrote ${r.files.length} file${r.files.length === 1 ? '' : 's'}: plan.md and the starter kits.${r.note ? ` ${r.note}` : ''}` });
   const copy = async () => {
     const text = buildInstruction(idea.id, idea.slug, design.folder);
     setFallback(null); setCopied(null);
@@ -249,7 +249,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           </ul>
           <div className="hint">{approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}</div>
         </>
-      ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a starter kit for the picked tool. No code: the kits are templates.'}</div>}
+      ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a filled-in starter kit for the picked tool (and for any tool the design adds for its gaps): a synthetic sample, the tool\'s own files and a test checklist. No code.'}</div>}
       {hasAgentKit(files) && (
         <div className="pk-agent">
           <div className="hint">The custom-app part is built with a coding agent and goes to the CSIC Repository.</div>

@@ -5,7 +5,9 @@ import { NO_AI_TIP } from './aiUi';
 import { DesignDiagram } from './DesignDiagram';
 import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
-import { fileNote, packFiles, pointRows, ROADSHOW_PACK_FILES } from './designPack';
+import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, ROADSHOW_PACK_FILES } from './designPack';
+import { RecipeFlowDiagram } from './RecipeFlowDiagram';
+import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
 import { DeckLinks } from '../panels/RoadshowSection';
 import { roadshowNote, type RoadshowViewLike } from '../panels/roadshowHelpers';
 import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
@@ -23,6 +25,7 @@ export function DesignPackPopout({ id }: { id: string }) {
   const [plan, setPlan] = useState<{ files: string[] } | null>(null);
   const [roadshow, setRoadshow] = useState<RoadshowViewLike | null>(null);
   const [open, setOpen] = useState<Record<string, string | undefined>>({});
+  const [flow, setFlow] = useState<RecipeFlow | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
@@ -36,7 +39,20 @@ export function DesignPackPopout({ id }: { id: string }) {
   const features: any[] = s?.features ?? [];
   const tool: any = s?.tool;
   const deck = roadshow?.deck;
-  const files = [...packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool)), ...(deck ? ROADSHOW_PACK_FILES.filter((f) => deck.files.includes(f.replace('roadshow/', ''))) : [])];
+  const main = kitSlug(tool?.tool);
+  const files = [...packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main), ...(deck ? ROADSHOW_PACK_FILES.filter((f) => deck.files.includes(f.replace('roadshow/', ''))) : [])];
+  // The Dataiku kit's recipe flow, drawn here from its flow.json (checked again, as the server checked it).
+  const hasFlow = (plan?.files ?? []).includes(FLOW_JSON);
+  const featureNames = features.map((f) => String(f.name)).join('\n');
+  useEffect(() => {
+    let live = true;
+    if (!hasFlow) { setFlow(null); return; }
+    post(`/api/ideas/${encodeURIComponent(id)}/design-file`, { path: FLOW_JSON }).then((r) => {
+      if (!live) return;
+      try { const raw = JSON.parse(r.text); setFlow(checkFlow(raw, String(raw?.project ?? ''), featureNames.split('\n').filter(Boolean)) ?? null); } catch { setFlow(null); }
+    }, () => {});
+    return () => { live = false; };
+  }, [id, hasFlow, featureNames]);
   // The AI's diagram when there is one, else a plain one drawn here from the design, so the pack never shows nothing.
   const stored = s?.diagram;
   const spec = stored?.spec ?? (s ? plainDiagram(s) : null);
@@ -136,6 +152,13 @@ export function DesignPackPopout({ id }: { id: string }) {
               </div>
             </section>
           )}
+          {flow && (
+            <section className="sec dp-sec" data-testid="pack-recipe-flow">
+              <h3>Starter kit: the Dataiku recipe flow <span className="sec-n">{FLOW_HTML}</span></h3>
+              <p className="dp-summary">The recipes in the Dataiku kit, as Dataiku draws its Flow: the sample and the rules sheet go in, each recipe's steps are in flow.md, and the outputs come out.</p>
+              <RecipeFlowDiagram flow={flow} />
+            </section>
+          )}
           {deck && (
             <section className="sec dp-sec" data-testid="pack-roadshow">
               <h3>The roadshow <span className="sec-n">{roadshowNote(roadshow)}</span></h3>
@@ -158,7 +181,8 @@ export function DesignPackPopout({ id }: { id: string }) {
             <h3>Files <span className="sec-n">{files.length} in the idea's folder</span></h3>
             <ul className="dp-files">
               {files.map((f) => {
-                const n = fileNote(f);
+                const n = fileNote(f, main);
+                const drawn = f === FLOW_HTML && flow;
                 return (
                   <li key={f} data-file={f}>
                     <div className="dp-file-h">
@@ -167,7 +191,7 @@ export function DesignPackPopout({ id }: { id: string }) {
                       <button className="link-btn" data-action="view-file" onClick={() => void view(f)}>{open[f] !== undefined ? 'Hide' : 'Read it'}</button>
                     </div>
                     {n.use && <div className="dp-file-u">{n.use}</div>}
-                    {open[f] !== undefined && <pre className="dp-file-text">{open[f]}</pre>}
+                    {open[f] !== undefined && (drawn ? <RecipeFlowDiagram flow={flow} /> : <pre className="dp-file-text">{open[f]}</pre>)}
                   </li>
                 );
               })}

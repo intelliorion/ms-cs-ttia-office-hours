@@ -1,16 +1,36 @@
 /** The design pack's words: what each file is, and how to use it. A leaf module, so it can be tested on its own. */
 import { BASE_TAGS, BUILD_HINTS, BUILD_TAGS, NOT_ANSWERED, pointOf, POINT_LABELS, type DesignTag } from '../../../src/design/points';
 
+/** What each starter-kit file is and how to use it, by its name. */
 const KIT_FILES: Record<string, string> = {
-  'README.md': 'Start here: what the starter kit holds and the order to use it in.',
-  'topics.md': 'The topics the Copilot Studio agent answers, to build one by one.',
-  'screens.md': 'The Power Apps screens to make, and what each shows.',
-  'flow.md': 'The steps of the Power Automate flow.',
-  'prompts.md': 'Prompts to try in Microsoft Copilot on the sample data.',
+  'README.md': 'Start here: what the kit holds, what it must show, the files in the order of work, who does what, and the links to the design, the approach and the plan.',
+  'sample-data.csv': "The synthetic sample, made from the design's input fields, with the seeded test rows marked T1, T2 … in test_case. Build and test on it only; never swap in real data.",
+  'test-checklist.md': 'Each "done when" and each feature as a tick-box test with the result to expect. Run it on the sample with the builder before the demo.',
+  'prompts.md': 'The prompts to paste into Microsoft Copilot with the sample attached, each with the answer to check against.',
+  'instructions.md': "The agent's instructions: paste them into the Instructions box in Copilot Studio and name the agent as it says.",
+  'skills.md': 'One topic per feature: its trigger phrases, inputs, steps, the answer and the action or connector it needs. Build them one by one.',
+  'knowledge.md': 'The knowledge to add to the agent (the sample first), what never to add, and test questions with their answers.',
+  'data-model.md': 'The SharePoint lists (or tables) and their columns with types. Make them first, and fill the input list from the sample.',
+  'screens.md': "Each screen's controls and the key Power Fx formulas, sketched. Build them once the lists are there.",
+  'flows.md': 'The Power Automate flows for what the app cannot do on its own, each with its trigger and steps.',
+  'flow.md': "Each Dataiku recipe's actual steps, in flow order, from uploading the sample to the dashboard.",
+  'datasets.md': 'The input and output datasets and their schemas: set the types when you upload.',
+  'rules.csv': 'The rules sheet template: fill it in and upload it as its own dataset.',
+  'flow-diagram.html': 'The recipe flow as Dataiku draws it: datasets, recipes, outputs. It opens in any browser; Read it shows it here.',
+  'flow.json': 'The recipe flow as data: what the diagram is drawn from.',
+  'BUILD-WITH-AGENT.md': 'The instruction to paste into Claude Code or GitHub Copilot: the agent builds the proof of concept inside this folder, on the sample.',
 };
+/** A kit for a tool the design uses outside the build. */
+const OUTSIDE_README = 'A short kit for a tool the design uses for its gaps, outside the main build: what it covers, what to set up and how to test it.';
+/** The kit's files in the order of work. */
+const KIT_ORDER = ['README.md', 'sample-data.csv', 'instructions.md', 'knowledge.md', 'skills.md', 'prompts.md', 'data-model.md', 'screens.md', 'flows.md',
+  'datasets.md', 'rules.csv', 'flow.md', 'flow-diagram.html', 'flow.json', 'BUILD-WITH-AGENT.md', 'test-checklist.md'];
 
-/** What a file in the pack is and how to use it, by its path in the idea folder. */
-export function fileNote(path: string): { title: string; use: string } {
+/** The kit folder for a tool, as the server names it ("Power Apps" → "power-apps"). */
+export const kitSlug = (tool: string | undefined) => (tool ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** What a file in the pack is and how to use it, by its path in the idea folder. `main` is the picked tool's kit folder. */
+export function fileNote(path: string, main?: string): { title: string; use: string } {
   if (path === 'design.md') return { title: 'The design', use: 'The proof of concept on one page: what it shows, with what input, for whom, built by whom, and how to build it. Share it with the team before the first session.' };
   if (path === 'approach.md') return { title: 'The tool and why', use: 'The tool picked, with its pros and cons and the facts it rests on. The builder starts here.' };
   if (path === 'plan.md') return { title: 'The build plan', use: 'The build tasks in order, each with its tool and when it is done, plus the risks. Work through it in the design sessions.' };
@@ -19,7 +39,11 @@ export function fileNote(path: string): { title: string; use: string } {
   const m = /^kit\/([^/]+)\/(.+)$/.exec(path);
   if (m) {
     const tool = m[1].replace(/-/g, ' ');
-    return { title: `Starter kit: ${tool} · ${m[2]}`, use: KIT_FILES[m[2]] ?? 'A template from the starter kit: copy it and fill it in. No code is written for you.' };
+    const outside = main && m[1] !== main;
+    return {
+      title: `${outside ? 'Outside the build' : 'Starter kit'}: ${tool} · ${m[2]}`,
+      use: outside && m[2] === 'README.md' ? OUTSIDE_README : KIT_FILES[m[2]] ?? 'A file in the starter kit folder.',
+    };
   }
   return { title: path, use: '' };
 }
@@ -42,8 +66,21 @@ export function pointRows(state: { steps?: any[]; settled?: Record<string, strin
 /** The roadshow's files the pack can show (the deck itself opens with Present). */
 export const ROADSHOW_PACK_FILES = ['roadshow/script.md', 'roadshow/run-of-show.md'];
 
-/** The pack's files in reading order: the design, the tool, the plan, then the kit. */
-export function packFiles(planFiles: string[], hasApproach: boolean): string[] {
-  const kit = planFiles.filter((f) => f.startsWith('kit/')).sort((a, b) => (a.endsWith('/README.md') ? -1 : b.endsWith('/README.md') ? 1 : a.localeCompare(b)));
+/**
+ * The pack's files in reading order: the design, the tool, the plan, then the picked tool's kit (README first, then
+ * the files in the order of work, the checklist last), then each outside tool's kit.
+ */
+export function packFiles(planFiles: string[], hasApproach: boolean, main?: string): string[] {
+  const parts = (f: string) => { const [, folder = '', ...rest] = f.split('/'); return { folder, name: rest.join('/') }; };
+  const rank = (name: string) => { const i = KIT_ORDER.indexOf(name); return i < 0 ? KIT_ORDER.length - 1.5 : i; };
+  const kit = planFiles.filter((f) => f.startsWith('kit/')).sort((a, b) => {
+    const x = parts(a); const y = parts(b);
+    if (x.folder !== y.folder) return x.folder === main ? -1 : y.folder === main ? 1 : x.folder.localeCompare(y.folder);
+    return rank(x.name) - rank(y.name) || x.name.localeCompare(y.name);
+  });
   return ['design.md', ...(hasApproach ? ['approach.md'] : []), ...(planFiles.includes('plan.md') ? ['plan.md'] : []), ...kit];
 }
+
+/** Where the Dataiku kit keeps its recipe flow (drawn in the pack). */
+export const FLOW_JSON = 'kit/dataiku/flow.json';
+export const FLOW_HTML = 'kit/dataiku/flow-diagram.html';

@@ -14,6 +14,7 @@ import { csicFlags } from './choice';
 import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
 import { checkFlow, FLOW_DIAGRAM_FILE, FLOW_FILE, FLOW_KIND_WORD, renderFlowHtml, type RecipeFlow } from './recipeFlow';
+import { columnsOf, isUsable, KIND_LABELS, whatOf, type ColumnProfile, type DataFile } from '../data/model';
 
 export const NOT_SETTLED = '(not settled in the design)';
 export const TEST_FILE = 'test-checklist.md';
@@ -289,6 +290,7 @@ function studioFiles(c: KitContext): Record<string, string> {
     '## Add', '',
     `1. **${SAMPLE_FILE}** (this folder): ${mdLine(c.kit?.sample.name) || 'the synthetic sample'}${c.sample ? `, ${c.sample.rows.length} made-up rows; columns ${columnsLine(c)}` : ` (${NOT_SETTLED})`}.`,
     ...add.map((x, i) => `${i + 2}. ${bold(x.source)}: ${mdLine(x.holds)}`), '',
+    ...teamFiles(c),
     '## Do not add', '',
     ...not.map((x) => `- ${bold(x.source)}: ${mdLine(x.why) || mdLine(x.holds)}`),
     '- Any file or page with real names, client data or personal data.',
@@ -352,6 +354,24 @@ function powerAppsFiles(c: KitContext): Record<string, string> {
   return files;
 }
 
+/** The confirmed data's files of these kinds (usable ones only): what the kits name as the team's own files. */
+export const dataFilesOf = (c: Pick<KitContext, 'state'>, kinds: string[]): DataFile[] =>
+  (c.state.data?.confirmedAt ? c.state.data.files.filter((f) => isUsable(f) && kinds.includes(f.kind)) : []);
+
+/** knowledge.md: the rules, reference, process documents and example emails the team gave, to add as knowledge. */
+function teamFiles(c: KitContext): string[] {
+  const files = dataFilesOf(c, ['rules', 'process', 'email', 'today', 'other']);
+  if (!files.length) return [];
+  return [
+    '## The team\'s own files', '',
+    'The team gave these with the idea; they passed the Café data check and are in the idea folder\'s data-files/. Add the ones the agent must answer from.', '',
+    ...files.map((f) => `- ${bold(f.name)} (${KIND_LABELS[f.kind]}): ${mdLine(whatOf(f)) || 'what it holds was not said'}`), '',
+  ];
+}
+
+const DSS_TYPE = (c: ColumnProfile) => (c.type === 'number' ? (c.max && /\./.test(c.max) ? 'double' : 'int') : c.type === 'money' ? 'double' : c.type === 'date' || c.type === 'datetime' ? 'date' : c.type === 'yes-no' ? 'boolean' : 'string');
+const datasetName = (name: string) => name.replace(/\.[a-z0-9]+$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'dataset';
+
 /** The flow the AI gave, checked; else a plain one from the features: the sample, one recipe per feature, the result. */
 export function flowOf(c: KitContext): RecipeFlow {
   const project = point(c, 'environment') === NOT_SETTLED ? mdLine(c.idea.title) : mdLine(pointOf(c.state, 'environment')).slice(0, 80);
@@ -363,12 +383,19 @@ export function flowOf(c: KitContext): RecipeFlow {
     id: `r${i + 1}`, name: f.name.slice(0, 60), kind: 'prepare', inputs: [i ? `ds${i + 1}` : 'sample'], outputs: [i === built.length - 1 ? 'result' : `ds${i + 2}`],
     steps: [mdLine(f.what) || NOT_SETTLED], ...(c.built.length ? { feature: f.name } : {}),
   }));
+  // The confirmed data names the datasets: the sample input's name, each rules file with its columns, the output's columns.
+  const [input] = dataFilesOf(c, ['input']);
+  const rules = dataFilesOf(c, ['rules']).filter((f) => f.tables?.length).slice(0, 2);
+  const output = dataFilesOf(c, ['output'])[0] ?? dataFilesOf(c, ['today'])[0];
+  const colsOf = (f: DataFile) => columnsOf(f).filter((x) => x.type !== 'empty').slice(0, 20).map((x) => ({ name: x.name, type: DSS_TYPE(x) }));
+  if (rules.length && recipes[0]) recipes[0] = { ...recipes[0], inputs: [...recipes[0].inputs, ...rules.map((_, i) => `rules${i + 1}`)] };
   return {
     project,
     datasets: [
-      { id: 'sample', name: 'sample_data', kind: 'input', about: `Uploaded from ${SAMPLE_FILE}.`, columns: cols },
+      { id: 'sample', name: input ? datasetName(input.name) : 'sample_data', kind: 'input', about: `Uploaded from ${SAMPLE_FILE}${input ? `, made-up rows shaped like ${input.name}` : ''}.`, columns: cols },
+      ...rules.map((f, i) => ({ id: `rules${i + 1}`, name: datasetName(f.name), kind: 'rules' as const, about: mdLine(whatOf(f)) || `The team's ${f.name}.`, columns: colsOf(f) })),
       ...built.slice(1).map((f, i) => ({ id: `ds${i + 2}`, name: `${toolSlug(built[i].name).replace(/-/g, '_')}_out`, kind: 'intermediate' as const, about: '', columns: [] })),
-      { id: 'result', name: 'result', kind: 'output', about: point(c, 'output'), columns: [] },
+      { id: 'result', name: output ? datasetName(output.name) : 'result', kind: 'output', about: point(c, 'output'), columns: output ? colsOf(output) : [] },
     ],
     recipes,
   };

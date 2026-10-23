@@ -18,13 +18,15 @@ import { readDesign, skillGuidance } from '../design/store';
 import { reviewInput, codeValue } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
 import { applyUpdate, planUpdates } from '../review/updates';
-import { dataStepTask, type DataBrief, type DataStepInput, type DataStepOutput } from '../ai/tasks';
+import type { DataStepInput, DataStepOutput } from '../ai/tasks';
 import {
-  columnsOf, dataPoints, DATA_TOPICS, isUsable, KIND_LABELS, meaningOf, sizeWords, whatOf,
-  type DataFile, type DataQuestion, type DataState, type DataTopic,
+  columnsOf, dataPoints, DATA_TOPICS, isUsable, meaningOf, sizeWords, whatOf, type DataQuestion, type DataState, type DataTopic,
 } from './model';
 import { DataStepError, readData, reopenData, updateData } from './store';
 import { DATA_SOURCE } from './understand';
+import { fileBrief } from './brief';
+
+export { dataBrief, fileBrief, codedDataBrief } from './brief';
 
 export const ASKED_TEAM = '(not known yet; asked the team)';
 export const DATA_QUESTIONS_MAX = 15;
@@ -58,41 +60,6 @@ export function dataGaps(d: DataState): { topic: DataTopic; gap: string }[] {
 export function openAfterDone(d: DataState): string[] {
   const asked = d.steps.filter((s) => s.askedTeam && !s.answer?.trim()).map((s) => `Asked the team: ${s.question}`);
   return [...dataGaps(d).filter((g) => g.topic !== 'other').map((g) => g.gap), ...asked].slice(0, 10);
-}
-
-/** A file as the AI and the later steps read it: kind, what it is, columns with their meanings, rules and derivations. */
-export function fileBrief(f: DataFile): DataBrief['files'][number] {
-  const u = f.understanding;
-  return {
-    name: f.name, kind: KIND_LABELS[f.kind], what: whatOf(f) ?? '', size: sizeWords(f),
-    columns: columnsOf(f).map((c) => {
-      const codes = u?.columns.find((x) => x.name === c.name)?.codes;
-      return { name: c.name, type: c.type, ...(meaningOf(f, c.name) ? { meaning: meaningOf(f, c.name) } : {}), ...(codes ? { codes } : {}) };
-    }),
-    ...(u?.points.length ? { points: u.points } : {}),
-    ...(u?.rules.length ? { rules: u.rules.map((r) => `${r.rule}${r.columns.length ? ` (${r.columns.join(', ')})` : ''}`) } : {}),
-    ...(u?.derivations.length ? { derivations: u.derivations.map((x) => `${x.output} = ${x.how}${x.from.length ? ` (from ${x.from.join(', ')})` : ''}`) } : {}),
-    ...([...(f.tables?.flatMap((t) => t.issues) ?? []), ...(u?.issues ?? [])].length ? { issues: [...(f.tables?.flatMap((t) => t.issues) ?? []), ...(u?.issues ?? [])].slice(0, 6) } : {}),
-  };
-}
-
-/** The confirmed data, for the features, the tool, the design, the diagram, the kits and the roadshow. Undefined until confirmed. */
-export function dataBrief(d: DataState | undefined): DataBrief | undefined {
-  if (!d?.confirmedAt) return undefined;
-  const files = d.files.filter(isUsable).map(fileBrief);
-  const answers = d.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: s.question, answer: s.answer!.trim() }));
-  if (!files.length && !answers.length) return undefined;
-  return {
-    files,
-    ...(d.summary ? { summary: { input: d.summary.input, output: d.summary.output, knowledge: d.summary.knowledge, rules: d.summary.rules } } : {}),
-    ...(answers.length ? { answers } : {}),
-  };
-}
-
-/** The confirmed data brief with people coded (for a task whose other texts were coded with `codes`). */
-export async function codedDataBrief(root: string, id: string, d: DataState | undefined, codes: Map<string, Coded>): Promise<{ data?: DataBrief }> {
-  const b = dataBrief(d);
-  return b ? { data: await codeValue(root, id, b, codes) } : {};
 }
 
 /** Every answered data question on the idea, at once (the decision, the tool, the design and the roadshow read them). */

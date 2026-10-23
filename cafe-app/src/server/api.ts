@@ -39,6 +39,7 @@ import { diagramReply } from '../design/diagramFile';
 import { roadshowView, deckFile, photoFile } from '../roadshow/view';
 import { growIdea } from '../ai/grow';
 import { dropDataFile, editDataFile, releaseDataFile, removeDataFile, runDataFile, setDataKind, type DataProgress } from '../data/understand';
+import { fitSampleToData } from '../data/kitSample';
 import { addDataQuestion, answerDataStep, confirmData, finishDataByHand, nextDataStep } from '../data/questions';
 import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
@@ -395,7 +396,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     let kit: DesignKitOutput | undefined;
     try {
       const { input, codes } = await codedKitInput(root, idea, state, output);
-      kit = decodeKit((await ai.runWith(designKitTask, input)).output, codes);
+      const decoded = decodeKit((await ai.runWith(designKitTask, input)).output, codes);
+      // sample-data.csv has the confirmed sample input's real columns; its values stay made up.
+      kit = { ...decoded, sample: fitSampleToData(decoded.sample, state.data).sample };
     } catch { kit = undefined; }
     const { files } = await writePlan(root, idea, state, output, kit);
     // Written from the new design: the plan is no longer out of date (read again, the design may have moved meanwhile).

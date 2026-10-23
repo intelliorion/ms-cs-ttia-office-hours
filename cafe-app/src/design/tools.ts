@@ -5,6 +5,7 @@ import type { EmailRecord } from '../comms/outbox';
 import { draftQuestionsEmail } from '../review/prep';
 import { isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from '../review/needs';
 import { reviewInput } from '../review/suggestInput';
+import { codedDataBrief } from '../data/brief';
 import { takeInAnswers } from '../review/updates';
 import { showNames } from '../command/names';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
@@ -247,6 +248,8 @@ export async function suggestFeatures(
     ...(answers.length ? { teamAnswers: answers } : {}), ...(learned.length ? { learned } : {}),
     ...(have.length ? { existingFeatures: have.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}) })) } : {}),
     guidance: skillGuidance('cafe-design'),
+    // The confirmed data: what goes in and what must come out shape the features.
+    ...(await codedDataBrief(root, id, state.data, codes)),
   });
   const name = (t: string) => showNames(t, codes);
   const suggested = output.features.map((f) => {
@@ -284,6 +287,7 @@ export async function suggestTools(
     ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}),
     ...(seen.form?.participation ? { form: { participation: seen.form.participation } } : {}),
     ...(seen.flags ? { flags: seen.flags } : {}), ...(seen.graph ? { graph: seen.graph } : {}),
+    ...(await codedDataBrief(root, id, state.data, codes)),
   });
   // The operator's tool is theirs: an evaluation of another tool is no evaluation of it.
   if (evaluate && output.pick && output.pick.tool !== evaluate) throw new Error(`The AI answered for ${output.pick.tool}, not ${evaluate}. Try again.`);

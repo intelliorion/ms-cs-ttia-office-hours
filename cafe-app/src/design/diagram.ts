@@ -40,6 +40,20 @@ export interface DiagramSource {
   steps: { n: number; question: string; answer?: string; tag?: string }[];
   summary?: string;
   settled?: Partial<Record<string, string>>;
+  /** The data understanding: once confirmed, its files name the data lane's parts. */
+  data?: { confirmedAt?: string; points?: Partial<Record<string, string>>; files: { name: string; kind: string; check?: { status: string }; unreadable?: string }[] };
+}
+
+/** The confirmed data's files by role: the sample inputs, the rules and reference, the output sample. */
+export function dataLane(d: Pick<DiagramSource, 'data'>): { inputs: string[]; rules: string[]; output?: string } {
+  if (!d.data?.confirmedAt) return { inputs: [], rules: [] };
+  const ok = d.data.files.filter((f) => !f.unreadable && f.check?.status !== 'held');
+  const out = ok.find((f) => f.kind === 'output') ?? ok.find((f) => f.kind === 'today');
+  return {
+    inputs: ok.filter((f) => f.kind === 'input').map((f) => f.name).slice(0, 2),
+    rules: ok.filter((f) => f.kind === 'rules').map((f) => f.name).slice(0, 2),
+    ...(out ? { output: out.name } : {}),
+  };
 }
 
 const one = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -51,6 +65,8 @@ export function basisOf(d: DiagramSource): string {
     d.features.map((f) => [f.name, f.what ?? '', f.scope?.status ?? '', f.scope?.by ?? '']),
     d.tool ? [d.tool.tool, (d.tool.fit ?? []).map((x) => [x.feature, x.fit])] : null,
     d.steps.map((s) => [s.question, s.answer ?? '']), d.summary ?? '', d.settled ?? {},
+    // The confirmed data only when there is some, so a design with none keeps the fingerprint it had.
+    ...(d.data?.confirmedAt ? [d.data.files.map((f) => [f.name, f.kind])] : []),
   ]);
   let h = 5381;
   for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
@@ -138,12 +154,15 @@ export function plainDiagram(d: DiagramSource): DiagramSpec {
     ...(outside.length ? [{ id: 'outside', label: 'Outside the build', kind: 'outside' as const }] : []),
     { id: 'people', label: 'People', kind: 'person' },
   ];
+  const files = dataLane(d);
   const nodes: DiagramNode[] = [
-    { id: 'input', lane: 'data', kind: 'input', label: 'Sample input', ...(input ? { detail: input } : { detail: 'The sample input is not settled yet.' }), ...(stepFor('input-shape') ?? stepFor('smallest-input') ? { step: stepFor('input-shape') ?? stepFor('smallest-input') } : {}) },
+    { id: 'input', lane: 'data', kind: 'input', label: files.inputs[0] ? short(files.inputs[0]) : 'Sample input', ...(input ? { detail: input } : { detail: 'The sample input is not settled yet.' }), ...(stepFor('input-shape') ?? stepFor('smallest-input') ? { step: stepFor('input-shape') ?? stepFor('smallest-input') } : {}) },
   ];
+  if (files.inputs[1]) nodes.push({ id: 'input2', lane: 'data', kind: 'input', label: short(files.inputs[1]), detail: 'A second sample input the team gave.' });
+  files.rules.forEach((name, i) => nodes.push({ id: `rules${i + 1}`, lane: 'data', kind: 'store', label: short(name), detail: 'The rules or reference the team gave: what the input is checked against.' }));
   built.forEach((f, i) => nodes.push({ id: `f${i + 1}`, lane: 'tool', kind: 'step', label: short(f.name), feature: f.name, ...(f.what ? { detail: f.what } : {}) }));
   if (!built.length) nodes.push({ id: 'f1', lane: 'tool', kind: 'step', label: short(tool), detail: 'No feature is listed for the tool yet.' });
-  nodes.push({ id: 'output', lane: 'tool', kind: 'output', label: 'Output', ...(output ? { detail: output } : { detail: 'The output is not settled yet.' }), ...(stepFor('output') ? { step: stepFor('output') } : {}) });
+  nodes.push({ id: 'output', lane: 'tool', kind: 'output', label: files.output ? short(`Like ${files.output}`) : 'Output', ...(output ? { detail: output } : { detail: 'The output is not settled yet.' }), ...(stepFor('output') ? { step: stepFor('output') } : {}) });
   outside.forEach((f, i) => nodes.push({
     id: `o${i + 1}`, lane: 'outside', kind: 'step', label: short(f.name), feature: f.name,
     detail: [`Done with ${f.scope!.by}, outside the ${tool} build.`, f.what ?? ''].filter(Boolean).join(' '), ...(f.scope?.step ? { step: f.scope.step } : {}),
@@ -152,6 +171,8 @@ export function plainDiagram(d: DiagramSource): DiagramSpec {
   const steps = nodes.filter((n) => n.lane === 'tool' && n.kind === 'step');
   const edges: DiagramEdge[] = [
     ...steps.map((n) => ({ from: 'input', to: n.id })),
+    ...(files.inputs[1] && steps[0] ? [{ from: 'input2', to: steps[0].id }] : []),
+    ...(steps[0] ? files.rules.map((_, i) => ({ from: `rules${i + 1}`, to: steps[0].id, label: 'rules' })) : []),
     ...steps.map((n) => ({ from: n.id, to: 'output' })),
     { from: 'output', to: 'users', label: 'reads' },
     ...outside.map((_, i) => ({ from: 'output', to: `o${i + 1}` })),

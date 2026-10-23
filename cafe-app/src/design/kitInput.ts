@@ -12,6 +12,7 @@ import { scopeWords } from './choice';
 import { DESIGN_SOURCE } from './brainstorm';
 import type { DesignState } from './store';
 import { designPlanInput } from './kits';
+import { codedDataBrief } from '../data/brief';
 
 /** The tools the design uses for its gaps (features done outside the build), in the order the features name them. */
 export const outsideToolsOf = (state: Pick<DesignState, 'features'>): string[] =>
@@ -74,6 +75,7 @@ export async function codedKitInput(root: string, idea: Idea, state: DesignState
       risks: riskTexts,
     },
     outsideTools: outsideToolsOf(state),
+    ...(await codedDataBrief(root, idea.id, state.data, codes)),
   };
   return { input, codes };
 }

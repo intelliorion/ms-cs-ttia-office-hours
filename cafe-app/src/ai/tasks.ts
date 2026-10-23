@@ -493,6 +493,8 @@ export interface FeatureListInput {
   /** The operator's rows: kept as they are; only new features are wanted. */
   existingFeatures?: { name: string; what?: string }[];
   guidance?: string;
+  /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
+  data?: DataBrief;
 }
 export interface FeatureSuggestion { name: string; what: string; flags: (typeof FEATURE_ONLY_FLAGS)[number][] }
 export interface FeatureListOutput { features: FeatureSuggestion[] }
@@ -529,6 +531,7 @@ export const featureListTask: Task<FeatureListOutput> = {
       support: (Array.isArray(inp.support) ? inp.support : []).slice(0, 20).map((s) => cap(s, 200)),
       ...answersData(inp.teamAnswers), ...learnedData(inp.learned),
       ...(inp.existingFeatures?.length ? { existingFeatures: inp.existingFeatures.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}) })) } : {}),
+      ...dataBriefData(inp.data),
     };
     return build('feature-list', [
       "List the features a proof of concept of this Creators' Café idea needs: what it must do, as the operator and the team would name the parts. The operator decides; they add, change and remove features.",
@@ -540,6 +543,7 @@ export const featureListTask: Task<FeatureListOutput> = {
       ...(data.existingFeatures ? ['"existingFeatures" are the operator\'s features. Keep them out of your list (the app keeps them); add only features that are missing, under new names.'] : []),
       'Flags: "needs-live-system" when the feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data.',
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data. Never name people.",
+      ...(inp.data ? dataRules('features') : []),
       ...(inp.guidance ? ['Guidance from the Café design guide (guidance, not data):', cap(inp.guidance, 6000)] : []),
     ], FEATURE_LIST_SCHEMA, data, "a Café idea, the team's answers and the operator's features");
   },
@@ -578,6 +582,8 @@ export interface ToolPickInput {
   form?: { participation?: string };
   flags?: string[];
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
+  data?: DataBrief;
 }
 /** The tool when enough is known, what is still needed to be sure, and what the answers change (as the decision's). */
 export interface ToolPickOutput { pick?: ToolPickChoice; needs: ReviewNeed[]; updates?: ReviewUpdates; learned?: LearnedPoint[] }
@@ -657,6 +663,7 @@ function toolPickData(input: ToolPickInput) {
     ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
     ...(input.features?.length ? { features: input.features.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}) })) } : {}),
     ...(input.evaluate ? { evaluate: cap(input.evaluate, 40) } : {}),
+    ...dataBriefData(input.data),
   };
 }
 
@@ -692,6 +699,7 @@ export const toolPickTask: Task<ToolPickOutput> = {
       'Flags: "needs-live-system" when it needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
       '"context": 1 to 6 short lines listing the facts from DATA you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
       'reason: why this tool, at most 160 characters. In the pick, never name people.',
+      ...(inp.data ? dataRules('tool') : []),
       ...answerRules('teamAnswers'),
     ], TOOL_PICK_SCHEMA, data, "a Café idea, its features and the team's answers");
   },
@@ -725,6 +733,8 @@ export interface DesignStepInput {
   form?: { participation?: string };
   flags?: string[];
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
+  data?: DataBrief;
 }
 /** The next question (or done), and what the design answers change in the record, as the decision's and the tool picker's. */
 export interface DesignStepOutput {
@@ -848,6 +858,7 @@ function designStepData(input: DesignStepInput) {
     ...(input.form?.participation ? { form: { participation: cap(input.form.participation, 40) } } : {}),
     ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
     ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
+    ...dataBriefData(input.data),
   };
 }
 
@@ -869,6 +880,7 @@ export const designStepTask: Task<DesignStepOutput> = {
       'Keep it short: aim for about 8 questions in all on a typical idea. When one question can settle two points, ask it once and tag it with the one it settles most; never ask what the answers, the brief or the team already settle. Use tag null for any other question.',
       '"stepsSoFar" are the questions already asked and the answers. Never ask one of them again. An answer of "(not known yet; asked the team)" means move on.',
       '"features" are the operator\'s feature list for the proof of concept: design for those features, not others.',
+      ...(i.data ? dataRules('design') : []),
       ...(data.tool ? [
         `"tool" is the one tool already chosen for the whole proof of concept (${data.tool.tool}). Do not ask which tool to use. Aim your questions at what it means for this build:`,
         'how to cover each feature in "tool.gaps" (the tool does it only partly, or not at all; the note says what is missing) and each of "tool.cons". Ask how the team wants to cover a gap (a second step, a manual stand-in, leaving it out of the proof of concept) before smaller points.',
@@ -904,6 +916,8 @@ export interface DesignDiagramInput {
   points: Record<string, string>;
   /** Other tools the answers name for work outside the main build. */
   outsideTools: string[];
+  /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
+  data?: DataBrief;
 }
 
 const LANE_ITEM: JsonSchema = {
@@ -958,6 +972,7 @@ function designDiagramData(i: DesignDiagramInput) {
     steps: (Array.isArray(i.steps) ? i.steps : []).slice(0, 20).map((s) => ({ n: s.n, question: cap(s.question, 200), answer: cap(s.answer, 600), ...(s.tag ? { tag: cap(s.tag, 20) } : {}) })),
     points: Object.fromEntries(Object.entries(i.points ?? {}).slice(0, 10).map(([k, v]) => [cap(k, 20), cap(v, POINT_MAX)])),
     outsideTools: (i.outsideTools ?? []).slice(0, 5).map((t) => cap(t, 60)),
+    ...dataBriefData(i.data),
   };
 }
 
@@ -974,6 +989,7 @@ export const designDiagramTask: Task<DiagramSpec> = {
       'A feature whose "scope" is "out of scope" is not built: draw it as a "gap" node only if a builder needs to know it is left out. A feature done "outside the build" goes in that outside tool\'s lane.',
       'Edges: from and to are node ids, in the order the work flows; a short label (at most 30 characters) when the arrow carries something worth naming ("flagged claims", "monthly"). No arrow from a node to itself. Ids are short letters and digits (n1, input, rules).',
       'Use only what DATA says. Never invent a system, a field or a person. People appear as role words or codes such as [P1]; never write a name. No value words (savings, return on investment, benefits, costs, KPIs).',
+      ...(i.data ? dataRules('diagram') : []),
     ], DESIGN_DIAGRAM_SCHEMA, designDiagramData(i), "a finished Café design: the idea, its summary, the tool, the features and the design answers");
   },
   parse: (raw) => parseChecked<DiagramSpec>(raw, DESIGN_DIAGRAM_SCHEMA, trimDiagram),
@@ -1093,6 +1109,8 @@ export interface DesignKitInput {
   plan: { tasks: { title: string; detail: string; tool: string; done_when: string }[]; risks: string[] };
   /** The other tools the design uses for its gaps, outside the build. */
   outsideTools: string[];
+  /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
+  data?: DataBrief;
 }
 
 export const KIT_COLUMN_KINDS = ['id', 'text', 'number', 'money', 'date', 'time', 'yes-no', 'category', 'person'] as const;
@@ -1232,6 +1250,7 @@ function designKitData(i: DesignKitInput) {
       risks: capList(i.plan?.risks, 5, 160),
     },
     outsideTools: capList(i.outsideTools, 5, 60),
+    ...dataBriefData(i.data),
   };
 }
 
@@ -1264,6 +1283,7 @@ export const designKitTask: Task<DesignKitOutput> = {
       'dataiku (Dataiku): datasets: the sample input, the rules sheet when the logic uses one, any intermediate and the outputs, each with an id (short letters and digits), its kind and its columns with DSS types. recipes in flow order: id, name, kind (visual recipes only), inputs and outputs (dataset ids), steps: the rule written as the recipe\'s actual prepare, formula, filter, join or group steps with the column names and the formula, naming each dataset by its name (never its id). dashboard: what it shows and from which datasets, when the output is a dashboard. rules: the rules sheet template (its columns and 3 to 10 example rows) when the logic uses a rules sheet.',
       'outside: one entry per tool in DATA.outsideTools (tool: exactly as given): setup (what to set up, step by step, for the features done with it) and test (how to check it on the sample).',
       'People appear as codes such as [P1]: write a person as their code alone or as a role; never write a name. No value words (savings, return on investment, benefits, costs, KPIs).',
+      ...(i.data ? dataRules('kit') : []),
     ], DESIGN_KIT_SCHEMA, designKitData(i), "an approved Café design: the idea, the tool, the features, the design answers and the plan");
   },
   parse: (raw) => parseChecked<DesignKitOutput>(raw, DESIGN_KIT_SCHEMA, (v) => { trimToSchema(v, DESIGN_KIT_SCHEMA); }),

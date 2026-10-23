@@ -12,7 +12,6 @@ import type { DataCheck, Finding, FindingKind } from './model';
 import type { ReadResult, ReadTable } from './read';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const EMAIL_ONE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 /** Reserved for examples (RFC 2606): an address there is made up. */
 const EXAMPLE_DOMAIN = /@(?:[\w-]+\.)*(?:example\.(?:com|org|net)|[\w-]+\.(?:test|example|invalid))$/i;
 const ROLE_MAILBOX = /^(no-?reply|do-?not-?reply|info|admin|support|help|helpdesk|team|cafe|office|enquiries|contact|service|mailbox|postmaster|notifications?|finance|expenses|hr)$/i;

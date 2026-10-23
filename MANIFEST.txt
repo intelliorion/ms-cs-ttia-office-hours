@@ -35,7 +35,9 @@ cafe-app/src/command/query.ts
 cafe-app/src/comms/eml.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
+cafe-app/src/data/brief.ts
 cafe-app/src/data/check.ts
+cafe-app/src/data/kitSample.ts
 cafe-app/src/data/model.ts
 cafe-app/src/data/profile.ts
 cafe-app/src/data/questions.ts
@@ -132,6 +134,7 @@ cafe-app/tests/command-names.test.ts
 cafe-app/tests/command-query.test.ts
 cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
+cafe-app/tests/data-feed.test.ts
 cafe-app/tests/data-read-check.test.ts
 cafe-app/tests/data-routes.test.ts
 cafe-app/tests/data-tasks.test.ts

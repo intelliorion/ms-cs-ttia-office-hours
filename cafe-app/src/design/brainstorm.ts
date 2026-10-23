@@ -23,6 +23,7 @@ import { toolFeatures } from './choice';
 import { reviewInput } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
 import { writeDiagramFile } from './diagramFile';
+import { codedDataBrief } from '../data/brief';
 
 /** Where design.md is the source of a background tick. */
 export const DESIGN_FILE = 'design.md';
@@ -216,6 +217,8 @@ export async function codedDesignInput(root: string, idea: Idea, state: DesignSt
     ...(learned.length ? { learned } : {}), ...(teamAnswers.length ? { teamAnswers } : {}), stepsSoFar,
     ...(seen.form?.participation ? { form: { participation: seen.form.participation } } : {}),
     ...(seen.flags ? { flags: seen.flags } : {}), ...(seen.graph ? { graph: seen.graph } : {}),
+    // The confirmed data settles the input (and the output when there is a sample of it): the questions aim at its gaps.
+    ...(await codedDataBrief(root, idea.id, state.data, codes)),
   };
   const read = teamAnswers.length + state.steps.filter((s) => s.answer?.trim()).length;
   return { input, codes, read };
@@ -261,6 +264,7 @@ export async function codedDiagramInput(root: string, idea: Idea, state: DesignS
       steps: state.steps.map((s, i) => ({ n: s.n, question: tail[1 + 2 * i], answer: tail[2 + 2 * i], ...(s.tag ? { tag: s.tag } : {}) })),
       points: Object.fromEntries(points.map(([k], i) => [k, tail[1 + 2 * state.steps.length + i]]).filter(([, v]) => v)),
       outsideTools,
+      ...(await codedDataBrief(root, idea.id, state.data, codes)),
     },
   };
 }

@@ -55,4 +55,11 @@ describe('the Submission: what the form said, and what came after', () => {
     expect(el.querySelector('[data-testid="learned-brief"]')).toBeNull();
     expect(el.querySelector('[data-testid="learned"] .hint')?.textContent).toBe('Re-evaluate to have the AI sum up what the answers add.');
   });
+
+  it('the features and the tool saved in the tool picker show in the added colour', () => {
+    render(<Details idea={{ id: 'x', people: { team: [] }, tools: { 'Weekend spend check': 'Dataiku', 'Rules loading': 'Dataiku' } }} />);
+    expect([...el.querySelectorAll('[data-testid="picked"] [data-feature]')].map((x) => x.textContent)).toEqual(['Weekend spend check', 'Rules loading']);
+    expect([...el.querySelectorAll('[data-testid="picked"] [data-tool]')].map((x) => [x.textContent, x.className])).toEqual([['Dataiku', 'tg added']]);
+    expect(el.querySelector('[data-testid="added-legend"]')).not.toBeNull();
+  });
 });

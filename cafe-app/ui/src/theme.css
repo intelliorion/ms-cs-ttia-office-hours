@@ -1057,3 +1057,4 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ds-dot.on{outline:2px solid var(--teal);outline-offset:1px}
 .ds-steps.one{margin:0}
 .ds-see{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.tg.added{border-color:rgba(var(--rgb-added),.7);color:var(--added);border-style:dashed}

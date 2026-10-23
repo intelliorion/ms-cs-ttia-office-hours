@@ -47,7 +47,7 @@
   },
   "deckTemplate": {
     "emails": [],
-    "hint": "Used for the roadshow deck later"
+    "hint": "The full path of the firm template (.potx or .pptx): the roadshow deck takes its colours and fonts"
   },
   "operatorName": {
     "emails": "all"

@@ -36,3 +36,11 @@ export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefine
   };
   return { review: gate('review'), tools: gate('tools'), design: gate('design'), plan: gate('plan') };
 }
+
+/** The roadshow's home is Launch and Learn (4): the section there; a card elsewhere once it holds a to-do list or a deck. */
+export const ROADSHOW_STAGE = 4;
+export function roadshowGate(idea: IdeaLike, roadshow?: { deck?: unknown; prep?: unknown } | null): Gate {
+  if (idea.closed) return roadshow?.deck ? 'summary' : 'hidden';
+  if (idea.stage === ROADSHOW_STAGE) return 'active';
+  return roadshow?.deck || roadshow?.prep ? 'summary' : 'hidden';
+}

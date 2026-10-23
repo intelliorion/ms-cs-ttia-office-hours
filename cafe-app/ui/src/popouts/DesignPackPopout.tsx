@@ -5,7 +5,9 @@ import { NO_AI_TIP } from './aiUi';
 import { DesignDiagram } from './DesignDiagram';
 import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
-import { fileNote, packFiles, pointRows } from './designPack';
+import { fileNote, packFiles, pointRows, ROADSHOW_PACK_FILES } from './designPack';
+import { DeckLinks } from '../panels/RoadshowSection';
+import { roadshowNote, type RoadshowViewLike } from '../panels/roadshowHelpers';
 import { FIT_MARK, scopeLabel } from '../panels/designHelpers';
 
 /**
@@ -19,19 +21,22 @@ export function DesignPackPopout({ id }: { id: string }) {
   const idea = (state?.ideas ?? []).find((i: any) => i.id === id);
   const [design, setDesign] = useState<any>(null);
   const [plan, setPlan] = useState<{ files: string[] } | null>(null);
+  const [roadshow, setRoadshow] = useState<RoadshowViewLike | null>(null);
   const [open, setOpen] = useState<Record<string, string | undefined>>({});
   const [msg, setMsg] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     ideaGet(id, 'design').then((d) => { if (live) setDesign(d); }, () => {});
     ideaGet(id, 'plan').then((p) => { if (live) setPlan(p); }, () => {});
+    ideaGet(id, 'roadshow').then((r) => { if (live) setRoadshow(r); }, () => {});
     return () => { live = false; };
   }, [id]);
   const s = design?.state;
   const steps: any[] = s?.steps ?? [];
   const features: any[] = s?.features ?? [];
   const tool: any = s?.tool;
-  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool));
+  const deck = roadshow?.deck;
+  const files = [...packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool)), ...(deck ? ROADSHOW_PACK_FILES.filter((f) => deck.files.includes(f.replace('roadshow/', ''))) : [])];
   // The AI's diagram when there is one, else a plain one drawn here from the design, so the pack never shows nothing.
   const stored = s?.diagram;
   const spec = stored?.spec ?? (s ? plainDiagram(s) : null);
@@ -128,6 +133,13 @@ export function DesignPackPopout({ id }: { id: string }) {
                   </ul>
                 )}
               </div>
+            </section>
+          )}
+          {deck && (
+            <section className="sec dp-sec" data-testid="pack-roadshow">
+              <h3>The roadshow <span className="sec-n">{roadshowNote(roadshow)}</span></h3>
+              <p className="dp-summary">{deck.title}</p>
+              <DeckLinks id={id} />
             </section>
           )}
           <section className="sec dp-sec">

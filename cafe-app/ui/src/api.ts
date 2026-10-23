@@ -34,9 +34,15 @@ export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismi
   post(`/api/inbox/${encodeURIComponent(id)}/${what}`, body);
 
 /** The design series: GET an idea's design (state + live design.md) or its plan (plan.md + kit files). */
-export const ideaGet = (id: string, what: 'design' | 'plan') => fetch(`/api/ideas/${encodeURIComponent(id)}/${what}`).then((r) => handle<any>(r));
+export const ideaGet = (id: string, what: 'design' | 'plan' | 'roadshow') => fetch(`/api/ideas/${encodeURIComponent(id)}/${what}`).then((r) => handle<any>(r));
 export type DesignRoute = 'tools/suggest' | 'tools/features/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan' | 'tools/prep/answer' | 'tools/prep/email' | 'design/diagram';
 export const designPost = (id: string, what: DesignRoute, body: unknown = {}) => post(`/api/ideas/${encodeURIComponent(id)}/${what}`, body);
+
+/** Launch and Learn: a person's photo from the file picker, as its own bytes, with the person it is for. */
+export const roadshowUpload = (id: string, person: string, file: File) =>
+  fetch(`/api/ideas/${encodeURIComponent(id)}/roadshow/photo-upload`, {
+    method: 'POST', headers: { 'x-filename': filenameHeader(file.name), 'x-person': person, 'content-type': 'application/octet-stream' }, body: file,
+  }).then((r) => handle<any>(r));
 
 /** The Café assistant: conversations, one conversation's messages, and a message sent with live progress. */
 export const getChat = () => fetch('/api/chat').then((r) => handle<{ threads: any[]; current: { thread: any; entries: any[] } }>(r));

@@ -1122,3 +1122,21 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .dd-hint{font-size:12.5px}
 @media (max-width:760px){.dd-card{position:static;width:100%;max-height:none;margin-top:8px;box-shadow:none}.dd-box{max-height:420px}.dd-redraw{margin:0 0 4px;justify-content:flex-start}}
 .ds-final{margin-top:10px}
+/* Launch and Learn: the roadshow (photos per person, the to-do list, the deck and its files) */
+.rsh-people{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:8px}
+.rsh-person{display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid rgba(var(--rgb-line),.16);border-radius:6px;background:rgba(var(--rgb-s2),.25)}
+.rsh-ph{flex:none;width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(var(--rgb-accent),.55)}
+.rsh-ph.ini{display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--rgb-accent),.18);color:var(--strong);font-weight:700;font-size:15px;border-style:dashed}
+.rsh-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.rsh-who{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.rsh-path{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rsh-path input[type=text]{flex:1 1 180px;min-width:0;font-family:var(--mono);font-size:12.5px}
+.rsh-path label.btn{cursor:pointer}.rsh-path label.btn.disabled{opacity:.5;cursor:default}
+.rsh-slides{list-style:none;margin:8px 0;padding:0;display:flex;flex-direction:column;gap:2px;counter-reset:sl}
+.rsh-slides li{counter-increment:sl;display:grid;grid-template-columns:22px 78px 1fr auto;gap:8px;align-items:baseline;font-size:13px;padding:3px 6px;border-radius:4px}
+.rsh-slides li:nth-child(odd){background:rgba(var(--rgb-s2),.25)}
+.rsh-slides li::before{content:counter(sl);color:var(--muted);font-family:var(--mono);font-size:11.5px;text-align:right}
+.rsh-k{color:var(--teal);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase}
+.rsh-t{min-width:0;overflow-wrap:anywhere}.rsh-m{color:var(--muted);font-family:var(--mono);font-size:11.5px}
+.rsh-out{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.rsh-out a.btn{text-decoration:none;display:inline-block}

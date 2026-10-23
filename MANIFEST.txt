@@ -203,6 +203,7 @@ cafe-app/ui/src/panels/IdeasPane.tsx
 cafe-app/ui/src/panels/ReviewSelect.test.tsx
 cafe-app/ui/src/panels/ReviewSelect.tsx
 cafe-app/ui/src/panels/ReviewUpdates.test.tsx
+cafe-app/ui/src/panels/RoadshowSection.tsx
 cafe-app/ui/src/panels/StageSummaries.tsx
 cafe-app/ui/src/panels/StarDetails.tsx
 cafe-app/ui/src/panels/ToolPickerSection.tsx
@@ -215,6 +216,8 @@ cafe-app/ui/src/panels/filterIdeas.ts
 cafe-app/ui/src/panels/ideasList.test.ts
 cafe-app/ui/src/panels/outlook.test.ts
 cafe-app/ui/src/panels/outlook.ts
+cafe-app/ui/src/panels/roadshow.test.tsx
+cafe-app/ui/src/panels/roadshowHelpers.ts
 cafe-app/ui/src/panels/stageGate.test.ts
 cafe-app/ui/src/panels/stageGate.ts
 cafe-app/ui/src/panels/starProfile.test.ts
@@ -283,8 +286,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-DijgSYoA.js
-cafe-app/web/assets/index-DyxQ7CL_.css
+cafe-app/web/assets/index-Dvx1P56y.js
+cafe-app/web/assets/index-OI-1-EUm.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

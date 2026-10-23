@@ -9,13 +9,15 @@ import { EmailMenu } from './EmailMenu';
 import { openedText } from './outlook';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
-import { sectionsFor, type SectionKey } from './stageGate';
+import { roadshowGate, sectionsFor, type SectionKey } from './stageGate';
+import { RoadshowCard, RoadshowSection } from './RoadshowSection';
+import type { RoadshowViewLike } from './roadshowHelpers';
 import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
 
 /**
  * One idea, in the left panel in place of the list: what to do now. Back, its ID, round and stage, then the suggestion
  * strip, the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3;
- * cards for the earlier ones after that). Emails open in Outlook from the head's Email menu and the sections' own
+ * the Roadshow at stage 4; cards for the earlier ones after that). Emails open in Outlook from the head's Email menu and the sections' own
  * buttons; one unsent email per stage at most. What was submitted, its links and its history are on the right
  * (ContextPanels); the universe beside it stays focused on its star.
  */
@@ -32,7 +34,9 @@ export function IdeaDetails({ id }: { id: string }) {
   /** The design series: design.yaml (+ live design.md) and plan.md + kit files, read when the idea opens and after each change. */
   const [design, setDesign] = useState<DesignView | null>(null);
   const [plan, setPlan] = useState<PlanView | null>(null);
-  /** Which design section is waiting on the AI ('tools', 'design', 'plan'); null for the Review and Graph AI calls. */
+  /** Launch and Learn: the roadshow's to-do list, photos and deck, read with the design. */
+  const [roadshow, setRoadshow] = useState<RoadshowViewLike | null>(null);
+  /** Which section is waiting on the AI ('tools', 'design', 'plan', 'roadshow'); null for the Review and Graph AI calls. */
   const [aiFor, setAiFor] = useState<string | null>(null);
   /** Cards the operator reopened with Edit; cleared when another idea opens. */
   const [editing, setEditing] = useState<SectionKey[]>([]);
@@ -41,14 +45,15 @@ export function IdeaDetails({ id }: { id: string }) {
   idRef.current = id;
 
   const loadDesign = useCallback(async () => {
-    const [d, p] = await Promise.all([ideaGet(id, 'design').catch(() => null), ideaGet(id, 'plan').catch(() => null)]);
+    const [d, p, r] = await Promise.all([ideaGet(id, 'design').catch(() => null), ideaGet(id, 'plan').catch(() => null), ideaGet(id, 'roadshow').catch(() => null)]);
     if (idRef.current !== id) return; // another idea opened meanwhile
     // A failed re-read keeps what is already shown.
     if (d) setDesign(d);
     if (p) setPlan(p);
+    if (r) setRoadshow(r);
   }, [id]);
   useEffect(() => {
-    setDesign(null); setPlan(null); void loadDesign();
+    setDesign(null); setPlan(null); setRoadshow(null); void loadDesign();
   }, [loadDesign]);
   useEffect(() => {
     setNotice(null); setUndoKey(null); setEditing([]);
@@ -228,6 +233,12 @@ export function IdeaDetails({ id }: { id: string }) {
             noAi={noAi} call={designCall} />
         )}
         {gates.plan === 'summary' && <PlanCard id={id} plan={plan} onEdit={edit('plan')} />}
+        {/* Launch and Learn: the active work of the stage (the cards above are read-only there). */}
+        {roadshowGate(idea, roadshow) === 'active' && (
+          <RoadshowSection key={`roadshow-${id}`} idea={idea} view={roadshow} busy={busy || (aiBusy && aiFor !== 'roadshow')} aiWorking={aiFor === 'roadshow'}
+            noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />
+        )}
+        {roadshowGate(idea, roadshow) === 'summary' && <RoadshowCard id={id} view={roadshow} />}
       </div>
     </div>
   );

@@ -83,7 +83,8 @@ README.txt in the workspace says the same.
 data/                 the Café's data: safe to delete
   rounds/             one folder per round you make (ROUND-001, ...): its name and dates
   inbox/              dropped files and exports (see Import: drop anything); inbox/held/ keeps files the app will not read
-  ideas/              one folder per idea: the submission, its emails, its history
+  ideas/              one folder per idea: the submission, its emails, its history, the design files and the
+                      roadshow (roadshow.yaml, and roadshow/ with the deck, the script and the photos)
   cohorts/  roadshows/
   graph/              the universe: ai-links.jsonl (AI suggestions and your Yes or No), operator.jsonl (your
                       changes from the assistant), layout.json (cached star positions)
@@ -409,7 +410,8 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 - If `graph/ai-links.jsonl` has a line the app cannot read, that line is skipped (and kept in the file), the
   rest of the universe still shows, and `GET /api/graph` lists it under `problems`. A broken
   `graph/layout.json` is only a cache: the app lays the universe out afresh.
-- One AI call runs at a time, behind the server's lock, for up to 90 seconds.
+- One AI call runs at a time, behind the server's lock, for up to 90 seconds (the roadshow deck, which writes every
+  slide and its script in one reply, up to 5 minutes).
 
 ### Test hook
 
@@ -426,7 +428,7 @@ Each action section has a home stage. Before it, the section is hidden; at it, t
 |---|---|---|
 | 1 Review and Select | Decision (the choice first, the five checks fold away under it); the acknowledgement (E1) is sent from Emails | |
 | 2 Design series | Features and tool, then Design, then Plan and kits | Decision |
-| 3 Launch and Learn | nothing new | Decision, Features and tool, Design, Plan |
+| 3 Launch and Learn | Roadshow (photos, what the story needs, the deck) | Decision, Features and tool, Design (no Edit); Plan |
 
 There is no Submit Idea stage: an imported idea starts in Review and Select, and the checks that used to sit in
 Submit Idea (own words, no personal data, duplicates, acknowledgement) are Review and Select steps. In the files the
@@ -553,6 +555,62 @@ from the Superpowers project, copied under the MIT licence (`skills/LICENSE-supe
   instruction for a coding agent that works only inside the kit folder.
 - The stage never moves on its own. Saving the features and tool, answering the must-show and smallest-input questions
   and approving the design tick their steps in the background (s3e, s3c, s3d, s3f).
+
+## Launch and Learn: the roadshow
+
+In Launch and Learn the decision, the features and tool and the design are cards you read, not edit; the **Roadshow**
+section is the work of the stage. It builds the team's deck for the roadshow (about ten minutes, with a demo) and the
+script to talk, in three steps.
+
+1. **Photos.** One row per person on the idea (the submitter and every team member, with their roles). Type the path of
+   a picture on this computer (`/Users/…/photo.jpg` or `C:\…\photo.png`; quotes from "Copy as path" and `~` are fine)
+   and press **Use**, or **Choose…** the file. The app checks it is a picture (named .png, .jpg, .jpeg, .webp or .gif,
+   at most 5 MB, never a folder, and its first bytes really a PNG, JPEG, WebP or GIF; nothing else is read) and COPIES it
+   into the idea folder as `roadshow/photos/<person>.<ext>`, so the deck never depends on the original. A small
+   preview shows; **Remove** takes the copy off (never the original). Optional: a person with no photo gets their
+   initials in a circle. Photos never go to the AI.
+2. **What the story needs.** **Suggest** has the AI (task `roadshow-prep`) read everything the idea holds (the form,
+   the decision, the brief, every answer, the features, the tool, the design, the plan and the dates; names coded)
+   and list what the deck still needs from the team: what was hard, what surprised them, what they would do
+   differently, the demo, before and after, how long it took, what someone else needs to reuse it, the one question
+   for the room. Only what the record does not hold is asked. It is the decision's to-do list: a box per item,
+   **✉ Draft email** (the open questions as the E2, opened in Outlook and counted as sent, with Undo) and
+   **Re-evaluate**. What you paste is saved on the idea at once as an answer (source "roadshow"), with nothing to say
+   yes to, and the reply rewrites **Learned since the form**. The list is kept in `roadshow.yaml`.
+3. **The deck.** **Build the deck** has the AI (task `roadshow-deck`) write the slides and the speaker script as a
+   checked structure (10 to 14 slides, about ten minutes: title, the problem, how it works today, the team, what was
+   built, the design, the tool, the demo, what was hard, what was learned, reuse, next steps, one question, thanks;
+   each with points, an optional quote, a visual and the script in the presenter's voice, with cues such as "[switch
+   to the demo]"). The code then checks it: a value claim (ROI, savings, KPIs…) or a figure the record does not hold
+   is taken out (a point, or a sentence of the script), a visual must be one the app can draw, the deck opens with a
+   title slide and has the team slide, and the timings add up to about ten minutes; what it changed is listed under
+   the deck. The app then draws, in code, into the idea folder's `roadshow/`:
+
+   ```
+   deck.html        ONE self-contained page (no network): 16:9 slides, ←/→ or click to move, S for the speaker
+                    notes (with the time so far), F for full screen, T for light or dark. The team slide shows each
+                    person's photo (inlined) or initials, name and roles; the design slide draws the design diagram
+                    as the design pack does; the tool slide the fit table; a timeline slide the idea's dates.
+                    Printing gives one slide per page.
+   script.md        the talk track, slide by slide, with timings and cues
+   run-of-show.md   who does what, when: the demo cue, the one question, the four feedback questions
+   deck.pptx        the same slides for PowerPoint (pptxgenjs), photos embedded, the diagram as shapes, the script
+                    as each slide's speaker notes
+   ```
+
+   **▶ Present** opens the deck in a new tab (press F there for full screen); **Open script** and **Run of show**
+   open as text; **Export PowerPoint** downloads deck.pptx; **Export PDF** opens the deck's print window: choose
+   **Save as PDF**. **Open the folder** shows the files. When the record changes after a build (an answer, the team,
+   the design, the plan) the section says the deck is out of date and offers **Rebuild**; when only the photos changed,
+   **Update the files** draws them again with no AI. The deck is also reachable from **See the design** (the design
+   pack), which can read the script and the run of show.
+
+**The firm template.** pptxgenjs cannot fill a PowerPoint template's slide masters, so the app never claims to. When
+Settings → Project configuration → Firm deck template holds the full path of a .potx, .pptx or .thmx file, the app reads
+its theme and draws both decks in its colours and fonts, and says so under the deck; its masters, logos and layouts are
+not used (put the slides on them with Reuse Slides in PowerPoint). When it is empty, or not a file the app can read, the
+deck uses the app's own clean look and says that too. A WebP photo shows in deck.html; deck.pptx shows the initials
+(not every PowerPoint opens WebP), and the build says so.
 
 ## Tests
 

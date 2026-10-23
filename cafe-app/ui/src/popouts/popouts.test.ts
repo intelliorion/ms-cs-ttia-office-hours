@@ -44,7 +44,7 @@ describe('roundFieldsUnblock', () => {
     expect(roundFieldsUnblock('csicLink')).toBe('Needed for E5, E9, E11');
     expect(roundFieldsUnblock('teamsLink')).toBe('Needed for E7, E10, RS, SR');
     expect(roundFieldsUnblock('distList')).toBe('Needed for E0, E0B');
-    expect(roundFieldsUnblock('deckTemplate')).toBe('Used for the roadshow deck later');
+    expect(roundFieldsUnblock('deckTemplate')).toBe('The full path of the firm template (.potx or .pptx): the roadshow deck takes its colours and fonts');
     expect(roundFieldsUnblock('operatorName')).toBe('Needed for every email');
     expect(roundFieldsUnblock('open')).toBe('');
   });

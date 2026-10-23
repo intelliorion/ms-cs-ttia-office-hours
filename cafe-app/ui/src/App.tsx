@@ -24,7 +24,7 @@ declare global { interface Window { __cafe?: Record<string, (...a: any[]) => voi
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, selectedIds, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, setLabels, resetView,
-    leftView, openIdea, backToList, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
+    leftView, openIdea, backToList, trail, goBack, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // A click shows what was clicked, with no card in between (see clickStar).
   const onSelect = clickStar;
   const chatOpen = useChat((c) => c.open);
@@ -54,13 +54,15 @@ export default function App() {
       if (a === 'none') return;
       e.preventDefault();
       if (a === 'blur') (e.target as HTMLElement).blur?.();
+      // After following links, Esc steps back along them first.
+      else if ((a === 'back' || a === 'deselect') && trail.length) goBack();
       else if (a === 'back') backToList();
       else if (a === 'drawer') setDrawer(null);
       else select(null);
     };
     document.addEventListener('keydown', on);
     return () => document.removeEventListener('keydown', on);
-  }, [cardFor, popout, select, focus, drawer, leftView, backToList, setDrawer]);
+  }, [cardFor, popout, select, focus, drawer, leftView, backToList, trail, goBack, setDrawer]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => { if (focusKeyApplies(e, !!popout)) { e.preventDefault(); toggleFocus(); } };
     document.addEventListener('keydown', on);

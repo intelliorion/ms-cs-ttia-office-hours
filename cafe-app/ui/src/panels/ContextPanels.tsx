@@ -82,7 +82,7 @@ function IdeaSubmission({ id }: { id: string }) {
 
 /** An idea in the universe: its links and its history, as two tabs. To grow it, ask the command bar ("grow it"). */
 function IdeaConnections({ id }: { id: string }) {
-  const { graph, state, refresh, clickStar } = useStore();
+  const { graph, state, refresh, followLink } = useStore();
   const [tab, setTab] = useState<'links' | 'history'>('links');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
@@ -106,7 +106,7 @@ function IdeaConnections({ id }: { id: string }) {
       {tab === 'links' ? <>
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
-          onOpen={clickStar} />
+          onOpen={followLink} />
       </> : <History history={history} steps={state?.steps} />}
     </div>
   );
@@ -114,7 +114,7 @@ function IdeaConnections({ id }: { id: string }) {
 
 /** Any star that is not an idea: what it is, its links and where each came from. */
 function StarLinks({ nodeId }: { nodeId: string }) {
-  const { graph, refresh, select, clickStar } = useStore();
+  const { graph, refresh, select, followLink, trail, goBack } = useStore();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   useEffect(() => setMsg(null), [nodeId]);
@@ -131,6 +131,7 @@ function StarLinks({ nodeId }: { nodeId: string }) {
   const colour = (NODE_COLOURS as Record<string, string>)[node.type] ?? '#9fb0ae';
   return (
     <div className="ctx-scroll" data-testid="ctx-star">
+      {trail.length > 0 && <button className="btn back ctx-back" data-action="link-back" title="Back to where you were (Esc)" onClick={goBack}>← Back</button>}
       <div className="ctx-star-h">
         <div>
           <div className="nc-type"><span className="dot" style={{ background: colour }} />{NODE_LABELS[node.type as keyof typeof NODE_LABELS] ?? node.type}</div>
@@ -141,14 +142,14 @@ function StarLinks({ nodeId }: { nodeId: string }) {
         <button className="x" aria-label="Back to the overview" title="Back to the overview" onClick={() => select(null)}>✕</button>
       </div>
       {msg && <div className={`pop-notice ${msg.kind}`} role="status">{msg.text}</div>}
-      <LinkTable rows={rows} busy={busy} compact onConfirm={(id) => void confirm(id)} onOpen={clickStar} />
+      <LinkTable rows={rows} busy={busy} compact onConfirm={(id) => void confirm(id)} onOpen={followLink} />
     </div>
   );
 }
 
 /** The ideas a star touches, with how many sit at each stage, each one a click from opening. */
 function IdeasAround({ nodeId }: { nodeId: string }) {
-  const { graph, state, openIdea } = useStore();
+  const { graph, state, followLink } = useStore();
   if (!graph) return null;
   const around = ideasAround(graph, nodeId);
   const rows = around.map((a) => {
@@ -164,7 +165,7 @@ function IdeasAround({ nodeId }: { nodeId: string }) {
       <ul className="ctx-ideas">
         {rows.map((r) => (
           <li key={r.id}>
-            <button className="ctx-idea" data-idea={r.idea.id} onClick={() => openIdea(r.idea.id)}>
+            <button className="ctx-idea" data-idea={r.idea.id} onClick={() => followLink(`idea:${r.idea.id}`)}>
               <span className="iid">{r.idea.id}</span>
               <span className="ctx-idea-t">{r.m.title}</span>
               <span className="stg" style={{ ['--c' as string]: r.m.stageColour }}>{r.m.stageLabel}</span>

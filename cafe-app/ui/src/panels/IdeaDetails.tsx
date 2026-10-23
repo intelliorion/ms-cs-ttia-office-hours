@@ -20,7 +20,7 @@ import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
  * (ContextPanels); the universe beside it stays focused on its star.
  */
 export function IdeaDetails({ id }: { id: string }) {
-  const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
+  const { state, graph, refresh, openPopout, backToList, trail, goBack, notice, setNotice, suggest, setSuggest, ai } = useStore();
   const ring = useStageRing();
   const [aiBusy, setAiBusy] = useState(false);
   const idea = state?.ideas.find((i: any) => i.id === id);
@@ -129,7 +129,9 @@ export function IdeaDetails({ id }: { id: string }) {
 
   const head = (extra?: React.ReactNode) => (
     <div className="id-head">
-      <button ref={backBtn} className="btn back" data-action="back" aria-label="Back to the ideas list" title="Back to the list (Esc)" onClick={backToList}>← Back</button>
+      {/* After following a link here, Back goes to where the link was clicked; otherwise to the list. */}
+      <button ref={backBtn} className="btn back" data-action="back" aria-label={trail.length ? 'Back to where you were' : 'Back to the ideas list'}
+        title={trail.length ? 'Back to where you were (Esc)' : 'Back to the list (Esc)'} onClick={trail.length ? goBack : backToList}>← Back</button>
       <span className="iid">{id}</span>
       {extra}
     </div>

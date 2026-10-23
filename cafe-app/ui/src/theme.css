@@ -727,6 +727,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ctx-tabs button{border:1px solid var(--panel-border);background:rgba(var(--rgb-s2),.5);color:var(--muted);border-radius:999px;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
 .ctx-tabs button.on{border-color:var(--teal);color:var(--strong);box-shadow:0 0 10px rgba(var(--rgb-accent),.2) inset}
 .ctx-star-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ctx-back{align-self:flex-start;margin-bottom:8px}
 .ctx-star-t{font-size:20px;font-weight:700;color:var(--strong);margin:2px 0 4px;line-height:1.25}
 .ctx-star-h .x{width:30px;height:30px;font-size:13px}
 .ctx-stages{display:flex;flex-wrap:wrap;gap:8px}

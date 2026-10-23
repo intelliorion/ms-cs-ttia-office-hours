@@ -67,12 +67,22 @@ export function detectSoftwareGl(renderer: string | null): boolean {
 export const SOFTWARE_NOTICE = 'Lite quality picked for this browser (software graphics). Change it with the Quality button.';
 export const SLOW_NOTICE = 'Switched to Lite quality: this browser was drawing under 20 fps.';
 
-/** The rest of the universe starts 80% hidden each time something new comes into view; 50% at least, 100% only what is in view. */
+/** How much of the rest of the universe is hidden while something is in view: 80% at first, 50% at least, 100% only what is in view. */
 export const DEFAULT_HIDE = 0.8;
 export const MIN_HIDE = 0.5;
 export const clampHide = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(MIN_HIDE, Math.round(v * 100) / 100)) : DEFAULT_HIDE);
-/** Something new in view (a click, a pick, a lit answer): the slider starts again at the default. */
-const FRESH = { hideUnlit: DEFAULT_HIDE };
+/** The picture's settings are remembered in this browser: the slider level, the labels, the kinds of star switched off. */
+const HIDE_KEY = 'cafe-hide';
+const LABELS_KEY = 'cafe-labels';
+const HIDDEN_TYPES_KEY = 'cafe-hidden-types';
+const remember = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
+const recall = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+export function readHide(): number { const v = recall(HIDE_KEY); return v === null ? DEFAULT_HIDE : clampHide(Number(v)); }
+export function readLabels(): LabelMode { const v = recall(LABELS_KEY); return v === 'full' || v === 'smart' || v === 'none' ? v : DEFAULT_LABELS; }
+export function readHiddenTypes(): string[] {
+  try { const v = JSON.parse(recall(HIDDEN_TYPES_KEY) ?? '[]'); return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : []; } catch { return []; }
+}
+const writeHiddenTypes = (t: string[]) => { remember(HIDDEN_TYPES_KEY, JSON.stringify(t)); return t; };
 
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
@@ -90,6 +100,10 @@ export function openIdeaPatch(id: string, narrow: boolean) {
 }
 /** Back to the list: the selection and the camera stay; the idea's notice and suggestion go. */
 export function backPatch() { return { leftView: LIST_VIEW, notice: null, suggest: null }; }
+/** Where the panels were before a link was followed: what the left panel showed and which star was picked. */
+export interface Spot { leftView: LeftView; selectedId: string | null }
+/** Most links followed in a row that Back remembers. */
+export const TRAIL_MAX = 30;
 export type EscAction = 'none' | 'blur' | 'back' | 'drawer' | 'deselect';
 /** What Esc does, in order: a modal handles its own; a text field lets go; idea details go back; a drawer closes; a star card closes. */
 export function escAction(s: { modal: boolean; leftView: LeftView; detailsVisible: boolean; drawer: Drawer; card: boolean; target?: any }): EscAction {
@@ -112,7 +126,7 @@ export interface AppState {
   /** The stars a command-bar answer rests on, lit in the universe until cleared. */
   highlight: string[] | null;
   setHighlight: (ids: string[] | null) => void;
-  /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Back to 80% when something new comes into view. */
+  /** While something is in view: how much of the rest is hidden, 0.5 to 1 (1 shows only what is in view). Remembered in this browser. */
   hideUnlit: number;
   /** Kinds of star switched off in the picture only (the bottom bar's Show filter). Not remembered. */
   hiddenTypes: string[];
@@ -150,6 +164,12 @@ export interface AppState {
    * With Ctrl/⌘ (additive) the star joins the selection, or leaves it if it was in; two or more make a multi-selection.
    */
   clickStar: (id: string | null, additive?: boolean) => void;
+  /** Where Back goes after following links from the Connections or Star panel, newest last. Any other move clears it. */
+  trail: Spot[];
+  /** A click on a link: remember where the panels are, then go to that star as a click on it would. */
+  followLink: (id: string) => void;
+  /** Back along the trail: the panels and the picked star as they were before the last link was followed. */
+  goBack: () => void;
   backToList: () => void;
   notice: Notice | null;
   suggest: Suggest | null;
@@ -172,8 +192,22 @@ export interface AppState {
   setSuggest: (s: Suggest | null) => void;
 }
 
+/** What a click on a star changes (see clickStar). */
+function clickPatch(s: AppState, id: string | null, additive = false): Partial<AppState> {
+  if (!id) return { selectedId: null, selectedIds: [] };
+  if (additive) {
+    const now = s.selectedIds.length ? s.selectedIds : s.selectedId ? [s.selectedId] : [];
+    const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
+    if (next.length >= 2) return { ...(s.leftView.kind === 'idea' && !s.focus ? backPatch() : {}), selectedIds: next, selectedId: next[next.length - 1], highlight: null };
+    return { selectedIds: [], selectedId: next[0] ?? null, highlight: null };
+  }
+  if (s.focus) return { selectedId: id, selectedIds: [], highlight: null };
+  if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null };
+  return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, selectedIds: [], highlight: null };
+}
+
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: DEFAULT_LABELS, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', theme: readTheme(), qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: readHide(), hiddenTypes: readHiddenTypes(), hoverId: null, labels: readLabels(), viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', theme: readTheme(), qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, trail: [], notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -189,11 +223,11 @@ export const useStore = create<AppState>((set) => ({
       }));
     } catch (e) { set({ notice: { text: (e as Error).message, kind: 'error' } }); }
   },
-  select: (id) => set({ selectedId: id, selectedIds: [], ...FRESH }),
+  select: (id) => set({ selectedId: id, selectedIds: [], trail: [] }),
   hover: (id) => set({ hoverId: id }),
-  toggleLabels: () => set((s) => ({ labels: nextLabelMode(s.labels) })),
-  setLabels: (m) => set({ labels: m }),
-  resetView: () => set((s) => ({ selectedId: null, selectedIds: [], viewNonce: s.viewNonce + 1 })),
+  toggleLabels: () => set((s) => { const labels = nextLabelMode(s.labels); remember(LABELS_KEY, labels); return { labels }; }),
+  setLabels: (m) => { remember(LABELS_KEY, m); set({ labels: m }); },
+  resetView: () => set((s) => ({ selectedId: null, selectedIds: [], trail: [], viewNonce: s.viewNonce + 1 })),
   // Entering focus starts clean; leaving it keeps the star clicked in focus mode, so the panels show it.
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, selectedIds: s.focus ? s.selectedIds : [], viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
@@ -210,27 +244,23 @@ export const useStore = create<AppState>((set) => ({
     return { quality: 'lite', notice: { text: SLOW_NOTICE, kind: 'ok' } };
   }),
   openPopout: (p) => set({ popout: p, drawer: null }),
-  openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return { ...openIdeaPatch(id, isNarrow()), ...FRESH }; }),
-  backToList: () => set(backPatch()),
-  clickStar: (id, additive = false) => set((s) => {
-    if (!id) return { selectedId: null, selectedIds: [] };
-    // Something new in view: the slider starts again at the default.
-    if (additive) {
-      const now = s.selectedIds.length ? s.selectedIds : s.selectedId ? [s.selectedId] : [];
-      const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
-      if (next.length >= 2) return { ...(s.leftView.kind === 'idea' && !s.focus ? backPatch() : {}), selectedIds: next, selectedId: next[next.length - 1], highlight: null, ...FRESH };
-      return { selectedIds: [], selectedId: next[0] ?? null, highlight: null, ...FRESH };
-    }
-    if (s.focus) return { selectedId: id, selectedIds: [], highlight: null, ...FRESH };
-    if (id.startsWith('idea:')) return { ...openIdeaPatch(id.slice(5), isNarrow()), highlight: null, ...FRESH };
-    return { ...(s.leftView.kind === 'idea' ? backPatch() : {}), selectedId: id, selectedIds: [], highlight: null, ...FRESH };
+  openIdea: (id) => set((s) => { if (s.focus) writeFocus(false); return { ...openIdeaPatch(id, isNarrow()), trail: [] }; }),
+  backToList: () => set({ ...backPatch(), trail: [] }),
+  clickStar: (id, additive = false) => set((s) => ({ ...clickPatch(s, id, additive), trail: [] })),
+  followLink: (id) => set((s) => ({
+    ...clickPatch(s, id),
+    trail: [...s.trail, { leftView: s.leftView, selectedId: s.selectedId }].slice(-TRAIL_MAX),
+  })),
+  goBack: () => set((s) => {
+    const to = s.trail.at(-1); if (!to) return {};
+    return { leftView: to.leftView, selectedId: to.selectedId, selectedIds: [], highlight: null, notice: null, suggest: null, trail: s.trail.slice(0, -1) };
   }),
   closePopout: () => set({ popout: null, suggest: null, notice: null }),
   setNotice: (n) => set({ notice: n }),
-  setHighlight: (ids) => set({ highlight: ids?.length ? ids : null, ...(ids?.length ? FRESH : {}) }),
-  setHideUnlit: (v) => set({ hideUnlit: clampHide(v) }),
-  toggleType: (type) => set((s) => ({ hiddenTypes: s.hiddenTypes.includes(type) ? s.hiddenTypes.filter((t) => t !== type) : [...s.hiddenTypes, type] })),
-  showAllTypes: () => set({ hiddenTypes: [] }),
+  setHighlight: (ids) => set({ highlight: ids?.length ? ids : null }),
+  setHideUnlit: (v) => { const hideUnlit = clampHide(v); remember(HIDE_KEY, String(hideUnlit)); set({ hideUnlit }); },
+  toggleType: (type) => set((s) => ({ hiddenTypes: writeHiddenTypes(s.hiddenTypes.includes(type) ? s.hiddenTypes.filter((t) => t !== type) : [...s.hiddenTypes, type]) })),
+  showAllTypes: () => set({ hiddenTypes: writeHiddenTypes([]) }),
   setSuggest: (x) => set({ suggest: x }),
 }));
 

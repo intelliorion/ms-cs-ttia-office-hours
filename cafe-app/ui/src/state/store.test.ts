@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 const api = vi.hoisted(() => ({ getState: vi.fn(), getGraph: vi.fn(), getAiStatus: vi.fn() }));
 vi.mock('../api', () => api);
@@ -241,5 +241,61 @@ describe('Ctrl/⌘+click: several stars', () => {
     useStore.getState().clickStar('team:gss', true);
     useStore.getState().clickStar('capability:x');
     expect(useStore.getState()).toMatchObject({ selectedIds: [], selectedId: 'capability:x' });
+  });
+});
+
+describe('following links', () => {
+  let useStore: typeof import('./store').useStore;
+  beforeAll(async () => { ({ useStore } = await import('./store')); });
+  const start = () => useStore.setState({ leftView: { kind: 'idea', id: 'CAFE-2026-001' }, selectedId: 'idea:CAFE-2026-001', selectedIds: [], trail: [], focus: false } as any);
+
+  it('a followed link can be walked back, one step at a time, to where it started', () => {
+    start();
+    useStore.getState().followLink('team:legal');
+    expect(useStore.getState().leftView).toEqual({ kind: 'list' });
+    expect(useStore.getState().selectedId).toBe('team:legal');
+    useStore.getState().followLink('idea:CAFE-2026-002');
+    expect(useStore.getState().leftView).toEqual({ kind: 'idea', id: 'CAFE-2026-002' });
+    expect(useStore.getState().trail).toHaveLength(2);
+    useStore.getState().goBack();
+    expect(useStore.getState().selectedId).toBe('team:legal');
+    expect(useStore.getState().leftView).toEqual({ kind: 'list' });
+    useStore.getState().goBack();
+    expect(useStore.getState().leftView).toEqual({ kind: 'idea', id: 'CAFE-2026-001' });
+    expect(useStore.getState().selectedId).toBe('idea:CAFE-2026-001');
+    expect(useStore.getState().trail).toEqual([]);
+    useStore.getState().goBack(); // nothing left: no change
+    expect(useStore.getState().selectedId).toBe('idea:CAFE-2026-001');
+  });
+
+  it('any other move starts a fresh trail', () => {
+    for (const move of [
+      () => useStore.getState().clickStar('team:gss'),
+      () => useStore.getState().openIdea('CAFE-2026-003'),
+      () => useStore.getState().backToList(),
+      () => useStore.getState().select(null),
+      () => useStore.getState().resetView(),
+    ]) {
+      start();
+      useStore.getState().followLink('team:legal');
+      move();
+      expect(useStore.getState().trail).toEqual([]);
+    }
+  });
+});
+
+describe('picture settings', () => {
+  it('labels and the kinds of star switched off are remembered in this browser', async () => {
+    const { useStore, readLabels, readHiddenTypes } = await import('./store');
+    useStore.getState().setLabels('none');
+    expect(readLabels()).toBe('none');
+    useStore.getState().toggleLabels();
+    expect(readLabels()).toBe(useStore.getState().labels);
+    useStore.getState().toggleType('Person');
+    expect(readHiddenTypes()).toEqual(useStore.getState().hiddenTypes);
+    useStore.getState().showAllTypes();
+    expect(readHiddenTypes()).toEqual([]);
+    localStorage.setItem('cafe-labels', 'bogus');
+    expect(readLabels()).toBe('smart');
   });
 });

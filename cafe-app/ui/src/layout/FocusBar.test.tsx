@@ -53,15 +53,17 @@ describe('the focus bar', () => {
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, null, lit, 0).opacity).toBe(0);
     expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null, lit, 0).opacity).toBe(LINK_IN_VIEW);
   });
-  it('each new thing in view starts at 80% again: the level is not carried from one click to the next', () => {
+  it('the level is kept from one click to the next, and remembered in this browser', async () => {
     useStore.setState({ highlight: null, selectedId: null, selectedIds: [], leftView: { kind: 'list' } as any, focus: false });
     useStore.getState().clickStar('team:gss');
     useStore.getState().setHideUnlit(1);
-    expect(useStore.getState().hideUnlit).toBe(1);
     useStore.getState().clickStar('entity:cs');
-    expect(useStore.getState().hideUnlit).toBe(0.8);
-    useStore.getState().setHideUnlit(0.5);
+    expect(useStore.getState().hideUnlit).toBe(1);
+    useStore.getState().setHideUnlit(0.6);
     useStore.getState().setHighlight(['team:gss']);
-    expect(useStore.getState().hideUnlit).toBe(0.8);
+    expect(useStore.getState().hideUnlit).toBe(0.6);
+    const { readHide } = await import('../state/store');
+    expect(readHide()).toBe(0.6);
+    useStore.getState().setHideUnlit(DEFAULT_HIDE);
   });
 });

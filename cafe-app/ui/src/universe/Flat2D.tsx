@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { readFlat, saveFlat } from './viewMemory';
 import { useStageSize } from '../layout/Stage';
 import {
   DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelSpotVisible, labelsMayOverlap, neighbourhood, ringColour,
@@ -55,8 +56,11 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
   }, [graph.nodes, layout, BOX.x, BOX.y, BOX.w, BOX.h, deg]);
 
   // Zoom and pan: positions move, dots and labels keep their size, so zooming in opens the picture up.
-  const [view, setView] = useState({ k: 1, x: 0, y: 0 });
-  useEffect(() => { setView({ k: 1, x: 0, y: 0 }); }, [viewNonce]);
+  // Where the operator left it (remembered across a theme change and a reload); Reset view starts it again.
+  const [view, setView] = useState(() => readFlat() ?? { k: 1, x: 0, y: 0 });
+  const firstNonce = useRef(viewNonce);
+  useEffect(() => { if (viewNonce !== firstNonce.current) setView({ k: 1, x: 0, y: 0 }); }, [viewNonce]);
+  useEffect(() => { saveFlat(view); }, [view]);
   const centre: [number, number] = [BOX.x + BOX.w / 2, BOX.y + BOX.h / 2];
   const pts = useMemo(() => new Map([...base].map(([id, p]) => [id, [centre[0] + (p[0] - centre[0]) * view.k + view.x, centre[1] + (p[1] - centre[1]) * view.k + view.y] as [number, number]])),
     // eslint-disable-next-line react-hooks/exhaustive-deps

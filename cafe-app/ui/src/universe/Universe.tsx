@@ -8,6 +8,7 @@ import { Stars } from './Stars';
 import { Links } from './Links';
 import { Flat2D } from './Flat2D';
 import { useFlyTo } from './useFlyTo';
+import { readCamera, saveCamera } from './viewMemory';
 import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
 import { DIM, bounds, degrees, dimFromHide, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
@@ -85,7 +86,7 @@ export function Universe(input: UniverseProps) {
       onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }}
     >
       <Canvas
-        key={`${quality}-${props.theme ?? 'default'}` /* the context options differ, so a new quality or theme makes a new canvas */}
+        key={`${quality}-${props.theme ?? 'default'}` /* the context options differ, so a new quality or theme makes a new canvas; it starts where the camera was (viewMemory) */}
         resize={{ offsetSize: true }}
         dpr={lite ? 1 : [1, 2]}
         gl={{ antialias: !lite, powerPreference: 'high-performance' }}
@@ -133,11 +134,24 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
   const { camera, gl, controls } = useThree();
   const { flyTo, flyHome } = useFlyTo(home);
 
-  // First frame: put the camera home.
+  // First frame: the camera where the operator left it (a new theme or quality makes a new canvas), else home.
+  const flown = useRef<string | null>(null);
+  const restored = useRef(false);
   useEffect(() => {
-    camera.position.copy(home.position); camera.lookAt(home.target);
     const c = controls as unknown as { target: Vector3; update: () => void } | null;
-    if (c) { c.target.copy(home.target); c.update(); }
+    const m = restored.current ? undefined : readCamera();
+    if (m) {
+      camera.position.set(...m.position); camera.lookAt(new Vector3(...m.target));
+      if (spin.current) spin.current.rotation.y = m.spin;
+      // The star it was looking at is already in view: no fly to it again.
+      if (m.selectedId && m.selectedId === selectedId) flown.current = selectedId;
+      if (c) { c.target.set(...m.target); c.update(); restored.current = true; }
+      return;
+    }
+    if (restored.current) return;
+    camera.position.copy(home.position); camera.lookAt(home.target);
+    if (c) { c.target.copy(home.target); c.update(); restored.current = true; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, controls, home]);
 
   useEffect(() => {
@@ -149,7 +163,6 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
   }, [gl]);
 
   // Fly to the selected star, once per selection: a refreshed graph keeps the camera where it is.
-  const flown = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedId) { flown.current = null; return; }
     if (!spin.current || flown.current === selectedId) return;
@@ -164,8 +177,9 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
   }, [selectedId, pos, flyTo, graph]);
 
   // Reset view.
-  const first = useRef(true);
-  useEffect(() => { if (first.current) { first.current = false; return; } flyHome(); }, [viewNonce, flyHome]);
+  // Only when the button bumps the count: flyHome itself changes once the controls attach, and that is not a reset.
+  const nonce = useRef(viewNonce);
+  useEffect(() => { if (nonce.current === viewNonce) return; nonce.current = viewNonce; flyHome(); }, [viewNonce, flyHome]);
 
   // The fps watchdog (Full only): one verdict over the first few seconds of frames.
   const watch = useMemo(() => (watchFps ? frameWatch() : null), [watchFps]);
@@ -173,6 +187,16 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
     if (watch && typeof document !== 'undefined' && document.visibilityState === 'visible' && watch(dt * 1000) === 'slow') onSlow?.();
   });
 
+  // Remember where the camera is, for the next canvas.
+  useFrame(() => {
+    const c = controls as unknown as { target: Vector3 } | null;
+    if (!restored.current || !c || !spin.current) return;
+    const r = (v: number) => Math.round(v * 100) / 100;
+    saveCamera({
+      position: [r(camera.position.x), r(camera.position.y), r(camera.position.z)],
+      target: [r(c.target.x), r(c.target.y), r(c.target.z)], spin: Math.round(spin.current.rotation.y * 1e4) / 1e4, selectedId,
+    });
+  });
   useFrame((_, dt) => {
     if (!spin.current || selectedId) return;
     if (performance.now() - lastDown.current < IDLE_AFTER_MS) return;

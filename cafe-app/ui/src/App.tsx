@@ -16,6 +16,7 @@ import { RoundPopout } from './popouts/RoundPopout';
 import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
+import { ConfigPopout } from './popouts/ConfigPopout';
 import { TypeFilter } from './layout/TypeFilter';
 import { labelModeText, visibleGraph } from './universe/graphView';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
@@ -37,6 +38,8 @@ export default function App() {
   useEffect(() => { void refresh(); }, [refresh]);
   // Lite drops the panels' backdrop blur too (theme.css), so the quality is on the root element.
   useEffect(() => { document.documentElement.dataset.quality = quality; }, [quality]);
+  const theme = useStore((s) => s.theme);
+  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
@@ -70,7 +73,7 @@ export default function App() {
         {shown && (
           <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} selectedIds={selectedIds} highlight={highlight} hideUnlit={hideUnlit} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
-            quality={quality} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
+            quality={quality} theme={theme} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
         )}
         <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
@@ -96,6 +99,7 @@ export default function App() {
         {popout?.kind === 'outbox' && <OutboxPopout />}
         {popout?.kind === 'inbox' && <InboxPopout />}
         {popout?.kind === 'ai' && <AiPopout />}
+        {popout?.kind === 'config' && <ConfigPopout />}
       </Stage>
       {!focus && <Drawers />}
     </>

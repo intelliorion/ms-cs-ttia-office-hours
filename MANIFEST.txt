@@ -236,8 +236,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CgQ_CjDa.css
-cafe-app/web/assets/index-vcdg5leN.js
+cafe-app/web/assets/index-6M3R7IjW.css
+cafe-app/web/assets/index-DqLCdeC0.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

@@ -68,7 +68,7 @@ export function IdeaDetails({ id }: { id: string }) {
     } catch (e) {
       const msg = (e as Error).message;
       // A setting the email needs (such as your signature name) is set in Rounds; say where.
-      setNotice({ text: msg.startsWith('Set first:') ? `${msg}. Set it in Rounds, then try again.` : msg, kind: 'error' });
+      setNotice({ text: msg.startsWith('Set first:') ? `${msg}. Set it in Settings → Project configuration (a round's dates in Rounds), then try again.` : msg, kind: 'error' });
     }
     await refresh();
     setBusy(false);

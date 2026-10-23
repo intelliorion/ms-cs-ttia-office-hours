@@ -1,8 +1,8 @@
 import { memo, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
-import { AdditiveBlending, Sprite, Vector3 } from 'three';
-import { DIM, edgeStyle, LINK_COLOUR, UNCONFIRMED_COLOUR, type GEdge, type Vec3 } from './graphView';
+import { AdditiveBlending, NormalBlending, Sprite, Vector3 } from 'three';
+import { DIM, edgeStyle, NIGHT, type GEdge, type ScenePalette, type Vec3 } from './graphView';
 import { haloTexture } from './haloTexture';
 
 const PULSE_SECONDS = 1.2;
@@ -12,7 +12,9 @@ const LITE_LINK_BOOST = 2.2;
 /** Faint teal links; unconfirmed dashed amber; the selection's links bright with travelling pulses. */
 // memo: hover changes never re-render the links (their style depends only on the selection).
 // Lite (no bloom): the selection's links get a second, wider, faint additive line under them as their glow.
-export const Links = memo(function Links({ edges, pos, selectedId, lit = null, dim = DIM, lite = false }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null; lit?: Set<string> | null; dim?: number; lite?: boolean }) {
+// Frost: silver threads on light, the ones in view pine green, drawn stronger (light swallows thin lines), no glow.
+export const Links = memo(function Links({ edges, pos, selectedId, lit = null, dim = DIM, lite = false, palette = NIGHT }: { edges: GEdge[]; pos: Map<string, Vec3>; selectedId: string | null; lit?: Set<string> | null; dim?: number; lite?: boolean; palette?: ScenePalette }) {
+  const boost = (lite ? LITE_LINK_BOOST : 1) * palette.linkBoost;
   // One stable points array per edge, so drei Line keeps its geometry across renders.
   const points = useMemo(() => {
     const m = new Map<string, [Vec3, Vec3]>();
@@ -34,10 +36,10 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           key={b.key}
           points={b.points}
           segments
-          color={b.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR}
+          color={b.dashed ? palette.unconfirmed : palette.link}
           lineWidth={1}
           transparent
-          opacity={Math.min(1, LITE_LINK_BOOST * b.opacity)}
+          opacity={Math.min(1, boost * b.opacity)}
           dashed={b.dashed}
           dashSize={2.5}
           gapSize={2}
@@ -52,10 +54,10 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           <Line
             key={e.id}
             points={points.get(e.id)!}
-            color={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR}
+            color={s.dashed ? palette.unconfirmed : bright || (lit && lit.has(e.from) && lit.has(e.to)) ? palette.linkHot : palette.link}
             lineWidth={bright ? 1.2 : 1}
             transparent
-            opacity={Math.min(1, (lite ? LITE_LINK_BOOST : 1) * linkOpacity(e, selectedId, lit, dim))}
+            opacity={Math.min(1, boost * linkOpacity(e, selectedId, lit, dim))}
             dashed={s.dashed}
             dashSize={2.5}
             gapSize={2}
@@ -64,11 +66,11 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           />
         );
       })}
-      {lite && pulses.map((e) => (
+      {lite && !palette.frost && pulses.map((e) => (
         <Line
           key={`glow-${e.id}`}
           points={points.get(e.id)!}
-          color={e.confirmed ? '#7dd3cf' : UNCONFIRMED_COLOUR}
+          color={e.confirmed ? palette.link : palette.unconfirmed}
           lineWidth={3}
           transparent
           opacity={0.1}
@@ -78,7 +80,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
         />
       ))}
       {pulses.map((e) => (
-        <Pulse key={e.id} from={pos.get(selectedId === e.from ? e.from : e.to)!} to={pos.get(selectedId === e.from ? e.to : e.from)!} amber={!e.confirmed} />
+        <Pulse key={e.id} from={pos.get(selectedId === e.from ? e.from : e.to)!} to={pos.get(selectedId === e.from ? e.to : e.from)!} amber={!e.confirmed} frost={palette.frost} />
       ))}
     </group>
   );
@@ -105,7 +107,7 @@ export function linkBatches(edges: GEdge[], points: Map<string, [Vec3, Vec3]>, s
   return [...m.values()];
 }
 
-function Pulse({ from, to, amber }: { from: Vec3; to: Vec3; amber: boolean }) {
+function Pulse({ from, to, amber, frost = false }: { from: Vec3; to: Vec3; amber: boolean; frost?: boolean }) {
   const ref = useRef<Sprite>(null);
   const [a, b] = useMemo(() => [new Vector3(...from), new Vector3(...to)], [from, to]);
   const offset = useMemo(() => Math.random(), []);
@@ -119,7 +121,9 @@ function Pulse({ from, to, amber }: { from: Vec3; to: Vec3; amber: boolean }) {
   });
   return (
     <sprite ref={ref}>
-      <spriteMaterial map={haloTexture()} color={amber ? '#ffd29a' : '#c9fffa'} blending={AdditiveBlending} transparent depthWrite={false} toneMapped={false} />
+      {/* A glow adds light, which shows on dark only; on Frost the bead is a soft pine (or gold) dot instead. */}
+      <spriteMaterial map={haloTexture()} color={frost ? (amber ? '#b8862b' : '#1f6f5c') : amber ? '#ffd29a' : '#c9fffa'}
+        blending={frost ? NormalBlending : AdditiveBlending} transparent depthWrite={false} toneMapped={false} />
     </sprite>
   );
 }

@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
-import { chipText } from '../popouts/aiUi';
+import { SettingsMenu } from './SettingsMenu';
 import { baseName, unsentCount } from '../popouts/titleHelpers';
 import { inboxCount } from '../popouts/inboxHelpers';
 import { AssistantLauncher } from './Assistant';
 
 export function TitleBar() {
-  const { openPopout, refresh, setNotice, state, ai, refreshAi, inbox, refreshInbox } = useStore();
+  const { openPopout, refresh, setNotice, state, refreshAi, inbox, refreshInbox } = useStore();
   useEffect(() => { void refreshAi(); void refreshInbox(); }, [refreshAi, refreshInbox]);
   const waiting = inboxCount(inbox?.counts);
   const n = unsentCount(state?.outbox);
@@ -29,9 +29,7 @@ export function TitleBar() {
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Rounds</button>
         <button className="pill" data-action="outbox" onClick={() => openPopout({ kind: 'outbox' })}>Outbox ({n})</button>
         <button className="pill" data-action="review-pack" onClick={() => void write('/api/review-pack')}>Review pack</button>
-        <button className="pill" data-action="ai" title="AI helper" onClick={() => openPopout({ kind: 'ai' })}>
-          <span className="ai-dot" data-on={ai?.provider ? 'true' : 'false'} aria-hidden="true" />{chipText(ai)}
-        </button>
+        <SettingsMenu />
       </div>
     </header>
   );

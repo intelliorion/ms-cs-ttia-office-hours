@@ -85,7 +85,13 @@ export function OutboxPopout() {
                     <div className="mr2">
                       <span className="hint">{m.status !== 'sent' && left > 0 ? `${left} placeholder${left > 1 ? 's' : ''} to fill in Outlook` : ''}</span>
                       <span className="acts">
-                        {a.kind === 'set-first' && <button className="link-btn" data-action="set-first" title="Opens Rounds" onClick={() => openPopout({ kind: 'round' })}>{a.label}</button>}
+                        {a.kind === 'set-first' && (() => {
+                          // A round's dates are set in Rounds; everything else (your name, links) in Project configuration.
+                          const roundLabels = new Set((state?.fields?.round ?? []).map((f: string[]) => f[1]));
+                          const toRounds = (m.missingSettings ?? []).every((x: any) => roundLabels.has(x.label) || /round/i.test(x.label));
+                          return <button className="link-btn" data-action="set-first" title={toRounds ? 'Opens Rounds' : 'Opens Project configuration'}
+                            onClick={() => openPopout({ kind: toRounds ? 'round' : 'config' })}>{a.label}</button>;
+                        })()}
                         {(a.kind === 'approve' || a.kind === 'sent') && (
                           <button className="btn primary sm" data-action="open-outlook" disabled={busy} title="Opens it as a new Outlook message; counts as sent"
                             onClick={() => void act(async () => { const o = await post('/api/outbox/open', { key: m.key }); downloadEml(o); return o; }, (o: any) => openedText(o.email.template))}>Open in Outlook</button>

@@ -10,13 +10,23 @@ export type Popout =
   | { kind: 'round' }
   | { kind: 'outbox' }
   | { kind: 'inbox' }
-  | { kind: 'ai' };
+  | { kind: 'ai' }
+  | { kind: 'config' };
 
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
 export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }
 export type Drawer = 'ideas' | 'charts' | null;
 /** Pill label for the Focus button. */
 export const focusLabel = (on: boolean) => (on ? 'Show panels' : 'Focus');
+/** The look: Default (the night sky) or Frost (a light winter morning). Remembered in this browser only. */
+export type Theme = 'default' | 'frost';
+export const THEMES: { id: Theme; name: string; note: string }[] = [
+  { id: 'default', name: 'Default', note: 'Night sky: glowing stars on dark' },
+  { id: 'frost', name: 'Frost', note: 'Winter morning: baubles on light' },
+];
+const THEME_KEY = 'cafe-theme';
+export function readTheme(): Theme { try { return localStorage.getItem(THEME_KEY) === 'frost' ? 'frost' : 'default'; } catch { return 'default'; } }
+function writeTheme(t: Theme) { try { localStorage.setItem(THEME_KEY, t); } catch { /* storage unavailable */ } }
 const FOCUS_KEY = 'cafe-focus';
 export function readFocus(): boolean { try { return localStorage.getItem(FOCUS_KEY) === '1'; } catch { return false; } }
 function writeFocus(on: boolean) { try { localStorage.setItem(FOCUS_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ } }
@@ -114,6 +124,8 @@ export interface AppState {
   focus: boolean;
   toggleFocus: () => void;
   quality: Quality;
+  theme: Theme;
+  setTheme: (t: Theme) => void;
   /** The operator picked the quality with the button: never switch it automatically. */
   qualitySetByHand: boolean;
   setQuality: (q: Quality) => void;
@@ -155,7 +167,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: DEFAULT_LABELS, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: DEFAULT_LABELS, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', theme: readTheme(), qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -179,6 +191,7 @@ export const useStore = create<AppState>((set) => ({
   // Entering focus starts clean; leaving it keeps the star clicked in focus mode, so the panels show it.
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, selectedIds: s.focus ? s.selectedIds : [], viewNonce: s.viewNonce + 1 }; }),
   setQuality: (q) => { writeQuality(q, true); set({ quality: q, qualitySetByHand: true }); },
+  setTheme: (t) => { writeTheme(t); set({ theme: t }); },
   cycleQuality: () => set((s) => { const q = nextQuality(s.quality); writeQuality(q, true); return { quality: q, qualitySetByHand: true }; }),
   autoPickQuality: (renderer) => {
     if (readQuality() !== null || !detectSoftwareGl(renderer)) return;

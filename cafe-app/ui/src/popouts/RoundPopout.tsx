@@ -10,7 +10,7 @@ interface IdeaRow { id: string; title?: string; round?: string }
 
 /**
  * The Rounds pop-out: on the left every round (newest first) with its dates and its ideas, then New round;
- * on the right the ideas in no round, to put in one, then the Settings form.
+ * on the right the ideas in no round, to put in one. Settings live in Settings → Project configuration.
  */
 export function RoundPopout() {
   const { state, closePopout, refresh, notice, setNotice } = useStore();
@@ -19,7 +19,6 @@ export function RoundPopout() {
     String(b.created ?? '').localeCompare(String(a.created ?? '')) || b.id.localeCompare(a.id));
   const ideas: IdeaRow[] = state?.ideas ?? [];
   const roundFields: Pairs = state?.fields?.round ?? [];
-  const settingFields: Pairs = state?.fields?.settings ?? [];
   const known = new Set(rounds.map((r) => r.id));
   const unassigned = ideas.filter((i) => !i.round || !known.has(i.round));
 
@@ -27,16 +26,12 @@ export function RoundPopout() {
   const [newName, setNewName] = useState('');
   const [ticked, setTicked] = useState<string[]>([]);
   const [target, setTarget] = useState('');
-  const [settings, setSettings] = useState<Record<string, string>>({});
-  const [capacity, setCapacity] = useState({ ideasPerRound: '3', sessionsPerWeek: '2' });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setNotice(null);
     if (!state) return;
     setNewName(defaultRoundName(state.today, (state.rounds ?? []).map((r: RoundRow) => r.name)));
-    setSettings(Object.fromEntries(settingFields.map(([k]) => [k, state.settings?.[k] ?? ''])));
-    setCapacity({ ideasPerRound: String(state.settings?.capacity?.ideasPerRound ?? 3), sessionsPerWeek: String(state.settings?.capacity?.sessionsPerWeek ?? 2) });
     // Load once per opening; later refreshes must not overwrite what is being typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(state)]);
@@ -68,12 +63,8 @@ export function RoundPopout() {
     () => post(`/api/rounds/${encodeURIComponent(r.id)}`, Object.fromEntries(roundFields.map(([k]) => [k, dateOf(r, k)]))),
     `${r.name} dates saved.`,
   );
-  const saveSettings = () => run(
-    () => post('/api/settings', { ...settings, capacity: { ideasPerRound: Number(capacity.ideasPerRound), sessionsPerWeek: Number(capacity.sessionsPerWeek) } }),
-    'Settings saved.',
-  );
 
-  const title = <><div className="pop-id">Rounds</div><h2>Rounds, their ideas and settings</h2></>;
+  const title = <><div className="pop-id">Rounds</div><h2>Rounds and their ideas</h2></>;
   return (
     <Modal title={title} label="Rounds" onClose={closePopout} width={1100} height={860}>
       {notice && <div className="pop-strip"><div className={`pop-notice ${notice.kind ?? 'ok'}`} role="status">{notice.text}</div></div>}
@@ -152,28 +143,6 @@ export function RoundPopout() {
                 {picked.length ? `Put ${ideaCount(picked.length)} in ${targetName || 'a round'}` : `Pick ideas to put in ${targetName || 'a round'}`}</button>
             </div>
           </section>
-          <form onSubmit={(e) => { e.preventDefault(); void saveSettings(); }}>
-            <section className="sec">
-              <h3>Settings</h3>
-              <p className="hint lead">Kept in settings.yaml, never sent anywhere.</p>
-              {settingFields.map(([k, label]) => (
-                <label key={k} className="rf">
-                  <span className="rf-h"><span className="rf-l">{label}</span><span className="rf-u">{roundFieldsUnblock(k)}</span></span>
-                  <input type="text" value={settings[k] ?? ''} data-field={k} onChange={(e) => setSettings((x) => ({ ...x, [k]: e.target.value }))} />
-                </label>
-              ))}
-            </section>
-            <section className="sec">
-              <h3>Capacity</h3>
-              <div className="cap">
-                <label className="rf"><span className="rf-l">Ideas per round</span>
-                  <input type="number" min={1} step={1} value={capacity.ideasPerRound} data-field="ideasPerRound" onChange={(e) => setCapacity((c) => ({ ...c, ideasPerRound: e.target.value }))} /></label>
-                <label className="rf"><span className="rf-l">Sessions per week</span>
-                  <input type="number" min={1} step={1} value={capacity.sessionsPerWeek} data-field="sessionsPerWeek" onChange={(e) => setCapacity((c) => ({ ...c, sessionsPerWeek: e.target.value }))} /></label>
-              </div>
-              <div className="rf-foot"><button className="btn primary" type="submit" data-action="save-settings" disabled={busy}>Save settings</button></div>
-            </section>
-          </form>
         </div>
       </div>
     </Modal>

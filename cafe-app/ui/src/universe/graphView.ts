@@ -32,10 +32,29 @@ export function visibleGraph<G extends Graph>(graph: G, hidden: readonly string[
   return { ...graph, nodes, edges: graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 }
 
-export function ringColour(node: GNode): string {
-  if (node.attrs?.closed) return STAGE_RING.closed;
-  return STAGE_RING[String(node.attrs?.stage ?? 2)] ?? STAGE_RING[2];
+export function ringColour(node: GNode, ring: Record<string, string> = STAGE_RING): string {
+  if (node.attrs?.closed) return ring.closed;
+  return ring[String(node.attrs?.stage ?? 2)] ?? ring[2];
 }
+
+/** The scene's colours for a theme: Default is the night sky; Frost is baubles on a light winter morning. */
+export interface ScenePalette {
+  frost: boolean;
+  bg: string;
+  link: string;
+  /** Links in view (a selection's, or between lit stars). */
+  linkHot: string;
+  unconfirmed: string;
+  /** Light backgrounds swallow thin lines: Frost draws them stronger. */
+  linkBoost: number;
+  ring: Record<string, string>;
+}
+export const NIGHT: ScenePalette = { frost: false, bg: '#07090b', link: LINK_COLOUR, linkHot: LINK_COLOUR, unconfirmed: UNCONFIRMED_COLOUR, linkBoost: 1, ring: STAGE_RING };
+export const FROST: ScenePalette = {
+  frost: true, bg: '#eef3f8', link: '#8a9bb0', linkHot: '#1f6f5c', unconfirmed: '#b8862b', linkBoost: 2.4,
+  ring: { 2: '#b8862b', 3: '#1f6f5c', 4: '#7a5aa8', closed: '#a3b0bd' },
+};
+export const paletteFor = (theme?: string): ScenePalette => (theme === 'frost' ? FROST : NIGHT);
 
 /** The node itself plus its direct neighbours. */
 export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<string> {

@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
-import { DIM, NODE_COLOURS, labelSpotVisible, labelsMayOverlap, wantsLabel, type LabelMode, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
+import { DIM, NIGHT, NODE_COLOURS, labelSpotVisible, type ScenePalette, labelsMayOverlap, wantsLabel, type LabelMode, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture, softHaloTexture } from './haloTexture';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
@@ -23,6 +23,8 @@ export interface StarsProps {
   lite?: boolean;
   /** How bright stars outside the lit set are (0 hides them, with their labels and rings). */
   dim?: number;
+  /** The theme's colours. Frost draws glossy baubles with gold caps instead of glowing stars. */
+  palette?: ScenePalette;
   onSelect: (id: string, additive?: boolean) => void;
   onHover: (id: string | null) => void;
 }
@@ -100,7 +102,12 @@ function emissiveByInstance(m: Material) {
 }
 
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
-export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, onSelect, onHover }: StarsProps) {
+/** A bauble's cap: a short gold cylinder on top, as wide as a third of the ball. */
+export const CAP = { width: 0.36, height: 0.3, lift: 0.96 };
+export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, palette = NIGHT, onSelect, onHover }: StarsProps) {
+  const frost = palette.frost;
+  const cap = useRef<InstancedMesh>(null);
+  const bg = useMemo(() => new Color(palette.bg), [palette.bg]);
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
   const glint = useRef<InstancedMesh>(null);
@@ -129,12 +136,18 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       dummy.scale.setScalar(gone ? 0 : Math.max(sizes[i] * 2.2, 4)); dummy.updateMatrix();
       hit.current!.setMatrixAt(i, dummy.matrix);
       halo.current!.setMatrixAt(i, dummy.matrix); halo.current!.setColorAt(i, base[i]);
+      if (cap.current) {
+        dummy.position.set(p[0], p[1] + sizes[i] * CAP.lift, p[2]);
+        dummy.scale.set(gone ? 0 : sizes[i] * CAP.width, gone ? 0 : sizes[i] * CAP.height, gone ? 0 : sizes[i] * CAP.width); dummy.updateMatrix();
+        cap.current.setMatrixAt(i, dummy.matrix);
+      }
     });
+    if (cap.current) { cap.current.instanceMatrix.needsUpdate = true; cap.current.computeBoundingSphere(); }
     for (const m of [core.current!, hit.current!, halo.current!]) {
       m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere();
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
-  }, [nodes, pos, sizes, base, hood, dim]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodes, pos, sizes, base, hood, dim, frost]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(({ clock, camera }) => {
     const c = core.current, h = halo.current; if (!c || !h || !n) return; // no stars yet: nothing to light
@@ -147,7 +160,11 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       const lit = !hood || hood.has(id);
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
       b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId || picked?.has(id) ? 1.4 : 1) * twinkle;
-      c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
+      // Frost: a bauble doesn't glow; out of view it fades toward the snow, picked it catches the light.
+      if (frost) {
+        const hot = i === hoverIndex || id === selectedId || picked?.has(id);
+        c.setColorAt(i, tmpC.copy(base[i]).lerp(bg, lit ? 0 : 1 - dim).lerp(WHITE, hot ? 0.18 : 0));
+      } else c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
     }
     const g = lite ? glint.current : null;
     writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g, hide: dim <= 0 });
@@ -201,13 +218,21 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
     <group ref={root}>
       <instancedMesh key={`core-${n}`} ref={core} args={[undefined, undefined, n]} frustumCulled={false}>
         <sphereGeometry args={lite ? [1, 16, 12] : [1, 24, 16]} />
-        <meshStandardMaterial color="#000000" emissive="#ffffff" emissiveIntensity={1.6} roughness={1} metalness={0} toneMapped={false} onUpdate={emissiveByInstance} />
+        {frost
+          ? <meshPhysicalMaterial key="bauble" color="#ffffff" metalness={0.3} roughness={0.2} clearcoat={1} clearcoatRoughness={0.06} envMapIntensity={1.15} />
+          : <meshStandardMaterial key="star" color="#000000" emissive="#ffffff" emissiveIntensity={1.6} roughness={1} metalness={0} toneMapped={false} onUpdate={emissiveByInstance} />}
       </instancedMesh>
-      <instancedMesh key={`halo-${n}`} ref={halo} args={[undefined, undefined, n]} frustumCulled={false} renderOrder={2}>
+      {frost && (
+        <instancedMesh key={`cap-${n}`} ref={cap} args={[undefined, undefined, n]} frustumCulled={false}>
+          <cylinderGeometry args={[1, 1, 1, 14]} />
+          <meshStandardMaterial color="#c9a347" metalness={0.85} roughness={0.28} envMapIntensity={1.2} />
+        </instancedMesh>
+      )}
+      <instancedMesh key={`halo-${n}`} ref={halo} args={[undefined, undefined, n]} frustumCulled={false} renderOrder={2} visible={!frost}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial map={lite ? softHaloTexture() : haloTexture()} transparent opacity={lite ? LITE_HALO_OPACITY : 1} blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
       </instancedMesh>
-      {lite && (
+      {lite && !frost && (
         <instancedMesh key={`glint-${n}`} ref={glint} args={[undefined, undefined, n]} frustumCulled={false} renderOrder={3}>
           <planeGeometry args={[1, 1]} />
           <meshBasicMaterial map={haloTexture()} transparent blending={AdditiveBlending} depthWrite={false} toneMapped={false} />
@@ -226,7 +251,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
         <Billboard key={d.id} position={pos.get(d.id)}>
           <mesh>
             <ringGeometry args={[sizes[i] * 1.75, sizes[i] * 1.75 + 0.32, 64]} />
-            <meshBasicMaterial color={ringColour(d)} transparent opacity={!hood || hood.has(d.id) ? 0.9 : dim} visible={!hidden(d.id)} depthWrite={false} toneMapped={false} />
+            <meshBasicMaterial color={ringColour(d, palette.ring)} transparent opacity={!hood || hood.has(d.id) ? 0.9 : dim} visible={!hidden(d.id)} depthWrite={false} toneMapped={false} />
           </mesh>
         </Billboard>
       ))}

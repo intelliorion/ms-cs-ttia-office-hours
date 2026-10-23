@@ -10,7 +10,8 @@ import { Flat2D } from './Flat2D';
 import { useFlyTo } from './useFlyTo';
 import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
-import { DIM, bounds, degrees, dimFromHide, neighbourhood, type Graph, type LabelMode, type Vec3 } from './graphView';
+import { DIM, bounds, degrees, dimFromHide, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
+import { Snowfall } from './Snowfall';
 
 export interface UniverseProps {
   graph: Graph;
@@ -37,6 +38,8 @@ export interface UniverseProps {
   /** Watch the frame rate in Full and call onSlow once if it averages under 20 fps. */
   watchFps?: boolean;
   onSlow?: () => void;
+  /** 'default' (night sky) or 'frost' (baubles on a light winter morning). */
+  theme?: string;
 }
 
 const SPIN = 0.03; // rad/s while idle
@@ -80,7 +83,7 @@ export function Universe(input: UniverseProps) {
       onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }}
     >
       <Canvas
-        key={quality /* the context options differ, so a new quality makes a new canvas */}
+        key={`${quality}-${props.theme ?? 'default'}` /* the context options differ, so a new quality or theme makes a new canvas */}
         resize={{ offsetSize: true }}
         dpr={lite ? 1 : [1, 2]}
         gl={{ antialias: !lite, powerPreference: 'high-performance' }}
@@ -99,7 +102,8 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow }: UniverseProps) {
+function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow, theme }: UniverseProps) {
+  const palette = paletteFor(theme);
   const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
   const home = useMemo(() => homeFor(radius, focus), [radius, focus]);
@@ -175,11 +179,12 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
 
   return (
     <>
-      <Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
-      <ambientLight intensity={0.2} />
+      {palette.frost
+        ? <Snowfall floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
+        : <><Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} /><ambientLight intensity={0.2} /></>}
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} onSelect={onSelect} onHover={onHover} />
+        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} palette={palette} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} palette={palette} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}
@@ -190,7 +195,8 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
         }}
       />
       {/* Lite draws straight to the screen: no bloom passes, no multisampled buffers. */}
-      {!lite && (
+      {/* Bloom makes light glow, which only works on dark: Frost has none. */}
+      {!lite && !palette.frost && (
         <EffectComposer multisampling={4}>
           <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
         </EffectComposer>

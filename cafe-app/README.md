@@ -45,7 +45,11 @@ panels, large white titles and pill buttons at the bottom.
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
 - **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
-  Rounds, Outbox, Review pack (this writes the file), and the AI chip (which shows who is answering).
+  Rounds, Outbox, Review pack (this writes the file), and ⚙ Settings: the AI connector (a dot shows whether an
+  AI is answering), Project configuration (your name for the signature, the form, CSIC and Teams links, the
+  distribution list, capacity; kept in rules/settings.yaml) and the theme: Default (the night sky) or Frost (a
+  light winter morning: the stars become glossy baubles with gold caps on silver threads, with snow falling).
+  The theme is remembered in this browser only.
 
 ## Run it
 
@@ -342,7 +346,7 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
 - **Suggest a review** (in the idea's details): fills in the five criteria, a decision and a reason for you to
   edit. It is highlighted until you change it.
 
-The **AI chip** in the title bar says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
+**Settings → AI connector** says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
 "No AI: working by hand"). Click it to pick a provider (Auto, Claude Code, Copilot CLI, VS Code or None) and
 press Test, which asks the AI for a tiny checked reply (up to 30 seconds) and says who answered and how long it
 took. The choice is saved in `rules/settings.yaml`.

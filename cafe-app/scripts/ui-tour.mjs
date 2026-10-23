@@ -174,19 +174,24 @@ async function popouts2Shots(p, gl, errors, restart) {
   await shot(p, '09-import.png');
   await p.keyboard.press('Escape');
 
-  // Round: fill the dates and settings through the page, leaving the Teams link and the series date empty.
+  // Round: fill the dates through the page; then Settings → Project configuration, leaving the Teams link and the series date empty.
   await click(p, '.titlebar [data-action="round"]');
   await p.waitForSelector('[data-field="deadline"]');
   await p.fill('[data-field="open"]', '2026-10-05');
   await p.fill('[data-field="deadline"]', '2026-10-30');
   await p.fill('[data-field="reviewBy"]', '2026-11-13');
-  await p.fill('[data-field="operatorName"]', 'Café operator');
-  await p.fill('[data-field="formLink"]', 'https://forms.example.com/cafe');
   await click(p, '[data-action="save-round"]');
-  await sleep(500);
-  await click(p, '[data-action="save-settings"]');
   await sleep(700);
   await shot(p, '10-round.png');
+  await p.keyboard.press('Escape');
+  await click(p, '.titlebar [data-action="settings"]');
+  await click(p, '.set-menu [data-action="config"]');
+  await p.waitForSelector('[data-field="operatorName"]');
+  await p.fill('[data-field="operatorName"]', 'Café operator');
+  await p.fill('[data-field="formLink"]', 'https://forms.example.com/cafe');
+  await click(p, '[data-action="save-settings"]');
+  await sleep(700);
+  await shot(p, '10b-project-configuration.png');
   await p.keyboard.press('Escape');
 
   // Fixture: an E2 sent on the app's day, so it is late 8 days on.
@@ -223,9 +228,10 @@ async function popouts2Shots(p, gl, errors, restart) {
 // The AI pop-out, then "Grow the universe" on CAFE-2026-002 with the fake provider. Needs CAFE_AI_FAKE=1.
 async function aiShots(p) {
   await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); });
-  await p.waitForSelector('.titlebar [data-action="ai"]');
+  await p.waitForSelector('.titlebar [data-action="settings"]');
   await sleep(1000);
-  await p.click('.titlebar [data-action="ai"]');
+  await p.click('.titlebar [data-action="settings"]');
+  await p.click('.set-menu [data-action="ai"]');
   await p.waitForSelector('.ai-pop');
   await sleep(800);
   await shot(p, '13-ai-chip.png');

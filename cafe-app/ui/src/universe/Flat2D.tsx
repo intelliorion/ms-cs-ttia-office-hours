@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStageSize } from '../layout/Stage';
 import {
   DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelSpotVisible, labelsMayOverlap, neighbourhood, ringColour,
-  spreadApart, starSize, wantsLabel, zoomAt, type Graph, type LabelMode, type Vec3,
+  paletteFor, spreadApart, starSize, wantsLabel, zoomAt, type Graph, type LabelMode, type Vec3,
 } from './graphView';
 
 interface Props {
@@ -18,6 +18,7 @@ interface Props {
   onSelect: (id: string | null, additive?: boolean) => void;
   selectedIds?: string[];
   onHover: (id: string | null) => void;
+  theme?: string;
 }
 
 // The centre gap of the frame, below the title bar and above the pills; on a 1920×1080 frame x 500..1260, y 100..980.
@@ -28,7 +29,11 @@ const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, To
 const radius = (n: Graph['nodes'][number], links: number) => starSize(n, links) * 3.2;
 
 /** No WebGL (or Quality: Flat): the same graph drawn flat in SVG, dots pushed apart so none crowd; wheel zooms, drag pans. */
-export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover }: Props) {
+export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, theme }: Props) {
+  const pal = paletteFor(theme);
+  const frost = pal.frost;
+  /** How far right of its dot a label starts, as a radius: Frost's baubles are bigger, and an idea's ring wider still. */
+  const labelGap = (n: Graph['nodes'][number], links: number) => radius(n, links) * (frost ? (n.type === 'Idea' ? 1.55 : 1.0) : 1);
   const { w: stageW, h: stageH } = useStageSize();
   const BOX = boxFor(stageW, stageH, focus);
   const deg = useMemo(() => degrees(graph), [graph]);
@@ -88,7 +93,7 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
       && wantsLabel(labels, n, deg.get(n.id) ?? 0, { hover: n.id === hoverId, picked: picked(n.id), inView: !!hood?.has(n.id) }));
     const score = (id: string, t: string) => (picked(id) || id === hoverId ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (RANK[t] ?? 9) - (deg.get(id) ?? 0) / 100;
     for (const n of want.sort((a, b) => score(a.id, a.type) - score(b.id, b.type))) {
-      const p = pts.get(n.id)!; const r = radius(n, deg.get(n.id) ?? 0);
+      const p = pts.get(n.id)!; const r = labelGap(n, deg.get(n.id) ?? 0);
       if (p[0] < -50 || p[0] > stageW + 50 || p[1] < -50 || p[1] > stageH + 50) continue;
       const w = n.label.length * (n.type === 'Idea' ? 7.8 : 7); const h = n.type === 'Idea' ? 34 : 18;
       const b = [p[0] + r * 2 + 4, p[1] - 12, p[0] + r * 2 + 8 + w, p[1] - 12 + h];
@@ -117,12 +122,21 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
         {Object.entries(NODE_COLOURS).map(([t, c]) => (
           <radialGradient key={t} id={`h-${t}`}><stop offset="0" stopColor={c} stopOpacity="0.85" /><stop offset="0.35" stopColor={c} stopOpacity="0.25" /><stop offset="1" stopColor={c} stopOpacity="0" /></radialGradient>
         ))}
+        {/* Frost: a glossy bauble, lit from the upper left. */}
+        {frost && Object.entries(NODE_COLOURS).map(([t, c]) => (
+          <radialGradient key={`b-${t}`} id={`b-${t}`} cx="0.5" cy="0.5" r="0.62" fx="0.34" fy="0.3">
+            <stop offset="0" stopColor="#ffffff" stopOpacity="0.95" /><stop offset="0.22" stopColor={c} /><stop offset="0.85" stopColor={c} /><stop offset="1" stopColor="#1b2a3a" stopOpacity="0.55" />
+          </radialGradient>
+        ))}
+        {frost && <linearGradient id="cap" x1="0" x2="1"><stop offset="0" stopColor="#8a6a26" /><stop offset="0.45" stopColor="#e6c873" /><stop offset="1" stopColor="#8a6a26" /></linearGradient>}
       </defs>
       <g>
         {graph.edges.map((e) => {
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
           const s = edgeStyle(e, litSet ? null : selectedId, litSet, dim);
-          return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR} strokeOpacity={s.pulse ? 0.9 : s.opacity * 1.6} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
+          const hotLink = s.pulse || (!!litSet && litSet.has(e.from) && litSet.has(e.to));
+          const stroke = frost ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
+          return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeOpacity={Math.min(1, (s.pulse ? 0.9 : s.opacity * 1.6) * (frost ? 1.5 : 1))} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>
       {graph.nodes.map((n) => {
@@ -131,19 +145,32 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
         const o = lit(n.id) ? 1 : dim;
         if (o <= 0) return null;
         const hot = n.id === hoverId || n.id === selectedId;
+        // Without a glow around it a bauble needs more body to read.
+        const rb = r * 1.7;
         const showLabel = shown.has(n.id);
         return (
           <g key={n.id} opacity={o} style={{ cursor: 'pointer' }} data-id={n.id}
             onMouseEnter={() => onHover(n.id)} onMouseLeave={() => onHover(null)}
             onClick={(e) => { e.stopPropagation(); if (dragged.current) { dragged.current = false; return; } onSelect(n.id, e.ctrlKey || e.metaKey); }}>
-            <circle cx={p[0]} cy={p[1]} r={r * (hot ? 4.2 : 3.4)} fill={`url(#h-${n.type})`} />
-            {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={r * 1.75} fill="none" stroke={ringColour(n)} strokeWidth={1.2} />}
-            <circle cx={p[0]} cy={p[1]} r={r} fill={NODE_COLOURS[n.type]} />
-            <circle cx={p[0]} cy={p[1]} r={r * 0.45} fill="#fff" opacity={hot ? 0.9 : 0.55} />
+            {frost ? (
+              <>
+                {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={rb * 1.75} fill="none" stroke={ringColour(n, pal.ring)} strokeWidth={1.4} />}
+                <ellipse cx={p[0]} cy={p[1] + rb * 1.15} rx={rb * 0.9} ry={rb * 0.28} fill="#1b2a3a" opacity={0.12} />
+                <rect x={p[0] - rb * 0.3} y={p[1] - rb * 1.22} width={rb * 0.6} height={rb * 0.34} rx={rb * 0.08} fill="url(#cap)" />
+                <circle cx={p[0]} cy={p[1]} r={rb * (hot ? 1.15 : 1)} fill={`url(#b-${n.type})`} stroke={hot ? '#1f6f5c' : 'none'} strokeWidth={1.5} />
+              </>
+            ) : (
+              <>
+                <circle cx={p[0]} cy={p[1]} r={r * (hot ? 4.2 : 3.4)} fill={`url(#h-${n.type})`} />
+                {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={r * 1.75} fill="none" stroke={ringColour(n)} strokeWidth={1.2} />}
+                <circle cx={p[0]} cy={p[1]} r={r} fill={NODE_COLOURS[n.type]} />
+                <circle cx={p[0]} cy={p[1]} r={r * 0.45} fill="#fff" opacity={hot ? 0.9 : 0.55} />
+              </>
+            )}
             {showLabel && (
-              <text x={p[0] + r * 2 + 6} y={p[1] + 4} className={`flat-label${n.type === 'Idea' ? ' idea' : ''}`}>
+              <text x={p[0] + labelGap(n, deg.get(n.id) ?? 0) * 2 + 6} y={p[1] + 4} className={`flat-label${n.type === 'Idea' ? ' idea' : ''}`}>
                 {n.label}
-                {n.type === 'Idea' && <tspan x={p[0] + r * 2 + 6} dy={16} className="flat-sub">{n.attrs?.closed ? `Closed · ${n.attrs.closed}` : String(n.attrs?.stageLabel ?? '')}</tspan>}
+                {n.type === 'Idea' && <tspan x={p[0] + labelGap(n, deg.get(n.id) ?? 0) * 2 + 6} dy={16} className="flat-sub">{n.attrs?.closed ? `Closed · ${n.attrs.closed}` : String(n.attrs?.stageLabel ?? '')}</tspan>}
               </text>
             )}
           </g>

@@ -23,9 +23,13 @@ export function normalizePeople(raw: unknown): Idea['people'] {
     const name = typeof p?.name === 'string' ? p.name.trim() : '';
     if (!name) continue;
     const roles = [...(Array.isArray(p.roles) ? p.roles : []), ...(isRole(p.role) ? [p.role] : [])] as PersonRole[];
-    team = addPerson(team, { name, roles: roles.length ? roles : ['member'], ...(typeof p.note === 'string' && p.note ? { note: p.note } : {}) });
+    team = addPerson(team, {
+      name, roles: roles.length ? roles : ['member'], ...(typeof p.note === 'string' && p.note ? { note: p.note } : {}),
+      ...(Array.isArray(p.added) ? { added: p.added.filter(isRole) } : {}), ...(p.joined === true ? { joined: true } : {}),
+    });
   }
-  if (typeof r.builder === 'string' && r.builder.trim()) team = withRole(team, r.builder.trim(), 'builder');
+  // The old builder field never came from the form.
+  if (typeof r.builder === 'string' && r.builder.trim()) team = withAddedRole(team, r.builder.trim(), 'builder');
   const { builder: _old, ...rest } = r;
   return { ...(rest as object), ...(typeof r.submitter === 'string' ? { submitter: r.submitter } : {}), team };
 }
@@ -33,18 +37,36 @@ export function normalizePeople(raw: unknown): Idea['people'] {
 /** Add someone, or give an entry already there for the same name the new roles too (notes are joined). */
 export function addPerson(team: Person[], p: Person): Person[] {
   const i = team.findIndex((x) => sameName(x.name, p.name));
-  if (i < 0) return [...team, { ...p, roles: cleanRoles(p.roles) }];
+  if (i < 0) return [...team, tidy({ ...p, roles: cleanRoles(p.roles) })];
   const have = team[i];
   const note = [have.note, p.note].filter(Boolean).filter((n, k, all) => all.indexOf(n) === k).join('; ');
-  return team.map((x, k) => (k === i ? { ...have, roles: cleanRoles([...have.roles, ...p.roles]), ...(note ? { note } : {}) } : x));
+  const added = [...(have.added ?? []), ...(p.added ?? [])];
+  return team.map((x, k) => (k === i ? tidy({ ...have, roles: cleanRoles([...have.roles, ...p.roles]), ...(note ? { note } : {}), ...(added.length ? { added } : {}) }) : x));
+}
+
+/** `added` holds only roles the person has, each once; nothing empty is kept. */
+function tidy(p: Person): Person {
+  const added = [...new Set(p.added ?? [])].filter((r) => p.roles.includes(r));
+  const { added: _a, joined, ...rest } = p;
+  return { ...rest, ...(added.length ? { added } : {}), ...(joined ? { joined } : {}) };
 }
 
 /** Give someone a role (adding them to the team when they are not on it). */
 export const withRole = (team: Person[], name: string, role: PersonRole): Person[] => addPerson(team, { name, roles: [role] });
 
+/**
+ * Give someone a role after the form (an answer, an email, the assistant): marked as added, and the person as joined
+ * when the form did not list them, so the Submission can show what was not submitted.
+ */
+export function withAddedRole(team: Person[], name: string, role: PersonRole): Person[] {
+  const was = team.find((p) => sameName(p.name, name));
+  if (was?.roles.includes(role)) return team;
+  return addPerson(team, { name, roles: [role], added: [role], ...(was ? {} : { joined: true }) });
+}
+
 /** Take one role off someone; a person left with none stays on the team as a member. */
 export function withoutRole(team: Person[], name: string, role: PersonRole): Person[] {
-  return team.map((p) => (sameName(p.name, name) ? { ...p, roles: cleanRoles(p.roles.filter((r) => r !== role)) } : p));
+  return team.map((p) => (sameName(p.name, name) ? tidy({ ...p, roles: cleanRoles(p.roles.filter((r) => r !== role)) }) : p));
 }
 
 export const personOn = (idea: Idea, name: string): Person | undefined => idea.people.team.find((p) => sameName(p.name, name));

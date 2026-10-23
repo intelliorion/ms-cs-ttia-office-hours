@@ -8,8 +8,6 @@ import { historyLine, type HistoryEntry } from './ideaHelpers';
 /** Pieces of an idea's panels: the stage button, the round chip, Details, History, and what each decision means. */
 
 const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', builder: 'Builder', member: 'Member' };
-/** A person's roles as one label: "Lead · Builder". Older records (one role) read the same. */
-const rolesLabel = (p: { role?: string; roles?: string[] }) => (p.roles ?? (p.role ? [p.role] : ['member'])).map((r) => ROLE[r] ?? r).join(' · ');
 /** Who builds it: everyone on the team with the builder role (older records: their builder field). */
 export const buildersOf = (idea: any): string[] =>
   [...(idea?.people?.team ?? []).filter((p: any) => p.roles?.includes('builder')).map((p: any) => p.name), ...(idea?.people?.builder ? [idea.people.builder] : [])];
@@ -156,11 +154,30 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const tags = (xs: string[] | undefined, cls = '') =>
   xs?.length ? <div className="tags">{xs.map((t) => <span key={t} className={`tg ${cls}`}>{t}</span>)}</div> : <span className="none">Not given</span>;
 
-export function Details({ idea }: { idea: any }) {
+/** A person's roles, the ones given after the form in the "added" colour. */
+function RoleLabels({ p }: { p: any }) {
+  const roles: string[] = p.roles ?? (p.role ? [p.role] : ['member']);
+  const added = new Set<string>(p.added ?? []);
+  return <>{roles.map((r, i) => <em key={r} className={added.has(r) ? 'added-role' : undefined}>{i ? '· ' : ''}{ROLE[r] ?? r}</em>)}</>;
+}
+
+/** Where a saved answer came from, in words. */
+const answerFrom = (source?: string) => (!source ? '' : source === 'review answers' ? 'your review' : 'a team email');
+
+/**
+ * What was submitted, and what was learned since. Anything not in the original form (a role or person added later, a
+ * field changed from the form's value, the answers) is in the "added" colour.
+ */
+export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: (a: { question: string; answer: string }) => void }) {
   const team: any[] = idea.people?.team ?? [];
+  const builders = team.filter((p) => (p.roles ?? []).includes('builder'));
+  const answers: any[] = idea.answers ?? [];
+  const was = idea.formWas ?? {};
+  const anyAdded = answers.length > 0 || Object.keys(was).length > 0 || team.some((p) => p.joined || p.added?.length) || !!idea.people?.builder;
   return (
     <section className="sec">
       <h3>Details</h3>
+      {anyAdded && <p className="added-legend" data-testid="added-legend"><span className="added-dot" aria-hidden="true" />In this colour: added after the form.</p>}
       <Field label="Business challenge">{idea.challenge || <span className="none">Not given</span>}</Field>
       <Field label="Current process">{idea.current_process || <span className="none">Not given</span>}</Field>
       <Field label="Desired outcomes">{tags(idea.outcomes)}</Field>
@@ -175,16 +192,46 @@ export function Details({ idea }: { idea: any }) {
       <div className="field-row">
         <Field label="Team">
           {team.length
-            ? <div className="tags">{team.map((p) => <span key={p.name} className="tg person" data-person={p.name}>{p.name}<em>{rolesLabel(p)}</em></span>)}</div>
+            ? <div className="tags">{team.map((p) => (
+              <span key={p.name} className={`tg person${p.joined ? ' added' : ''}`} data-person={p.name} title={p.joined ? 'Not on the form: added later' : undefined}>{p.name}<RoleLabels p={p} /></span>
+            ))}</div>
             : idea.people?.submitter ? <span>{idea.people.submitter}<em className="role"> Submitter</em></span> : <span className="none">Not given</span>}
         </Field>
         <Field label="Tried it already">{idea.experimented || <span className="none">Not given</span>}</Field>
       </div>
       <div className="field-row">
-        <Field label="Builder">{buildersOf(idea).length
-          ? <div className="tags">{buildersOf(idea).map((n) => <span key={n} className="tg person" data-builder={n}>{n}</span>)}</div>
+        <Field label="Builder">{builders.length || idea.people?.builder
+          ? <div className="tags">
+            {builders.map((p) => {
+              const later = (p.added ?? []).includes('builder');
+              return <span key={p.name} className={`tg person${later ? ' added' : ''}`} data-builder={p.name} title={later ? 'Named after the form' : undefined}>{p.name}</span>;
+            })}
+            {!builders.length && <span className="tg person added" data-builder={idea.people.builder}>{idea.people.builder}</span>}
+          </div>
           : <span className="none">Not named yet</span>}</Field>
+        <Field label="Participation">{idea.participation
+          ? (was.participation !== undefined
+            ? <span data-testid="participation"><span className="added-v">{idea.participation}</span><span className="was"> (form: {was.participation || 'not given'})</span></span>
+            : <span data-testid="participation">{idea.participation}</span>)
+          : <span className="none">Not given</span>}</Field>
       </div>
+      {answers.length > 0 && (
+        <div className="learned" data-testid="learned">
+          <div className="f-l">Learned since the form <span className="sec-n">{answers.length}</span></div>
+          <ul className="learned-list">
+            {answers.map((a, i) => (
+              <li key={`${i}-${a.question}`} data-answer={i}>
+                <div className="learned-q">{a.question}</div>
+                <div className="learned-a">{a.answer}</div>
+                <div className="learned-m">
+                  {answerFrom(a.source) && <span>From {answerFrom(a.source)}</span>}
+                  {onRemoveAnswer && <button className="link-btn" data-action="remove-answer" title="Take this answer back (wrong, out of date or a duplicate)" onClick={() => onRemoveAnswer({ question: a.question, answer: a.answer })}>Remove</button>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

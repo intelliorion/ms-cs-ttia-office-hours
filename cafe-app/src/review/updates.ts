@@ -1,7 +1,7 @@
 import type { Clock } from '../clock';
 import type { Idea, PrepUpdate } from '../ideas/idea';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
-import { hasRole, matchPerson, personOn, withRole, withoutRole, withRoleOn } from '../ideas/people';
+import { hasRole, matchPerson, personOn, withAddedRole, withoutRole, withRoleOn } from '../ideas/people';
 import { sameQuestion } from '../inbox/question';
 import { appendHistory } from '../workspace/files';
 import { tick } from '../checklist/checklist';
@@ -119,13 +119,15 @@ export async function decideUpdate(root: string, id: string, uid: string, act: u
       // The builder: the one named takes the role; anyone else who had it keeps their other roles.
       let team = idea.people.team;
       for (const other of withRoleOn(idea, 'builder')) if (norm(other.name) !== norm(u.builder.name)) team = withoutRole(team, other.name, 'builder');
-      team = withRole(team, u.builder.name, 'builder');
+      team = withAddedRole(team, u.builder.name, 'builder');
       undo.team = idea.people.team; undo.teamAfter = team;
       await saveIdea(root, { ...idea, people: { ...idea.people, team } });
       undo.ticked = await tickIf('s2e', u.builder.canAttend);
     } else if (u.kind === 'participation' && u.participation) {
       undo.participation = idea.participation ?? null;
-      await saveIdea(root, { ...idea, participation: u.participation });
+      // Keep what the form said, the first time the field changes.
+      const formWas = idea.formWas?.participation !== undefined || !idea.participation ? idea.formWas : { ...idea.formWas, participation: idea.participation };
+      await saveIdea(root, { ...idea, participation: u.participation, ...(formWas ? { formWas } : {}) });
     } else if (u.kind === 'flag' && u.flag) {
       await saveIdea(root, { ...idea, flags: idea.flags.filter((f) => f !== u.flag) });
     } else if (u.kind === 'facts' && u.facts) {
@@ -157,7 +159,13 @@ export async function decideUpdate(root: string, id: string, uid: string, act: u
       }
     } else if (u.kind === 'participation') {
       const { participation: _p, ...rest } = now;
-      await saveIdea(root, (u.undo?.participation ? { ...now, participation: u.undo.participation } : rest) as Idea);
+      const back = (u.undo?.participation ? { ...now, participation: u.undo.participation } : rest) as Idea;
+      // Back to the form's value: nothing differs from the form any more.
+      if (back.formWas?.participation !== undefined && back.formWas.participation === back.participation) {
+        const { participation: _w, ...was } = back.formWas;
+        if (Object.keys(was).length) back.formWas = was; else delete back.formWas;
+      }
+      await saveIdea(root, back);
     } else if (u.kind === 'flag' && u.flag && !now.flags.includes(u.flag)) {
       await saveIdea(root, { ...now, flags: [...now.flags, u.flag] });
     } else if (u.kind === 'facts' && u.facts) {
@@ -172,4 +180,15 @@ export async function decideUpdate(root: string, id: string, uid: string, act: u
     return save({ ...rest, status: 'proposed' });
   }
   throw new Error('Say yes, no or undo');
+}
+
+/** Take back one saved answer (wrong, out of date or a duplicate). Logged in the idea's history. */
+export async function removeAnswer(root: string, id: string, question: string, answer: string, clock: Clock): Promise<{ removed: boolean }> {
+  const idea = await loadIdea(root, id) as WithAnswers;
+  const list = idea.answers ?? [];
+  const i = list.findIndex((a) => a.question === question && a.answer === answer);
+  if (i < 0) throw new Error('That answer is gone already');
+  await saveIdea(root, { ...idea, answers: list.filter((_, k) => k !== i) } as Idea);
+  await appendHistory(await ideaDir(root, id), { at: clock(), action: 'answer-removed', by: 'operator', detail: `Answer removed: ${answer}`, ...(list[i].source ? { source: list[i].source } : {}) });
+  return { removed: true };
 }

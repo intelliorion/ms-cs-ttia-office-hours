@@ -7,7 +7,7 @@ import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
 import { FIRST_STAGE, STAGE_NAMES, loadSteps, type StageNo } from '../rules/stages';
 import { listIdeas, loadIdea, saveIdea, ideaDir, nextId, slugify } from '../ideas/store';
 import { normalizeIdea, type Closure, type Idea, type Person } from '../ideas/idea';
-import { hasRole, personOn, withRole, withoutRole } from '../ideas/people';
+import { hasRole, personOn, withAddedRole, withoutRole } from '../ideas/people';
 import { setStage } from '../ideas/stage';
 import { changes, type StageTarget } from '../ideas/suggest';
 import { tick } from '../checklist/checklist';
@@ -306,7 +306,7 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       const idea = await loadIdea(root, a.ideaId);
       // The builder role goes on the person (added to the team when new); their other roles stay.
       const before = idea.people.team;
-      const after = withRole(before, a.name, 'builder');
+      const after = withAddedRole(before, a.name, 'builder');
       await saveIdea(root, { ...idea, people: { ...idea.people, team: after } });
       await history(root, a.ideaId, at, `Builder named: ${a.name}`, item.file);
       return { inverse: { t: 'set-team', ideaId: a.ideaId, before, after } };
@@ -463,7 +463,7 @@ async function replay(root: string, _item: InboxItem, inv: Inverse, clock: Clock
       if (inv.field === 'people.builder') {
         if (!hasRole(personOn(idea, inv.expect), 'builder')) { out.kept.push(`The builder of ${inv.ideaId} has changed since, so it was kept`); return out; }
         let team = withoutRole(idea.people.team, inv.expect, 'builder');
-        if (inv.value) team = withRole(team, inv.value, 'builder');
+        if (inv.value) team = withAddedRole(team, inv.value, 'builder');
         await saveIdea(root, { ...idea, people: { ...idea.people, team } });
         out.did++;
         return out;

@@ -75,7 +75,7 @@ describe('the Café assistant: changes', () => {
       'I couldn\'t find both stars in the universe, so I left "link" out.',
     ]);
     await doActions(root, entry.id, undefined, clock);
-    expect((await loadIdea(root, 'CAFE-2026-002')).people.team).toContainEqual({ name: 'Avery Chen', roles: ['sponsor'] });
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team).toContainEqual({ name: 'Avery Chen', roles: ['sponsor'], added: ['sponsor'], joined: true });
     expect((await loadIdea(root, 'CAFE-2026-001')).round).toBe((await listRounds(root))[0].id);
     const c = await runCommand(root, 'again', ai, clock, { thread: entry.thread });
     expect((await cancelActions(root, c.id, undefined)).actions.every((a) => a.status === 'cancelled')).toBe(true);
@@ -216,7 +216,7 @@ describe('the Café assistant: people', () => {
     await doActions(root, entry.id, undefined, clock);
     const idea = await loadIdea(root, 'CAFE-2026-001') as any;
     expect(idea.people.builder).toBeUndefined();
-    expect(idea.people.team).toContainEqual({ name: 'Rhys Llewellyn', roles: ['builder'] });
+    expect(idea.people.team).toContainEqual({ name: 'Rhys Llewellyn', roles: ['builder'], added: ['builder'], joined: true });
     expect(await rels(root)).toContain('person:rhys-llewellyn BUILDS idea:CAFE-2026-001');
     await undoChatAction(root, entry.id, 'a1', clock);
     const back = await loadIdea(root, 'CAFE-2026-001') as any;
@@ -229,7 +229,7 @@ describe('the Café assistant: people', () => {
     const entry = await runCommand(root, 'add Jane Roe to the procurement faq bot', ai, clock);
     expect(entry.actions.map((a) => a.label)).toEqual(['Make Jane Roe a team member on Procurement FAQ bot']);
     await doActions(root, entry.id, undefined, clock);
-    expect((await loadIdea(root, 'CAFE-2026-002')).people.team).toContainEqual({ name: 'Jane Roe', roles: ['member'] });
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team).toContainEqual({ name: 'Jane Roe', roles: ['member'], added: ['member'], joined: true });
   });
 
   it('a lead made builder too keeps both roles; unlinking LEADS then takes off only the lead role', async () => {
@@ -240,12 +240,12 @@ describe('the Café assistant: people', () => {
     const add = await runCommand(root, 'Kwame Mensah builds the faq bot too', ai, clock);
     expect(add.actions.map((a) => a.label)).toEqual(['Make Kwame Mensah builder on Procurement FAQ bot (also lead)']);
     await doActions(root, add.id, undefined, clock);
-    expect((await loadIdea(root, 'CAFE-2026-002')).people.team[0]).toEqual({ name: 'Kwame Mensah', roles: ['lead', 'builder'] });
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team[0]).toEqual({ name: 'Kwame Mensah', roles: ['lead', 'builder'], added: ['builder'] });
     expect(await rels(root)).toEqual(expect.arrayContaining(['person:kwame-mensah LEADS idea:CAFE-2026-002', 'person:kwame-mensah BUILDS idea:CAFE-2026-002']));
     const drop = await runCommand(root, 'Kwame Mensah no longer leads the faq bot', ai, clock);
     expect(drop.actions.map((a) => a.label)).toEqual(['Kwame Mensah is no longer lead on Procurement FAQ bot']);
     await doActions(root, drop.id, undefined, clock);
-    expect((await loadIdea(root, 'CAFE-2026-002')).people.team[0]).toEqual({ name: 'Kwame Mensah', roles: ['builder'] });
+    expect((await loadIdea(root, 'CAFE-2026-002')).people.team[0]).toEqual({ name: 'Kwame Mensah', roles: ['builder'], added: ['builder'] });
   });
 });
 

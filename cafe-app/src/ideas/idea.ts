@@ -18,6 +18,10 @@ export interface Person {
   roles: PersonRole[];
   /** The form's own words for them, as typed ("Lead, Builder"). */
   note?: string;
+  /** Roles given after the form (by an answer, an email or the assistant), so they show apart from what was submitted. */
+  added?: PersonRole[];
+  /** Not on the form: added later. */
+  joined?: boolean;
 }
 
 export interface StepState {
@@ -105,6 +109,8 @@ export interface Idea {
   use_case_category: string[];
   additional_context?: string;
   people: { submitter?: string; team: Person[] };
+  /** What the form said for a field that was changed later (field → the form's value), so both can be shown. */
+  formWas?: Record<string, string>;
   checklist: Record<string, StepState>;
   /** step id → ISO due date */
   due: Record<string, string>;

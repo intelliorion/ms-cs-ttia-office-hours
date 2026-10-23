@@ -2,7 +2,7 @@ import { ALLOWED, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type G
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
-import { personOn, rolesText, withRole, withoutRole } from '../ideas/people';
+import { personOn, rolesText, withAddedRole, withoutRole } from '../ideas/people';
 import { appendHistory } from '../workspace/files';
 import { assignIdeas, createRound, listRounds, setIdeaRound } from '../round/store';
 import type { Round } from '../round/round';
@@ -276,7 +276,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
       const before = idea.people.team;
       const after: Person[] = a.role === null
         ? before.filter((p) => p.name.toLowerCase() !== a.person.toLowerCase())
-        : a.drop ? withoutRole(before, a.person, a.role) : withRole(before, a.person, a.role);
+        : a.drop ? withoutRole(before, a.person, a.role) : withAddedRole(before, a.person, a.role);
       await saveIdea(root, { ...idea, people: { ...idea.people, team: after } });
       await log(root, idea.id, clock, a.role === null ? `${a.person} taken off the team` : a.drop ? `${a.person} no longer ${a.role}` : `${a.person} set as ${a.role}`);
       return { inverse: { t: 'team', ideaId: idea.id, before, after } };

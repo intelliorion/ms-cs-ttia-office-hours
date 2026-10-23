@@ -25,9 +25,9 @@ describe('one person, several roles', () => {
       builder: 'Person 2',
     })).toEqual({
       submitter: 'Person 1',
-      team: [{ name: 'Person 1', roles: ['lead', 'sponsor'], note: 'Lead' }, { name: 'Person 2', roles: ['builder'] }],
+      team: [{ name: 'Person 1', roles: ['lead', 'sponsor'], note: 'Lead' }, { name: 'Person 2', roles: ['builder'], added: ['builder'] }],
     });
-    expect(normalizePeople({ builder: 'Person 9' })).toEqual({ team: [{ name: 'Person 9', roles: ['builder'] }] });
+    expect(normalizePeople({ builder: 'Person 9' })).toEqual({ team: [{ name: 'Person 9', roles: ['builder'], added: ['builder'], joined: true }] });
     expect(normalizePeople(undefined)).toEqual({ team: [] });
   });
 

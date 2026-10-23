@@ -73,7 +73,8 @@ describe('what your answers change in the record', () => {
     const [b, p, f, a] = await updates(root);
     for (const x of [b, p, f, a]) expect((await decideUpdate(root, idea.id, x.id, 'yes', clock)).status).toBe('applied');
     let now = await loadIdea(root, idea.id) as any;
-    expect(now.people.team[1]).toEqual({ name: 'Person 2', roles: ['builder'] });
+    expect(now.people.team[1]).toEqual({ name: 'Person 2', roles: ['builder'], added: ['builder'] });
+    expect(now.formWas).toEqual({ participation: 'Individual' });
     expect(now.checklist.s2e?.done).toBe(true);
     expect(now.participation).toBe('Team');
     expect(now.flags).toEqual([]);
@@ -86,6 +87,7 @@ describe('what your answers change in the record', () => {
     expect(now.people.team[1]).toEqual({ name: 'Person 2', roles: ['member'] });
     expect(now.checklist.s2e?.done).toBeFalsy();
     expect(now.participation).toBe('Individual');
+    expect(now.formWas).toBeUndefined();
     expect(now.flags).toEqual([FLAG]);
     expect(now.answers ?? []).toEqual([]);
   });
@@ -120,7 +122,7 @@ describe('the same person, the same answers: no duplicates', () => {
     expect(b.label).toBe('Make Tomasz Wiśniewski the builder (the answer says "Tomasz Wiśniewski Viseiewki") instead of Person 1');
     await decideUpdate(root, idea.id, b.id, 'yes', clock);
     expect((await loadIdea(root, idea.id)).people.team).toEqual([
-      { name: 'Person 1', roles: ['lead'] }, { name: 'Tomasz Wiśniewski', roles: ['sponsor', 'builder'], note: 'Sponsor' },
+      { name: 'Person 1', roles: ['lead'] }, { name: 'Tomasz Wiśniewski', roles: ['sponsor', 'builder'], note: 'Sponsor', added: ['builder'] },
     ]);
     // Re-evaluated, the answer spelt yet another way: nothing new to do.
     await suggestPrep(root, idea.id, ai({ builder: 'Tomasz Viseiewki' }).run, clock);
@@ -143,5 +145,18 @@ describe('the same person, the same answers: no duplicates', () => {
     expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer)).toEqual(['Yes.', 'Confirmed, every session.']);
     await decideUpdate(root, idea.id, fresh.id, 'undo', clock);
     expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer).sort()).toEqual(['Not confirmed yet.', 'Yes.']);
+  });
+});
+
+describe('taking back a saved answer', () => {
+  it('removes that one answer and logs it', async () => {
+    const root = await tmpWorkspace();
+    const answers = [{ question: 'Q1', answer: 'Old', source: REVIEW_SOURCE }, { question: 'Q1', answer: 'New', source: REVIEW_SOURCE }];
+    await saveIdea(root, { ...idea, answers } as any);
+    const { removeAnswer } = await import('../src/review/updates');
+    await removeAnswer(root, idea.id, 'Q1', 'Old', clock);
+    expect(((await loadIdea(root, idea.id)) as any).answers).toEqual([answers[1]]);
+    await expect(removeAnswer(root, idea.id, 'Q1', 'Old', clock)).rejects.toThrow('gone already');
+    expect((await readHistory(await ideaDir(root, idea.id))).at(-1)).toMatchObject({ action: 'answer-removed', detail: 'Answer removed: Old' });
   });
 });

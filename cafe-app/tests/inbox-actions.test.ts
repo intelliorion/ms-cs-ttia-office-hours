@@ -296,7 +296,7 @@ describe('Needs your OK: applied only on Apply', () => {
     const r = rec(item, 'name_builder');
     const before = (await loadIdea(root, 'CAFE-2026-001')).people.team;
     await applyRecords(root, item.id, [r.id], clock);
-    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toContainEqual({ name: 'Person 3', roles: ['builder'] });
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toContainEqual({ name: 'Person 3', roles: ['builder'], added: ['builder'], joined: true });
     await undoRecord(root, item.id, r.id, clock);
     expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toEqual(before);
   });
@@ -306,7 +306,7 @@ describe('Needs your OK: applied only on Apply', () => {
     const idea = await loadIdea(root, 'CAFE-2026-001');
     await saveIdea(root, { ...idea, people: { ...idea.people, team: [{ name: 'Person 3', roles: ['lead'], note: 'Lead' }] } });
     await applyRecords(root, item.id, [rec(item, 'name_builder').id], clock);
-    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toEqual([{ name: 'Person 3', roles: ['lead', 'builder'], note: 'Lead' }]);
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toEqual([{ name: 'Person 3', roles: ['lead', 'builder'], note: 'Lead', added: ['builder'] }]);
   });
 
   it('an undo recorded before roles (the builder field) still takes the builder back', async () => {

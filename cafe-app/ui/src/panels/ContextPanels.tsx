@@ -70,12 +70,18 @@ function Overview({ part }: { part: 'pipeline' | 'demand' }) {
 /** What was submitted: the form's answers, read-only, and the import's flags. */
 function IdeaSubmission({ id }: { id: string }) {
   const idea = useStore((s) => s.state?.ideas?.find((i: any) => i.id === id));
+  const { refresh, setNotice } = useStore();
+  const removeAnswer = async (a: { question: string; answer: string }) => {
+    try { await post(`/api/ideas/${encodeURIComponent(id)}/answers/remove`, a); setNotice({ text: 'Answer removed.', kind: 'ok' }); }
+    catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+    await refresh();
+  };
   if (!idea) return <p className="hint">This idea is no longer in the workspace.</p>;
   return (
     <div className="ctx-scroll" data-testid="ctx-submission">
       <div className="ctx-title"><span className="iid">{idea.id}</span> {idea.title || 'Untitled idea'}</div>
       {idea.flags?.length > 0 && <ul className="ctx-flags">{idea.flags.map((f: string) => <li key={f}>⚑ {f}</li>)}</ul>}
-      <Details idea={idea} />
+      <Details idea={idea} onRemoveAnswer={(a) => void removeAnswer(a)} />
     </div>
   );
 }

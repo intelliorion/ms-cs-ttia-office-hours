@@ -9,11 +9,11 @@ import { loadSettings, saveSettings } from '../src/round/store';
 describe('workspace', () => {
   it('creates the layout, rules and templates, and no round', async () => {
     const root = await tmpWorkspace();
-    expect((await readdir(root)).sort()).toEqual(
-      ['cohorts', 'exports', 'graph', 'ideas', 'inbox', 'roadshows', 'rounds', 'rules', 'skills', 'templates'],
-    );
+    // The setup at the top; everything the Café makes under data/, which can be deleted.
+    expect((await readdir(root)).sort()).toEqual(['README.txt', 'data', 'rules', 'templates']);
+    expect((await readdir(path.join(root, 'data'))).sort()).toEqual(['chat', 'cohorts', 'exports', 'graph', 'ideas', 'inbox', 'roadshows', 'rounds']);
     expect(await readdir(path.join(root, 'templates'))).toHaveLength(17);
-    expect(await readdir(path.join(root, 'rounds'))).toEqual([]);
+    expect(await readdir(path.join(root, 'data', 'rounds'))).toEqual([]);
   });
 
   it('is safe to run twice and keeps edits', async () => {
@@ -46,7 +46,7 @@ describe('ideas', () => {
   it('lists good ideas and reports a broken one', async () => {
     const root = await tmpWorkspace();
     await saveIdea(root, sampleIdea());
-    const broken = path.join(root, 'ideas', 'CAFE-2026-002-broken');
+    const broken = path.join(root, 'data', 'ideas', 'CAFE-2026-002-broken');
     await mkdir(broken, { recursive: true });
     await writeFile(path.join(broken, 'idea.yaml'), 'title: [unclosed\n');
     const { ideas, problems } = await listIdeas(root);
@@ -77,5 +77,43 @@ describe('start-up never overwrites rules', () => {
     expect(created).not.toContain('rules/settings.yaml');
     expect(created).not.toContain('rules/stages.yaml');
     expect(await readFile(path.join(root, 'rules', 'settings.yaml'), 'utf8')).toBe('');
+  });
+});
+
+describe('the data folder', () => {
+  it("an older workspace's data moves into data/ once, with its references still working; a folder in both places is left alone", async () => {
+    const { initWorkspace } = await import('../src/workspace/init');
+    const { listOutbox } = await import('../src/comms/outbox');
+    const { listIdeas } = await import('../src/ideas/store');
+    const { mkdtemp, rename: mv } = await import('node:fs/promises');
+    const os = await import('node:os');
+    // Build a workspace the new way, then put it back into the old layout (data folders at the top).
+    const root = await tmpWorkspace();
+    await saveIdea(root, sampleIdea());
+    const { draftEmail } = await import('../src/comms/outbox');
+    await saveSettings(root, { operatorName: 'Café operator' });
+    const rec = await draftEmail(root, { template: 'E2', ideaId: 'CAFE-2026-001' }, () => '2026-10-22');
+    for (const name of ['ideas', 'rounds', 'inbox', 'graph']) await mv(path.join(root, 'data', name), path.join(root, name));
+    await writeFile(path.join(root, 'data', 'chat', 'keep.txt'), 'x');
+    await mkdir(path.join(root, 'chat'), { recursive: true });
+    const r = await initWorkspace(root);
+    expect(r.moved.sort()).toEqual(['graph', 'ideas', 'inbox', 'rounds']);
+    expect(r.left).toEqual(['chat']);
+    expect((await listIdeas(root)).ideas.map((i) => i.id)).toEqual(['CAFE-2026-001']);
+    expect((await listOutbox(root)).map((m) => m.key)).toEqual([rec.key]);
+    expect(rec.key.startsWith('ideas/')).toBe(true);
+    void mkdtemp; void os;
+  });
+
+  it('deleting data/ while the app runs leaves an empty Café that works', async () => {
+    const { rm } = await import('node:fs/promises');
+    const { listIdeas } = await import('../src/ideas/store');
+    const root = await tmpWorkspace();
+    await saveIdea(root, sampleIdea());
+    await rm(path.join(root, 'data'), { recursive: true, force: true });
+    expect((await listIdeas(root)).ideas).toEqual([]);
+    await saveIdea(root, sampleIdea());
+    expect((await listIdeas(root)).ideas).toHaveLength(1);
+    expect(await loadSettings(root)).toBeTruthy();
   });
 });

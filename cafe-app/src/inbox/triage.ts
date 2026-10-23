@@ -1,4 +1,5 @@
 import { parse as parseCsv } from 'csv-parse/sync';
+import { fromDataKey } from '../workspace/paths';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
@@ -191,7 +192,7 @@ export async function readAndScreen(
 ) {
   const item = await getItem(root, id);
   if (!item) throw new Error(`No such import ${id}`);
-  const file = path.join(root, ...item.file.split('/'));
+  const file = fromDataKey(root, item.file);
   const bytes = new Uint8Array(await fs.readFile(file));
   // A pick ("Which idea?") keeps the transcription the operator was shown; only Run again has the AI look again.
   const stored = opts.reuseRead && item.meta?.readBy === 'ai' && item.text ? { type: 'note' as const, text: item.text, meta: item.meta } : null;

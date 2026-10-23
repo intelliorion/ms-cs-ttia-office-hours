@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from '../graph/store';
 import { listIdeas } from '../ideas/store';
@@ -42,7 +43,7 @@ export interface ChatEntry {
 /** A conversation: its title, when it was last used, and the codes and last answer it carries forward. */
 export interface ChatThread { id: string; title: string; started: string; updated: number; codes: [string, Coded][]; last: string[] }
 
-const dir = (root: string) => path.join(root, 'chat');
+const dir = (root: string) => paths(root).chat;
 const logFile = (root: string) => path.join(dir(root), 'log.jsonl');
 const threadsFile = (root: string) => path.join(dir(root), 'threads.json');
 

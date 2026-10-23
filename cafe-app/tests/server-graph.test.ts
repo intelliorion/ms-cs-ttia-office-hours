@@ -26,9 +26,9 @@ describe('/api/graph', () => {
     const s = await startServer();
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
     await fetch(`${s.base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
-    await mkdir(path.join(s.root, 'graph'), { recursive: true });
-    await writeFile(path.join(s.root, 'graph', 'layout.json'), 'not json', 'utf8');
-    await writeFile(path.join(s.root, 'graph', 'ai-links.jsonl'), 'garbage\n', 'utf8');
+    await mkdir(path.join(s.root, 'data', 'graph'), { recursive: true });
+    await writeFile(path.join(s.root, 'data', 'graph', 'layout.json'), 'not json', 'utf8');
+    await writeFile(path.join(s.root, 'data', 'graph', 'ai-links.jsonl'), 'garbage\n', 'utf8');
     const r = await fetch(`${s.base}/api/graph`);
     expect(r.status).toBe(200);
     const g = await json(r);

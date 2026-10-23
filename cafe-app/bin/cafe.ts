@@ -21,12 +21,16 @@ const USAGE = 'Usage: cafe <init | start | import <file>> [--workspace DIR] [--p
 async function main(): Promise<void> {
   switch (command) {
     case 'init': {
-      const { created } = await initWorkspace(root);
+      const { created, moved, left } = await initWorkspace(root);
+      if (moved.length) console.log(`Moved into data/: ${moved.join(', ')}`);
+      if (left.length) console.log(`In both places, left as they are (move them into data/ by hand): ${left.join(', ')}`);
       console.log(created.length ? `Created in ${root}:\n  ${created.join('\n  ')}` : `${root} is already set up.`);
       return;
     }
     case 'start': {
-      await initWorkspace(root);
+      const { moved, left } = await initWorkspace(root);
+      if (moved.length) console.log(`Moved the Café's data into data/: ${moved.join(', ')}`);
+      if (left.length) console.log(`These are both at the top and in data/, so they were left as they are: ${left.join(', ')}. Move what you need into data/ by hand.`);
       const port = Number(flag('port') ?? 4100);
       const server = createApp({ root, clock });
       server.on('error', (e: NodeJS.ErrnoException) => {

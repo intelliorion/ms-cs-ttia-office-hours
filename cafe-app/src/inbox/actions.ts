@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Clock } from '../clock';
-import { paths } from '../workspace/paths';
+import { dataKey, fromDataKey, paths } from '../workspace/paths';
 import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
 import { FIRST_STAGE, STAGE_NAMES, loadSteps, type StageNo } from '../rules/stages';
 import { listIdeas, loadIdea, saveIdea, ideaDir, nextId, slugify } from '../ideas/store';
@@ -136,8 +136,8 @@ export function labelOf(a: Action): string {
   }
 }
 
-const abs = (root: string, rel: string) => path.join(root, ...rel.split('/'));
-const rel = (root: string, p: string) => path.relative(root, p).split(path.sep).join('/');
+const abs = (root: string, rel: string) => fromDataKey(root, rel);
+const rel = (root: string, p: string) => dataKey(root, p);
 const exists = (p: string) => fs.access(p).then(() => true, () => false);
 const key = (s: string) => s.trim().toLowerCase();
 
@@ -376,8 +376,8 @@ export async function undoAction(root: string, item: InboxItem, recordId: string
 
 const safeRel = (root: string, f: string) => {
   const p = path.resolve(abs(root, f));
-  const base = path.resolve(root);
-  if (f.includes('..') || !(p.startsWith(path.join(base, 'ideas') + path.sep) || p.startsWith(path.join(base, 'rounds') + path.sep))) {
+  const { ideas, rounds } = paths(root);
+  if (f.includes('..') || !(p.startsWith(path.resolve(ideas) + path.sep) || p.startsWith(path.resolve(rounds) + path.sep))) {
     throw new Error(`Won't remove ${f}`);
   }
   return p;

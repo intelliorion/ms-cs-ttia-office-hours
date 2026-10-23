@@ -29,8 +29,8 @@ async function start(provider: Provider = fakeProvider(), opts: { builder?: stri
   // The idea the reply is about, with the E2 questions sent (so the answers and the reply are Safe).
   const people = { submitter: 'Person 1', team: [], ...(opts.builder ? { builder: opts.builder } : {}) };
   await saveIdea(s.root, sampleIdea({ sent: { E2: '2026-10-20' }, people } as any));
-  const folder = (await readdir(path.join(s.root, 'ideas'))).find((f) => f.startsWith(ID))!;
-  const dir = path.join(s.root, 'ideas', folder, 'emails');
+  const folder = (await readdir(path.join(s.root, 'data', 'ideas'))).find((f) => f.startsWith(ID))!;
+  const dir = path.join(s.root, 'data', 'ideas', folder, 'emails');
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${ID}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n1. How many requests a week?\n2. Who does it today?\n`);
   type Res = Omit<Response, 'json'> & { json(): Promise<any> };
@@ -222,7 +222,7 @@ describe('final review fixes', () => {
     const s = await start();
     const { item } = await (await s.drop('reply.eml', reply)).json();
     expect(item.status).toBe('applied');
-    await writeFile(path.join(s.root, ...item.file.split('/')), `${reply}\nHer salary and passport number are below.\n`);
+    await writeFile(path.join(s.root, 'data', ...item.file.split('/')), `${reply}\nHer salary and passport number are below.\n`);
     const r = await s.post(`/api/inbox/${item.id}/process`, {});
     const again = (await r.json()).item;
     expect(again.status).toBe('held');

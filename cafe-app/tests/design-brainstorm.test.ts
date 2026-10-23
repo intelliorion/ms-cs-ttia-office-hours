@@ -223,7 +223,7 @@ describe('design brainstorm routes', () => {
     const got = await json(await fetch(`${s.base}/api/ideas/${ID}/design`));
     const dir = await ideaDir(s.root, ID);
     expect(got.folder).toBe(path.relative(s.root, dir).split(path.sep).join('/'));
-    expect(got.folder).toMatch(new RegExp(`^ideas/${ID}-`));
+    expect(got.folder).toMatch(new RegExp(`^data/ideas/${ID}-`));
   });
 
   it('injection text in an answer stays inside the step: no stage move, no extra ticks, no new headings', async () => {
@@ -250,7 +250,7 @@ describe('the Inbox fills a question asked in an E2', () => {
     await applyDesignEvent(root, idea, { t: 'step', question: Q1, suggested: [], tag: 'must-show', source: 'ai-suggested' }, clock);
     const { emailKey } = await askTeam(root, idea, 1, clock);
     // The operator sends the E2.
-    const file = path.join(root, ...emailKey.split('/'));
+    const file = path.join(root, 'data', ...emailKey.split('/'));
     await writeFile(file, (await readFile(file, 'utf8')).replace('status: draft', 'status: sent\nsentAt: 2026-10-20'));
 
     const triage: Understanding = {

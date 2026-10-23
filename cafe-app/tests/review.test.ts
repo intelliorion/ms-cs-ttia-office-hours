@@ -139,7 +139,7 @@ describe('writeReviewPack', () => {
     await createRound(root, 'Autumn', clock);
     await setIdeaRound(root, 'CAFE-2026-001', 'ROUND-002', clock);
     const file = await writeReviewPack(root, clock);
-    expect(path.relative(root, file)).toBe(path.join('rounds', 'ROUND-002', 'review-pack-2026-10-19.md'));
+    expect(path.relative(root, file)).toBe(path.join('data', 'rounds', 'ROUND-002', 'review-pack-2026-10-19.md'));
     const md = await readFile(file, 'utf8');
     expect(md).toContain('2 ideas to decide');
     // Grouped by round, newest first; a round with no open idea is left out; ideas in no round come last.
@@ -158,7 +158,7 @@ describe('writeReviewPack', () => {
   it('with no round at all it still builds: one "No round yet" group and a notice to create a round', async () => {
     const root = await setup();
     const file = await writeReviewPack(root, clock);
-    expect(path.relative(root, file)).toBe(path.join('exports', 'review-pack-2026-10-19.md'));
+    expect(path.relative(root, file)).toBe(path.join('data', 'exports', 'review-pack-2026-10-19.md'));
     const md = await readFile(file, 'utf8');
     expect(md.split('\n').filter((l) => /^##? /.test(l))).toEqual(['# Review pack', '## No round yet']);
     expect(md).toContain('\nCreate a round first (Rounds button).\n');

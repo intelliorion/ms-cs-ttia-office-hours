@@ -79,6 +79,6 @@ describe('a round, end to end', () => {
       });
     expect(run('init')).toContain('rules/settings.yaml');
     expect(JSON.parse(run('import', FIXTURE)).created).toHaveLength(3);
-    expect(await readdir(path.join(root, 'rounds'))).toEqual([]);
+    expect(await readdir(path.join(root, 'data', 'rounds'))).toEqual([]);
   });
 });

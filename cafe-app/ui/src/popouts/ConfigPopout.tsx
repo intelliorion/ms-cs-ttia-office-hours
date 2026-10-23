@@ -43,9 +43,10 @@ export function ConfigPopout() {
         <div className="pop-col">
         <section className="sec">
           <h3>Data folder</h3>
-          <p className="hint lead">Everything the Café keeps (ideas, rounds, emails, the graph, settings) is in this folder on this computer.</p>
+          <p className="hint lead">Everything the Café made or was given (ideas, rounds, emails, imports, the graph, chat) is in this folder.
+            It is safe to delete, all of it or any part: the Café starts again empty. Your settings and the email templates sit beside it and stay.</p>
           <div className="data-dir">
-            <code title={state?.workspace ?? ''}><bdi>{state?.workspace ?? ''}</bdi></code>
+            <code title={state?.dataFolder ?? ''}><bdi>{state?.dataFolder ?? ''}</bdi></code>
             <button className="btn" type="button" data-action="open-data-folder" disabled={busy} onClick={() => void openData()}>Open data folder</button>
           </div>
         </section>

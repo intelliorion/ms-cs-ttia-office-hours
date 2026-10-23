@@ -273,7 +273,7 @@ describe('Task 3 carry-overs', () => {
     await saveIdea(root, idea);
     await applyDesignEvent(root, idea, { t: 'step', question: 'What is the one thing this proof of concept must show?', suggested: [], tag: 'must-show', source: 'ai-suggested' }, clock);
     const { emailKey } = await askTeam(root, idea, 1, clock);
-    const file = path.join(root, ...emailKey.split('/'));
+    const file = path.join(root, 'data', ...emailKey.split('/'));
     await writeFile(file, (await readFile(file, 'utf8')).replace('status: draft', 'status: sent\nsentAt: 2026-10-20'));
     const triage: Understanding = {
       what: 'Person 2 answers something else.', understood: ['Person 2 answers something else.'], uncertain: [], kind: 'reply', ideaId: ID, matchConfidence: 0.95,

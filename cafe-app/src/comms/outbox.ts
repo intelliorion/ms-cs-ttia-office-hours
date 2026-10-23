@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { plusDays, type Clock } from '../clock';
-import { paths } from '../workspace/paths';
+import { dataKey, fromDataKey, paths } from '../workspace/paths';
 import { writeFileAtomic, readText, appendHistory } from '../workspace/files';
 import { loadTemplates, render, fillText, analyse } from './templates';
 import { loadIdea, saveIdea, ideaDir } from '../ideas/store';
@@ -57,10 +57,10 @@ const FILE_PATTERN = /^\d{3}-[A-Z0-9]+\.md$/;
 
 function fileOf(root: string, key: string): string {
   if (!KEY_PATTERN.test(key) || key.includes('..')) throw new Error(`Not an Outbox item: ${key}`);
-  return path.join(root, ...key.split('/'));
+  return fromDataKey(root, key);
 }
 
-const keyOf = (root: string, file: string) => path.relative(root, file).split(path.sep).join('/');
+const keyOf = (root: string, file: string) => dataKey(root, file);
 
 function serialize(r: EmailRecord): string {
   const { key: _key, body, ...meta } = r;

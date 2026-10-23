@@ -3,7 +3,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import type { Clock } from '../clock';
 import type { Connector } from '../ai/connector';
-import { paths } from '../workspace/paths';
+import { dataKey, fromDataKey, paths } from '../workspace/paths';
 import { writeFileAtomic } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
 import { currentRoundId, NO_ROUND } from '../round/store';
@@ -128,7 +128,7 @@ async function conflictContext(root: string, item: InboxItem, tr: TriageRecord, 
 }
 
 async function sizeOf(root: string, item: InboxItem): Promise<number> {
-  try { return (await fs.stat(path.join(root, ...item.file.split('/')))).size; } catch { return item.text?.length ?? 0; }
+  try { return (await fs.stat(fromDataKey(root, item.file))).size; } catch { return item.text?.length ?? 0; }
 }
 
 /**
@@ -536,7 +536,7 @@ async function roundDraft(root: string, item: InboxItem, clock: Clock): Promise<
   const body = r.body.replaceAll('[FILE NAME]', item.name);
   const file = path.join(dir, `${String(names.length + 1).padStart(3, '0')}-PD.md`);
   await writeFileAtomic(file, `---\n${YAML.stringify(rec)}---\n${body}\n`);
-  return { ...rec, key: path.relative(root, file).split(path.sep).join('/'), body };
+  return { ...rec, key: dataKey(root, file), body };
 }
 
 export interface InboxView {

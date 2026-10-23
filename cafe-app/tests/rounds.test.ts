@@ -13,8 +13,8 @@ import {
 const clock = fixedClock('2026-10-22');
 
 async function legacyRound(root: string, id = 'ROUND-2026-Q4') {
-  await mkdir(path.join(root, 'rounds', id), { recursive: true });
-  await writeFile(path.join(root, 'rounds', id, 'round.yaml'), `id: ${id}\n`);
+  await mkdir(path.join(root, 'data', 'rounds', id), { recursive: true });
+  await writeFile(path.join(root, 'data', 'rounds', id, 'round.yaml'), `id: ${id}\n`);
 }
 
 describe('rounds', () => {
@@ -33,7 +33,7 @@ describe('rounds', () => {
     const root = await tmpWorkspace();
     const first = await createRound(root, '', clock);
     expect(first).toEqual({ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-22' });
-    const stored = YAML.parse(await readFile(path.join(root, 'rounds', 'ROUND-001', 'round.yaml'), 'utf8'));
+    const stored = YAML.parse(await readFile(path.join(root, 'data', 'rounds', 'ROUND-001', 'round.yaml'), 'utf8'));
     expect(stored).toEqual({ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-22' });
     expect((await createRound(root, '  Spring pilots ', clock))).toMatchObject({ id: 'ROUND-002', name: 'Spring pilots' });
     expect(await currentRoundId(root)).toBe('ROUND-002');
@@ -78,7 +78,7 @@ describe('rounds', () => {
     const root = await tmpWorkspace();
     await createRound(root, 'Good', clock);
     await legacyRound(root, 'ROUND-002');
-    await writeFile(path.join(root, 'rounds', 'ROUND-002', 'round.yaml'), 'name: [unclosed\n');
+    await writeFile(path.join(root, 'data', 'rounds', 'ROUND-002', 'round.yaml'), 'name: [unclosed\n');
     expect((await listRounds(root)).map((r) => r.id)).toEqual(['ROUND-001']);
     const { problems } = await listRoundsChecked(root);
     expect(problems).toEqual([{ folder: 'ROUND-002', message: expect.any(String) }]);

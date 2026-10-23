@@ -172,18 +172,18 @@ describe('store and layout', () => {
     expect(g3.edges.find((e) => e.id === edge.id)?.confirmed).toBe(true);
     await setAiLinkStatus(root, edge.id, 'removed');
     expect((await rebuildGraph(root)).edges.some((e) => e.id === edge.id)).toBe(false);
-    expect(await readFile(path.join(root, 'graph', 'nodes.jsonl'), 'utf8')).toContain('"idea:CAFE-2026-001"');
+    expect(await readFile(path.join(root, 'data', 'graph', 'nodes.jsonl'), 'utf8')).toContain('"idea:CAFE-2026-001"');
   });
 
   it('an unreadable layout.json is treated as empty and rewritten', async () => {
     const root = await tmpWorkspace();
     await importExport(root, FIXTURE, { clock: fixedClock('2026-10-19'), steps });
     const g = await rebuildGraph(root);
-    await mkdir(path.join(root, 'graph'), { recursive: true });
-    await writeFile(path.join(root, 'graph', 'layout.json'), '{"idea:CAFE-2026-001": [1, 2', 'utf8');
+    await mkdir(path.join(root, 'data', 'graph'), { recursive: true });
+    await writeFile(path.join(root, 'data', 'graph', 'layout.json'), '{"idea:CAFE-2026-001": [1, 2', 'utf8');
     const l = await layoutFor(root, g);
     expect(Object.keys(l)).toHaveLength(g.nodes.length);
-    expect(JSON.parse(await readFile(path.join(root, 'graph', 'layout.json'), 'utf8'))).toEqual(l);
+    expect(JSON.parse(await readFile(path.join(root, 'data', 'graph', 'layout.json'), 'utf8'))).toEqual(l);
   });
 
   it('a garbage line in ai-links.jsonl is skipped and listed as a problem; writes keep it', async () => {
@@ -191,7 +191,7 @@ describe('store and layout', () => {
     await importExport(root, FIXTURE, { clock: fixedClock('2026-10-19'), steps });
     const link = { from: 'idea:CAFE-2026-002', to: 'capability:ticketing-and-status', rel: 'NEEDS' as const, description: 'd', source: 'ai:challenge', confidence: 0.6, status: 'pending' as const, newNodes: [{ id: 'capability:ticketing-and-status', type: 'Capability' as const, label: 'Ticketing and status' }] };
     await appendAiLink(root, link);
-    const file = path.join(root, 'graph', 'ai-links.jsonl');
+    const file = path.join(root, 'data', 'graph', 'ai-links.jsonl');
     await writeFile(file, `${await readFile(file, 'utf8')}{"from": "torn\n`, 'utf8');
     const read = await readAiLinks(root);
     expect(read.links).toHaveLength(1);
@@ -306,8 +306,8 @@ describe('rounds in the graph', () => {
 
   it('rebuilds a legacy workspace with its old round as a star', async () => {
     const root = await tmpWorkspace();
-    await mkdir(path.join(root, 'rounds', 'ROUND-2026-Q4'), { recursive: true });
-    await writeFile(path.join(root, 'rounds', 'ROUND-2026-Q4', 'round.yaml'), 'id: ROUND-2026-Q4\n');
+    await mkdir(path.join(root, 'data', 'rounds', 'ROUND-2026-Q4'), { recursive: true });
+    await writeFile(path.join(root, 'data', 'rounds', 'ROUND-2026-Q4', 'round.yaml'), 'id: ROUND-2026-Q4\n');
     await saveIdea(root, sampleIdea({ round: 'ROUND-2026-Q4' }));
     const g = await rebuildGraph(root);
     const star = g.nodes.find((n) => n.type === 'Round');

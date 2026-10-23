@@ -73,7 +73,7 @@ describe('importExport', () => {
     const root = await tmpWorkspace();
     const rows = parse(await readFile(FIXTURE), { bom: true }) as string[][];
     const reversed = rows.map((r) => [...r].reverse());
-    const file = path.join(root, 'inbox', 'reordered.csv');
+    const file = path.join(root, 'data', 'inbox', 'reordered.csv');
     await writeFile(file, reversed.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n'));
     const r = await importExport(root, file, opts);
     expect(r.created.map((c) => c.title)).toEqual([
@@ -87,7 +87,7 @@ describe('importExport', () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Ideas');
     rows.forEach((r) => ws.addRow(r));
-    const file = path.join(root, 'inbox', 'export.xlsx');
+    const file = path.join(root, 'data', 'inbox', 'export.xlsx');
     await wb.xlsx.writeFile(file);
     const r = await importExport(root, file, opts);
     expect(r.created).toHaveLength(3);
@@ -96,7 +96,7 @@ describe('importExport', () => {
 
   it('refuses a file with no Title column and writes nothing', async () => {
     const root = await tmpWorkspace();
-    const file = path.join(root, 'inbox', 'wrong.csv');
+    const file = path.join(root, 'data', 'inbox', 'wrong.csv');
     await writeFile(file, 'Name,Region\nX,AMER\n');
     await expect(importExport(root, file, opts)).rejects.toThrow('has no Title column');
     expect((await listIdeas(root)).ideas).toEqual([]);
@@ -104,14 +104,14 @@ describe('importExport', () => {
 
   it('refuses a file type it cannot read', async () => {
     const root = await tmpWorkspace();
-    const file = path.join(root, 'inbox', 'notes.txt');
+    const file = path.join(root, 'data', 'inbox', 'notes.txt');
     await writeFile(file, 'hello');
     await expect(importExport(root, file, opts)).rejects.toThrow('use a .csv or .xlsx export');
   });
 
   it('never reissues the ID of a broken idea folder', async () => {
     const root = await tmpWorkspace();
-    const broken = path.join(root, 'ideas', 'CAFE-2026-001-broken');
+    const broken = path.join(root, 'data', 'ideas', 'CAFE-2026-001-broken');
     await mkdir(broken, { recursive: true });
     const brokenYaml = 'title: [unclosed\n';
     await writeFile(path.join(broken, 'idea.yaml'), brokenYaml);
@@ -133,7 +133,7 @@ describe('the newer form columns', () => {
   const csv = (header: string[], row: string[]) => [header, row].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
   it('keeps solution maturity, business impact, beneficiaries, use case category and additional context; skips SharePoint\'s own columns', async () => {
     const root = await tmpWorkspace();
-    const file = path.join(root, 'inbox', 'newer.csv');
+    const file = path.join(root, 'data', 'inbox', 'newer.csv');
     await writeFile(file, csv(
       ['ID', 'Title', 'Submitter Name', 'Solution Maturity', 'Business Impact', 'Beneficiaries', 'Use Case Category', 'Additional Context', 'Item Type', 'Path', 'Created', 'Modified', 'Created By', 'Content Type', 'Favourite colour'],
       ['4', 'Desk finder', 'Person 1 (CS)', 'Prototype', 'Saves about 2 hours a week per office manager', 'Employees;#Office managers', 'Workplace services', 'Pilot runs in one office first.', 'Item', 'sites/cafe/Lists/Submissions', '2026-10-01', '2026-10-02', 'Person 1', 'Item', 'Teal'],
@@ -152,7 +152,7 @@ describe('the newer form columns', () => {
 
   it('a multi-choice answer in a text column reads "A; B", and a missing column leaves the field out', async () => {
     const root = await tmpWorkspace();
-    const file = path.join(root, 'inbox', 'multi.csv');
+    const file = path.join(root, 'data', 'inbox', 'multi.csv');
     await writeFile(file, csv(['Title', 'Solution Maturity', 'Business Impact'], ['Desk finder', ';#Idea;#Prototype;#', '']));
     const r = await importExport(root, file, opts);
     const idea = await loadIdea(root, r.created[0].id);

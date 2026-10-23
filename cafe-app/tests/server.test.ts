@@ -67,7 +67,7 @@ describe('api', () => {
     });
     expect(res.status).toBe(200);
     expect((await j(res)).created).toHaveLength(3);
-    expect((await readdir(path.join(root, 'inbox'))).filter((n) => n.endsWith('.csv'))).toEqual(['2026-10-19-Café – export.csv']);
+    expect((await readdir(path.join(root, 'data', 'inbox'))).filter((n) => n.endsWith('.csv'))).toEqual(['2026-10-19-Café – export.csv']);
   });
 
   it('sets a stage freely, logs it, and shows the history', async () => {
@@ -97,7 +97,7 @@ describe('api', () => {
   it('records a reply received, which clears the late reply', async () => {
     const { base, root } = await boot();
     await fetch(`${base}/api/import`, { method: 'POST', headers: { 'x-filename': 'export.csv' }, body: await readFile(FIXTURE) });
-    const ideaFile = path.join(root, 'ideas', 'CAFE-2026-001-email-scheduler', 'idea.yaml');
+    const ideaFile = path.join(root, 'data', 'ideas', 'CAFE-2026-001-email-scheduler', 'idea.yaml');
     const yaml = await readFile(ideaFile, 'utf8');
     await writeFile(ideaFile, yaml.replace(/^due: \{\}$/m, 'due:\n  s2d: 2026-10-10'));
     expect((await j(await fetch(`${base}/api/state`))).ideas[0].overdue).toHaveLength(1);
@@ -170,7 +170,7 @@ describe('api', () => {
     const draft = await j(await post(base, '/api/ideas/CAFE-2026-001/draft', { template: 'E1' }));
     expect((await post(base, '/api/outbox/approve', { key: draft.key })).status).toBe(200);
     await Promise.all([post(base, '/api/outbox/sent', { key: draft.key }), post(base, '/api/outbox/sent', { key: draft.key })]);
-    const lines = (await readFile(path.join(root, 'ideas', 'CAFE-2026-001-email-scheduler', 'history.log'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const lines = (await readFile(path.join(root, 'data', 'ideas', 'CAFE-2026-001-email-scheduler', 'history.log'), 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
     expect(lines.filter((l) => l.action === 'tick' && l.source === draft.key)).toHaveLength(1);
     expect(lines.filter((l) => l.action === 'sent')).toHaveLength(1);
 
@@ -209,8 +209,8 @@ describe('api', () => {
   it('a round.yaml that cannot be read is named in the state, and the other rounds still load', async () => {
     const { base, root } = await boot();
     await post(base, '/api/rounds', { name: 'Good' });
-    await mkdir(path.join(root, 'rounds', 'ROUND-002'), { recursive: true });
-    await writeFile(path.join(root, 'rounds', 'ROUND-002', 'round.yaml'), 'id: [unclosed\n');
+    await mkdir(path.join(root, 'data', 'rounds', 'ROUND-002'), { recursive: true });
+    await writeFile(path.join(root, 'data', 'rounds', 'ROUND-002', 'round.yaml'), 'id: [unclosed\n');
     const state = await j(await fetch(`${base}/api/state`));
     expect(state.rounds.map((r: { id: string }) => r.id)).toEqual(['ROUND-001']);
     expect(state.roundProblems.map((p: { folder: string }) => p.folder)).toEqual(['ROUND-002']);

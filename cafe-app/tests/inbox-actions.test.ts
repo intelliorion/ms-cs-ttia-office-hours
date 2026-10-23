@@ -78,7 +78,7 @@ async function setup(triage: Understanding | (() => never) = FULL) {
 
 const rec = (item: InboxItem, t: Action['t'], pred: (r: ActionRecord) => boolean = () => true) =>
   (item.actions as ActionRecord[]).find((r) => r.action.t === t && pred(r))!;
-const undoLines = async (root: string) => (await readFile(path.join(root, 'inbox', 'undo.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean);
+const undoLines = async (root: string) => (await readFile(path.join(root, 'data', 'inbox', 'undo.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean);
 
 const link = (over: Partial<AiLink> = {}): AiLink => ({
   from: 'idea:CAFE-2026-001', to: 'capability:document-reading', rel: 'NEEDS', description: '', source: 'x', confidence: 0.8, status: 'pending', ...over,
@@ -226,7 +226,7 @@ describe('Undo is field-level (Review Focus 5)', () => {
     const after = await undoRecord(root, item.id, rec(item, 'file_email').id, clock);
     expect((after.actions as ActionRecord[]).find((r) => r.action.t === 'file_email')!.status).toBe('undone');
     expect(await readdir(dir)).toEqual(['operator.eml']);
-    await expect(readFile(path.join(root, ...item.file.split('/')))).resolves.toBeTruthy();
+    await expect(readFile(path.join(root, 'data', ...item.file.split('/')))).resolves.toBeTruthy();
   });
 
   it('graph_links (safe): undo removes the link; another link added since stays', async () => {
@@ -262,7 +262,7 @@ describe('Undo is field-level (Review Focus 5)', () => {
   it('a failing undo log never marks an applied action failed', async () => {
     const root = await tmpWorkspace('2026-10-19');
     for (const i of IDEAS) await saveIdea(root, i);
-    await mkdir(path.join(root, 'inbox', 'undo.jsonl'), { recursive: true }); // appendFile on a directory fails
+    await mkdir(path.join(root, 'data', 'inbox', 'undo.jsonl'), { recursive: true }); // appendFile on a directory fails
     const { item } = await processDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), connectorFor(FULL), clock);
     expect(rec(item, 'file_email').status).toBe('applied');
     expect((item.actions as ActionRecord[]).some((r) => r.status === 'failed')).toBe(false);
@@ -421,7 +421,7 @@ describe('screen before store (final review 3)', () => {
   it('the sidecar written by saveDrop has no text or meta, only what identifies the file', async () => {
     const root = await tmpWorkspace('2026-10-19');
     const saved = await saveDrop(root, 'reply.eml', new Uint8Array(await readFile(FIX('reply.eml'))), clock);
-    const raw = JSON.parse(await readFile(path.join(root, 'inbox', '.items', `${saved.id}.json`), 'utf8'));
+    const raw = JSON.parse(await readFile(path.join(root, 'data', 'inbox', '.items', `${saved.id}.json`), 'utf8'));
     expect(Object.keys(raw).sort()).toEqual(['file', 'hash', 'id', 'name', 'receivedAt', 'status', 'type']);
     expect(saved.text).toBeUndefined();
     expect(saved.meta).toBeUndefined();

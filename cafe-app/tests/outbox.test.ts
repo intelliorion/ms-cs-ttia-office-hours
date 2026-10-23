@@ -49,7 +49,7 @@ describe('outbox', () => {
     await saveRound(root, 'ROUND-001', { reviewBy: '2026-11-09' });
     const [item] = await listOutbox(root);
     expect(item.view.body).toContain('by 2 November 2026');
-    expect(await readFile(path.join(root, ...key.split('/')), 'utf8')).toContain('2 November 2026');
+    expect(await readFile(path.join(root, 'data', ...key.split('/')), 'utf8')).toContain('2 November 2026');
   });
 
   it('shows a new setting in open drafts', async () => {

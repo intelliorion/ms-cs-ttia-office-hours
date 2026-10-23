@@ -248,7 +248,7 @@ describe('inbox store', () => {
     expect(item.text).toBeUndefined(); // stored only after the screen (triage)
     expect(item.meta).toBeUndefined();
     expect(item.duplicate).toBeUndefined();
-    expect(await readFile(path.join(root, item.file))).toEqual(Buffer.from(await bytes('reply.eml')));
+    expect(await readFile(path.join(root, 'data', item.file))).toEqual(Buffer.from(await bytes('reply.eml')));
     const sidecar = JSON.parse(await readFile(path.join(itemsDir(root), `${item.id}.json`), 'utf8'));
     expect(sidecar.id).toBe(item.id);
     expect(await listItems(root)).toEqual([item]);
@@ -264,7 +264,7 @@ describe('inbox store', () => {
     expect(item.type).toBe('note');
     expect(item.file).toBe('inbox/2026-10-20-pasted-note.txt');
     expect(item.text).toBeUndefined();
-    expect(await readFile(path.join(root, item.file), 'utf8')).toBe('Person 2 called about CAFE-2026-001.');
+    expect(await readFile(path.join(root, 'data', item.file), 'utf8')).toBe('Person 2 called about CAFE-2026-001.');
   });
 
   it('recognises the same content dropped twice', async () => {
@@ -274,7 +274,7 @@ describe('inbox store', () => {
     expect(again.id).toBe(first.id);
     expect(again.duplicate).toBe(true);
     expect(await listItems(root)).toHaveLength(1);
-    expect((await readdir(path.join(root, 'inbox'))).filter((n) => n.endsWith('.eml'))).toEqual(['2026-10-20-reply.eml']);
+    expect((await readdir(path.join(root, 'data', 'inbox'))).filter((n) => n.endsWith('.eml'))).toEqual(['2026-10-20-reply.eml']);
     const other = await saveDrop(root, 'reply.eml', strToU8('different'), clock);
     expect(other.file).toBe('inbox/2026-10-20-reply-2.eml');
   });
@@ -287,15 +287,15 @@ describe('inbox store', () => {
     expect(held.file).toBe('inbox/held/2026-10-20-held-tracker.csv');
     expect(held.text).toBeUndefined();
     expect(held.hold).toEqual({ reasons: ['Lists 12 people by name'] });
-    expect(await exists(path.join(root, item.file))).toBe(false);
-    expect(await exists(path.join(root, held.file))).toBe(true);
+    expect(await exists(path.join(root, 'data', item.file))).toBe(false);
+    expect(await exists(path.join(root, 'data', held.file))).toBe(true);
     const sidecar = await readFile(path.join(itemsDir(root), `${item.id}.json`), 'utf8');
     expect(sidecar).not.toContain('AB12366');
 
     const note = await saveDrop(root, 'note.txt', await bytes('note.txt'), clock);
     await expect(deleteHeld(root, note.id)).rejects.toThrow(/only held/i);
     await deleteHeld(root, item.id);
-    expect(await exists(path.join(root, held.file))).toBe(false);
+    expect(await exists(path.join(root, 'data', held.file))).toBe(false);
     expect(await getItem(root, item.id)).toBeUndefined();
   });
 
@@ -303,7 +303,7 @@ describe('inbox store', () => {
     const root = await tmpWorkspace();
     await saveDrop(root, 'note.txt', await bytes('note.txt'), clock);
     await saveDrop(root, 'transcript.vtt', await bytes('transcript.vtt'), clock);
-    expect((await readdir(path.join(root, 'inbox'))).sort()).toEqual(['.items', '2026-10-20-note.txt', '2026-10-20-transcript.vtt', 'held']);
+    expect((await readdir(path.join(root, 'data', 'inbox'))).sort()).toEqual(['.items', '2026-10-20-note.txt', '2026-10-20-transcript.vtt', 'held']);
     const sidecars = await readdir(itemsDir(root));
     expect(sidecars).toHaveLength(2);
     expect(sidecars.every((n) => n.endsWith('.json'))).toBe(true);
@@ -381,8 +381,8 @@ describe('fix round 1', () => {
     const first = await holdItem(root, item.id, ['Lists 12 people by name']);
     const second = await holdItem(root, item.id, ['Lists 12 people by name']);
     expect(second).toEqual(first);
-    expect(await exists(path.join(root, first.file))).toBe(true);
-    expect((await readdir(path.join(root, 'inbox', 'held')))).toEqual(['2026-10-20-held-tracker.csv']);
+    expect(await exists(path.join(root, 'data', first.file))).toBe(true);
+    expect((await readdir(path.join(root, 'data', 'inbox', 'held')))).toEqual(['2026-10-20-held-tracker.csv']);
 
     // a crash after the sidecar write but before the rename: the file is still in inbox/
     const other = await saveDrop(root, 'note.txt', await bytes('note.txt'), clock);
@@ -392,8 +392,8 @@ describe('fix round 1', () => {
     await writeFile(sidecarPath, JSON.stringify(half));
     const recovered = await holdItem(root, other.id, ['x']);
     expect(recovered.file).toBe('inbox/held/2026-10-20-note.txt');
-    expect(await exists(path.join(root, recovered.file))).toBe(true);
-    expect(await exists(path.join(root, other.file))).toBe(false);
+    expect(await exists(path.join(root, 'data', recovered.file))).toBe(true);
+    expect(await exists(path.join(root, 'data', other.file))).toBe(false);
   });
 
   it('vtt fallback speakers must look like names', () => {

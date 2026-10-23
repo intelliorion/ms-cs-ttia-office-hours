@@ -75,18 +75,27 @@ npm run cafe -- import export.csv --workspace ~/cafe-workspace
 
 ### The workspace folder
 
+The setup sits at the top; everything the Café makes or is given sits in `data/`, which you can delete
+(all of it, or any part) at any time, even while the app runs: the Café simply starts again empty.
+README.txt in the workspace says the same.
+
 ```
-rounds/       one folder per round you make (ROUND-001, ...): its name and dates; the review pack
-inbox/        dropped files and exports (see Import: drop anything); inbox/held/ keeps files the app will not read
-ideas/        one folder per idea: the submission, its emails, its history
-cohorts/  roadshows/
-graph/        the universe: nodes.jsonl, edges.jsonl, ai-links.jsonl (AI suggestions and your Yes or No),
-              layout.json (cached star positions)
-templates/    the email templates
-rules/        settings.yaml (including the AI choice), stages.yaml
-exports/      files the app writes for you
-skills/
+data/                 the Café's data: safe to delete
+  rounds/             one folder per round you make (ROUND-001, ...): its name and dates; the review pack
+  inbox/              dropped files and exports (see Import: drop anything); inbox/held/ keeps files the app will not read
+  ideas/              one folder per idea: the submission, its emails, its history
+  cohorts/  roadshows/
+  graph/              the universe: ai-links.jsonl (AI suggestions and your Yes or No), operator.jsonl (your
+                      changes from the assistant), layout.json (cached star positions)
+  chat/               the assistant's conversations
+  exports/            files the app writes for you
+rules/                your configuration: settings.yaml (your name, links, the AI choice), stages.yaml. Keep it.
+templates/            the email templates. Keep them; a missing one is copied back at the next start.
 ```
+
+An older workspace that kept rounds/, inbox/, ideas/ and the rest at the top has them moved into data/ the
+first time this version starts (the console says what moved). Stored references are relative to data/, so
+nothing else changes. A folder found in both places is left alone and named, never merged.
 
 ## Build the UI
 
@@ -331,7 +340,7 @@ transcript, or, for text that mentions "a second builder", a reply that clashes)
 (`whiteboard` or `scanned` in the name gives the kit's whiteboard text, `tracker` a list of people, anything else
 "A blank picture"), so the Import can be tested without a real AI. See Test hook below.
 
-New folders in the workspace:
+New folders in the workspace (under data/):
 
 ```
 inbox/               dropped files

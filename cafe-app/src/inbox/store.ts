@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { paths } from '../workspace/paths';
+import { fromDataKey, paths } from '../workspace/paths';
 import { moveFile, readText, writeFileAtomic } from '../workspace/files';
 import { slugify } from '../ideas/store';
 import { systemClock, type Clock } from '../clock';
@@ -46,7 +46,7 @@ const sidecar = (root: string, id: string) => {
   if (!ID.test(id)) throw new Error(`Not an import: ${id}`);
   return path.join(itemsDir(root), `${id}.json`);
 };
-const abs = (root: string, rel: string) => path.join(root, ...rel.split('/'));
+const abs = (root: string, rel: string) => fromDataKey(root, rel);
 const exists = (p: string) => fs.access(p).then(() => true, () => false);
 
 async function writeItem(root: string, item: InboxItem): Promise<void> {

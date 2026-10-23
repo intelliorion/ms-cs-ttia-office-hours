@@ -66,7 +66,7 @@ async function page(browser, errors, { fresh = false } = {}) {
 // Two pending AI links (below 0.7, so dashed and unconfirmed) for the pop-out and the star card, and one
 // 0.9 link between stars the form already made, which is added confirmed and can still be removed.
 async function seedAiLinks() {
-  const dir = path.join(workspace, 'graph');
+  const dir = path.join(workspace, 'data', 'graph');
   await fs.mkdir(dir, { recursive: true });
   const links = [
     { from: 'idea:CAFE-2026-002', to: 'painpoint:re-keying-requests-into-a-tracker', rel: 'REPLACES', description: 'Requests are re-keyed into an Excel tracker by hand',

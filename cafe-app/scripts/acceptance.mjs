@@ -299,7 +299,7 @@ async function run() {
   for (const [name, why] of [['06-tracker.eml', /name|id|phone/i], ['11-held-tracker.csv', /people|name/i]]) {
     const n = (await state()).ideas.length;
     d = await drop(name);
-    const heldFile = d.item.file?.startsWith('inbox/held/') && await fs.access(path.join(workspace, d.item.file)).then(() => true, () => false);
+    const heldFile = d.item.file?.startsWith('inbox/held/') && await fs.access(path.join(workspace, 'data', d.item.file)).then(() => true, () => false);
     check(name, 'HELD, 0 AI calls, nothing imported', `${show(d.item)}, ${d.aiCalls} AI`,
       d.item.status === 'held' && why.test((d.item.hold?.reasons ?? []).join(' ')) && d.aiCalls === 0 && heldFile
         && !d.item.preview && !acts(d.item).length && (await state()).ideas.length === n);
@@ -314,8 +314,8 @@ async function run() {
   // 08: transcript, sure 002, filed in notes; graph proposals.
   d = await drop('08-transcript.vtt');
   const i8 = d.item;
-  const dir2 = (await fs.readdir(path.join(workspace, 'ideas'))).find((x) => x.startsWith('CAFE-2026-002'));
-  const notes = await fs.readdir(path.join(workspace, 'ideas', dir2, 'notes')).catch(() => []);
+  const dir2 = (await fs.readdir(path.join(workspace, 'data', 'ideas'))).find((x) => x.startsWith('CAFE-2026-002'));
+  const notes = await fs.readdir(path.join(workspace, 'data', 'ideas', dir2, 'notes')).catch(() => []);
   check('08-transcript.vtt', 'sure 002, filed to notes, graph proposed', `${show(i8)} | notes: ${notes.filter((n) => n.endsWith('.vtt')).length} vtt`,
     i8.type === 'transcript' && i8.triage?.ideaId === 'CAFE-2026-002' && safeApplied(i8, 'file_email') && notes.some((n) => n.endsWith('.vtt'))
       && acts(i8).some((r) => r.action.t === 'graph_links'));
@@ -394,7 +394,7 @@ async function designPass() {
   const ID = 'CAFE-2026-005';
   const idea = await ideaOf(ID);
   if (!idea) { check('(design) idea', `${ID} exists`, 'not found', false); return; }
-  const dir = path.join(workspace, 'ideas', (await fs.readdir(path.join(workspace, 'ideas'))).find((x) => x.startsWith(ID)));
+  const dir = path.join(workspace, 'data', 'ideas', (await fs.readdir(path.join(workspace, 'data', 'ideas'))).find((x) => x.startsWith(ID)));
   const u = (r) => `/api/ideas/${ID}/${r}`;
 
   // Tool picker: the AI suggests, the operator saves the picks.
@@ -521,7 +521,7 @@ async function agenticPass(clock) {
       const g13 = await graph();
       // The tool pick already links 001 to the twin, so the AI link lands on that same (confirmed) edge.
       const onTwin = g13.edges.find((e) => e.to === twin.id && e.from === 'idea:CAFE-2026-001' && e.rel === 'NEEDS');
-      const stored = (await fs.readFile(path.join(ws, 'graph', 'ai-links.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l))
+      const stored = (await fs.readFile(path.join(ws, 'data', 'graph', 'ai-links.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l))
         .find((l) => l.to === twin.id && String(l.source).includes('13-conflicting-reply'));
       check(A('13 resolved'), "keep the form's builder; link onto the existing star, confirmed; no new star",
         `builder ${(await ideaOf('CAFE-2026-001')).people?.builder}; AI link ${stored?.status ?? 'none'}; edge ${onTwin ? (onTwin.confirmed ? 'confirmed' : 'waiting') : 'none'}; Slot findings star ${g13.nodes.some((n) => /^slot findings$/i.test(n.label))}; status ${out.item.status}`,

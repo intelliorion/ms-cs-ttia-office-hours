@@ -46,7 +46,7 @@ function triageConnector(reply: Understanding | (() => never)) {
 async function sentE2(root: string, id: string, questions: string[]) {
   const idea = (await listIdeas(root)).ideas.find((i) => i.id === id)!;
   await saveIdea(root, { ...idea, sent: { ...idea.sent, E2: '2026-10-20' } });
-  const dir = path.join(root, 'ideas', (await ideaFolders(root)).find((f) => f.startsWith(id))!, 'emails');
+  const dir = path.join(root, 'data', 'ideas', (await ideaFolders(root)).find((f) => f.startsWith(id))!, 'emails');
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, '001-E2.md'), `---\ntemplate: E2\nidea: ${id}\nstatus: sent\nsentAt: 2026-10-20\n---\nHi,\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n`);
 }
@@ -56,7 +56,7 @@ async function pickTool(root: string, id: string, feature: string) {
   const idea = (await listIdeas(root)).ideas.find((i) => i.id === id)!;
   await saveIdea(root, { ...idea, tools: { [feature]: 'Copilot Studio' } });
 }
-const ideaFolders = async (root: string) => (await readdir(path.join(root, 'ideas'))).sort();
+const ideaFolders = async (root: string) => (await readdir(path.join(root, 'data', 'ideas'))).sort();
 
 describe('/api/inbox: exports', () => {
   it('a form export: the graph step counts what the form drew, then the AI reads every new idea into the universe', async () => {
@@ -145,7 +145,7 @@ describe('/api/inbox: exports', () => {
     const undone = await json(await s.post(`/api/inbox/${item.id}/undo`, { recordId: r.id }));
     expect(undone.item.actions[0].status).toBe('undone');
     expect(await ideaFolders(s.root)).toEqual(['CAFE-2026-004-by-hand']);
-    expect(await exists(path.join(s.root, ...item.file.split('/')))).toBe(true);
+    expect(await exists(path.join(s.root, 'data', ...item.file.split('/')))).toBe(true);
   });
 
   it('Undo of an import keeps an idea the operator has worked in since, and says so (Review Focus 5)', async () => {
@@ -161,12 +161,12 @@ describe('/api/inbox: exports', () => {
   it('Review Focus 3: the same drop twice is a duplicate and applies nothing', async () => {
     const s = await server();
     const first = await s.drop('export.csv', await readFile(FIXTURE));
-    const lines = await readFile(path.join(s.root, 'inbox', 'undo.jsonl'), 'utf8');
+    const lines = await readFile(path.join(s.root, 'data', 'inbox', 'undo.jsonl'), 'utf8');
     const again = await s.drop('export-again.csv', await readFile(FIXTURE));
     expect(again.duplicate).toBe(true);
     expect(again.item.id).toBe(first.item.id);
     expect((await listIdeas(s.root)).ideas).toHaveLength(3);
-    expect(await readFile(path.join(s.root, 'inbox', 'undo.jsonl'), 'utf8')).toBe(lines);
+    expect(await readFile(path.join(s.root, 'data', 'inbox', 'undo.jsonl'), 'utf8')).toBe(lines);
     expect((await s.inbox()).items).toHaveLength(1);
   });
 
@@ -253,7 +253,7 @@ describe('/api/inbox: emails and notes', () => {
     const r = await s.post(`/api/inbox/${item.id}/choose`, { ideaId: 'CAFE-2026-002' });
     expect(r.status).toBe(400);
     expect((await json(r)).error).toBe('Undo what was done first');
-    expect(await readdir(path.join(s.root, 'ideas', (await ideaFolders(s.root)).find((f) => f.startsWith('CAFE-2026-002'))!))).not.toContain('emails');
+    expect(await readdir(path.join(s.root, 'data', 'ideas', (await ideaFolders(s.root)).find((f) => f.startsWith('CAFE-2026-002'))!))).not.toContain('emails');
   });
 
   it('a card for an import that is gone gets a plain answer, not "inbox"', async () => {
@@ -340,7 +340,7 @@ describe('/api/inbox: held items', () => {
 
     const del = await s.post(`/api/inbox/${item.id}/delete`);
     expect(del.status).toBe(200);
-    expect(await exists(path.join(s.root, ...item.file.split('/')))).toBe(false);
+    expect(await exists(path.join(s.root, 'data', ...item.file.split('/')))).toBe(false);
     expect((await s.inbox()).items).toHaveLength(0);
   });
 

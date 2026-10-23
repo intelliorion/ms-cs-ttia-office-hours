@@ -1,8 +1,8 @@
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import type { Clock } from '../clock';
 import type { AddRoute } from './server';
-import { paths } from '../workspace/paths';
+import { dataKey, paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
 import { listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
@@ -63,7 +63,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     ]);
     const today = clock();
     return {
-      today, workspace: root, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
+      today, workspace: root, dataFolder: paths(root).data, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
         return {
@@ -111,7 +111,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/ideas/:id/round', async ({ params, body }) => setIdeaRound(root, params.id, String(body.round ?? ''), clock));
   add('POST', '/api/settings', async ({ body }) => saveSettings(root, body));
   // Project configuration: show the workspace (the data folder) in Finder or File Explorer, on this computer.
-  add('POST', '/api/workspace/open', async () => { await openFolder(root); return { folder: root }; });
+  add('POST', '/api/workspace/open', async () => {
+    const { data } = paths(root);
+    await mkdir(data, { recursive: true });
+    await openFolder(data);
+    return { folder: data };
+  });
 
   add('POST', '/api/import', async ({ raw, headers }) => {
     const name = fileNameOf(headers['x-filename']);
@@ -192,7 +197,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('GET', '/api/ideas/:id/design', async ({ params }) => {
     const idea = await loadIdea(root, params.id);
     const state = await readDesign(root, idea.id);
-    const folder = path.relative(root, await ideaDir(root, idea.id)).split(path.sep).join('/');
+    const folder = `data/${dataKey(root, await ideaDir(root, idea.id))}`;
     return { state, designMd: renderDesignMd(idea, state), folder };
   });
   add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => {

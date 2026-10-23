@@ -168,6 +168,16 @@ describe('The data questions, the automatic updates and the one confirmation', (
     const learned = (await loadIdea(root, ID)).learned!.points.find((p) => p.topic === 'Data')!;
     expect(learned.text).toMatch(/^Sample input: expenses\.csv \(40 rows, 6 columns\)/);
     expect(await readFile(path.join(await ideaDir(root, ID), 'design.md'), 'utf8')).toMatch(/Confirmed by the operator on 2026-10-20/);
+    // A file held at the personal-data check is not part of the understanding: dropping it and removing it leave the
+    // confirmation and the summary as they were (nothing in it reached the AI or the design).
+    d = (await drop('contacts.csv', personalCsv(), 'input')).body.state.data;
+    expect(d.files.at(-1).check.status).toBe('held');
+    expect(d.confirmedAt).toBe('2026-10-20');
+    expect(d.summary.text).toMatch(/The data is understood/);
+    d = (await post(`/api/ideas/${ID}/data/${d.files.at(-1).id}/remove`)).body.state.data;
+    expect(d.confirmedAt).toBe('2026-10-20');
+    expect(d.summary.text).toMatch(/The data is understood/);
+    expect(pointOf(await readDesign(root, ID), 'input-shape')).toMatch(/^expenses\.csv/);
     // Dropping another file reopens it: a new confirmation is needed.
     d = (await drop('flagged.csv', outputCsv(), 'output')).body.state.data;
     expect(d.confirmedAt).toBeUndefined();

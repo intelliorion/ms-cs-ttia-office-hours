@@ -103,7 +103,8 @@ export async function dropDataFile(
       type: dataTypeOf(ext), at: clock(), steps: [{ id: 'read', status: 'running', detail: 'Reading the file…' }],
     };
     data.files.push(f);
-    reopenData(data, { summary: true });
+    // Not reopened yet: a file changes what the data holds only once it is read and saved (the end of runSteps). A
+    // file held at the check, or one that could not be read, leaves the confirmed understanding as it was.
     return f;
   });
   try {
@@ -219,18 +220,24 @@ export async function releaseDataFile(root: string, id: string, fid: string, ai:
   return runDataFile(root, id, fid, 'profile', ai, clock, progress);
 }
 
-/** Remove a file: its copy goes from the idea folder and its record from the design. The understanding is reopened. */
+/**
+ * Remove a file: its copy goes from the idea folder and its record from the design. The understanding is reopened when
+ * the file was part of it (read and saved); a held or unreadable file never was, so the confirmation stays.
+ */
 export async function removeDataFile(root: string, id: string, fid: string, clock: Clock) {
   const { out: f, state } = await updateData(root, id, (data) => {
     const x = fileOf(data, fid);
     data.files = data.files.filter((y) => y.id !== fid);
-    reopenData(data, { summary: true });
+    if (fedUnderstanding(x)) reopenData(data, { summary: true });
     return x;
   });
   await removeCopy(root, id, f.file);
   await appendHistory(await ideaDir(root, id), { at: clock(), action: 'data', by: 'operator', detail: `Data file removed: ${f.name}` });
   return state;
 }
+
+/** Whether a file is part of the understanding: it got past the check and was saved into the design. */
+const fedUnderstanding = (f: DataFile) => f.check?.status !== 'held' && f.steps.some((s) => s.id === 'saved' && s.status === 'done');
 
 /** The operator's kind for a file. A changed kind needs Understand again (the AI read it as the old one). */
 export async function setDataKind(root: string, id: string, fid: string, kind: unknown) {

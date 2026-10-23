@@ -496,7 +496,8 @@ nothing is saved until you press a button, and you can do everything except plan
    form", and feeds Suggest features, Suggest a tool, the design questions, the diagram, the kits (sample-data.csv
    gets the sample input's real columns, values made up; the Dataiku datasets and Copilot Studio's knowledge.md name
    the real files) and the roadshow ("The data" slide). Dropping, removing or editing a file afterwards asks for a
-   new confirmation. With no AI the files are read, checked and profiled; write their meaning by hand, add questions
+   new confirmation; a file held at the check (or one that could not be read) is not part of the understanding, so
+   dropping or removing it leaves the confirmation as it was. With no AI the files are read, checked and profiled; write their meaning by hand, add questions
    by hand and **Finish by hand**.
 
 1. **Features and tool** (the tool picker), in two steps.

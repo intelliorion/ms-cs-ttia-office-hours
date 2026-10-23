@@ -18,7 +18,7 @@ import { listRounds, loadSettings } from '../round/store';
 import type { Round, Settings } from '../round/round';
 import type { Coded } from '../command/names';
 import type { DeckVisual, RoadshowInput } from '../ai/tasks';
-import { fingerprint, readRoadshow, rosterOf, ROLE_WORDS, type RoadshowState } from './store';
+import { fingerprint, presentersOf, readRoadshow, rosterOf, ROLE_WORDS, type RoadshowState } from './store';
 import { codedDataBrief } from '../data/brief';
 import { dataLane } from '../design/diagram';
 
@@ -160,7 +160,8 @@ export async function codedRoadshowInput(
   let at = 0;
   const take = (n: number) => { const out = tail.slice(at, at + n); at += n; return out; };
   const [names, [reason], learned, [summary], stepTexts, pointTexts, whats, toolTexts, planTexts, partTexts, todoTexts] = blocks.map((b) => take(b.length));
-  const team = roster.map((p, i) => ({ code: names[i] ?? '', roles: p.roles.map((r) => ROLE_WORDS[r]) }));
+  const presenting = new Set(presentersOf(roster));
+  const team = roster.map((p, i) => ({ code: names[i] ?? '', roles: p.roles.map((r) => ROLE_WORDS[r]), ...(presenting.has(p) ? { presents: true as const } : {}) }));
   let k = 0;
   const toolOut = t ? {
     tool: t.tool, pathway: t.pathway, reason: toolTexts[k++],

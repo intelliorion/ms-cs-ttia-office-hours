@@ -371,6 +371,17 @@ describe('the roadshow, end to end on the server', () => {
     expect((await readRoadshow(s.root, ID)).prep!.needs.some((n) => n.askedAt)).toBe(false);
   });
 
+  it('the deck AI is told who presents (the lead and the builder, as on the title slide), so its subtitle names no one else', async () => {
+    const sp = spy();
+    const s = await server(sp.provider);
+    await json(await s.post(`${s.rs}/build`));
+    const asked = sp.prompts.find((p) => p.startsWith('TASK: roadshow-deck'))!;
+    expect(asked).toContain('only the people in DATA.team marked presents');
+    const data = JSON.parse(asked.slice(asked.indexOf('<<<DATA') + 7, asked.lastIndexOf('DATA>>>')));
+    expect(data.team.map((t: any) => [t.roles, t.presents ?? false])).toEqual([[['Lead', 'Submitted the idea'], true], [['Builder'], true], [['Sponsor'], false]]);
+    expect((await readRoadshow(s.root, ID)).deck).toBeDefined();
+  });
+
   it('Build the deck: the AI writes the spec (names coded, no photos, no business impact), the app draws deck.html, script.md, run-of-show.md and deck.pptx', async () => {
     const sp = spy();
     const s = await server(sp.provider);

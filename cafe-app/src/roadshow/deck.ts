@@ -14,7 +14,7 @@ import {
 } from '../ai/tasks';
 import type { DiagramSpec } from '../design/diagram';
 import { columnsOf, isUsable, KIND_LABELS, whatOf, type DataFile } from '../data/model';
-import { DECK_FILES, photosBasis, readRoadshow, roadshowDir, rosterOf, rolesLine, writeRoadshow, type RoadshowDeck, type RoadshowState, type TemplateNote } from './store';
+import { DECK_FILES, photosBasis, presentersOf, readRoadshow, roadshowDir, rosterOf, rolesLine, writeRoadshow, type RoadshowDeck, type RoadshowState, type TemplateNote } from './store';
 import { codedRoadshowInput, datesOf, diagramOfDesign, gatherRoadshow, recordBasis, visualsOf, type RoadshowSource } from './source';
 import { IMAGE_MIME, imageSize, readStoredPhoto, type ImageKind } from './photos';
 import { readTemplateTheme, DEFAULT_THEME, type DeckTheme } from './template';
@@ -229,7 +229,7 @@ export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { tod
       return { feature: f.name, mark: (x?.fit ?? 'yes') as FitMark, note: x?.note || f.what || '' };
     }),
   } : undefined;
-  const lead = roster.find((p) => p.roles.includes('lead')) ?? roster.find((p) => p.roles.includes('submitter')) ?? roster[0];
+  const presenters = presentersOf(roster);
   const builder = roster.find((p) => p.roles.includes('builder'));
   const after = pointOf(design, 'must-show') ?? design.summary;
   const diagram = diagramOfDesign(design);
@@ -257,7 +257,7 @@ export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { tod
     after: [...(sample ? [fileLine('It makes', sample)] : []), ...(after ? [clip(after, 240)] : [])],
     theme: opts.theme ?? DEFAULT_THEME, ...(opts.template ? { template: opts.template } : {}),
     ...(demoLinkOf(idea.answers) ? { demoLink: demoLinkOf(idea.answers) } : {}),
-    presenters: [lead, builder].filter((p, i, all): p is NonNullable<typeof p> => !!p && all.indexOf(p) === i).map((p) => p.name),
+    presenters: presenters.map((p) => p.name),
     ...(builder ? { builder: builder.name } : {}),
   };
 }

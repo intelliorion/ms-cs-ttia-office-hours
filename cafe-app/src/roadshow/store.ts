@@ -146,6 +146,13 @@ export function rosterOf(idea: Pick<Idea, 'people'>): RosterPerson[] {
   return out;
 }
 
+/** Who presents the deck: the lead (else the submitter, else the first person) and the builder, once each. */
+export function presentersOf(roster: RosterPerson[]): RosterPerson[] {
+  const lead = roster.find((p) => p.roles.includes('lead')) ?? roster.find((p) => p.roles.includes('submitter')) ?? roster[0];
+  const builder = roster.find((p) => p.roles.includes('builder'));
+  return [lead, builder].filter((p, i, all): p is RosterPerson => !!p && all.indexOf(p) === i);
+}
+
 /** "Lead · Builder": a person's roles in words, for the team slide. A "member" next to another role is left out. */
 export const rolesLine = (roles: RosterPerson['roles']) => roles.filter((r) => r !== 'member' || roles.length === 1).map((r) => ROLE_WORDS[r]).join(' · ');
 

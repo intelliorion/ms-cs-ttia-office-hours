@@ -721,7 +721,8 @@ script to talk, in three steps.
 
    ```
    deck.html        ONE self-contained page (no network): 16:9 slides, ←/→ or click to move, S for the speaker
-                    notes (with the time so far), F for full screen, T for light or dark. The team slide shows each
+                    notes (with the time so far), F for full screen, T for light or dark. The title slide shows the presenters
+                    (the lead and the builder; the AI is told who they are, for its subtitle). The team slide shows each
                     person's photo (inlined) or initials, name and roles; the design slide is full bleed: the
                     design diagram fills the slide under the title, with larger text (the app picks wide or
                     narrower, taller parts, whichever draws it largest), and any point the AI gave that slide

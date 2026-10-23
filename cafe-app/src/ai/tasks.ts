@@ -1321,7 +1321,7 @@ export interface RoadshowInput {
   idea: IdeaText & { use_case_category?: string[]; support?: string[] };
   form?: { function?: string; region?: string; participation?: string; maturity?: string; experimented?: string };
   /** The people on the idea, as codes, with their roles ("submitter" for the one who sent the form). */
-  team: { code: string; roles: string[] }[];
+  team: { code: string; roles: string[]; presents?: true }[];
   /** The decision and its reason. */
   decision?: { decision: string; label: string; reason: string; at?: string };
   /** "Learned since the form": what the answers added. */
@@ -1376,7 +1376,7 @@ function roadshowData(i: RoadshowInput) {
   return {
     idea: { ...ideaData(i.idea), ...(i.idea.use_case_category?.length ? { category: capList(i.idea.use_case_category, 6, 80) } : {}), ...(i.idea.support?.length ? { support: capList(i.idea.support, 8, 120) } : {}) },
     ...(i.form ? { form: Object.fromEntries(Object.entries(i.form).filter(([, v]) => v).map(([k, v]) => [k, cap(v, 80)])) } : {}),
-    team: (i.team ?? []).slice(0, 12).map((p) => ({ code: cap(p.code, 8), roles: capList(p.roles, 5, 20) })),
+    team: (i.team ?? []).slice(0, 12).map((p) => ({ code: cap(p.code, 8), roles: capList(p.roles, 5, 20), ...(p.presents ? { presents: true } : {}) })),
     ...(i.decision ? { decision: { decision: cap(i.decision.decision, 20), label: cap(i.decision.label, 60), reason: cap(i.decision.reason, 400), ...(i.decision.at ? { at: cap(i.decision.at, 20) } : {}) } } : {}),
     ...learnedData(i.learned),
     ...(i.answers?.length ? { answers: i.answers.slice(-30).map((a) => ({ question: cap(a.question, 220), answer: cap(a.answer, 600), ...(a.source ? { source: cap(a.source, 30) } : {}) })) } : {}),
@@ -1544,7 +1544,7 @@ export const roadshowDeckTask: Task<DeckSpec> = {
       'Use only what DATA says. Where DATA says nothing about a point, leave it out rather than guess; never invent a system, a number, a date, a quote or a person.',
       ...CAFE_STORY_RULES,
       ...((input as RoadshowInput).data ? dataRules('deck') : []),
-      'title and subtitle: the deck\'s title (the idea, said as what it does) and a subtitle (who presents it and where, from DATA.roadshow when given).',
+      'title and subtitle: the deck\'s title (the idea, said as what it does) and a subtitle (who presents it: only the people in DATA.team marked presents, never anyone else; and where, from DATA.roadshow when given).',
     ], ROADSHOW_DECK_SCHEMA, data, "a Café idea's whole record: the form, the team, the decision, the answers, the tool, the design, the plan and the dates");
   },
   parse: (raw) => parseChecked<DeckSpec>(raw, ROADSHOW_DECK_SCHEMA, trimDeck),

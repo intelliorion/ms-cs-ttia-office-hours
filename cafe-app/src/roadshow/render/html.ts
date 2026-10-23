@@ -14,7 +14,7 @@ export const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
 /** The label over each kind of slide. */
 export const KIND_LABEL: Record<DeckSlide['kind'], string> = {
   title: '', problem: 'The problem', today: 'How it works today', team: 'The team', solution: 'What we built', demo: 'Live demo',
-  diagram: 'The design', tool: 'The tool', headaches: 'What was hard', lessons: 'What we learned', reuse: 'To reuse it',
+  data: 'The data', diagram: 'The design', tool: 'The tool', headaches: 'What was hard', lessons: 'What we learned', reuse: 'To reuse it',
   next: 'What happens next', question: 'A question for you', thanks: '',
 };
 
@@ -95,6 +95,18 @@ function fitHtml(m: DeckModel): string {
     + `<table><thead><tr><th>Feature</th><th>Fit</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
+/** The data slide: what goes in (and the rules it is checked against), the build, what comes out. */
+export function dataHtml(m: DeckModel): string {
+  const d = m.data;
+  if (!d) return '';
+  const card = (f: { name: string; kind: string; what: string; columns: string[] }, cls = '') => `<div class="dt-f${cls}"><div class="dt-k">${esc(f.kind)}</div><b>${esc(f.name)}</b>`
+    + `${f.what ? `<p>${esc(f.what)}</p>` : ''}${f.columns.length ? `<div class="dt-cols">${f.columns.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : ''}</div>`;
+  const ins = [...d.inputs.map((f) => card(f)), ...d.rules.map((f) => card(f, ' rules'))].join('');
+  return `<div class="dt"><div class="dt-col"><div class="dt-h">What goes in</div>${ins || '<p class="muted">Not given.</p>'}</div><div class="dt-arrow" aria-hidden="true">→</div>`
+    + `<div class="dt-mid"><b>${esc(d.tool ?? 'The proof of concept')}</b><span>on sample, masked data</span></div><div class="dt-arrow" aria-hidden="true">→</div>`
+    + `<div class="dt-col"><div class="dt-h">What comes out</div>${d.output ? card(d.output, ' out') : '<p class="muted">Not given.</p>'}</div></div>`;
+}
+
 function timelineHtml(m: DeckModel): string {
   const items = m.timeline.slice(0, 8);
   if (!items.length) return '';
@@ -139,6 +151,7 @@ function slideBody(s: DeckSlide, m: DeckModel): string {
     }
     case 'fit-table': return `${head}<div class="split wide-l"><div>${fitHtml(m)}</div><div class="col">${pointsHtml(s)}${quoteHtml(s)}</div></div>`;
     case 'timeline': return `${head}${timelineHtml(m)}<div class="foot-pts">${pointsHtml(s)}${quoteHtml(s)}</div>`;
+    case 'data': return `${head}${m.data ? dataHtml(m) : ''}${s.points.length ? `<div class="foot-pts">${pointsHtml(s)}</div>` : ''}`;
     case 'before-after': return `${head}${beforeAfterHtml(s, m)}${s.points.length ? `<div class="foot-pts">${pointsHtml(s)}</div>` : ''}`;
     default: return `${head}<div class="body">${pointsHtml(s)}${quoteHtml(s)}</div>`;
   }
@@ -226,6 +239,14 @@ ${DIAGRAM_CSS}
 .ba-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}.after .ba-h{color:var(--accent)}
 .ba ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:12px;font-size:22px;line-height:1.3}
 .ba-arrow{display:grid;place-items:center;font-size:44px;color:var(--accent)}
+.dt{display:grid;grid-template-columns:1.2fr 54px .8fr 54px 1.2fr;align-items:center;gap:0;max-height:470px}
+.dt-col{display:flex;flex-direction:column;gap:12px;min-width:0}.dt-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dt-f{border-radius:16px;padding:14px 18px;background:var(--soft);border:1px solid var(--line);overflow:hidden}.dt-f b{font:700 21px/1.2 var(--head);word-break:break-word}
+.dt-f.rules{border-style:dashed}.dt-f.out{background:color-mix(in srgb,var(--accent) 9%,var(--slide));border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.dt-f p{margin:6px 0 0;font-size:15px;color:var(--muted);line-height:1.3}.dt-k{font:700 12px var(--head);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.dt-cols{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.dt-cols span{font:600 13px ui-monospace,Menlo,monospace;padding:3px 8px;border-radius:6px;background:var(--card);border:1px solid var(--line)}
+.dt-mid{border-radius:18px;padding:22px 16px;text-align:center;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#020617));color:#fff;display:flex;flex-direction:column;gap:6px}.dt-mid b{font:800 24px var(--head)}.dt-mid span{font-size:14px;opacity:.85}
+.dt-arrow{display:grid;place-items:center;font-size:40px;color:var(--accent)}
 .demo{border-radius:20px;background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#020617));color:#fff;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center}
 .play{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center;font-size:40px;padding-left:8px}
 .demo-t{font:800 34px var(--head)}.demo-l{font-size:18px;opacity:.85;word-break:break-all}

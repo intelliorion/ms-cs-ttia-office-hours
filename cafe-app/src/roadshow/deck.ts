@@ -13,6 +13,7 @@ import {
   DECK_POINT_MAX, DECK_POINTS_MAX, DECK_TITLE_MAX, type DeckSlide, type DeckSpec, type DeckVisual, type RoadshowInput,
 } from '../ai/tasks';
 import type { DiagramSpec } from '../design/diagram';
+import { columnsOf, isUsable, KIND_LABELS, whatOf, type DataFile } from '../data/model';
 import { DECK_FILES, photosBasis, readRoadshow, roadshowDir, rosterOf, rolesLine, writeRoadshow, type RoadshowDeck, type RoadshowState, type TemplateNote } from './store';
 import { codedRoadshowInput, datesOf, diagramOfDesign, gatherRoadshow, recordBasis, visualsOf, type RoadshowSource } from './source';
 import { IMAGE_MIME, imageSize, readStoredPhoto, type ImageKind } from './photos';
@@ -89,6 +90,7 @@ export function checkDeck(spec: DeckSpec, ctx: { visuals: DeckVisual[]; data: st
     if (!visual && s.kind === 'team' && ctx.visuals.includes('team')) visual = 'team';
     if (!visual && s.kind === 'diagram' && ctx.visuals.includes('diagram')) visual = 'diagram';
     if (!visual && s.kind === 'tool' && ctx.visuals.includes('fit-table')) visual = 'fit-table';
+    if (!visual && s.kind === 'data' && ctx.visuals.includes('data')) visual = 'data';
     const quote = s.quote && !bad(s.quote) ? one(s.quote, 240) : '';
     const title = one(s.title, DECK_TITLE_MAX);
     return {
@@ -109,6 +111,12 @@ export function checkDeck(spec: DeckSpec, ctx: { visuals: DeckVisual[]; data: st
     slides.splice(after >= 0 ? after + 1 : 1, 0, { kind: 'team', title: 'The team behind it', points: [], visual: 'team', notes: 'This is the team behind it, and the part each of us played.', minutes: 0.5 });
     warnings.push('Added the team slide');
   }
+  if (ctx.visuals.includes('data') && !slides.some((s) => s.kind === 'data')) {
+    // The data slide goes after what was built (else after the team, how it works today or the problem).
+    const at = ['solution', 'team', 'today', 'problem'].map((k) => slides.findIndex((s) => s.kind === k)).find((i) => i >= 0) ?? 0;
+    slides.splice(at + 1, 0, { kind: 'data', title: 'The data it runs on', points: [], visual: 'data', notes: 'This is the data it runs on: what goes in and what comes out. It is sample data, masked, never the real thing.', minutes: 0.5 });
+    warnings.push('Added the data slide');
+  }
   const total = slides.reduce((t, s) => t + s.minutes, 0);
   if (total < 7 || total > 13) {
     const k = 10 / total;
@@ -123,6 +131,9 @@ export function checkDeck(spec: DeckSpec, ctx: { visuals: DeckVisual[]; data: st
 export interface DeckPhoto { mime: string; base64: string; kind: ImageKind; w?: number; h?: number }
 export interface DeckPerson { name: string; roles: string; initials: string; photo?: DeckPhoto }
 export type FitMark = 'yes' | 'partly' | 'no' | 'out' | 'outside';
+/** A file of the confirmed data, as the data slide shows it. */
+export interface DeckDataFile { name: string; kind: string; what: string; columns: string[] }
+export interface DeckData { inputs: DeckDataFile[]; rules: DeckDataFile[]; output?: DeckDataFile; tool?: string }
 export interface DeckModel {
   id: string;
   ideaTitle: string;
@@ -136,6 +147,8 @@ export interface DeckModel {
   team: DeckPerson[];
   diagram?: DiagramSpec;
   fit?: { tool: string; pathway?: string; rows: { feature: string; mark: FitMark; note: string }[] };
+  /** The data slide: the confirmed files, what goes in, the rules, what comes out. */
+  data?: DeckData;
   timeline: { what: string; date: string }[];
   /** For a before-after slide the AI left empty: today's process, and what the proof of concept shows. */
   before: string[];
@@ -165,6 +178,18 @@ export function demoLinkOf(answers: { question: string; answer: string }[] = [])
     if (m) return m[0].replace(/[.,;:]+$/, '');
   }
   return undefined;
+}
+
+/** The confirmed data, for the data slide and the before-after: the usable files by what they are. */
+export function deckData(design: RoadshowSource['design']): DeckData | undefined {
+  const d = design.data;
+  if (!d?.confirmedAt) return undefined;
+  const ok = d.files.filter(isUsable);
+  const card = (f: DataFile): DeckDataFile => ({ name: f.name, kind: KIND_LABELS[f.kind], what: clip(whatOf(f) ?? '', 120), columns: columnsOf(f).filter((c) => c.type !== 'empty').map((c) => c.name).slice(0, 6) });
+  const out = ok.find((f) => f.kind === 'output') ?? ok.find((f) => f.kind === 'today');
+  const inputs = ok.filter((f) => f.kind === 'input').slice(0, 2).map(card);
+  if (!inputs.length && !out) return undefined;
+  return { inputs, rules: ok.filter((f) => f.kind === 'rules').slice(0, 2).map(card), ...(out ? { output: card(out) } : {}), ...(design.tool ? { tool: design.tool.tool } : {}) };
 }
 
 /** Said before the points a full-bleed diagram slide moves into its speaker notes. */
@@ -208,15 +233,27 @@ export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { tod
   const builder = roster.find((p) => p.roles.includes('builder'));
   const after = pointOf(design, 'must-show') ?? design.summary;
   const diagram = diagramOfDesign(design);
+  const data = deckData(design);
+  // Today's report and the sample output, when the team gave them, open the before and the after.
+  const confirmed = design.data?.confirmedAt ? design.data.files.filter(isUsable) : [];
+  const today = confirmed.find((f) => f.kind === 'today');
+  const sample = confirmed.find((f) => f.kind === 'output');
+  const fileLine = (label: string, f: DataFile) => clip(`${label}: ${f.name}${whatOf(f) ? `, ${whatOf(f)}` : ''}`);
+  // A before-after the AI wrote still opens with the files when it does not name them.
+  const openWith = (lines: string[] | undefined, f: DataFile | undefined, label: string) =>
+    (!lines?.length || !f || lines.some((l) => l.includes(f.name)) ? lines : [fileLine(label, f), ...lines].slice(0, DECK_POINTS_MAX));
+  const withFiles = (sl: DeckSlide): DeckSlide => (sl.visual !== 'before-after' ? sl
+    : { ...sl, ...(sl.before ? { before: openWith(sl.before, today, "Today's report") } : {}), ...(sl.after ? { after: openWith(sl.after, sample, 'It makes') } : {}) });
   return {
     id: idea.id, ideaTitle: idea.title, title: spec.title, subtitle: spec.subtitle,
     ...(src.round?.name ? { roundName: src.round.name } : {}), ...(src.round?.roadshow ? { roadshowDate: src.round.roadshow } : {}),
-    builtOn: opts.today, slides: diagram ? spec.slides.map(bleedSlide) : spec.slides, team,
+    builtOn: opts.today, slides: (diagram ? spec.slides.map(bleedSlide) : spec.slides).map(withFiles), team,
     ...(diagram ? { diagram } : {}),
     ...(fit ? { fit } : {}),
     timeline: datesOf(src),
-    before: processLines(idea.current_process ?? pointOf(design, 'replaces')),
-    after: after ? [clip(after, 240)] : [],
+    ...(data ? { data } : {}),
+    before: [...(today ? [fileLine("Today's report", today)] : []), ...processLines(idea.current_process ?? pointOf(design, 'replaces'))].slice(0, 5),
+    after: [...(sample ? [fileLine('It makes', sample)] : []), ...(after ? [clip(after, 240)] : [])],
     theme: opts.theme ?? DEFAULT_THEME, ...(opts.template ? { template: opts.template } : {}),
     ...(demoLinkOf(idea.answers) ? { demoLink: demoLinkOf(idea.answers) } : {}),
     presenters: [lead, builder].filter((p, i, all): p is NonNullable<typeof p> => !!p && all.indexOf(p) === i).map((p) => p.name),

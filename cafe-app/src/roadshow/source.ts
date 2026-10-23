@@ -19,6 +19,8 @@ import type { Round, Settings } from '../round/round';
 import type { Coded } from '../command/names';
 import type { DeckVisual, RoadshowInput } from '../ai/tasks';
 import { fingerprint, readRoadshow, rosterOf, ROLE_WORDS, type RoadshowState } from './store';
+import { codedDataBrief } from '../data/brief';
+import { dataLane } from '../design/diagram';
 
 export type Answer = { question: string; answer: string; source?: string };
 
@@ -92,6 +94,9 @@ export function visualsOf(src: Pick<RoadshowSource, 'idea' | 'design' | 'history
   if (diagramOfDesign(src.design)) v.push('diagram');
   if (src.design.tool && (src.design.tool.fit.length || src.design.features.length)) v.push('fit-table');
   if (datesOf(src).length >= 2) v.push('timeline');
+  // The data slide: what goes in and what comes out, once the team's data is confirmed.
+  const files = dataLane(src.design);
+  if (files.inputs.length || files.output) v.push('data');
   return v;
 }
 
@@ -106,6 +111,8 @@ export function recordBasis(src: RoadshowSource): string {
     idea.function, idea.region, idea.people, idea.review ?? null, idea.learned?.points ?? [], (idea.answers ?? []).map((a) => [a.question, a.answer]),
     design.features, design.tool ?? null, design.summary ?? '', design.steps.map((s) => [s.question, s.answer ?? '']), design.settled ?? {},
     design.diagram?.spec ?? null, design.approvedAt ?? '', src.planMd ?? '', datesOf(src), src.round?.name ?? '', src.round?.roadshow ?? '',
+    // The confirmed data only when there is some, so a deck built before the Data step is not out of date for it.
+    ...(design.data?.confirmedAt ? [design.data.confirmedAt, design.data.files.map((f) => [f.name, f.kind])] : []),
   ]);
 }
 
@@ -183,6 +190,7 @@ export async function codedRoadshowInput(
     ...(src.round ? { roadshow: { name: src.round.name, ...(src.round.roadshow ? { date: src.round.roadshow } : {}) } } : {}),
     visuals: visualsOf(src),
     ...(extra.todo?.length ? { todo: extra.todo.map((_, i) => ({ need: todoTexts[2 * i], ask: todoTexts[2 * i + 1] })) } : {}),
+    ...(await codedDataBrief(root, idea.id, design.data, codes)),
   };
   return { input, codes, read: answers.length };
 }

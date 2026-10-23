@@ -393,6 +393,7 @@ function roadshowDeckFor(prompt: string) {
       slide('today', 'How it works today', [], 1, { visual: 'before-after', before: ['Done by hand', 'Checked by eye'], after: ['Checked on sample data', 'One list to review'] }),
       ...(v.has('team') ? [slide('team', 'The team behind it', [], 0.5, { visual: 'team' })] : []),
       slide('solution', 'What we built', ['A proof of concept on sample data'], 1),
+      ...(v.has('data') ? [slide('data', 'The data it runs on', ['Sample, masked data in; a list out'], 0.5, { visual: 'data' })] : []),
       ...(v.has('diagram') ? [slide('diagram', 'How it fits together', ['Sample data in, a list out'], 0.75, { visual: 'diagram' })] : []),
       ...(v.has('fit-table') ? [slide('tool', `Built with ${data.tool?.tool ?? 'one tool'}`, ['One tool for the whole proof of concept'], 0.75, { visual: 'fit-table' })] : []),
       { ...slide('demo', 'The demo', ['Load the sample', 'Run the check', 'Read the result'], 2.5), notes: `${lead} shows it. [switch to the demo] Load the sample, run the check, read the result. [back to the slides]` },

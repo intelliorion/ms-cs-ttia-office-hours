@@ -136,6 +136,7 @@ cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/data-feed.test.ts
 cafe-app/tests/data-read-check.test.ts
+cafe-app/tests/data-roadshow.test.ts
 cafe-app/tests/data-routes.test.ts
 cafe-app/tests/data-tasks.test.ts
 cafe-app/tests/dataFixtures.ts

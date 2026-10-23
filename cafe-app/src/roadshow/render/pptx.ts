@@ -225,6 +225,35 @@ export async function renderDeckPptx(m: DeckModel): Promise<Uint8Array> {
         quote({ x: X0, y: 6.1, w: CW, h: 0.6 });
         return;
       }
+      case 'data': {
+        const d = m.data;
+        if (d) {
+          const colW = (CW - 2.4) / 2.6;
+          const card = (f: { name: string; kind: string; what: string; columns: string[] }, x: number, y: number, h: number, fill: string) => {
+            slide.addShape(pptx.ShapeType.roundRect, { x, y, w: colW, h, fill: { color: fill }, line: { color: LINE, width: 0.75 }, rectRadius: 0.12 });
+            slide.addText([
+              { text: f.kind.toUpperCase(), options: { fontSize: 9, bold: true, color: accent, breakLine: true } },
+              { text: f.name, options: { fontSize: 15, bold: true, color: ink, breakLine: true } },
+              ...(f.what ? [{ text: f.what, options: { fontSize: 10, color: MUTED, breakLine: true } }] : []),
+              ...(f.columns.length ? [{ text: f.columns.join(' · '), options: { fontSize: 9, color: ink, fontFace: 'Consolas' } }] : []),
+            ], { x: x + 0.15, y: y + 0.08, w: colW - 0.3, h: h - 0.16, valign: 'top', fontFace: body, margin: 0, fit: 'shrink' } as never);
+          };
+          const ins = [...d.inputs, ...d.rules];
+          const h = Math.min(1.9, 4.2 / Math.max(1, ins.length) - 0.15);
+          slide.addText('WHAT GOES IN', { x: X0, y: 1.95, w: colW, h: 0.3, fontSize: 11, bold: true, color: MUTED, fontFace: head, charSpacing: 2, margin: 0 });
+          ins.forEach((f, k) => card(f, X0, 2.35 + k * (h + 0.15), h, SOFT));
+          const midX = X0 + colW + 0.6;
+          slide.addText('→', { x: X0 + colW, y: 3.4, w: 0.6, h: 0.6, fontSize: 28, color: accent, align: 'center', bold: true });
+          slide.addText([{ text: d.tool ?? 'The proof of concept', options: { fontSize: 18, bold: true, breakLine: true } }, { text: 'on sample, masked data', options: { fontSize: 11 } }],
+            { shape: pptx.ShapeType.roundRect, x: midX, y: 2.9, w: colW * 0.6, h: 1.6, fill: { color: accent }, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: head, rectRadius: 0.15 } as never);
+          slide.addText('→', { x: midX + colW * 0.6, y: 3.4, w: 0.6, h: 0.6, fontSize: 28, color: accent, align: 'center', bold: true });
+          const outX = midX + colW * 0.6 + 0.6;
+          slide.addText('WHAT COMES OUT', { x: outX, y: 1.95, w: colW, h: 0.3, fontSize: 11, bold: true, color: MUTED, fontFace: head, charSpacing: 2, margin: 0 });
+          if (d.output) card(d.output, outX, 2.35, 1.9, 'EEF4FF');
+        }
+        if (s.points.length) slide.addText(s.points.join('   ·   '), { x: X0, y: 6.3, w: CW, h: 0.5, fontSize: 14, color: MUTED, fontFace: body });
+        return;
+      }
       case 'before-after': {
         const before = s.before?.length ? s.before : m.before;
         const after = s.after?.length ? s.after : m.after;

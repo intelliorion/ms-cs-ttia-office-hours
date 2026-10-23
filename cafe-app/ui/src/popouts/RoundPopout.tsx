@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { post } from '../api';
 import { Modal } from './Modal';
-import { downloadEml, openedText } from '../panels/outlook';
+import { openedText } from '../panels/outlook';
 
 /** The emails a round sends to everyone, not about one idea. */
 const ROUND_EMAILS: [string, string][] = [['E0', 'Call for ideas'], ['E0B', 'Deadline reminder']];
@@ -63,10 +63,8 @@ export function RoundPopout() {
     if (await run(() => post(`/api/rounds/${encodeURIComponent(pickTarget)}/ideas`, { ideaIds: ids }), `${ideaCount(ids.length)} put in ${targetName}.`)) setTicked([]);
   };
   const takeOut = (i: IdeaRow) => run(() => post(`/api/ideas/${encodeURIComponent(i.id)}/round`, { round: '' }), `${i.id} taken out of its round.`);
-  const openRoundEmail = (r: RoundRow, template: string) => run(async () => {
-    const o = await post(`/api/rounds/${encodeURIComponent(r.id)}/email-open`, { template });
-    downloadEml(o);
-  }, openedText(template));
+  const openRoundEmail = (r: RoundRow, template: string) => run(
+    () => post(`/api/rounds/${encodeURIComponent(r.id)}/email-open`, { template }), openedText(template));
   const saveDates = (r: RoundRow) => run(
     () => post(`/api/rounds/${encodeURIComponent(r.id)}`, Object.fromEntries(roundFields.map(([k]) => [k, dateOf(r, k)]))),
     `${r.name} dates saved.`,

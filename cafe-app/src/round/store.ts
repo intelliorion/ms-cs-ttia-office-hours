@@ -88,10 +88,7 @@ export async function saveRound(root: string, id: string, patch: Record<string, 
   const next: Round = { ...round };
   for (const [key, label] of ROUND_FIELDS) {
     if (!(key in patch)) continue;
-    // The signature may run over several lines; every other setting is one line.
-    const value = key === 'operatorName'
-      ? String(patch[key] ?? '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.trimEnd()).join('\n').trim()
-      : String(patch[key] ?? '').trim();
+    const value = String(patch[key] ?? '').trim();
     if (value && (!DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)))) {
       throw new Error(`${label} must be a date (YYYY-MM-DD)`);
     }

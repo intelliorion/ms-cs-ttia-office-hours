@@ -23,3 +23,32 @@ export function openFolder(dir: string, platform: NodeJS.Platform = process.plat
     child.once('spawn', () => { child.unref(); resolve(); });
   });
 }
+
+type SpawnWithExit = (cmd: string, args: string[], opts: { detached: boolean; stdio: 'ignore'; windowsHide: boolean }) => {
+  once(ev: 'error', fn: (e: Error) => void): unknown; once(ev: 'exit', fn: (code: number | null) => void): unknown; unref(): void;
+};
+
+/** Runs `open` on a Mac and waits for its answer: it exits 0 once the app has the file, 1 when it can't. */
+function openOnMac(args: string[], run: SpawnWithExit): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = run('open', args, { detached: true, stdio: 'ignore', windowsHide: false });
+    child.once('error', () => resolve(false));
+    child.once('exit', (code) => resolve(code === 0));
+  });
+}
+
+/**
+ * Opens an Outlook draft file (.eml marked unsent) in Outlook, so a new message shows ready to check and send.
+ * On a Mac, Outlook by name (the default mail app may be Apple Mail), else whatever opens .eml files; on Windows and
+ * Linux, the app the computer opens .eml files with. The path goes as one argument, never through a shell.
+ */
+export async function openEmailFile(
+  file: string, platform: NodeJS.Platform = process.platform,
+  run: SpawnWithExit = spawn as unknown as SpawnWithExit, runDetached: Spawn = spawn as unknown as Spawn,
+): Promise<void> {
+  if (platform === 'darwin') {
+    if (await openOnMac(['-a', 'Microsoft Outlook', file], run) || await openOnMac([file], run)) return;
+    throw new Error("Couldn't open the email in Outlook. Is Outlook installed?");
+  }
+  try { await openFolder(file, platform, runDetached); } catch { throw new Error("Couldn't open the email in Outlook. Is Outlook installed?"); }
+}

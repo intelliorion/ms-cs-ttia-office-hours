@@ -6,7 +6,7 @@ import { ideaCardModel } from '../popouts/ideaHelpers';
 import { RoundChip, StageButton } from '../popouts/IdeaSections';
 import { ReviewSelect } from './ReviewSelect';
 import { EmailMenu } from './EmailMenu';
-import { downloadEml, openedText } from './outlook';
+import { openedText } from './outlook';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
 import { sectionsFor, type SectionKey } from './stageGate';
@@ -116,8 +116,8 @@ export function IdeaDetails({ id }: { id: string }) {
     const open = (r.needs ?? []).filter((n: any) => !n.met).length;
     setNotice({ text: `${hadPrep ? 'Re-evaluated' : 'Suggested'} by ${providerName(r.provider, ai)}: ${open ? `${open} thing${open > 1 ? 's' : ''} to find out first` : 'nothing more needed, ready to decide'}. Nothing is saved until you press Save decision.`, kind: 'ok' });
   });
-  /** An email went to Outlook: the file is downloaded, the notice says so and offers Undo. */
-  const opened = (o: any) => { downloadEml(o); setUndoKey(o.email.key); return o; };
+  /** An email went to Outlook (the app opened it there): the notice says so and offers Undo. */
+  const opened = (o: any) => { setUndoKey(o.email.key); return o; };
   const answer = async (need: string, text: string) => {
     try { await post(`/api/ideas/${encodeURIComponent(id)}/prep/answer`, { need, answer: text }); }
     catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }

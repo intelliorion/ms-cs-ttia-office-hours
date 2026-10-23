@@ -2,8 +2,8 @@
 
 A local app for the person who runs the CS TTIA Creators' Café. It imports the submission export, tracks
 each idea's 25 steps, drafts the emails, blocks any email that still needs a date or link, shows replies
-that are late. It never sends anything: you approve, copy, send
-from Outlook, then mark the email as sent.
+that are late. It never sends anything: each email opens in Outlook
+as a new message for you to check and send.
 
 The design is in `docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md` (the one-screen UI) and
 `docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md` (the core).
@@ -145,7 +145,8 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
    once you close it as CSIC. Links the idea has in the universe are listed here too: any AI link can be
    removed, and a link a conflict rule held says "Waiting on you" with **Add it anyway**.
-5. **Emails.** There is no Outbox. Every email opens straight in Outlook as a new message (an unsent .eml) and
+5. **Emails.** There is no Outbox. Every email opens straight in Outlook as a new message (the app writes an unsent .eml under
+   data/exports/outlook and opens it in Outlook; nothing is downloaded) and
    counts as sent, with Undo: from the stage's own buttons (Draft email, Save decision), from the idea's
    **✉ Emails** menu (this stage's emails, plus anything drafted and not sent yet), and for a round's call for
    ideas and deadline reminder, from that round in Rounds. An idea keeps at most one unsent email per stage: a

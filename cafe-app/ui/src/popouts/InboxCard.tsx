@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { inboxPost, post } from '../api';
-import { downloadEml, openedText } from '../panels/outlook';
+import { openedText } from '../panels/outlook';
 import { useStore } from '../state/store';
 import { importReportLines, type ImportReport } from './titleHelpers';
 import {
@@ -269,7 +269,7 @@ export function InboxCard({ item, busy, ideaTitle, openIdea, run, expanded = fal
               onClick={() => void go('Drafting…', async () => {
                 const r = await inboxPost(item.id, 'draft-held-reply');
                 // Straight to Outlook, like every email now; if a setting is missing it waits under the idea's ✉ Emails.
-                try { const o = await post('/api/outbox/open', { key: r.email.key }); downloadEml(o); return { ...r, opened: true }; }
+                try { await post('/api/outbox/open', { key: r.email.key }); return { ...r, opened: true }; }
                 catch (e) { return { ...r, openError: (e as Error).message }; }
               }, (r: any) => (r.opened ? openedText(r.email?.template ?? 'PD') : `${r.email?.template ?? 'PD'} is drafted under the idea's ✉ Emails. ${r.openError ?? ''}`.trim()))}>Draft reply asking for counts</button>
             {!sureDelete

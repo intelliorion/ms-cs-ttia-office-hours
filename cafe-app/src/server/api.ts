@@ -13,7 +13,7 @@ import { setStage } from '../ideas/stage';
 import { writeFileAtomic, readHistory } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
-import { openFolder } from '../workspace/reveal';
+import { openFolder, openEmailFile } from '../workspace/reveal';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -118,6 +118,28 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return { folder: data };
   });
 
+  /**
+   * Opens an email in Outlook from this computer: its draft file (.eml, marked unsent) is written under
+   * data/exports/outlook and handed to Outlook, nothing is downloaded. If Outlook can't open it, an email this click
+   * counted as sent goes back to unsent. CAFE_NO_OUTLOOK=1 (tests, the UI tour) writes the file and opens nothing.
+   */
+  const inOutlook = async (key: string, open: () => Promise<Awaited<ReturnType<typeof openEmail>>>) => {
+    const wasSent = (await listOutbox(root)).find((m) => m.key === key)?.status === 'sent';
+    const out = await open();
+    const dir = path.join(paths(root).exports, 'outlook');
+    await mkdir(dir, { recursive: true });
+    const file = path.join(dir, out.filename.replace(/\.eml$/i, `-${Date.now()}.eml`));
+    try {
+      await writeFileAtomic(file, out.eml);
+      if (process.env.CAFE_NO_OUTLOOK !== '1') await openEmailFile(file);
+    } catch (e) {
+      if (!wasSent) await unopenEmail(root, key, clock);
+      throw e;
+    }
+    const { eml: _eml, ...rest } = out;
+    return { ...rest, file: `data/${dataKey(root, file)}` };
+  };
+
   add('POST', '/api/import', async ({ raw, headers }) => {
     const name = fileNameOf(headers['x-filename']);
     if (!/\.(csv|xlsx)$/i.test(name)) throw new Error('Drop a .csv or .xlsx export');
@@ -142,12 +164,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const template = String(body.template);
     if (template !== 'E0' && template !== 'E0B') throw new Error('Rounds send the call for ideas (E0) and the deadline reminder (E0B)');
     const rec = await draftEmail(root, { template, round: params.id }, clock);
-    return openEmail(root, rec.key, clock, await steps());
+    return inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
   });
 
   add('POST', '/api/outbox/approve', async ({ body }) => approve(root, String(body.key), clock));
   add('POST', '/api/outbox/sent', async ({ body }) => markSent(root, String(body.key), clock, await steps()));
-  add('POST', '/api/outbox/open', async ({ body }) => openEmail(root, String(body.key), clock, await steps()));
+  add('POST', '/api/outbox/open', async ({ body }) => inOutlook(String(body.key), async () => openEmail(root, String(body.key), clock, await steps())));
   add('POST', '/api/outbox/unopen', async ({ body }) => {
     const before = (await listOutbox(root)).find((m) => m.key === String(body.key));
     const out = await unopenEmail(root, String(body.key), clock);
@@ -183,14 +205,14 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // Draft email: the open to-dos become the questions email (E2), opened in Outlook and counted as sent.
   add('POST', '/api/ideas/:id/prep/email', async ({ params }) => {
     const rec = await draftNeedsEmail(root, params.id, clock);
-    const out = await openEmail(root, rec.key, clock, await steps());
+    const out = await inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
     await markAsked(root, params.id, out.email.sentAt ?? clock());
     return out;
   });
   // Any of an idea's emails, from the header's Email menu: drafted if need be, then opened in Outlook.
   add('POST', '/api/ideas/:id/email-open', async ({ params, body }) => {
     const rec = await draftEmail(root, { template: String(body.template), ideaId: params.id }, clock);
-    return openEmail(root, rec.key, clock, await steps());
+    return inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
   });
   // Design series: the tool picker. The AI only suggests; the operator's save is what counts.
   add('GET', '/api/ideas/:id/design', async ({ params }) => {

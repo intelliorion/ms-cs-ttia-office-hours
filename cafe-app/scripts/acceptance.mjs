@@ -37,6 +37,7 @@ const workspace = path.resolve(flag('workspace', path.join(APP, `.acceptance-${R
 const DROP_MS = REAL ? 120_000 : 15_000;
 
 if (REAL) delete process.env.CAFE_AI_FAKE; else process.env.CAFE_AI_FAKE = '1';
+process.env.CAFE_NO_OUTLOOK = '1'; // emails are written, never opened in Outlook
 
 /* ---------- the AI, counted ---------- */
 

@@ -706,7 +706,7 @@ async function main() {
   await fs.rm(workspace, { recursive: true, force: true });
   await fs.mkdir(workspace, { recursive: true });
   await fs.mkdir(out, { recursive: true });
-  const launch = (env = {}, ws = workspace) => spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', ws, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } });
+  const launch = (env = {}, ws = workspace) => spawn(process.execPath, [path.join(APP, 'node_modules/tsx/dist/cli.mjs'), 'bin/cafe.ts', 'start', '--workspace', ws, '--port', String(port)], { cwd: APP, stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, CAFE_NO_OUTLOOK: '1', ...env } }); // emails are written, never opened in Outlook
   let server = launch();
   const restart = async (env, ws) => {
     server.kill('SIGTERM');

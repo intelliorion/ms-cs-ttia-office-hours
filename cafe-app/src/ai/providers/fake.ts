@@ -288,6 +288,74 @@ function planForPicks(prompt: string) {
   return { ...DESIGN_PLAN, tasks: DESIGN_PLAN.tasks.map((t) => ({ ...t, tool: home(t.tool) })) };
 }
 
+/**
+ * A filled-in kit for any approved design: a request sample (with ten weekend requests seeded), a check per built
+ * feature, the picked tool's own section and a short setup for each outside tool.
+ */
+function kitFor(prompt: string) {
+  const data = dataOf(prompt) as { tool?: { tool: string }; features?: { name: string; status: string }[]; outsideTools?: string[] };
+  const tool = data.tool?.tool ?? '';
+  const built = (data.features ?? []).filter((f) => f.status === 'built').map((f) => f.name);
+  const first = built[0] ?? 'The rule';
+  const kit: Record<string, unknown> = {
+    sample: {
+      name: 'Synthetic requests',
+      columns: [
+        { name: 'request_id', kind: 'id', about: 'The request number, REQ-001 on' },
+        { name: 'received_on', kind: 'date', about: 'The day it came in, YYYY-MM-DD' },
+        { name: 'desk', kind: 'category', about: 'The desk it is for: EMEA, AMER or APAC' },
+        { name: 'requester', kind: 'person', about: 'Who sent it (a role, never a name)' },
+        { name: 'amount', kind: 'money', about: 'The amount asked for, a plain number' },
+      ],
+      rows: [
+        ['REQ-001', '2026-10-05', 'EMEA', 'analyst', '120.50'],
+        ['REQ-002', '2026-10-06', 'AMER', 'associate', '80'],
+        ['REQ-003', '2026-10-07', 'APAC', 'analyst', '45.25'],
+      ],
+      seeded: [{ label: 'Weekend request', count: 10, row: ['REQ-900', '2026-10-10', 'EMEA', 'analyst', '60'], expect: 'All 10 are flagged as weekend requests' }],
+    },
+    checks: [
+      { check: 'Run the whole sample through it.', expected: 'The 10 rows marked T1 are flagged and no other row is' },
+      ...built.map((f) => ({ check: `Use ${f} on the sample.`, expected: `${f} works on all 34 rows`, feature: f })),
+    ],
+    outside: (data.outsideTools ?? []).map((t) => ({ tool: t, setup: [`Set up ${t} on the sample only.`], test: [`${t} gives the same result as the main build on the sample.`] })),
+  };
+  if (tool === 'Microsoft Copilot') kit.copilot = { prompts: built.map((f) => ({ title: `Try ${f}`, feature: f, prompt: `Using only the attached sample-data.csv, list the requests where received_on falls on a Saturday or Sunday (${f}).`, expected: 'The 10 requests REQ-025 to REQ-034' })) };
+  if (tool === 'Copilot Studio') {
+    kit.studio = {
+      name: 'Request helper', purpose: 'Answers questions about the requests in the sample and flags weekend ones.', tone: 'Plain, short and friendly.',
+      must: ['Say which rows an answer comes from'], mustNot: ['Guess an answer the sample does not hold'], handover: ['A request is not in the sample: hand over to the desk lead'],
+      skills: built.map((f) => ({ feature: f, name: f, triggers: ['Which requests came in at the weekend?', 'Show weekend requests', 'Any Saturday requests?'], inputs: ['The desk (optional)'], steps: ['Read the sample', 'Pick the rows whose received_on is a Saturday or Sunday'], answer: 'A short list of the request ids', action: 'none' })),
+      knowledge: [{ source: 'sample-data.csv', holds: 'The synthetic requests', add: true }, { source: 'The live request mailbox', holds: 'Real requests', add: false, why: 'Real data: never in a proof of concept' }],
+      tests: [{ question: 'Which requests came in at the weekend?', expected: 'REQ-025 to REQ-034' }],
+    };
+  }
+  if (tool === 'Power Apps') {
+    kit.powerApps = {
+      tables: [{ name: 'Requests', purpose: 'The sample, one row per request', columns: [{ name: 'request_id', type: 'Single line of text', note: '' }, { name: 'received_on', type: 'Date only', note: '' }, { name: 'Weekend', type: 'Yes/No', note: 'Set by the app' }] }],
+      screens: [{ name: 'Browse', purpose: 'Every request, weekend ones first', feature: first, controls: [{ name: 'galRequests', kind: 'Gallery', does: 'Lists the requests', formula: 'SortByColumns(Requests, "received_on")' }, { name: 'tglWeekend', kind: 'Toggle', does: 'Shows weekend requests only', formula: 'Filter(Requests, Weekday(received_on) in [1, 7])' }] }],
+      flows: [{ name: 'Weekly summary', trigger: 'Every Monday at 08:00', steps: ['Get the requests of the last week', 'Post the count of weekend ones to the team chat'] }],
+    };
+  }
+  if (tool === 'Dataiku') {
+    kit.dataiku = {
+      datasets: [
+        { id: 'requests', name: 'requests_sample', kind: 'input', about: 'Uploaded from sample-data.csv', columns: [{ name: 'request_id', type: 'string' }, { name: 'received_on', type: 'date' }, { name: 'amount', type: 'double' }] },
+        { id: 'rules', name: 'desk_rules', kind: 'rules', about: 'Which desks work weekends', columns: [{ name: 'desk', type: 'string' }, { name: 'weekend_ok', type: 'boolean' }] },
+        { id: 'joined', name: 'requests_with_rules', kind: 'intermediate', about: '', columns: [] },
+        { id: 'flagged', name: 'weekend_flags', kind: 'output', about: 'One row per flagged request', columns: [{ name: 'request_id', type: 'string' }, { name: 'reason', type: 'string' }] },
+      ],
+      recipes: [
+        { id: 'r1', name: 'Join the desk rules', kind: 'join', inputs: ['requests', 'rules'], outputs: ['joined'], steps: ['Left join requests_sample to desk_rules on desk'] },
+        { id: 'r2', name: first, kind: 'prepare', inputs: ['joined'], outputs: ['flagged'], steps: ['Formula: is_weekend = weekday(received_on) >= 6', 'Filter: keep rows where is_weekend and not weekend_ok'], feature: first },
+      ],
+      dashboard: { name: 'Weekend requests', shows: ['The count of flagged requests by desk'], from: ['flagged'] },
+      rules: { columns: ['desk', 'weekend_ok'], rows: [['EMEA', 'false'], ['AMER', 'false'], ['APAC', 'true']] },
+    };
+  }
+  return kit;
+}
+
 /** How many Q/A pairs the design-step prompt carries (its DATA block's stepsSoFar). */
 function stepsSoFar(prompt: string): number {
   const data = dataOf(prompt) as { stepsSoFar?: unknown[] };
@@ -360,6 +428,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS, features: featureChangesFor(prompt) });
       if (prompt.startsWith('TASK: design-diagram')) return JSON.stringify(diagramFor(prompt));
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
+      if (prompt.startsWith('TASK: design-kit')) return JSON.stringify(kitFor(prompt));
       if (prompt.startsWith('TASK: roadshow-prep')) return JSON.stringify(roadshowPrepFor(prompt));
       if (prompt.startsWith('TASK: roadshow-deck')) return JSON.stringify(roadshowDeckFor(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));

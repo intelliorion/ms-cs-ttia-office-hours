@@ -519,9 +519,15 @@ nothing is saved until you press a button, and you can do everything except plan
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it
    needs approving again.
 4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, and the
-   CSIC note when the tool choice has a CSIC flag) and a starter kit for the picked tool, covering every feature. For a custom app, **Copy build instruction** copies a
-   ready-made instruction for Claude Code or GitHub Copilot. Running it again rewrites only the files the app
-   made and keeps any you added.
+   CSIC note when the tool choice has a CSIC flag) and a filled-in starter kit for the picked tool. A second AI
+   task (design-kit) reads the whole approved design (the features with their status and fit, the tool's pros and
+   cons, every design answer and build point, the summary, the Learned since the form brief, the plan's tasks and
+   risks; people's names coded) and writes the kit's content; the app checks it and writes the files. Where the
+   design does not say something, the kit says "(not settled in the design)" rather than leaving it to you. Every
+   tool also gets a short kit for each other tool the design uses for its gaps (a feature done outside the build,
+   such as Power Automate). If the kit AI fails, the kits are still written from the design alone and the README
+   says so. For a custom app, **Copy build instruction** copies a ready-made instruction for Claude Code or GitHub
+   Copilot. Running it again rewrites only the files the app made and keeps any you added.
 
 **The files it writes** (under `ideas/<id>/`):
 
@@ -531,8 +537,35 @@ design.yaml            the design's state: features (and where the design moved 
                        answers, the settled build points, summary, the diagram, approval date
 design.md              the design, readable: the points, the build points, the features and tool, the decisions
 plan.md                the plan: the one thing to show, tasks for the tool, risks
-kit/<tool>/...         the starter kit for the picked tool, all Markdown: topics, screens, a flow, a process,
-                       prompts, or for a custom app README.md and BUILD-WITH-AGENT.md
+kit/<tool>/...         the starter kit for the picked tool (below)
+kit/<other tool>/README.md   a short kit (what it covers, what to set up, the test) for each tool the design adds
+                       for its gaps, outside the build
+```
+
+**The starter kits.** Every kit has:
+
+```
+README.md              what the kit is, what it must show, the build points, the features by status, the files in
+                       the order of work, the plan tasks, who does what, the sample's columns and seeded tests, risks
+sample-data.csv        a SYNTHETIC sample with the design's input fields: about 24 ordinary rows from the AI's
+                       example rows (ids numbered, dates moved by whole weeks), then the seeded test rows from "done
+                       when" (marked T1, T2 … in test_case); at most 200 rows; a person column holds Person 1, 2 …
+test-checklist.md      each "done when", each seeded group and each feature as a tick-box test with the expected result
+```
+
+and, by tool:
+
+```
+Microsoft Copilot      prompts.md: each prompt written against the sample's columns, with the answer to check against
+Copilot Studio         instructions.md (the agent's instructions, ready to paste), skills.md (one topic per feature:
+                       trigger phrases, inputs, steps, the answer, the action or connector), knowledge.md (what to
+                       add, what not to add, test questions)
+Power Apps             data-model.md (lists and columns with types), screens.md (each screen's controls and key
+                       Power Fx formulas), flows.md (Power Automate flows for what the app cannot do, when any)
+Dataiku                flow.md (each recipe's actual steps), datasets.md (schemas), rules.csv (the rules sheet
+                       template, when the logic uses one), flow.json and flow-diagram.html (the recipe flow:
+                       datasets → recipes → outputs and dashboard, one self-contained page)
+custom app             BUILD-WITH-AGENT.md (the instruction for a coding agent; no code is written by the app)
 ```
 
 A plan task on a tool other than the one picked is listed under "Not picked" in plan.md, with no kit.
@@ -555,8 +588,8 @@ from the Superpowers project, copied under the MIT licence (`skills/LICENSE-supe
 - A custom app is TTIA-Led, so an idea with one needs the CSIC Repository before any build beyond a proof
   of concept. The same goes for a live connection to a non-Microsoft system or personal, client or
   third-party data.
-- The app writes no application code. The kits are outlines, checklists and, for a custom app, an
-  instruction for a coding agent that works only inside the kit folder.
+- The app writes no application code. The kits are instructions, a synthetic sample, checklists, a diagram and,
+  for a custom app, an instruction for a coding agent that works only inside the kit folder.
 - The stage never moves on its own. Saving the features and tool, answering the must-show and smallest-input questions
   and approving the design tick their steps in the background (s3e, s3c, s3d, s3f).
 

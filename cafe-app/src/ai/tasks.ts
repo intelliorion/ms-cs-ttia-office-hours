@@ -1072,6 +1072,199 @@ export const designPlanTask: Task<DesignPlanOutput> = {
   parse: parseDesignPlan,
 };
 
+/* ---------- Design kit: the content of the starter kit for the one tool ---------- */
+
+/** The approved design, for the kit: everything the design settled, with people coded. */
+export interface DesignKitInput {
+  idea: IdeaText;
+  /** The tool the kit is for, with what it does well and what it cannot do. */
+  tool: { tool: string; pathway?: string; reason?: string; pros: string[]; cons: string[] };
+  summary: string;
+  /** Every feature, with where the design put it ("built", "out of scope", "<tool>, outside the <tool> build") and its fit. */
+  features: { name: string; what?: string; status: string; fit?: string; note?: string; why?: string }[];
+  /** What each design point settled (must-show, input-shape, logic, output, done-when, environment, …). */
+  points: Record<string, string>;
+  steps: { question: string; answer: string }[];
+  learned?: { topic: string; text: string }[];
+  plan: { tasks: { title: string; detail: string; tool: string; done_when: string }[]; risks: string[] };
+  /** The other tools the design uses for its gaps, outside the build. */
+  outsideTools: string[];
+}
+
+export const KIT_COLUMN_KINDS = ['id', 'text', 'number', 'money', 'date', 'time', 'yes-no', 'category', 'person'] as const;
+export type KitColumnKind = (typeof KIT_COLUMN_KINDS)[number];
+export const PA_COLUMN_TYPES = ['Single line of text', 'Multiple lines of text', 'Number', 'Currency', 'Date only', 'Date and time', 'Yes/No', 'Choice', 'Lookup'] as const;
+export const DSS_TYPES = ['string', 'int', 'double', 'date', 'boolean'] as const;
+export const DSS_DATASET_KINDS = ['input', 'rules', 'intermediate', 'output'] as const;
+export const DSS_RECIPES = ['prepare', 'join', 'filter', 'group', 'stack', 'split', 'sort', 'window', 'distinct', 'pivot', 'top-n'] as const;
+export const KIT_COLUMNS_MAX = 20;
+export const KIT_ROWS_MAX = 12;
+export const KIT_SEEDED_MAX = 6;
+export const KIT_SEEDED_COUNT_MAX = 50;
+
+export interface KitSample {
+  name: string;
+  columns: { name: string; kind: KitColumnKind; about: string }[];
+  rows: string[][];
+  seeded: { label: string; count: number; row: string[]; expect: string }[];
+}
+export interface KitCheck { check: string; expected: string; feature?: string }
+export interface KitCopilot { prompts: { title: string; feature?: string; prompt: string; expected: string }[] }
+export interface KitStudio {
+  name: string; purpose: string; tone: string; must: string[]; mustNot: string[]; handover: string[];
+  skills: { feature?: string; name: string; triggers: string[]; inputs: string[]; steps: string[]; answer: string; action: string }[];
+  knowledge: { source: string; holds: string; add: boolean; why?: string }[];
+  tests: { question: string; expected: string }[];
+}
+export interface KitPowerApps {
+  tables: { name: string; purpose: string; columns: { name: string; type: (typeof PA_COLUMN_TYPES)[number]; note: string }[] }[];
+  screens: { name: string; purpose: string; feature?: string; controls: { name: string; kind: string; does: string; formula?: string }[] }[];
+  flows: { name: string; trigger: string; steps: string[]; feature?: string }[];
+}
+export interface KitDataiku {
+  datasets: { id: string; name: string; kind: (typeof DSS_DATASET_KINDS)[number]; about: string; columns: { name: string; type: (typeof DSS_TYPES)[number] }[] }[];
+  recipes: { id: string; name: string; kind: (typeof DSS_RECIPES)[number]; inputs: string[]; outputs: string[]; steps: string[]; feature?: string }[];
+  dashboard?: { name: string; shows: string[]; from: string[] };
+  rules?: { columns: string[]; rows: string[][] };
+}
+export interface KitOutside { tool: string; setup: string[]; test: string[] }
+export interface DesignKitOutput {
+  sample: KitSample;
+  checks: KitCheck[];
+  copilot?: KitCopilot;
+  studio?: KitStudio;
+  powerApps?: KitPowerApps;
+  dataiku?: KitDataiku;
+  outside?: KitOutside[];
+}
+
+const kStr = (max: number, min = 0): JsonSchema => ({ type: 'string', ...(min ? { minLength: min } : {}), maxLength: max });
+const kList = (n: number, max: number, min = 0): JsonSchema => ({ type: 'array', ...(min ? { minItems: min } : {}), maxItems: n, items: kStr(max, 1) });
+const kObj = (required: string[], properties: Record<string, JsonSchema>): JsonSchema => ({ type: 'object', additionalProperties: false, required, properties });
+const kArr = (items: JsonSchema, max: number, min = 0): JsonSchema => ({ type: 'array', ...(min ? { minItems: min } : {}), maxItems: max, items });
+const CELLS: JsonSchema = { type: 'array', maxItems: KIT_COLUMNS_MAX, items: kStr(80) };
+const KIT_ID = kStr(30, 1);
+
+export const DESIGN_KIT_SCHEMA: JsonSchema = kObj(['sample', 'checks'], {
+  sample: kObj(['name', 'columns', 'rows', 'seeded'], {
+    name: kStr(80, 1),
+    columns: kArr(kObj(['name', 'kind', 'about'], { name: kStr(40, 1), kind: { type: 'string', enum: KIT_COLUMN_KINDS }, about: kStr(160) }), KIT_COLUMNS_MAX, 1),
+    rows: kArr(CELLS, KIT_ROWS_MAX, 1),
+    seeded: kArr(kObj(['label', 'count', 'row', 'expect'], {
+      label: kStr(100, 1), count: { type: 'integer', minimum: 1, maximum: KIT_SEEDED_COUNT_MAX }, row: CELLS, expect: kStr(240, 1),
+    }), KIT_SEEDED_MAX),
+  }),
+  checks: kArr(kObj(['check', 'expected'], { check: kStr(240, 1), expected: kStr(240, 1), feature: kStr(60) }), 20, 1),
+  copilot: kObj(['prompts'], {
+    prompts: kArr(kObj(['title', 'prompt', 'expected'], { title: kStr(80, 1), feature: kStr(60), prompt: kStr(900, 1), expected: kStr(300, 1) }), 12, 1),
+  }),
+  studio: kObj(['name', 'purpose', 'tone', 'must', 'mustNot', 'handover', 'skills', 'knowledge', 'tests'], {
+    name: kStr(60, 1), purpose: kStr(300, 1), tone: kStr(200, 1), must: kList(8, 200), mustNot: kList(8, 200), handover: kList(6, 200),
+    skills: kArr(kObj(['name', 'triggers', 'inputs', 'steps', 'answer', 'action'], {
+      feature: kStr(60), name: kStr(60, 1), triggers: kList(10, 120, 1), inputs: kList(8, 160), steps: kList(10, 240, 1), answer: kStr(400, 1), action: kStr(240),
+    }), 12, 1),
+    knowledge: kArr(kObj(['source', 'holds', 'add'], { source: kStr(120, 1), holds: kStr(240, 1), add: { type: 'boolean' }, why: kStr(200) }), 8),
+    tests: kArr(kObj(['question', 'expected'], { question: kStr(200, 1), expected: kStr(300, 1) }), 12),
+  }),
+  powerApps: kObj(['tables', 'screens', 'flows'], {
+    tables: kArr(kObj(['name', 'purpose', 'columns'], {
+      name: kStr(60, 1), purpose: kStr(200),
+      columns: kArr(kObj(['name', 'type', 'note'], { name: kStr(40, 1), type: { type: 'string', enum: PA_COLUMN_TYPES }, note: kStr(160) }), KIT_COLUMNS_MAX, 1),
+    }), 6, 1),
+    screens: kArr(kObj(['name', 'purpose', 'controls'], {
+      name: kStr(60, 1), purpose: kStr(200), feature: kStr(60),
+      controls: kArr(kObj(['name', 'kind', 'does'], { name: kStr(40, 1), kind: kStr(40, 1), does: kStr(200, 1), formula: kStr(300) }), 12, 1),
+    }), 8, 1),
+    flows: kArr(kObj(['name', 'trigger', 'steps'], { name: kStr(60, 1), trigger: kStr(200, 1), steps: kList(10, 240, 1), feature: kStr(60) }), 6),
+  }),
+  dataiku: kObj(['datasets', 'recipes'], {
+    datasets: kArr(kObj(['id', 'name', 'kind', 'about', 'columns'], {
+      id: KIT_ID, name: kStr(60, 1), kind: { type: 'string', enum: DSS_DATASET_KINDS }, about: kStr(200),
+      columns: kArr(kObj(['name', 'type'], { name: kStr(40, 1), type: { type: 'string', enum: DSS_TYPES } }), KIT_COLUMNS_MAX),
+    }), 12, 1),
+    recipes: kArr(kObj(['id', 'name', 'kind', 'inputs', 'outputs', 'steps'], {
+      id: KIT_ID, name: kStr(60, 1), kind: { type: 'string', enum: DSS_RECIPES },
+      inputs: kList(4, 30, 1), outputs: kList(3, 30, 1), steps: kList(10, 240, 1), feature: kStr(60),
+    }), 12, 1),
+    dashboard: kObj(['name', 'shows', 'from'], { name: kStr(60, 1), shows: kList(6, 160, 1), from: kList(4, 30, 1) }),
+    rules: kObj(['columns', 'rows'], { columns: kList(10, 40, 1), rows: kArr(CELLS, 20) }),
+  }),
+  outside: kArr(kObj(['tool', 'setup', 'test'], { tool: kStr(60, 1), setup: kList(8, 240, 1), test: kList(6, 240, 1) }), 5),
+});
+
+/**
+ * Trims a reply to the schema, in place: every string to one line within its maxLength, every list cut to its
+ * maxItems. Only lengths change: a wrong type or a missing field is still refused by the check after it.
+ */
+function trimToSchema(v: unknown, s: JsonSchema): unknown {
+  if (s.type === 'string' && typeof v === 'string') return s.maxLength ? trimStrings(oneLine(v) as string, s.maxLength) : oneLine(v);
+  if (s.type === 'array' && Array.isArray(v)) {
+    const items = s.items;
+    const out = (s.maxItems !== undefined ? v.slice(0, s.maxItems) : v).map((x) => (items ? trimToSchema(x, items) : x));
+    // An item that trims to an empty string is dropped, so it cannot fail a minLength.
+    return items?.type === 'string' ? out.filter((x) => x !== '') : out;
+  }
+  const o = asObj(v);
+  if (s.type === 'object' && o && s.properties) {
+    for (const [k, ps] of Object.entries(s.properties)) if (Object.hasOwn(o, k)) o[k] = trimToSchema(o[k], ps);
+  }
+  return v;
+}
+
+function designKitData(i: DesignKitInput) {
+  return {
+    idea: ideaData(i.idea),
+    tool: { tool: cap(i.tool.tool, 40), ...(i.tool.pathway ? { pathway: cap(i.tool.pathway, 60) } : {}), reason: cap(i.tool.reason, 200), pros: capList(i.tool.pros, 5, 200), cons: capList(i.tool.cons, 5, 200) },
+    summary: cap(i.summary, 600),
+    features: (Array.isArray(i.features) ? i.features : []).slice(0, FEATURES_MAX).map((f) => ({
+      name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), status: cap(f.status, 120),
+      ...(f.fit ? { fit: cap(f.fit, 10) } : {}), ...(f.note ? { note: cap(f.note, 200) } : {}), ...(f.why ? { why: cap(f.why, 200) } : {}),
+    })),
+    points: Object.fromEntries(Object.entries(i.points ?? {}).slice(0, 10).map(([k, v]) => [cap(k, 20), cap(v, POINT_MAX)])),
+    steps: (Array.isArray(i.steps) ? i.steps : []).slice(0, 20).map((s) => ({ question: cap(s.question, 200), answer: cap(s.answer, 600) })),
+    ...learnedData(i.learned),
+    plan: {
+      tasks: (i.plan?.tasks ?? []).slice(0, 12).map((t) => ({ title: cap(t.title, 80), detail: cap(t.detail, 300), tool: cap(t.tool, 40), done_when: cap(t.done_when, 160) })),
+      risks: capList(i.plan?.risks, 5, 160),
+    },
+    outsideTools: capList(i.outsideTools, 5, 60),
+  };
+}
+
+/** Which part of the reply holds the picked tool's own files. */
+export const KIT_SECTION: Record<string, 'copilot' | 'studio' | 'powerApps' | 'dataiku' | undefined> = {
+  'Microsoft Copilot': 'copilot', 'Copilot Studio': 'studio', 'Power Apps': 'powerApps', 'Dataiku': 'dataiku', 'custom app': undefined,
+};
+
+export const designKitTask: Task<DesignKitOutput> = {
+  name: 'design-kit',
+  schema: DESIGN_KIT_SCHEMA,
+  // A whole kit is a long reply.
+  timeoutMs: 300_000,
+  prompt(input) {
+    const i = input as DesignKitInput;
+    const section = KIT_SECTION[i.tool?.tool];
+    return build('design-kit', [
+      `Write the content of the starter kit for an approved Creators' Café design, for the tool in DATA.tool (${String(i.tool?.tool ?? '')}). The app writes the files from your reply; you write what goes in them. A citizen builder must be able to start building from the kit without doing the design work again, so make every part concrete: real column names, the actual rule, real example phrases.`,
+      'Read all of DATA: the summary, every feature with its status and fit, the tool\'s pros and cons, the design points (input-shape: the sample\'s fields and format; logic: the exact rule; output: the result\'s columns and form; done-when: the seeded test; environment: where it is built), the questions and answers, the learned brief, the plan tasks and the risks.',
+      'Where the design truly does not say something the kit needs, write "(not settled in the design)" for it rather than guess. Never invent a system, a data source, a person or a figure the design does not support.',
+      `sample: a SYNTHETIC sample of the input. name: what it is (a few words). columns: the actual input fields from the input-shape point (else the smallest input), in that order, at most ${KIT_COLUMNS_MAX}; kind is one of ${KIT_COLUMN_KINDS.join(', ')}; about: one line on what the column holds and its format (dates as YYYY-MM-DD, times as HH:MM, money as plain numbers). rows: 3 to ${KIT_ROWS_MAX} ordinary made-up rows (values in column order, as text), the normal cases the rule should pass. seeded: the test rows the done-when point seeds, one group per kind of seeded case (for example "Weekend claim on a weekday-only code"), with count as the design says (at most ${KIT_SEEDED_COUNT_MAX}), one template row, and expect: what must come out for those rows. The app makes the file from these: it numbers the ids, repeats the rows and dates them by whole weeks.`,
+      'Sample values are made up: never a real person, client, company or account. A "person" column holds a role word only; the app writes Person 1, Person 2 in it. No email addresses or phone numbers.',
+      'checks: one per check in the done-when point and one per feature that is built (feature: its exact name): what to do on the sample, and the expected result (counts from the sample when you can: the seeded rows).',
+      section
+        ? `Fill "${section}" for ${i.tool.tool} and leave out ${['copilot', 'studio', 'powerApps', 'dataiku'].filter((x) => x !== section).map((x) => `"${x}"`).join(', ')}.`
+        : 'The tool is a custom app: leave out "copilot", "studio", "powerApps" and "dataiku" (a coding agent builds it from the design; you give the sample and the checks).',
+      'copilot (Microsoft Copilot, no build): one prompt per built feature (title, feature, prompt, expected), written against the sample\'s real column names and asking Copilot to use only the attached sample file; expected is the answer to check against (counts from the sample, such as the seeded rows).',
+      'studio (Copilot Studio): the agent\'s instructions: name, purpose, tone, must (what it always does), mustNot (what it never does, including never asking for or storing personal or client data), handover (when it hands over to a person, as a role). skills: one per built feature (feature: its exact name): name, triggers (3 to 10 real phrases a user would type), inputs (what it asks for or reads), steps, answer (what it says back), action (the connector or Power Automate flow it needs, named and described, or "none"). knowledge: the sources to add (the sample file first, then the SharePoint pages or documents the design names), each with what it holds; add false, with why, for what must not be added. tests: questions with the expected answers from the sample.',
+      'powerApps (Power Apps): tables: the SharePoint lists (or Dataverse tables) with their columns and types (the input list from the sample\'s columns, and the output list when the design has one). screens: each screen with its real controls (name, kind such as Gallery, Form, Button, Dropdown, Label), what each does, and the key Power Fx formula sketched (for example Filter(Claims, Weekday(ClaimDate) in [1,7])). flows: the Power Automate flows for what the app cannot do on its own (empty when none).',
+      'dataiku (Dataiku): datasets: the sample input, the rules sheet when the logic uses one, any intermediate and the outputs, each with an id (short letters and digits), its kind and its columns with DSS types. recipes in flow order: id, name, kind (visual recipes only), inputs and outputs (dataset ids), steps: the rule written as the recipe\'s actual prepare, formula, filter, join or group steps with the column names and the formula. dashboard: what it shows and from which datasets, when the output is a dashboard. rules: the rules sheet template (its columns and 3 to 10 example rows) when the logic uses a rules sheet.',
+      'outside: one entry per tool in DATA.outsideTools (tool: exactly as given): setup (what to set up, step by step, for the features done with it) and test (how to check it on the sample).',
+      'People appear as codes such as [P1]: write a person as their code alone or as a role; never write a name. No value words (savings, return on investment, benefits, costs, KPIs).',
+    ], DESIGN_KIT_SCHEMA, designKitData(i), "an approved Café design: the idea, the tool, the features, the design answers and the plan");
+  },
+  parse: (raw) => parseChecked<DesignKitOutput>(raw, DESIGN_KIT_SCHEMA, (v) => { trimToSchema(v, DESIGN_KIT_SCHEMA); }),
+};
+
 /* ---------- Launch and Learn: the roadshow's to-do list and its deck ---------- */
 
 /** Everything the idea holds, for the roadshow (names coded): the story so far, from the form to the plan. */

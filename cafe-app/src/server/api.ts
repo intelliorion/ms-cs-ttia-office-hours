@@ -22,14 +22,15 @@ import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../gra
 import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, roadshowPrepTask, roadshowDeckTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, type DesignKitOutput } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
-import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
+import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
+import { codedKitInput, decodeKit } from '../design/kitInput';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { suggestRoadshowPrep, answerRoadshowNeed, draftRoadshowNeedsEmail, markRoadshowAsked } from '../roadshow/prep';
 import { setPhotoFromPath, setPhotoFromUpload, removePhoto } from '../roadshow/photos';
@@ -57,7 +58,7 @@ export function fileNameOf(header: unknown): string {
   return path.basename(decoded.replace(/\\/g, '/'));
 }
 /** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
-const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv))$/;
+const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html))$/;
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
@@ -340,8 +341,15 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     if (retired) throw new DesignError(retired);
     let output;
     try { ({ output } = await ai.runWith(designPlanTask, designPlanInput(idea, state))); } catch { throw new DesignError(PLAN_NEEDS_AI); }
-    const { files } = await writePlan(root, idea, state, output);
-    return { files };
+    // The kits' content: the AI fills them in from the design (names coded, then put back). If it fails, the kits are
+    // still written from the design alone, and say so.
+    let kit: DesignKitOutput | undefined;
+    try {
+      const { input, codes } = await codedKitInput(root, idea, state, output);
+      kit = decodeKit((await ai.runWith(designKitTask, input)).output, codes);
+    } catch { kit = undefined; }
+    const { files } = await writePlan(root, idea, state, output, kit);
+    return { files, ...(kit ? {} : { note: KIT_NO_AI }) };
   });
   add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));
   // The design pack: one of the files the design series wrote (design.md, approach.md, plan.md, kit/...), read-only.

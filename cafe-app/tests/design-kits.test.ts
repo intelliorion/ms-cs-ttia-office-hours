@@ -8,8 +8,9 @@ import { pathwayOf } from '../src/design/choice';
 import { applyDesignEvent, askTeam } from '../src/design/brainstorm';
 import {
   renderPlanMd, kitFiles, designPlanInput, oneThingToShow, toolSlug, CUSTOM_APP_CSIC, AGENT_FILE,
-  NOT_PICKED_HEADING, NOT_PICKED_NOTE, PLAN_NEEDS_AI, AGENT_DATA_LINE,
+  NOT_PICKED_HEADING, NOT_PICKED_NOTE, PLAN_NEEDS_AI, AGENT_DATA_LINE, KIT_NO_AI,
 } from '../src/design/kits';
+import { NOT_SETTLED } from '../src/design/kitFiles';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
@@ -130,7 +131,7 @@ describe('plan.md and kits (renderers)', () => {
     expect(oneThingToShow({ ...state, steps: [{ n: 1, question: 'Q', suggested: [], answer: MUST_SHOW, tag: 'must-show', source: 'operator' }] })).toBe(MUST_SHOW);
   });
 
-  it('one kit, for the one tool; every file starts from all the features and the plan tasks for that tool', () => {
+  it('one kit, for the one tool (no kit AI): the README holds all the features and that tool\'s plan tasks; every file points to it', () => {
     const idea = sampleIdea({ stage: 3 });
     const state: DesignState = {
       ...emptyDesign(), status: 'approved', approvedAt: '2026-10-20', summary: 'S.',
@@ -141,25 +142,32 @@ describe('plan.md and kits (renderers)', () => {
     APPROVED_TOOLS.forEach((tool, i) => {
       const files = kitFiles(idea, { ...state, tool: toolOf(tool) }, PLAN);
       expect(Object.keys(files).every((p) => p.startsWith(`kit/${toolSlug(tool)}/`)), tool).toBe(true);
-      for (const [p, text] of Object.entries(files)) {
-        for (const j of [0, 1, 2]) expect(text, p).toContain(`**Feature ${j}**: Does thing ${j}`);
-        expect(text, p).toContain(`**Task ${i} for ${tool}**`);
-        for (const k of APPROVED_TOOLS.keys()) if (k !== i) expect(text, p).not.toContain(`**Task ${k} for`);
-        expect(text.indexOf('## Features for this tool'), p).toBeLessThan(text.indexOf('## Plan tasks for this tool'));
-      }
+      const readme = files[`kit/${toolSlug(tool)}/README.md`];
+      for (const j of [0, 1, 2]) expect(readme, tool).toContain(`**Feature ${j}**: Does thing ${j}`);
+      expect(readme, tool).toContain(`**Task ${i} for ${tool}**`);
+      for (const k of APPROVED_TOOLS.keys()) if (k !== i) expect(readme, tool).not.toContain(`**Task ${k} for`);
+      expect(readme.indexOf('## Features'), tool).toBeLessThan(readme.indexOf('## The order of work'));
+      expect(readme, tool).toContain(KIT_NO_AI);
+      for (const [p, text] of Object.entries(files)) if (p.endsWith('.md') && !p.endsWith('README.md')) expect(text, p).toContain('start at [README.md](README.md)');
       Object.assign(all, files);
     });
     expect(Object.keys(all).sort()).toEqual([
-      'kit/copilot-studio/README.md', 'kit/copilot-studio/topics.md',
-      'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md',
-      'kit/dataiku/flow.md', 'kit/microsoft-copilot/prompts.md', 'kit/power-apps/screens.md',
+      'kit/copilot-studio/README.md', 'kit/copilot-studio/instructions.md', 'kit/copilot-studio/knowledge.md', 'kit/copilot-studio/skills.md', 'kit/copilot-studio/test-checklist.md',
+      'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/test-checklist.md',
+      'kit/dataiku/README.md', 'kit/dataiku/datasets.md', 'kit/dataiku/flow-diagram.html', 'kit/dataiku/flow.json', 'kit/dataiku/flow.md', 'kit/dataiku/test-checklist.md',
+      'kit/microsoft-copilot/README.md', 'kit/microsoft-copilot/prompts.md', 'kit/microsoft-copilot/test-checklist.md',
+      'kit/power-apps/README.md', 'kit/power-apps/data-model.md', 'kit/power-apps/screens.md', 'kit/power-apps/test-checklist.md',
     ]);
-    expect(all['kit/dataiku/flow.md']).toMatch(/## Flow\n\n1\. \*\*Synthetic data\*\*/);
     expect(all['kit/microsoft-copilot/prompts.md']).toContain('## No build');
-    expect(all['kit/copilot-studio/topics.md']).toContain('### Topic: Feature 1');
-    expect(all['kit/power-apps/screens.md']).toContain('### Screen: Feature 2');
-    // Templates only: no code files anywhere.
-    expect(Object.keys(all).every((p) => p.endsWith('.md'))).toBe(true);
+    expect(all['kit/copilot-studio/skills.md']).toContain('## 2. Feature 1 (feature: Feature 1)');
+    expect(all['kit/power-apps/screens.md']).toContain('## Screen 3: Feature 2');
+    // With no kit AI, a plain flow: the sample, one recipe per feature, the result.
+    expect(JSON.parse(all['kit/dataiku/flow.json']).recipes.map((r: any) => r.name)).toEqual(['Feature 0', 'Feature 1', 'Feature 2']);
+    // Never "write this yourself": what the design does not say is said to be not settled.
+    for (const [p, text] of Object.entries(all)) expect(text, p).not.toMatch(/write (one line|5 to 10|this yourself)|copy it and fill it in/i);
+    expect(all['kit/copilot-studio/skills.md']).toContain(NOT_SETTLED);
+    // No code files anywhere: instructions, checklists, a diagram and its data.
+    expect(Object.keys(all).every((p) => /\.(md|csv|json|html)$/.test(p))).toBe(true);
     // No tool, no kit.
     expect(kitFiles(idea, state, PLAN)).toEqual({});
   });
@@ -180,7 +188,7 @@ describe('plan routes', () => {
     const r = await s.post(`/api/ideas/${ID}/plan`);
     expect(r.status).toBe(200);
     const { files } = await json(r);
-    expect(files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'plan.md']);
+    expect(files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
     const dir = await ideaDir(s.root, ID);
     const plan = await readFile(path.join(dir, 'plan.md'), 'utf8');
     expect(plan.startsWith('# Plan — Email scheduler')).toBe(true);
@@ -235,7 +243,7 @@ describe('plan routes', () => {
     expect(await readFile(path.join(dir, 'plan.md'), 'utf8')).toMatch(/^# Plan — /);
     expect(await readFile(path.join(dir, 'kit', 'custom-app', 'README.md'), 'utf8')).toContain(CUSTOM_APP_CSIC);
     const got = await json(await s.get(`/api/ideas/${ID}/plan`));
-    expect(got.files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/notes.md', 'plan.md']);
+    expect(got.files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/notes.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
     expect(got.planMd).toMatch(/^# Plan — Email scheduler/);
   });
 
@@ -332,7 +340,7 @@ describe('Task 6 carry-overs', () => {
     expect(Object.keys(kitFiles(idea, base, plan)).some((p) => p.startsWith('kit/dataiku/'))).toBe(false);
     // Every task picked: no Not picked heading.
     expect(renderPlanMd(idea, base, { tasks: plan.tasks.slice(1, 2), risks: [] })).not.toContain(NOT_PICKED_HEADING);
-    expect(Object.keys(kitFiles(idea, base, plan))).toEqual(['kit/power-apps/screens.md']);
+    expect(Object.keys(kitFiles(idea, base, plan)).sort()).toEqual(['kit/power-apps/README.md', 'kit/power-apps/data-model.md', 'kit/power-apps/screens.md', 'kit/power-apps/test-checklist.md']);
   });
 
   it('plan.md no longer scans for value words: it is the plan as written, with no check after the risks', () => {

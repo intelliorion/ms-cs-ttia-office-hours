@@ -38,8 +38,12 @@ cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/diagram.ts
 cafe-app/src/design/diagramLayout.ts
+cafe-app/src/design/kitFiles.ts
+cafe-app/src/design/kitInput.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
+cafe-app/src/design/recipeFlow.ts
+cafe-app/src/design/sampleData.ts
 cafe-app/src/design/scope.ts
 cafe-app/src/design/store.ts
 cafe-app/src/design/tools.ts
@@ -121,6 +125,7 @@ cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
+cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-retired-tool.test.ts

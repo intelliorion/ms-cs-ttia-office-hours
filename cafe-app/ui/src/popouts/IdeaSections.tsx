@@ -173,7 +173,8 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
   const builders = team.filter((p) => (p.roles ?? []).includes('builder'));
   const answers: any[] = idea.answers ?? [];
   const was = idea.formWas ?? {};
-  const anyAdded = answers.length > 0 || Object.keys(was).length > 0 || team.some((p) => p.joined || p.added?.length) || !!idea.people?.builder;
+  const learned = idea.learned;
+  const anyAdded = !!learned?.points?.length || answers.length > 0 || Object.keys(was).length > 0 || team.some((p) => p.joined || p.added?.length) || !!idea.people?.builder;
   return (
     <section className="sec">
       <h3>Details</h3>
@@ -215,21 +216,37 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
             : <span data-testid="participation">{idea.participation}</span>)
           : <span className="none">Not given</span>}</Field>
       </div>
-      {answers.length > 0 && (
+      {(learned?.points?.length > 0 || answers.length > 0) && (
         <div className="learned" data-testid="learned">
-          <div className="f-l">Learned since the form <span className="sec-n">{answers.length}</span></div>
-          <ul className="learned-list">
-            {answers.map((a, i) => (
-              <li key={`${i}-${a.question}`} data-answer={i}>
-                <div className="learned-q">{a.question}</div>
-                <div className="learned-a">{a.answer}</div>
-                <div className="learned-m">
-                  {answerFrom(a.source) && <span>From {answerFrom(a.source)}</span>}
-                  {onRemoveAnswer && <button className="link-btn" data-action="remove-answer" title="Take this answer back (wrong, out of date or a duplicate)" onClick={() => onRemoveAnswer({ question: a.question, answer: a.answer })}>Remove</button>}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="f-l">Learned since the form</div>
+          {learned?.points?.length > 0 ? (
+            <>
+              <dl className="learned-brief" data-testid="learned-brief">
+                {learned.points.map((p: any) => <div key={p.topic}><dt>{p.topic}</dt><dd>{p.text}</dd></div>)}
+              </dl>
+              <div className="learned-by">
+                Summarised by the AI on {shortDate(learned.at)} from {learned.from} answer{learned.from === 1 ? '' : 's'}.
+                {learned.stale && <span className="learned-stale"> An answer was removed since: Re-evaluate to update it.</span>}
+              </div>
+            </>
+          ) : <div className="hint">Re-evaluate to have the AI sum up what the answers add.</div>}
+          {answers.length > 0 && (
+            <details className="learned-raw">
+              <summary>Answers as given <span className="sec-n">{answers.length}</span></summary>
+            <ul className="learned-list">
+              {answers.map((a, i) => (
+                <li key={`${i}-${a.question}`} data-answer={i}>
+                  <div className="learned-q">{a.question}</div>
+                  <div className="learned-a">{a.answer}</div>
+                  <div className="learned-m">
+                    {answerFrom(a.source) && <span>From {answerFrom(a.source)}</span>}
+                    {onRemoveAnswer && <button className="link-btn" data-action="remove-answer" title="Take this answer back (wrong, out of date or a duplicate)" onClick={() => onRemoveAnswer({ question: a.question, answer: a.answer })}>Remove</button>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            </details>
+          )}
         </div>
       )}
     </section>

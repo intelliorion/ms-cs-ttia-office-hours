@@ -48,7 +48,12 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
     needs, basis: pasted.length ? `${basis}, with ${pasted.length} answer${pasted.length === 1 ? '' : 's'} you added` : basis, provider,
     ...(updates.length ? { updates } : {}),
   };
-  await saveIdea(root, { ...idea, prep });
+  // The answers as a brief for the Submission: rewritten each time, from every answer the AI read.
+  const points = (output.learned ?? []).map((p) => ({ topic: p.topic.trim(), text: showNames(p.text, codes).trim() })).filter((p) => p.topic && p.text);
+  const from = (input.answers ?? []).length;
+  const learned = points.length ? { at: prep.at, provider, from, points } : undefined;
+  const { learned: _old, ...rest } = idea;
+  await saveIdea(root, { ...rest, prep, ...(learned ? { learned } : idea.learned && from ? { learned: idea.learned } : {}) });
   const open = needs.filter((x) => isOpenNeed(x, idea.answers)).length;
   await appendHistory(await ideaDir(root, id), {
     at: prep.at, action: 'review-suggest', by: 'app',

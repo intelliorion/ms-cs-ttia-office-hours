@@ -188,7 +188,8 @@ export async function removeAnswer(root: string, id: string, question: string, a
   const list = idea.answers ?? [];
   const i = list.findIndex((a) => a.question === question && a.answer === answer);
   if (i < 0) throw new Error('That answer is gone already');
-  await saveIdea(root, { ...idea, answers: list.filter((_, k) => k !== i) } as Idea);
+  // The brief was written from this answer too: say it is out of date until the next re-evaluation.
+  await saveIdea(root, { ...idea, answers: list.filter((_, k) => k !== i), ...(idea.learned ? { learned: { ...idea.learned, stale: true } } : {}) } as Idea);
   await appendHistory(await ideaDir(root, id), { at: clock(), action: 'answer-removed', by: 'operator', detail: `Answer removed: ${answer}`, ...(list[i].source ? { source: list[i].source } : {}) });
   return { removed: true };
 }

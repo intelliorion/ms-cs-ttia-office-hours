@@ -365,8 +365,10 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
   coming back; Undo puts back only that change. Every Yes and Undo is in the idea's history.
 - **The Submission** (right panel) shows the form, and in its own colour what came after it: a role or a person added
   later (by an answer, an email or the assistant), a field changed from the form's value ("Team (form: Individual)"),
-  and **Learned since the form**: every saved answer under its question, with where it came from and Remove for a
-  wrong or duplicate one.
+  and **Learned since the form**: the AI's short brief of what the answers add, one point per topic (Builder, Data,
+  Systems, Scope…; merged, repeats dropped, the later answer winning), written at each Suggest or Re-evaluate. The
+  answers as given are folded under it, with where each came from and Remove for a wrong or duplicate one; after a
+  Remove the brief says it is out of date until the next Re-evaluate.
 
 **Settings → AI connector** says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
 "No AI: working by hand"). Click it to pick a provider (Auto, Claude Code, Copilot CLI, VS Code or None) and

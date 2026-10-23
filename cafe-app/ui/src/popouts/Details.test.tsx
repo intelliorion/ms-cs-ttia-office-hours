@@ -16,6 +16,7 @@ const idea = {
     { name: 'Person 3', roles: ['member'], added: ['member'], joined: true },
   ] },
   answers: [{ question: 'Is sample data enough?', answer: 'Yes, sample data is enough.', source: 'review answers' }],
+  learned: { at: '2026-10-23', from: 1, points: [{ topic: 'Data', text: 'A made-up desk list and floor plan are enough to build it.' }] },
 };
 
 describe('the Submission: what the form said, and what came after', () => {
@@ -31,7 +32,10 @@ describe('the Submission: what the form said, and what came after', () => {
     expect(el.querySelector('[data-builder="Person 1"]')!.className).toBe('tg person added');
     expect(el.querySelector('[data-testid="participation"]')?.textContent).toBe('Team (form: Individual)');
     expect(el.querySelector('[data-testid="participation"] .added-v')).not.toBeNull();
-    expect(el.querySelector('[data-testid="learned"] .learned-a')?.textContent).toBe('Yes, sample data is enough.');
+    // The AI's brief first; the answers as given are folded under it.
+    expect([...el.querySelectorAll('[data-testid="learned-brief"] div')].map((d) => d.textContent)).toEqual(['DataA made-up desk list and floor plan are enough to build it.']);
+    expect(el.querySelector('.learned-by')?.textContent).toBe('Summarised by the AI on 23 Oct from 1 answer.');
+    expect(el.querySelector('details.learned-raw .learned-a')?.textContent).toBe('Yes, sample data is enough.');
     expect(el.querySelector('[data-testid="learned"] .learned-m')?.textContent).toContain('From your review');
     act(() => (el.querySelector('[data-action="remove-answer"]') as HTMLButtonElement).click());
     expect(removed).toEqual(['Yes, sample data is enough.']);
@@ -42,5 +46,13 @@ describe('the Submission: what the form said, and what came after', () => {
     expect(el.querySelector('[data-testid="added-legend"]')).toBeNull();
     expect(el.querySelector('[data-testid="learned"]')).toBeNull();
     expect(el.querySelector('[data-testid="participation"]')?.textContent).toBe('Team');
+  });
+
+  it('says the brief is out of date once an answer is removed, and asks for a re-evaluation when there is none', () => {
+    render(<Details idea={{ ...idea, learned: { ...idea.learned, stale: true } }} />);
+    expect(el.querySelector('.learned-stale')?.textContent).toContain('Re-evaluate to update it');
+    act(() => root.render(<Details idea={{ ...idea, learned: undefined }} />));
+    expect(el.querySelector('[data-testid="learned-brief"]')).toBeNull();
+    expect(el.querySelector('[data-testid="learned"] .hint')?.textContent).toBe('Re-evaluate to have the AI sum up what the answers add.');
   });
 });

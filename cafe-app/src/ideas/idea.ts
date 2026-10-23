@@ -109,6 +109,11 @@ export interface Idea {
   use_case_category: string[];
   additional_context?: string;
   people: { submitter?: string; team: Person[] };
+  /**
+   * What the answers add to the submission, as the AI's short brief (one point per topic), written at the last
+   * suggestion or re-evaluation. `stale` once an answer it was written from is removed.
+   */
+  learned?: { at: string; provider?: string; from: number; points: { topic: string; text: string }[]; stale?: boolean };
   /** What the form said for a field that was changed later (field → the form's value), so both can be shown. */
   formWas?: Record<string, string>;
   checklist: Record<string, StepState>;

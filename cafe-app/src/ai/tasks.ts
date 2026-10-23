@@ -53,7 +53,9 @@ export interface ReviewUpdates {
   facts: { question: string; answer: string }[];
   graph: ExtractOutput;
 }
-export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string; needs: ReviewNeed[]; updates?: ReviewUpdates }
+/** What the answers add to the submission, as a short brief: one clean point per topic. */
+export interface LearnedPoint { topic: string; text: string }
+export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string; needs: ReviewNeed[]; updates?: ReviewUpdates; learned?: LearnedPoint[] }
 export const NEED_MAX = 120;
 export const ASK_MAX = 220;
 export const NEED_ANSWER_MAX = 200;
@@ -111,9 +113,16 @@ export const UPDATES_SCHEMA: JsonSchema = {
 };
 
 export const REVIEW_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs', 'updates'],
+  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs', 'updates', 'learned'],
   properties: {
     updates: UPDATES_SCHEMA,
+    learned: {
+      type: 'array', maxItems: 8,
+      items: {
+        type: 'object', additionalProperties: false, required: ['topic', 'text'],
+        properties: { topic: { type: 'string', minLength: 1, maxLength: 30 }, text: { type: 'string', minLength: 1, maxLength: 280 } },
+      },
+    },
     criteria: {
       type: 'object', additionalProperties: false, required: CRITERIA.map((c) => c.id),
       properties: Object.fromEntries(CRITERIA.map((c) => [c.id, { type: 'boolean' } as JsonSchema])),
@@ -201,7 +210,7 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'at most 5 open items in all. Only ask what changes the decision: never ask for personal, client or third-party data.',
       'If the decision can be made from DATA as it is, every item is met (or there are none).',
       'updates: what DATA.answers change in the idea\'s record, for the operator to say yes to; leave a field empty when nothing changes.',
-      'builder: the person an answer names to build it, exactly as written in DATA (keep any [P1]-style code), else "".',
+      'builder: the person an answer names to build it, as their code alone when they have one (a code followed by a stray surname is that person), else the name as written; "" when none.',
       'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
       'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',
       'settles, word for word. facts: each answer that tells us something, as the question it answers and the fact in one plain sentence',
@@ -209,11 +218,17 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
       'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
       'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
+      'learned: what DATA.answers add to the submission, written as a short brief for someone reading the idea, not the answers as given.',
+      'One point per topic (such as Builder, Team, Data, Systems, Scope, What was tried, Existing tools), each a topic of one or two words',
+      'and one or two clear sentences. Merge answers on the same topic, drop repeats, and when answers disagree the later one wins.',
+      'Only what the form did not already say; no guesses, no figures that are not in DATA. Empty when there are no answers.',
+      'Names: write each person as their code alone. A code followed by a stray surname ("[P2] Viseiewki", a misspelling) is that one person: write [P2].',
     ], REVIEW_SCHEMA, { ...(input as ReviewSuggestInput), idea: ideaData(idea) });
   },
   parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => {
     const o = asObj(v); if (!o) return;
     o.reason = trimStrings(o.reason, 300);
+    if (Array.isArray(o.learned)) for (const p of o.learned) { const x = asObj(p); if (x) { x.topic = trimStrings(x.topic, 30); x.text = trimStrings(x.text, 280); } }
     const u = asObj(o.updates);
     if (u) {
       u.builder = trimStrings(u.builder, 80);

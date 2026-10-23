@@ -202,6 +202,7 @@ cafe-app/ui/src/panels/starProfile.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
 cafe-app/ui/src/popouts/ConfigPopout.test.tsx
 cafe-app/ui/src/popouts/ConfigPopout.tsx
+cafe-app/ui/src/popouts/Details.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.tsx
 cafe-app/ui/src/popouts/ImportPopout.tsx
@@ -256,8 +257,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-B6TxroBH.css
-cafe-app/web/assets/index-DNFb7SuI.js
+cafe-app/web/assets/index-BzspHMmJ.css
+cafe-app/web/assets/index-C5rKemJl.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

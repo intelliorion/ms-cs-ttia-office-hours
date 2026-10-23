@@ -160,3 +160,25 @@ describe('taking back a saved answer', () => {
     expect((await readHistory(await ideaDir(root, idea.id))).at(-1)).toMatchObject({ action: 'answer-removed', detail: 'Answer removed: Old' });
   });
 });
+
+describe('the brief of what the answers add', () => {
+  it('is the AI\'s own summary, names restored, kept on the idea; removing an answer marks it out of date', async () => {
+    const root = await setup();
+    const run: RunReview = async (input) => {
+      const code = /\[(P\d+)\]/.exec(JSON.stringify(input.answers ?? []))?.[1];
+      return { provider: 'fake', output: {
+        criteria: { feasible: true, builder: true, data: true, theme: true, reuse: true }, decision: 'select', reason: 'x', needs: [],
+        updates: NONE, learned: [{ topic: 'Builder', text: `[${code}] builds it and attends every session.` }, { topic: 'Data', text: 'Sample contracts are enough.' }],
+      } };
+    };
+    await suggestPrep(root, idea.id, run, clock);
+    const now = await loadIdea(root, idea.id) as any;
+    expect(now.learned).toEqual({ at: '2026-10-23', provider: 'fake', from: 1, points: [
+      { topic: 'Builder', text: 'Person 2 builds it and attends every session.' }, { topic: 'Data', text: 'Sample contracts are enough.' },
+    ] });
+    await saveIdea(root, { ...now, answers: [{ question: 'Q', answer: 'A', source: REVIEW_SOURCE }] } as any);
+    const { removeAnswer } = await import('../src/review/updates');
+    await removeAnswer(root, idea.id, 'Q', 'A', clock);
+    expect(((await loadIdea(root, idea.id)) as any).learned.stale).toBe(true);
+  });
+});

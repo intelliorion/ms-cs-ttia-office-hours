@@ -9,6 +9,11 @@ describe('the idea Emails menu', () => {
   it("lists this stage's emails (not the questions or decision emails, which their own buttons make), plus the reminder when due", () => {
     expect(stageEmails({ stage: 2 }, steps)).toEqual(['E1']);
     expect(stageEmails({ stage: 2, offerE2R: true }, steps)).toEqual(['E1', 'E2R']);
+    // A saved decision's email is sent from the menu (Save decision sends nothing); "Ask first" is the Draft email button's.
+    expect(stageEmails({ stage: 2, review: { decision: 'select' } }, steps)).toEqual(['E1', 'E3']);
+    expect(stageEmails({ stage: 2, review: { decision: 'csic' } }, steps)).toEqual(['E1', 'E5']);
+    expect(stageEmails({ stage: 2, review: { decision: 'ask' } }, steps)).toEqual(['E1']);
+    expect(stageEmails({ stage: 3, review: { decision: 'select' } }, steps)).not.toContain('E3');
     expect(stageEmails({ stage: 3 }, steps)).toEqual(['E7', 'E8']);
   });
   it("offers whatever this idea has drafted and not sent, and nothing of other ideas'", () => {

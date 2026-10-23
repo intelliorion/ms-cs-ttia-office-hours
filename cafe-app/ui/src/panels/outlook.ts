@@ -1,3 +1,5 @@
+import { DECISION_EMAIL } from '../popouts/ideaHelpers';
+
 /** What the notice says once an email went to Outlook. */
 export const openedText = (template: string) =>
   `${template} is open in Outlook: check it and send. It counts as sent.`;
@@ -9,6 +11,9 @@ export const openedText = (template: string) =>
 export function stageEmails(idea: any, steps: any[]): string[] {
   const own = new Set(['E2']);
   const out = steps.filter((s) => s.stage === idea.stage && s.email && s.email !== 'decision' && !own.has(s.email)).map((s) => s.email as string);
+  // The saved decision's email (E3 to E6) is sent from here, when you are ready; Save decision sends nothing.
+  const decided = idea.review?.decision && idea.review.decision !== 'ask' ? DECISION_EMAIL[idea.review.decision] : undefined;
+  if (decided && !idea.closed && idea.stage === 2) out.push(decided);
   if (idea.offerE2R) out.push('E2R');
   return [...new Set(out)];
 }

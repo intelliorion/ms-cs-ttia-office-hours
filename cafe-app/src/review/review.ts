@@ -8,7 +8,6 @@ import type { Settings } from '../round/round';
 import { withTick } from '../checklist/checklist';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
-import { draftEmail, type EmailRecord } from '../comms/outbox';
 
 export const CRITERIA = [
   { id: 'feasible', text: 'A proof of concept is feasible with approved tools and no live non-Microsoft system' },
@@ -41,7 +40,6 @@ export interface ReviewInput {
 
 export interface ReviewResult {
   idea: Idea;
-  email: EmailRecord;
   warnings: string[];
   handoff?: string;
   suggest?: Suggest;
@@ -98,7 +96,7 @@ export async function saveReview(
   const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
   if (!reason) throw new Error('Give a reason for the decision');
 
-  // Build everything in memory first; nothing is written until the email draft succeeds.
+  // Saving writes the decision only: its email is sent later, from the idea's ✉ Emails menu.
   let idea = await loadIdea(root, id);
   if (idea.closed) throw new Error(`${id} is closed. Reopen it first (set its stage)`);
   const today = ctx.clock();
@@ -117,13 +115,10 @@ export async function saveReview(
   const suggest = suggestion(idea, DECISION_SUGGESTS[decision]);
   const settings = await loadSettings(root);
 
-  // Draft the email first: it reads the stored idea, which still has the same id and title.
-  const email = await draftEmail(root, { template: DECISION_EMAIL[decision], ideaId: id }, ctx.clock);
-
   if (handoff) await writeFileAtomic(handoff, renderHandoff(idea, settings));
   await writeFileAtomic(path.join(dir, 'review.md'), renderReview(idea, review));
   await saveIdea(root, idea);
   if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
   await appendHistory(dir, { at: today, action: 'review', by: 'operator', detail: `${decision}: ${reason}`, source: 'review.md' });
-  return { idea, email, warnings, ...(handoff ? { handoff } : {}), ...(suggest ? { suggest } : {}) };
+  return { idea, warnings, ...(handoff ? { handoff } : {}), ...(suggest ? { suggest } : {}) };
 }

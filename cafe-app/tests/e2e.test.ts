@@ -37,23 +37,27 @@ describe('a round, end to end', () => {
       expect((await setStage(root, id, { stage: 2 }, clock)).stage).toBe(2);
     }
 
-    const ask = await saveReview(root, ids[0], { decision: 'ask', reason: 'Did they try Copilot in Outlook?' }, { clock, steps });
-    await approve(root, ask.email.key, clock);
-    await markSent(root, ask.email.key, clock, steps);
+    // Saving a decision sends nothing; its email is drafted and sent as a step of its own.
+    await saveReview(root, ids[0], { decision: 'ask', reason: 'Did they try Copilot in Outlook?' }, { clock, steps });
+    const ask = await draftEmail(root, { template: 'E2', ideaId: ids[0] }, clock);
+    await approve(root, ask.key, clock);
+    await markSent(root, ask.key, clock, steps);
 
     const csic = await saveReview(root, ids[1], { decision: 'csic', reason: 'Defined, sponsored, serves people beyond the team.' }, { clock, steps });
     expect(csic.suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
-    await approve(root, csic.email.key, clock);
-    await markSent(root, csic.email.key, clock, steps);
+    const e5 = await draftEmail(root, { template: 'E5', ideaId: ids[1] }, clock);
+    await approve(root, e5.key, clock);
+    await markSent(root, e5.key, clock, steps);
     // The operator says yes to the suggestion.
     await setStage(root, ids[1], { closeAs: 'csic' }, clock);
     await access(path.join(await ideaDir(root, ids[1]), 'csic-handoff.md'));
 
-    const sel = await saveReview(root, ids[2], {
+    await saveReview(root, ids[2], {
       criteria: { feasible: true, builder: true, data: true, theme: true }, decision: 'select', reason: 'Redacted sample invoices are enough.',
     }, { clock, steps });
-    await approve(root, sel.email.key, clock);
-    const sent = await markSent(root, sel.email.key, clock, steps);
+    const e3 = await draftEmail(root, { template: 'E3', ideaId: ids[2] }, clock);
+    await approve(root, e3.key, clock);
+    const sent = await markSent(root, e3.key, clock, steps);
     expect(sent.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
     expect((await setStage(root, ids[2], sent.suggest!, clock)).stage).toBe(3);
 

@@ -140,15 +140,15 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
    appear as stars and in the left list; put them in the round from **Rounds**.
 3. **Idea** (click it in the list or the universe): read it, draft E1, and set the stage forward or back, or
    close it. Every change is logged and nothing is ever blocked.
-4. **Review** (in the idea's details, left panel): tick the five criteria, pick a decision, give a reason. Saving drafts
-   the decision email and suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until
+4. **Review** (in the idea's details, left panel): pick a decision and save it. Saving sends and drafts no email
+   (the decision's email, E3 to E6, waits in the idea's ✉ Emails menu for when you want to send it) and suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
    once you close it as CSIC. Links the idea has in the universe are listed here too: any AI link can be
    removed, and a link a conflict rule held says "Waiting on you" with **Add it anyway**.
 5. **Emails.** There is no Outbox. Every email opens straight in Outlook as a new message (the app writes an unsent .eml under
    data/exports/outlook and opens it in Outlook; nothing is downloaded) and
-   counts as sent, with Undo: from the stage's own buttons (Draft email, Save decision), from the idea's
-   **✉ Emails** menu (this stage's emails, plus anything drafted and not sent yet), and for a round's call for
+   counts as sent, with Undo: from the stage's own button (Draft email, the questions), from the idea's
+   **✉ Emails** menu (this stage's emails, the saved decision's email, plus anything drafted and not sent yet), and for a round's call for
    ideas and deadline reminder, from that round in Rounds. An idea keeps at most one unsent email per stage: a
    newer one (another decision, say) replaces it. E2 starts a five-day reply clock. Sending E3, E4, E5, E6 or
    E10 suggests a move too. A missing date or link stops the email opening until you set it (Project

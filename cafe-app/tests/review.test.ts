@@ -36,7 +36,8 @@ describe('saveReview', () => {
     expect(idea.stage).toBe(2);
     expect(idea.review?.decision).toBe('select');
     await access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'));
-    expect((await listOutbox(root)).map((m) => m.template)).toEqual(['E3']);
+    // Saving sends and drafts nothing: the decision's email is sent later from ✉ Emails.
+    expect(await listOutbox(root)).toEqual([]);
   });
 
   it('needs a reason and writes nothing without one', async () => {
@@ -45,13 +46,13 @@ describe('saveReview', () => {
     await expect(access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'))).rejects.toThrow();
   });
 
-  it('selects an idea: review.md, s2a ticked, E3 drafted, still open, a move suggested', async () => {
+  it('selects an idea: review.md, s2a ticked, nothing drafted, still open, a move suggested', async () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-003', {
       criteria: { feasible: true, builder: true, data: true, theme: true, reuse: false, bogus: true },
       decision: 'select', reason: 'Feasible on redacted sample invoices.',
     }, ctx);
-    expect(r.email.template).toBe('E3');
+    expect(await listOutbox(root)).toEqual([]);
     expect(r.idea.closed).toBeUndefined();
     expect(r.idea.stage).toBe(2);
     expect(r.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
@@ -63,10 +64,10 @@ describe('saveReview', () => {
     expect(md).toContain('Feasible on redacted sample invoices.');
   });
 
-  it('asks first: E2 drafted, feasibility not ticked', async () => {
+  it('asks first: nothing drafted, feasibility not ticked', async () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-001', { decision: 'ask', reason: 'Did they try Copilot in Outlook?' }, ctx);
-    expect(r.email.template).toBe('E2');
+    expect(await listOutbox(root)).toEqual([]);
     expect(r.suggest).toBeUndefined();
     expect((await loadIdea(root, 'CAFE-2026-001')).checklist.s2a).toBeUndefined();
   });
@@ -74,7 +75,6 @@ describe('saveReview', () => {
   it('routes to CSIC: suggests closing, does not close, and writes the handoff', async () => {
     const root = await setup();
     const r = await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'Defined, sponsored, serves people beyond the team.' }, ctx);
-    expect(r.email.template).toBe('E5');
     expect(r.idea.closed).toBeUndefined();
     expect((await loadIdea(root, 'CAFE-2026-002')).closed).toBeUndefined();
     expect(r.suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
@@ -104,15 +104,12 @@ describe('saveReview', () => {
     expect(r.suggest).toBeUndefined();
   });
 
-  it('a failed email draft leaves the idea open and writes nothing', async () => {
+  it('saves even when an email template is missing: saving sends nothing', async () => {
     const root = await setup();
     await rm(path.join(paths(root).templates, 'E5.md'));
-    await expect(saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx)).rejects.toThrow();
-    expect((await loadIdea(root, 'CAFE-2026-002')).closed).toBeUndefined();
-    expect((await loadIdea(root, 'CAFE-2026-002')).checklist.s2a).toBeUndefined();
-    const dir = await ideaDir(root, 'CAFE-2026-002');
-    await expect(access(path.join(dir, 'review.md'))).rejects.toThrow();
-    await expect(access(path.join(dir, 'csic-handoff.md'))).rejects.toThrow();
+    await saveReview(root, 'CAFE-2026-002', { decision: 'csic', reason: 'a' }, ctx);
+    expect((await loadIdea(root, 'CAFE-2026-002')).review?.decision).toBe('csic');
+    expect(await listOutbox(root)).toEqual([]);
   });
 
   it('will not review a closed idea until it is reopened', async () => {

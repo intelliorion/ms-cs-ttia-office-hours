@@ -138,7 +138,7 @@ function DecisionForm({ idea, state, prep, disabled, onSave }: { idea: any; stat
       <div className="rv-foot">
         <span className="hint" data-testid="rs-saved">{!decision ? 'Pick a decision.'
           : saved ? `Saved ${shortDate(idea.review.at)}.`
-          : `Not saved yet. Saving opens ${email} in Outlook; nothing moves until you say yes.`}</span>
+          : `Not saved yet. Saving sends nothing and moves nothing; ${email} waits under ✉ Emails.`}</span>
         <button className="btn primary" data-action="save-review" disabled={disabled || !decision || saved}
           onClick={() => onSave({ criteria: prep?.criteria ?? idea.review?.criteria ?? {}, decision, reason: reasonFor(decision, prep, idea.review, label) })}>Save decision</button>
       </div>

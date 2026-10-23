@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore, useStageRing } from '../state/store';
 import { ideaGet, ideaPost, post } from '../api';
 import { NO_AI_TIP, providerName } from '../popouts/aiUi';
-import { ideaCardModel } from '../popouts/ideaHelpers';
+import { DECISION_EMAIL, ideaCardModel } from '../popouts/ideaHelpers';
 import { RoundChip, StageButton } from '../popouts/IdeaSections';
 import { ReviewSelect } from './ReviewSelect';
 import { EmailMenu } from './EmailMenu';
@@ -200,14 +200,10 @@ export function IdeaDetails({ id }: { id: string }) {
           <ReviewSelect idea={idea} state={state} busy={busy} aiBusy={aiBusy && !aiFor} noAi={noAi} noAiTip={NO_AI_TIP}
             aiName={providerName(idea.prep?.provider, ai)} onSuggest={() => void suggestReview()} onAnswer={answer}
             onDraftEmail={() => void act(async () => opened(await post(`/api/ideas/${encodeURIComponent(id)}/prep/email`)), (o: any) => openedText(o.email.template))}
-            onSave={(body) => void act(async () => {
-              const r = await ideaPost(id, 'review', body);
-              // The decision is saved; its email then goes to Outlook. If it can't yet (a setting missing), it waits under ✉ Emails.
-              try { const o = opened(await post('/api/outbox/open', { key: r.email.key })); return { ...r, opened: o, suggest: o.suggest ?? r.suggest }; }
-              catch (e) { return { ...r, openError: (e as Error).message }; }
-            }, (r: any) => [
+            // Saving writes the decision only; its email waits in ✉ Emails until you choose to send it.
+            onSave={(body) => void act(() => ideaPost(id, 'review', body), (r: any) => [
               'Decision saved.',
-              r.opened ? openedText(r.email.template) : `${r.email.template} waits under ✉ Emails. ${r.openError}`,
+              DECISION_EMAIL[body.decision] && body.decision !== 'ask' ? `Its email (${DECISION_EMAIL[body.decision]}) is under ✉ Emails when you want to send it.` : '',
               r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? []),
             ].filter(Boolean).join(' '))} />
         )}

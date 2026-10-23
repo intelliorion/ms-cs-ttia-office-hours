@@ -253,7 +253,7 @@ describe('plan routes', () => {
     const r = await s.post(`/api/ideas/${ID}/plan`);
     expect(r.status).toBe(400);
     expect((await json(r)).error).toBe(PLAN_NEEDS_AI);
-    expect(PLAN_NEEDS_AI).toBe('plan.md needs the AI: it could not be reached. Try again, or write plan.md by hand in the idea folder.');
+    expect(PLAN_NEEDS_AI).toBe('plan.md needs the AI: it could not be reached, or its reply could not be used. Try again, or write plan.md by hand in the idea folder.');
     expect((await json(await s.get(`/api/ideas/${ID}/plan`))).files).toEqual([]);
   });
 });

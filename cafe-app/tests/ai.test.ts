@@ -122,6 +122,33 @@ describe('AI connector', () => {
     await expect(connector([fake(JSON.stringify(bad))]).run(extractTask, INPUT)).rejects.toThrow(/invalid output/);
   });
 
+  it('asks once more after a reply the checker refused, saying what was wrong, and uses only the second reply', async () => {
+    const prompts: string[] = [];
+    const bad = { ...VALID, links: [{ ...VALID.links[0], extra_note: null }] };
+    const c = connector([fake((prompt) => { prompts.push(prompt); return JSON.stringify(prompts.length === 1 ? bad : VALID); })]);
+    expect(await c.run(extractTask, INPUT)).toEqual(VALID);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toMatch(/^Your last reply to this was refused by the checker \(.*extra_note.*\)/);
+    expect(prompts[1].endsWith(prompts[0])).toBe(true);
+  });
+
+  it('asks only once more: a second refused reply fails, and a timeout is never re-asked', async () => {
+    let calls = 0;
+    await expect(connector([fake(() => { calls++; return 'Sorry, I cannot help'; })]).run(extractTask, INPUT)).rejects.toThrow(/invalid output/);
+    expect(calls).toBe(2);
+    let hung = 0;
+    const c = connector([fake('', { complete: () => { hung++; return new Promise<string>(() => undefined); } })], DEFAULT_SETTINGS, 50);
+    await expect(c.run(extractTask, INPUT)).rejects.toThrow(/timed out/i);
+    expect(hung).toBe(1);
+  });
+
+  it('does not ask again when too little of the task time is left', async () => {
+    let calls = 0;
+    const c = connector([fake(() => { calls++; return '{}'; })], DEFAULT_SETTINGS, 5_000);
+    await expect(c.run(extractTask, INPUT)).rejects.toThrow(/invalid output/);
+    expect(calls).toBe(1);
+  });
+
   it('rejects text with no JSON object', async () => {
     await expect(connector([fake('Sorry, I cannot help')]).run(extractTask, INPUT)).rejects.toThrow(/invalid output/);
   });

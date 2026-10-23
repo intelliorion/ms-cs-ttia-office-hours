@@ -53,6 +53,15 @@ export function defaultProviders(env: NodeJS.ProcessEnv = process.env): Provider
   return env.CAFE_AI_FAKE === '1' ? [fakeProvider(), ...real] : real;
 }
 
+/** The least time worth asking again in, after a reply the checker refused. */
+export const RETRY_MIN_MS = 15_000;
+const isRefusedReply = (e: unknown) => e instanceof AiError && /^invalid output: /.test(e.message) && !/longer than/.test(e.message);
+/** The same prompt, headed by what was wrong with the last reply (only the checker's words, kept plain and short). */
+export function retryPrompt(prompt: string, why: string): string {
+  const plain = why.replace(/^invalid output: /, '').replace(/[^\w$.\[\] ,;:'"()-]/g, ' ').slice(0, 300);
+  return `Your last reply to this was refused by the checker (${plain}). Reply again, following the instructions below exactly: one JSON object matching the schema, nothing else.\n\n${prompt}`;
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const t = new Promise<never>((_r, reject) => { timer = setTimeout(() => reject(new AiError(`${what} timed out after ${Math.round(ms / 1000)} s`)), ms); });
@@ -82,9 +91,21 @@ export function createConnector(opts: {
     const p = await pick();
     if (!p) throw new AiError('No AI available');
     const ms = Math.min(run.timeoutMs ?? task.timeoutMs ?? timeoutMs, ceiling);
-    const raw = await withTimeout(p.complete(task.prompt(input), { timeoutMs: ms }), ms, p.label);
+    const t0 = Date.now();
+    const prompt = task.prompt(input);
+    const raw = await withTimeout(p.complete(prompt, { timeoutMs: ms }), ms, p.label);
     if (typeof raw !== 'string') throw new AiError('invalid output: the reply was not text');
-    return { provider: p.id, label: p.label, output: task.parse(raw) };
+    try {
+      return { provider: p.id, label: p.label, output: task.parse(raw) };
+    } catch (e) {
+      // A reply the checker refused (wrong shape, a key too many, too few items) is asked for once more, in the time
+      // the task has left, with what was wrong. Nothing from the refused reply is used. A timeout is never re-asked.
+      const left = ms - (Date.now() - t0);
+      if (!isRefusedReply(e) || left < RETRY_MIN_MS) throw e;
+      const again = await withTimeout(p.complete(retryPrompt(prompt, (e as Error).message), { timeoutMs: left }), left, p.label);
+      if (typeof again !== 'string') throw new AiError('invalid output: the reply was not text');
+      return { provider: p.id, label: p.label, output: task.parse(again) };
+    }
   }
 
   async function look(file: string, task: LookTask, run: { timeoutMs?: number } = {}) {

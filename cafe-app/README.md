@@ -407,8 +407,9 @@ The VS Code helper is a small extension in `vscode-helper/`; see
   object.
 - The AI gets **no shell, file or network access**. Only the title, challenge, current process and outcomes
   leave the app, each capped in length. No names, email addresses or ids.
-- The answer is **checked against a schema** before anything is used. Anything else is thrown away and the
-  app says it is working by hand.
+- The answer is **checked against a schema** before anything is used. A reply the check refuses is thrown away and
+  the AI is asked once more, told what was wrong, in the time the task has left (never after a timeout); if that
+  reply is refused too, the app says it is working by hand.
 - **What the AI finds is added at once, confirmed, new stars included; only a link a conflict rule holds waits
   for you; you can remove any AI link from the idea's details.** The rules are in the Import section above (a star
   that looks like one you have, a person, a link the AI was less than 50% sure of). A held link shows dashed with

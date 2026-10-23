@@ -22,7 +22,7 @@ export const PLAN_FILE = 'plan.md';
 export const KIT_DIR = 'kit';
 export const NOT_APPROVED = 'Design is not approved yet';
 /** The plan route with the AI down: plan.md has no hand path in the app. */
-export const PLAN_NEEDS_AI = 'plan.md needs the AI: it could not be reached. Try again, or write plan.md by hand in the idea folder.';
+export const PLAN_NEEDS_AI = 'plan.md needs the AI: it could not be reached, or its reply could not be used. Try again, or write plan.md by hand in the idea folder.';
 export const NOT_PICKED_HEADING = '### Not picked';
 export const NOT_PICKED_NOTE = 'These tasks are for a tool that was not picked; move the task to the picked tool, or change the tool.';
 

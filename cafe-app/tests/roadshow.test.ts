@@ -16,10 +16,11 @@ import {
 } from '../src/ai/tasks';
 import { imageKind, imageSize, cleanPhotoPath, readPhotoFile, PhotoError, setPhotoFromPath, removePhoto, PHOTO_MAX_BYTES } from '../src/roadshow/photos';
 import { rosterOf, readRoadshow, initialsOf, rolesLine } from '../src/roadshow/store';
-import { checkDeck, unknownFigures, decodeDeck, processLines, demoLinkOf } from '../src/roadshow/deck';
+import { checkDeck, unknownFigures, decodeDeck, processLines, demoLinkOf, bleedSlide, DIAGRAM_POINTS_LEAD } from '../src/roadshow/deck';
 import { planOf, datesOf, gatherRoadshow } from '../src/roadshow/source';
 import { themeFromTemplate, readTemplateTheme } from '../src/roadshow/template';
 import { FEEDBACK_QUESTIONS } from '../src/roadshow/render/text';
+import { deckFit, DECK_FITS, layout, wrap } from '../src/design/diagramLayout';
 import { mergeNeeds } from '../src/review/needs';
 
 const ID = 'CAFE-2026-001';
@@ -249,6 +250,32 @@ describe('the deck spec is checked by the code', () => {
   });
 });
 
+describe('the design-diagram slide', () => {
+  it('bleedSlide moves its points to the end of the speaker notes; other slides keep theirs', () => {
+    const d = { kind: 'diagram' as const, title: 'The design', points: ['Data in.', 'A list out'], visual: 'diagram' as const, notes: 'Here is the design. ', minutes: 0.5 };
+    expect(bleedSlide(d)).toEqual({ ...d, points: [], notes: `Here is the design.\n\n${DIAGRAM_POINTS_LEAD} Data in; A list out.` });
+    expect(bleedSlide({ ...d, points: [] })).toEqual({ ...d, points: [] });
+    const other = { ...d, kind: 'tool' as const, visual: 'fit-table' as const };
+    expect(bleedSlide(other)).toBe(other);
+  });
+  it('deckFit draws a tall diagram with wide parts and a long flow with narrower, taller ones, larger than the pack would', () => {
+    const lane = (id: string, kind: any) => ({ id, label: id, kind });
+    const tall = { lanes: [lane('d', 'data'), lane('t', 'tool')], edges: [] as any[],
+      nodes: [{ id: 'a', lane: 'd', label: 'Sample input', kind: 'input' as const }, ...[1, 2, 3, 4, 5, 6].map((i) => ({ id: `s${i}`, lane: 't', label: `Step number ${i}`, kind: 'step' as const }))] };
+    tall.edges = tall.nodes.slice(1).map((n) => ({ from: 'a', to: n.id }));
+    const t = deckFit(tall, 1176, 540);
+    expect(t.size.nodeW).toBe(DECK_FITS[0].size.nodeW);
+    const ids = 'abcdefgh'.split('');
+    const long = { lanes: [lane('t', 'tool')], nodes: ids.map((id) => ({ id, lane: 't', label: 'Weekend spend anomaly check', kind: 'step' as const })),
+      edges: ids.slice(1).map((id, i) => ({ from: ids[i], to: id })) };
+    const f = deckFit(long, 1176, 540);
+    expect(f.size.nodeW).toBeLessThan(DECK_FITS[0].size.nodeW);
+    expect(wrap('Weekend spend anomaly check', f.chars, f.lines).join(' ')).toBe('Weekend spend anomaly check');
+    const pack = layout(long);
+    expect(f.scale * 20).toBeGreaterThan(Math.min(1176 / pack.width, 540 / pack.height) * 13.5 * 1.5);
+  });
+});
+
 describe('the to-do list keeps its ids apart', () => {
   it('a new item whose question only looks like a kept one gets its own id; the same words keep theirs', () => {
     const prev = [
@@ -370,7 +397,7 @@ describe('the roadshow, end to end on the server', () => {
     expect(html).toContain(`data:image/png;base64,${png(24, 24).toString('base64')}`);
     expect(html).toContain('Person 2'); // no photo: initials
     expect(html).toContain('<span class="ph ini" aria-hidden="true">P2</span>');
-    expect(html).toContain('<svg class="diagram"');
+    expect(html).toContain('<svg class="diagram big"');
     expect(html).toContain('Weekend spend check');
     expect(html).toContain('@media print');
     expect(html).not.toMatch(/<(script|link|img)[^>]+(src|href)="https?:/);
@@ -393,6 +420,20 @@ describe('the roadshow, end to end on the server', () => {
     expect(names.some((x) => /^ppt\/media\/.+\.png$/.test(x))).toBe(true);
     const notes1 = strFromU8(zip['ppt/notesSlides/notesSlide1.xml']);
     expect(notes1).toContain('We will talk this through');
+    // The design-diagram slide is full bleed: the diagram fills it, larger text, its point moved into the speaker notes.
+    const k = deck.slides.findIndex((x: any) => x.visual === 'diagram');
+    const sec = html.split('<section class="slide ')[k + 1];
+    expect(sec).toMatch(/^k-diagram v-diagram bleed"/);
+    expect(sec).toContain('<div class="dia full"><svg class="diagram big"');
+    expect(sec).not.toMatch(/class="(pts|chips|dia-side)/);
+    expect(sec).toContain(`${DIAGRAM_POINTS_LEAD} Sample data in, a list out.`);
+    expect(script).toContain(`${DIAGRAM_POINTS_LEAD} Sample data in, a list out.`);
+    const dslide = strFromU8(zip[`ppt/slides/slide${k + 1}.xml`]);
+    expect(dslide).not.toContain('Sample data in, a list out');
+    expect(strFromU8(zip[`ppt/notesSlides/notesSlide${k + 1}.xml`])).toContain(`${DIAGRAM_POINTS_LEAD} Sample data in, a list out.`);
+    const sizes = [...dslide.matchAll(/<a:rPr[^>]*sz="(\d+)"[^>]*>(?:(?!<a:t>).)*<a:t>Weekend spend check/gs)].map((x) => Number(x[1]));
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(1200);
     // Files go only into roadshow/.
     expect((await readdir(dir)).sort()).toEqual(['deck.html', 'deck.pptx', 'photos', 'run-of-show.md', 'script.md']);
   });

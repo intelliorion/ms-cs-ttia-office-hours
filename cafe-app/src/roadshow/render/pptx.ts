@@ -4,12 +4,12 @@
  * notes. A WebP photo is shown in the HTML deck only (PowerPoint gets the initials), since not every PowerPoint opens WebP.
  */
 import PptxGenJS from 'pptxgenjs';
-import { layout, wrap } from '../../design/diagramLayout';
+import { deckFit, layout, wrap } from '../../design/diagramLayout';
 import type { DiagramSpec, NodeKind } from '../../design/diagram';
 import { formatDate } from '../../clock';
 import type { DeckSlide } from '../../ai/tasks';
 import type { DeckModel, DeckPerson, FitMark } from '../deck';
-import { KIND_LABEL } from './html';
+import { DECK_TEXT, KIND_LABEL } from './html';
 
 type Slide = ReturnType<PptxGenJS['addSlide']>;
 
@@ -51,8 +51,13 @@ function avatar(pptx: PptxGenJS, slide: Slide, p: DeckPerson, x: number, y: numb
   });
 }
 
-function diagramShapes(pptx: PptxGenJS, slide: Slide, spec: DiagramSpec, box: { x: number; y: number; w: number; h: number }, accent: string, font: string) {
-  const L = layout(spec);
+/**
+ * The design diagram as shapes in `box`. `big` is the full-slide drawing, as deck.html draws it: the deckFit shape,
+ * larger text, each part's kind shown by its colour bar only.
+ */
+function diagramShapes(pptx: PptxGenJS, slide: Slide, spec: DiagramSpec, box: { x: number; y: number; w: number; h: number }, accent: string, font: string, big = false) {
+  const fit = big ? deckFit(spec, box.w, box.h) : undefined;
+  const L = fit ? fit.layout : layout(spec);
   const k = Math.min(box.w / L.width, box.h / L.height);
   const ox = box.x + (box.w - L.width * k) / 2;
   const oy = box.y + (box.h - L.height * k) / 2;
@@ -61,7 +66,7 @@ function diagramShapes(pptx: PptxGenJS, slide: Slide, spec: DiagramSpec, box: { 
   const pt = (px: number) => Math.max(6, Math.round(px * k * 72));
   L.lanes.forEach((l, i) => {
     slide.addShape(pptx.ShapeType.roundRect, { x: X(6), y: Y(l.y), w: (L.width - 12) * k, h: l.h * k, fill: { color: i % 2 ? 'EEF1F6' : 'F5F7FA' }, line: { color: LINE, width: 0.75 }, rectRadius: 0.08 });
-    slide.addText(l.label, { x: X(12), y: Y(l.y + 6), w: 112 * k, h: Math.min(l.h, 60) * k, fontSize: pt(13), bold: true, color: accent, fontFace: font, valign: 'top', margin: 2 });
+    slide.addText(l.label, { x: X(12), y: Y(l.y + 6), w: (fit ? fit.size.labelW - 24 : 112) * k, h: Math.min(l.h, big ? 90 : 60) * k, fontSize: pt(big ? DECK_TEXT.lane : 13), bold: true, color: accent, fontFace: font, valign: 'top', margin: 2 });
   });
   for (const e of L.edges) {
     const m = /^M([\d.-]+),([\d.-]+) C[\d.,\s-]+ ([\d.-]+),([\d.-]+)$/.exec(e.d);
@@ -71,12 +76,19 @@ function diagramShapes(pptx: PptxGenJS, slide: Slide, spec: DiagramSpec, box: { 
       x: X(Math.min(x1, x2)), y: Y(Math.min(y1, y2)), w: Math.max(0.01, Math.abs(x2 - x1) * k), h: Math.max(0.01, Math.abs(y2 - y1) * k),
       flipH: x2 < x1, flipV: y2 < y1, line: { color: '8A94A6', width: 1.25, endArrowType: 'triangle', ...(e.back ? { dashType: 'dash' } : {}) },
     } as never);
-    if (e.label) slide.addText(e.label, { x: X(e.lx - 50), y: Y(e.ly - 9), w: 100 * k, h: 18 * k, fontSize: pt(11), color: MUTED, align: 'center', fontFace: font, fill: { color: 'FFFFFF' }, margin: 0 });
+    const ew = big ? 140 : 100; const eh = big ? 24 : 18;
+    if (e.label) slide.addText(e.label, { x: X(e.lx - ew / 2), y: Y(e.ly - eh / 2), w: ew * k, h: eh * k, fontSize: pt(big ? DECK_TEXT.edge : 11), color: MUTED, align: 'center', fontFace: font, fill: { color: 'FFFFFF' }, margin: 0 });
   }
   for (const n of L.nodes) {
     const c = KIND_COLOUR[n.kind] || hex(accent);
     slide.addShape(pptx.ShapeType.roundRect, { x: X(n.x), y: Y(n.y), w: n.w * k, h: n.h * k, fill: { color: 'FFFFFF' }, line: { color: c, width: 1.25 }, rectRadius: 0.06 });
     slide.addShape(pptx.ShapeType.rect, { x: X(n.x), y: Y(n.y + 10), w: 5 * k, h: (n.h - 20) * k, fill: { color: c }, line: { color: c, width: 0 } });
+    if (fit) {
+      slide.addText(wrap(n.label, fit.chars, fit.lines).join(' '), {
+        x: X(n.x + 12), y: Y(n.y + 2), w: (n.w - 16) * k, h: (n.h - 4) * k, valign: 'middle', fontFace: font, margin: 2, fontSize: pt(DECK_TEXT.node), bold: true, color: '0F172A',
+      });
+      continue;
+    }
     slide.addText([
       { text: n.kind.toUpperCase(), options: { fontSize: pt(10), bold: true, color: MUTED, breakLine: true } },
       { text: wrap(n.label, 22, 2).join(' '), options: { fontSize: pt(13.5), bold: true, color: '0F172A' } },
@@ -138,6 +150,12 @@ export async function renderDeckPptx(m: DeckModel): Promise<Uint8Array> {
       bullets(slide, s.points, { x: X0, y: 5.1, w: CW, h: 1.5 }, 18);
       return;
     }
+    // The design diagram is drawn full bleed: a smaller title, then the diagram fills the slide under it.
+    if (s.visual === 'diagram' && m.diagram) {
+      slide.addText(s.title, { x: X0, y: 0.8, w: W - X0 - 0.4, h: 0.6, fontSize: 24, bold: true, color: ink, fontFace: head, valign: 'top', margin: 0, fit: 'shrink' });
+      diagramShapes(pptx, slide, m.diagram, { x: 0.35, y: 1.5, w: W - 0.6, h: H - 1.5 - 0.6 }, accent, body, true);
+      return;
+    }
     slide.addText(s.title, { x: X0, y: 0.85, w: CW, h: 1.0, fontSize: 32, bold: true, color: ink, fontFace: head, valign: 'top', margin: 0 });
     const area = { x: X0, y: 2.0, w: CW, h: 4.6 };
     const quote = (box: { x: number; y: number; w: number; h: number }) => {
@@ -172,16 +190,8 @@ export async function renderDeckPptx(m: DeckModel): Promise<Uint8Array> {
         return;
       }
       case 'diagram': {
-        if (!m.diagram) { bullets(slide, s.points, area); return; }
-        // As in deck.html: a tall diagram gets the full height with its points beside it.
-        const L = layout(m.diagram);
-        if (L.width / L.height < 1.6 && s.points.length) {
-          diagramShapes(pptx, slide, m.diagram, { x: X0, y: 1.95, w: CW * 0.62, h: 4.85 }, accent, body);
-          bullets(slide, s.points, { x: X0 + CW * 0.65, y: 2.0, w: CW * 0.35, h: 4.6 }, 16);
-          return;
-        }
-        diagramShapes(pptx, slide, m.diagram, { x: X0, y: 1.95, w: CW, h: s.points.length ? 4.2 : 4.85 }, accent, body);
-        if (s.points.length) slide.addText(s.points.slice(0, 3).join('   ·   '), { x: X0, y: 6.25, w: CW, h: 0.5, fontSize: 14, color: MUTED, fontFace: body });
+        // With a diagram the slide was drawn full bleed above; without one, its points.
+        bullets(slide, s.points, area);
         return;
       }
       case 'fit-table': {

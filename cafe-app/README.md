@@ -648,13 +648,15 @@ script to talk, in three steps.
    ```
    deck.html        ONE self-contained page (no network): 16:9 slides, ←/→ or click to move, S for the speaker
                     notes (with the time so far), F for full screen, T for light or dark. The team slide shows each
-                    person's photo (inlined) or initials, name and roles; the design slide draws the design diagram
-                    as the design pack does; the tool slide the fit table; a timeline slide the idea's dates.
+                    person's photo (inlined) or initials, name and roles; the design slide is full bleed: the
+                    design diagram fills the slide under the title, with larger text (the app picks wide or
+                    narrower, taller parts, whichever draws it largest), and any point the AI gave that slide
+                    goes into its speaker notes; the tool slide the fit table; a timeline slide the idea's dates.
                     Printing gives one slide per page.
    script.md        the talk track, slide by slide, with timings and cues
    run-of-show.md   who does what, when: the demo cue, the one question, the four feedback questions
-   deck.pptx        the same slides for PowerPoint (pptxgenjs), photos embedded, the diagram as shapes, the script
-                    as each slide's speaker notes
+   deck.pptx        the same slides for PowerPoint (pptxgenjs), photos embedded, the diagram as shapes (full bleed,
+                    as in deck.html), the script as each slide's speaker notes
    ```
 
    **▶ Present** opens the deck in a new tab (press F there for full screen); **Open script** and **Run of show**

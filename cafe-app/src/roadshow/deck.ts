@@ -167,6 +167,18 @@ export function demoLinkOf(answers: { question: string; answer: string }[] = [])
   return undefined;
 }
 
+/** Said before the points a full-bleed diagram slide moves into its speaker notes. */
+export const DIAGRAM_POINTS_LEAD = 'Points to make on this slide:';
+
+/**
+ * The design-diagram slide is drawn full bleed: the diagram fills the slide under the title, with no points beside it.
+ * Any point the AI gave it moves to the end of its speaker notes, so nothing it wanted said is lost.
+ */
+export function bleedSlide(s: DeckSlide): DeckSlide {
+  if (s.visual !== 'diagram' || !s.points.length) return s;
+  return { ...s, points: [], notes: `${s.notes.trimEnd()}\n\n${DIAGRAM_POINTS_LEAD} ${s.points.map((p) => p.replace(/[.;\s]+$/, '')).join('; ')}.` };
+}
+
 /** The deck as the renderers see it: the checked spec, with the team, diagram, fit, dates and photos from the record. */
 export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { today: string; theme?: DeckTheme; template?: TemplateNote }): Promise<DeckModel> {
   const { idea, design } = src;
@@ -195,11 +207,12 @@ export async function deckModel(src: RoadshowSource, spec: DeckSpec, opts: { tod
   const lead = roster.find((p) => p.roles.includes('lead')) ?? roster.find((p) => p.roles.includes('submitter')) ?? roster[0];
   const builder = roster.find((p) => p.roles.includes('builder'));
   const after = pointOf(design, 'must-show') ?? design.summary;
+  const diagram = diagramOfDesign(design);
   return {
     id: idea.id, ideaTitle: idea.title, title: spec.title, subtitle: spec.subtitle,
     ...(src.round?.name ? { roundName: src.round.name } : {}), ...(src.round?.roadshow ? { roadshowDate: src.round.roadshow } : {}),
-    builtOn: opts.today, slides: spec.slides, team,
-    ...(diagramOfDesign(design) ? { diagram: diagramOfDesign(design) } : {}),
+    builtOn: opts.today, slides: diagram ? spec.slides.map(bleedSlide) : spec.slides, team,
+    ...(diagram ? { diagram } : {}),
     ...(fit ? { fit } : {}),
     timeline: datesOf(src),
     before: processLines(idea.current_process ?? pointOf(design, 'replaces')),

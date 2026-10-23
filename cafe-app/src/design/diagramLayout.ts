@@ -13,6 +13,40 @@ export const LANE_PAD = 18;
 export const LABEL_W = 132;
 export const PAD = 16;
 
+/** The sizes a layout uses. The pack uses the defaults; the roadshow deck's full-slide diagram uses one of DECK_FITS. */
+export interface LayoutSize { nodeW: number; nodeH: number; colGap: number; rowGap: number; lanePad: number; labelW: number }
+export const PACK_SIZE: LayoutSize = { nodeW: NODE_W, nodeH: NODE_H, colGap: COL_GAP, rowGap: ROW_GAP, lanePad: LANE_PAD, labelW: LABEL_W };
+
+/**
+ * The deck's diagram fills a slide and its parts carry larger text, read from the back of the room. A few shapes of
+ * part: wide ones with two lines (for a tall diagram), and narrower, taller ones with three or four lines (for a long
+ * flow, so it does not shrink to fit the width). deckFit picks the one that draws the text largest in the slide's area
+ * while cutting the fewest labels short.
+ */
+export interface DeckFit { size: LayoutSize; chars: number; lines: number; laneChars: number }
+export const DECK_FITS: DeckFit[] = [
+  { size: { nodeW: 224, nodeH: 64, colGap: 60, rowGap: 10, lanePad: 12, labelW: 150 }, chars: 18, lines: 2, laneChars: 12 },
+  { size: { nodeW: 180, nodeH: 88, colGap: 44, rowGap: 10, lanePad: 12, labelW: 140 }, chars: 14, lines: 3, laneChars: 11 },
+  { size: { nodeW: 150, nodeH: 88, colGap: 34, rowGap: 10, lanePad: 12, labelW: 130 }, chars: 11, lines: 3, laneChars: 10 },
+  { size: { nodeW: 150, nodeH: 112, colGap: 34, rowGap: 10, lanePad: 12, labelW: 130 }, chars: 11, lines: 4, laneChars: 10 },
+];
+
+/** The deck shape that draws the diagram largest in a w × h area, with its layout and the scale it is drawn at. */
+export function deckFit(spec: DiagramSpec, w: number, h: number): DeckFit & { layout: Layout; scale: number } {
+  let best: (DeckFit & { layout: Layout; scale: number; score: number }) | undefined;
+  for (const f of DECK_FITS) {
+    const L = layout(spec, f.size);
+    const scale = Math.min(w / L.width, h / L.height);
+    // A label cut short (an ellipsis) costs: it is read on the slide, not hovered.
+    const cut = spec.nodes.filter((n) => wrap(n.label, f.chars, f.lines).some((t) => t.endsWith('…'))).length / Math.max(1, spec.nodes.length);
+    const score = scale * (1 - 0.4 * cut);
+    // Ties (within 3%) go to the earlier shape: wider parts read more easily.
+    if (!best || score > best.score * 1.03) best = { ...f, layout: L, scale, score };
+  }
+  const { score: _score, ...out } = best!;
+  return out;
+}
+
 /** Lanes in reading order: the data goes in at the top, the build, the work outside it, then the people. */
 const LANE_ORDER: Record<LaneKind, number> = { data: 0, tool: 1, outside: 2, person: 3 };
 
@@ -58,7 +92,8 @@ export function columns(spec: DiagramSpec): Map<string, number> {
 
 const mid = (a: number, b: number, c: number, d: number) => (a + 3 * b + 3 * c + d) / 8;
 
-export function layout(spec: DiagramSpec): Layout {
+export function layout(spec: DiagramSpec, size: LayoutSize = PACK_SIZE): Layout {
+  const { nodeW: NODE_W, nodeH: NODE_H, colGap: COL_GAP, rowGap: ROW_GAP, lanePad: LANE_PAD, labelW: LABEL_W } = size;
   const col = columns(spec);
   const lanes = [...spec.lanes].map((l, i) => ({ l, i })).sort((a, b) => LANE_ORDER[a.l.kind] - LANE_ORDER[b.l.kind] || a.i - b.i).map((x) => x.l);
   // Parts in the same lane and column stack; the lane is as tall as its tallest stack.

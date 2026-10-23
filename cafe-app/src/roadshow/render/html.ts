@@ -3,7 +3,7 @@
  * the app from the deck model. ←/→ (or click) to move, S for the speaker notes, F for full screen, T for light or dark.
  * Printing gives one slide per page, so "Save as PDF" in the print window is the PDF export. Every text is escaped.
  */
-import { layout, wrap } from '../../design/diagramLayout';
+import { deckFit, layout, wrap } from '../../design/diagramLayout';
 import type { DiagramSpec, NodeKind } from '../../design/diagram';
 import { formatDate } from '../../clock';
 import type { DeckSlide } from '../../ai/tasks';
@@ -31,19 +31,37 @@ export function notesHtml(notes: string): string {
   return notes.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\[([^\]\n]{1,80})\]/g, '<span class="cue">$1</span>')}</p>`).join('');
 }
 
-/** The design diagram as SVG, laid out as the design pack lays it out. */
-export function diagramSvg(spec: DiagramSpec): string {
-  const L = layout(spec);
+/** Text sizes inside the deck's full-slide diagram (deckFit): read from the back of the room. */
+export const DECK_TEXT = { node: 20, lane: 17, edge: 15 };
+/** The area the full-bleed diagram has on a 1280 × 720 slide, under the kicker and the title. */
+export const DECK_DIAGRAM_AREA = { w: 1176, h: 540 };
+
+/**
+ * The design diagram as SVG, laid out as the design pack lays it out. `big` is the deck's full-slide drawing: the
+ * deckFit shape that draws it largest and larger text, each part's kind shown by its colour bar only (its word would
+ * cost a line).
+ */
+export function diagramSvg(spec: DiagramSpec, big = false): string {
+  const fit = big ? deckFit(spec, DECK_DIAGRAM_AREA.w, DECK_DIAGRAM_AREA.h) : undefined;
+  const L = fit ? fit.layout : layout(spec);
+  const tabW = fit ? fit.size.labelW - 12 : 120;
   const lanes = L.lanes.map((l, i) => `<g class="ln lk-${l.kind}${i % 2 ? ' alt' : ''}"><rect x="6" y="${l.y}" width="${L.width - 12}" height="${l.h}" rx="12"/>`
-    + `<rect class="tab" x="6" y="${l.y}" width="120" height="${l.h}" rx="12"/><text class="lk" x="18" y="${l.y + 22}">${esc(LANE_WORD[l.kind] ?? '')}</text>`
-    + wrap(l.label, 15, 3).map((t, k) => `<text class="lt" x="18" y="${l.y + 42 + k * 16}">${esc(t)}</text>`).join('') + '</g>').join('');
+    + `<rect class="tab" x="6" y="${l.y}" width="${tabW}" height="${l.h}" rx="12"/><text class="lk" x="18" y="${l.y + (big ? 26 : 22)}">${esc(LANE_WORD[l.kind] ?? '')}</text>`
+    + (fit ? wrap(l.label, fit.laneChars, 3).map((t, k) => `<text class="lt" x="18" y="${l.y + 50 + k * 20}">${esc(t)}</text>`)
+      : wrap(l.label, 15, 3).map((t, k) => `<text class="lt" x="18" y="${l.y + 42 + k * 16}">${esc(t)}</text>`)).join('') + '</g>').join('');
+  const [cw, eh] = big ? [DECK_TEXT.edge * 0.6, 26] : [6.6, 20];
   const edges = L.edges.map((e) => `<g class="ed${e.back ? ' back' : ''}"><path d="${e.d}" marker-end="url(#arr)"/>`
-    + (e.label ? `<g transform="translate(${e.lx},${e.ly})"><rect x="${-(e.label.length * 3.3 + 8)}" y="-10" width="${e.label.length * 6.6 + 16}" height="20" rx="10"/><text text-anchor="middle" y="4">${esc(e.label)}</text></g>` : '')
+    + (e.label ? `<g transform="translate(${e.lx},${e.ly})"><rect x="${-(e.label.length * cw / 2 + 8)}" y="${-eh / 2}" width="${e.label.length * cw + 16}" height="${eh}" rx="${eh / 2}"/><text text-anchor="middle" y="${big ? 5 : 4}">${esc(e.label)}</text></g>` : '')
     + '</g>').join('');
+  const nodeText = (n: (typeof L.nodes)[number]) => {
+    if (!fit) return `<text class="nk" x="16" y="18">${esc(NODE_WORD[n.kind].toUpperCase())}</text>` + wrap(n.label).map((t, k) => `<text class="nt" x="16" y="${36 + k * 16}">${esc(t)}</text>`).join('');
+    const lines = wrap(n.label, fit.chars, fit.lines);
+    const top = n.h / 2 + 7 - (lines.length - 1) * 12;
+    return `<title>${esc(NODE_WORD[n.kind])}: ${esc(n.label)}</title>` + lines.map((t, k) => `<text class="nt" x="18" y="${top + k * 24}">${esc(t)}</text>`).join('');
+  };
   const nodes = L.nodes.map((n) => `<g class="nd k-${n.kind}" transform="translate(${n.x},${n.y})"><rect width="${n.w}" height="${n.h}" rx="14"/>`
-    + `<rect class="bar" width="5" height="${n.h - 20}" x="0" y="10" rx="2.5"/><text class="nk" x="16" y="18">${esc(NODE_WORD[n.kind].toUpperCase())}</text>`
-    + wrap(n.label).map((t, k) => `<text class="nt" x="16" y="${36 + k * 16}">${esc(t)}</text>`).join('') + '</g>').join('');
-  return `<svg class="diagram" viewBox="0 0 ${L.width} ${L.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The design: ${spec.nodes.length} parts in ${spec.lanes.length} lanes">`
+    + `<rect class="bar" width="${big ? 6 : 5}" height="${n.h - 20}" x="0" y="10" rx="2.5"/>${nodeText(n)}</g>`).join('');
+  return `<svg class="diagram${big ? ' big' : ''}" viewBox="0 0 ${L.width} ${L.height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The design: ${spec.nodes.length} parts in ${spec.lanes.length} lanes">`
     + '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>'
     + lanes + edges + nodes + '</svg>';
 }
@@ -103,10 +121,8 @@ function slideBody(s: DeckSlide, m: DeckModel): string {
     case 'team': return `${head}${teamHtml(m.team)}${s.points.length ? `<div class="foot-pts">${pointsHtml(s)}</div>` : ''}`;
     case 'diagram': {
       if (!m.diagram) return `${head}<div class="body">${pointsHtml(s)}</div>`;
-      // A tall diagram (many parts side by side) gets the slide's full height, its points beside it; a wide one, the full width.
-      const L = layout(m.diagram);
-      if (L.width / L.height < 1.6 && s.points.length) return `${head}<div class="dia-side"><div class="dia">${diagramSvg(m.diagram)}</div><div class="col">${pointsHtml(s)}</div></div>`;
-      return `${head}<div class="dia">${diagramSvg(m.diagram)}</div>${s.points.length ? `<div class="chips">${s.points.slice(0, 3).map((p) => `<span>${esc(p)}</span>`).join('')}</div>` : ''}`;
+      // Full bleed: the diagram fills the slide under the title, with no points beside it (deckModel moves them into the notes).
+      return `${head}<div class="dia full">${diagramSvg(m.diagram, true)}</div>`;
     }
     case 'fit-table': return `${head}<div class="split wide-l"><div>${fitHtml(m)}</div><div class="col">${pointsHtml(s)}${quoteHtml(s)}</div></div>`;
     case 'timeline': return `${head}${timelineHtml(m)}<div class="foot-pts">${pointsHtml(s)}${quoteHtml(s)}</div>`;
@@ -119,7 +135,8 @@ function slideHtml(s: DeckSlide, i: number, m: DeckModel, starts: number[]): str
   const n = m.slides.length;
   const label = KIND_LABEL[s.kind];
   const plain = s.kind === 'title' || s.kind === 'thanks';
-  return `<section class="slide k-${s.kind}${s.visual ? ` v-${s.visual}` : ''}${plain ? ' hero-slide' : ''}" data-n="${i + 1}" aria-roledescription="slide" aria-label="Slide ${i + 1} of ${n}: ${esc(s.title)}"${i ? ' hidden' : ''}>`
+  const bleed = s.visual === 'diagram' && Boolean(m.diagram);
+  return `<section class="slide k-${s.kind}${s.visual ? ` v-${s.visual}` : ''}${plain ? ' hero-slide' : ''}${bleed ? ' bleed' : ''}" data-n="${i + 1}" aria-roledescription="slide" aria-label="Slide ${i + 1} of ${n}: ${esc(s.title)}"${i ? ' hidden' : ''}>`
     + `<div class="accent" aria-hidden="true"></div>`
     + (label && label.toLowerCase() !== s.title.toLowerCase() ? `<div class="kicker">${esc(label)}</div>` : '')
     + `<div class="content">${slideBody(s, m)}</div>`
@@ -175,9 +192,9 @@ blockquote{margin:28px 0 0;padding:16px 0 16px 28px;border-left:5px solid var(--
 .team.t-md .ph{width:120px;height:120px;font-size:38px}.team.t-sm .ph{width:92px;height:92px;font-size:30px}.team.t-sm li{width:170px}
 .team img.ph{box-shadow:0 0 0 4px var(--slide),0 0 0 7px var(--accent)}
 .dia{flex:1;min-height:0;background:var(--soft);border-radius:16px;padding:10px;display:flex}
-.dia-side{flex:1;min-height:0;display:grid;grid-template-columns:1.7fr 1fr;gap:34px}.dia-side .pts{font-size:21px;gap:12px}
+.slide.bleed{padding:40px 40px 50px 52px}.bleed .kicker{margin-bottom:8px}.bleed h2{font-size:30px;line-height:1.15;margin-bottom:12px;max-width:none}
+.dia.full{padding:6px;border-radius:14px}
 .diagram{width:100%;height:100%}
-.chips{display:flex;gap:12px;margin-top:16px;flex-wrap:wrap}.chips span{background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:8px 18px;font-size:18px}
 .diagram .ln rect{fill:color-mix(in srgb,var(--text) 3%,transparent);stroke:var(--line)}.diagram .ln.alt rect{fill:color-mix(in srgb,var(--text) 5%,transparent)}
 .diagram .ln .tab{fill:color-mix(in srgb,var(--accent) 10%,transparent);stroke:none}
 .diagram .lk{font:700 11px var(--head);letter-spacing:.12em;fill:var(--accent)}.diagram .lt{font:600 13px var(--body);fill:var(--text)}
@@ -186,6 +203,7 @@ blockquote{margin:28px 0 0;padding:16px 0 16px 28px;border-left:5px solid var(--
 .diagram .ed rect{fill:var(--slide);stroke:var(--line)}.diagram .ed text{font:600 11px var(--body);fill:var(--muted)}
 .diagram .nd>rect:first-child{fill:var(--card);stroke:var(--line);stroke-width:1.5}
 .diagram .nd .bar{fill:var(--k-step)}.diagram .nd .nk{font:700 10px var(--head);letter-spacing:.1em;fill:var(--muted)}.diagram .nd .nt{font:600 13.5px var(--body);fill:var(--text)}
+.diagram.big .nd .nt{font-size:${DECK_TEXT.node}px}.diagram.big .lk{font-size:14px}.diagram.big .lt{font-size:${DECK_TEXT.lane}px}.diagram.big .ed text{font-size:${DECK_TEXT.edge}px}.diagram.big .ed path{stroke-width:2.2}
 ${(['input', 'store', 'step', 'output', 'person', 'gap'] as const).map((k) => `.diagram .k-${k} .bar{fill:var(--k-${k})}.diagram .k-${k}>rect:first-child{stroke:color-mix(in srgb,var(--k-${k}) 45%,var(--line))}`).join('')}
 .fit{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card)}
 .fit{max-height:470px}.fit-h{display:flex;gap:14px;align-items:baseline;padding:12px 18px;background:var(--soft);font-size:22px}.fit-h span{color:var(--muted);font-size:17px}

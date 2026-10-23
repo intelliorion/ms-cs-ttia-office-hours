@@ -61,8 +61,8 @@ export interface PrepNeed {
  * One change the answers justify, proposed after a suggestion or a re-evaluation: nothing changes until the operator
  * says Yes. `key` names the change, so one said no to is not proposed again; `undo` is how an applied one goes back.
  */
-/** Where a proposal came from: the decision, the tool picker or the design questions. */
-export type UpdateSource = 'decision' | 'tools' | 'design';
+/** Where a proposal came from: the decision, the tool picker, the design questions or the roadshow's to-do list. */
+export type UpdateSource = 'decision' | 'tools' | 'design' | 'roadshow';
 
 export interface PrepUpdate {
   id: string;

@@ -37,6 +37,7 @@ cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/diagram.ts
+cafe-app/src/design/diagramLayout.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
 cafe-app/src/design/scope.ts
@@ -73,10 +74,21 @@ cafe-app/src/review/prep.ts
 cafe-app/src/review/review.ts
 cafe-app/src/review/suggestInput.ts
 cafe-app/src/review/updates.ts
+cafe-app/src/roadshow/deck.ts
+cafe-app/src/roadshow/photos.ts
+cafe-app/src/roadshow/prep.ts
+cafe-app/src/roadshow/render/html.ts
+cafe-app/src/roadshow/render/pptx.ts
+cafe-app/src/roadshow/render/text.ts
+cafe-app/src/roadshow/source.ts
+cafe-app/src/roadshow/store.ts
+cafe-app/src/roadshow/template.ts
+cafe-app/src/roadshow/view.ts
 cafe-app/src/round/round.ts
 cafe-app/src/round/store.ts
 cafe-app/src/rules/stages.ts
 cafe-app/src/server/api.ts
+cafe-app/src/server/fileReply.ts
 cafe-app/src/server/server.ts
 cafe-app/src/workspace/files.ts
 cafe-app/src/workspace/init.ts
@@ -145,6 +157,7 @@ cafe-app/tests/review-prep.test.ts
 cafe-app/tests/review-suggest.test.ts
 cafe-app/tests/review-updates.test.ts
 cafe-app/tests/review.test.ts
+cafe-app/tests/roadshow.test.ts
 cafe-app/tests/rounds.test.ts
 cafe-app/tests/rules.test.ts
 cafe-app/tests/server-graph.test.ts
@@ -270,7 +283,7 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CzSU5jMZ.js
+cafe-app/web/assets/index-DijgSYoA.js
 cafe-app/web/assets/index-DyxQ7CL_.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md

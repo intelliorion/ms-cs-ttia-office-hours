@@ -5,6 +5,9 @@ import type { Clock } from '../clock';
 import { APP_DIR } from '../workspace/paths';
 import { MissingSettingsError } from '../comms/outbox';
 import { registerApi } from './api';
+import { FileReply, FILE_CSP } from './fileReply';
+
+export { FileReply };
 import type { Connector } from '../ai/connector';
 
 export interface ServerOptions {
@@ -18,6 +21,8 @@ export interface RequestInfo {
   body: Record<string, unknown>;
   raw: Buffer;
   params: Record<string, string>;
+  /** The URL's query (?download=1). */
+  query?: Record<string, string>;
   headers: http.IncomingHttpHeaders;
   /** Present when the client asked for progress (Accept: application/x-ndjson): each call sends one line before the result. */
   progress?: (event: unknown) => void;
@@ -26,6 +31,16 @@ export interface RequestInfo {
 }
 
 export type Handler = (req: RequestInfo) => Promise<unknown>;
+
+function sendFile(res: http.ServerResponse, f: FileReply): void {
+  const ascii = (f.download ?? '').replace(/[^\w .()-]/g, '_');
+  res.writeHead(200, {
+    'content-type': f.type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+    'content-security-policy': f.type.startsWith('text/html') ? FILE_CSP.html : FILE_CSP.other,
+    ...(f.download ? { 'content-disposition': `attachment; filename="${ascii}"` } : {}),
+  });
+  res.end(f.body);
+}
 export type AddRoute = (method: 'GET' | 'POST', route: string, handler: Handler) => void;
 
 const WEB_DIR = path.join(APP_DIR, 'web');
@@ -112,13 +127,14 @@ export function createApp({ root, clock, connector }: ServerOptions): http.Serve
         res.on('close', () => { if (!res.writableEnded) gone = true; });
         res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         const line = (v: unknown) => { if (!gone) res.write(JSON.stringify(v) + '\n'); };
-        const call = () => route.handler({ body, raw, params, headers: req.headers, progress: (e) => line({ type: 'progress', ...(e as object) }), stopped: () => gone });
+        const call = () => route.handler({ body, raw, params, query: Object.fromEntries(url.searchParams), headers: req.headers, progress: (e) => line({ type: 'progress', ...(e as object) }), stopped: () => gone });
         try { line({ type: 'done', data: await (req.method === 'POST' ? exclusive(call) : call()) }); }
         catch (e) { line({ type: 'error', error: (e as Error).message }); }
         return res.end();
       }
-      const call = () => route.handler({ body, raw, params, headers: req.headers });
-      return send(res, 200, await (req.method === 'POST' ? exclusive(call) : call()));
+      const call = () => route.handler({ body, raw, params, query: Object.fromEntries(url.searchParams), headers: req.headers });
+      const out = await (req.method === 'POST' ? exclusive(call) : call());
+      return out instanceof FileReply ? sendFile(res, out) : send(res, 200, out);
     } catch (e) {
       const err = e as Error;
       return send(res, 400, { error: err.message, ...(err instanceof MissingSettingsError ? { missing: err.labels } : {}) });

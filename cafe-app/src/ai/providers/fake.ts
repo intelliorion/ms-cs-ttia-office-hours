@@ -294,6 +294,49 @@ function stepsSoFar(prompt: string): number {
   return Array.isArray(data.stepsSoFar) ? data.stepsSoFar.length : 0;
 }
 
+/** The roadshow's to-do list: what was hard, the demo, the one question. An item is met once an answer asks its question. */
+const ROADSHOW_NEEDS = [
+  { need: 'What was hard', ask: 'What was the hardest part of building it, and how did you get past it?' },
+  { need: 'How the demo runs', ask: 'How will you run the demo: a link to the proof of concept, or a recording?' },
+  { need: 'One question for the room', ask: 'What one question would you like the room to answer?' },
+];
+function roadshowPrepFor(prompt: string) {
+  const data = dataOf(prompt) as { answers?: { question: string; answer: string }[]; todo?: { need: string; ask: string }[] };
+  const answered = (ask: string) => (data.answers ?? []).find((a) => a.question === ask && a.answer.trim());
+  const items = data.todo?.length ? data.todo : ROADSHOW_NEEDS;
+  return {
+    needs: items.map((n) => { const a = answered(n.ask); return { ...n, met: !!a, ...(a ? { answer: a.answer.slice(0, 120) } : {}) }; }),
+    learned: [],
+  };
+}
+
+/** A whole deck from DATA: every kind of slide the data supports, the visuals it offers, about ten minutes. */
+function roadshowDeckFor(prompt: string) {
+  const data = dataOf(prompt) as { idea?: { title?: string; challenge?: string }; team?: { code: string }[]; visuals?: string[]; tool?: { tool: string }; roadshow?: { name?: string } };
+  const v = new Set(data.visuals ?? []);
+  const title = data.idea?.title || 'Our proof of concept';
+  const lead = data.team?.[0]?.code ?? 'the team';
+  const slide = (kind: string, t: string, points: string[], minutes: number, extra: object = {}) => ({ kind, title: t, points, notes: `${t}. We will talk this through in plain words. [click]`, minutes, ...extra });
+  return {
+    title, subtitle: `Presented by ${lead}${data.roadshow?.name ? ` at the ${data.roadshow.name} roadshow` : ''}`,
+    slides: [
+      slide('title', title, [], 0.5),
+      slide('problem', 'The problem, in one sentence', [(data.idea?.challenge ?? 'The work is done by hand today').slice(0, 150)], 1),
+      slide('today', 'How it works today', [], 1, { visual: 'before-after', before: ['Done by hand', 'Checked by eye'], after: ['Checked on sample data', 'One list to review'] }),
+      ...(v.has('team') ? [slide('team', 'The team behind it', [], 0.5, { visual: 'team' })] : []),
+      slide('solution', 'What we built', ['A proof of concept on sample data'], 1),
+      ...(v.has('diagram') ? [slide('diagram', 'How it fits together', ['Sample data in, a list out'], 0.75, { visual: 'diagram' })] : []),
+      ...(v.has('fit-table') ? [slide('tool', `Built with ${data.tool?.tool ?? 'one tool'}`, ['One tool for the whole proof of concept'], 0.75, { visual: 'fit-table' })] : []),
+      { ...slide('demo', 'The demo', ['Load the sample', 'Run the check', 'Read the result'], 2.5), notes: `${lead} shows it. [switch to the demo] Load the sample, run the check, read the result. [back to the slides]` },
+      slide('headaches', 'What was hard', ['Getting a realistic sample'], 0.75),
+      slide('lessons', 'What we learned', ['Start with the smallest sample'], 0.5),
+      slide('reuse', 'To reuse it', ['A licence for the tool', 'A builder', 'A data source'], 0.5),
+      slide('question', 'One question for you', ['Who else has this problem?'], 0.5),
+      slide('thanks', 'Thank you', [], 0.25),
+    ],
+  };
+}
+
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
 /** The tour's hook: CAFE_AI_FAKE_DELAY=<ms> makes every answer slow enough to see a step running. */
 async function fakeDelay() {
@@ -317,6 +360,8 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS, features: featureChangesFor(prompt) });
       if (prompt.startsWith('TASK: design-diagram')) return JSON.stringify(diagramFor(prompt));
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
+      if (prompt.startsWith('TASK: roadshow-prep')) return JSON.stringify(roadshowPrepFor(prompt));
+      if (prompt.startsWith('TASK: roadshow-deck')) return JSON.stringify(roadshowDeckFor(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';

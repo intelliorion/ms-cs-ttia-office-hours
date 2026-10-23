@@ -40,6 +40,8 @@ export const CANNOT_LOOK = 'This AI cannot read pictures';
 export const DEFAULT_TIMEOUT_MS = 90_000;
 /** The triage reads long emails and can take Claude Code more than 90 s. */
 export const TRIAGE_TIMEOUT_MS = 120_000;
+/** The longest any one task may ask for: the roadshow deck writes every slide and its script in one reply. */
+export const LONGEST_TIMEOUT_MS = 300_000;
 export const NO_AI_LABEL = 'No AI: working by hand';
 const CHOICE_LABELS: Record<AiChoice, string> = {
   auto: 'Automatic', claude: 'Claude Code', copilot: 'Copilot CLI', vscode: 'Copilot (VS Code)', none: 'No AI: work by hand',
@@ -65,7 +67,7 @@ export function createConnector(opts: {
   timeoutMs?: number;
 }): Connector {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const ceiling = opts.timeoutMs ?? TRIAGE_TIMEOUT_MS;
+  const ceiling = opts.timeoutMs ?? LONGEST_TIMEOUT_MS;
   const settings = async () => (typeof opts.settings === 'function' ? opts.settings() : opts.settings);
 
   async function pick(): Promise<Provider | null> {

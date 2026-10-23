@@ -22,7 +22,7 @@ import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../gra
 import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, roadshowPrepTask, roadshowDeckTask } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
@@ -31,6 +31,10 @@ import {
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
+import { suggestRoadshowPrep, answerRoadshowNeed, draftRoadshowNeedsEmail, markRoadshowAsked } from '../roadshow/prep';
+import { setPhotoFromPath, setPhotoFromUpload, removePhoto } from '../roadshow/photos';
+import { buildDeck, redrawDeck } from '../roadshow/deck';
+import { roadshowView, deckFile, photoFile } from '../roadshow/view';
 import { growIdea } from '../ai/grow';
 import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
@@ -52,8 +56,8 @@ export function fileNameOf(header: unknown): string {
   try { decoded = decodeURIComponent(sent); } catch { /* not encoded */ }
   return path.basename(decoded.replace(/\\/g, '/'));
 }
-/** The files the design pack may show: the design, the approach, the plan and the kit. */
-const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv))$/;
+/** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
+const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv))$/;
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
@@ -182,6 +186,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     if (before?.idea && before.template === 'E2' && before.sentAt) {
       await unmarkAsked(root, before.idea, before.sentAt);
       await markToolAsked(root, before.idea, before.sentAt, false);
+      await markRoadshowAsked(root, before.idea, before.sentAt, false);
     }
     return out;
   });
@@ -345,6 +350,52 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     if (text === undefined) throw new Error(`${rel} is not written yet`);
     return { path: rel, text };
   });
+  // Launch and Learn: the roadshow. The to-do list, each person's photo, the deck the AI writes and the app draws.
+  add('GET', '/api/ideas/:id/roadshow', async ({ params }) => roadshowView(root, params.id));
+  // Suggest or Re-evaluate: what the story still needs from the team (the AI reads everything the idea holds).
+  add('POST', '/api/ideas/:id/roadshow/suggest', async ({ params }) => {
+    await byHand(() => suggestRoadshowPrep(root, params.id, (input) => ai.runWith(roadshowPrepTask, input), clock))();
+    return roadshowView(root, params.id);
+  });
+  // An answer pasted against the to-do list: saved there and on the idea at once (nothing to say yes to).
+  add('POST', '/api/ideas/:id/roadshow/prep/answer', async ({ params, body }) => {
+    await answerRoadshowNeed(root, params.id, String(body.need ?? ''), body.answer);
+    return roadshowView(root, params.id);
+  });
+  // Draft email: the open items as the questions email (E2), opened in Outlook and counted as sent.
+  add('POST', '/api/ideas/:id/roadshow/prep/email', async ({ params }) => {
+    const rec = await draftRoadshowNeedsEmail(root, params.id, clock);
+    const out = await inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
+    await markRoadshowAsked(root, params.id, out.email.sentAt ?? clock());
+    return out;
+  });
+  // A person's photo: from a path on this computer (checked, then copied into the idea folder), or from the file picker.
+  add('POST', '/api/ideas/:id/roadshow/photo', async ({ params, body }) => {
+    await setPhotoFromPath(root, params.id, String(body.person ?? ''), body.path, clock);
+    return roadshowView(root, params.id);
+  });
+  add('POST', '/api/ideas/:id/roadshow/photo-upload', async ({ params, raw, headers }) => {
+    const name = fileNameOf(headers['x-filename']);
+    await setPhotoFromUpload(root, params.id, String(headers['x-person'] ?? ''), name, new Uint8Array(raw), clock);
+    return roadshowView(root, params.id);
+  });
+  add('POST', '/api/ideas/:id/roadshow/photo/remove', async ({ params, body }) => {
+    await removePhoto(root, params.id, String(body.person ?? ''));
+    return roadshowView(root, params.id);
+  });
+  // Build the deck (AI): the slides and the script, checked, then deck.html, script.md, run-of-show.md and deck.pptx drawn.
+  add('POST', '/api/ideas/:id/roadshow/build', async ({ params }) => {
+    await byHand(() => buildDeck(root, params.id, (input) => ai.runWith(roadshowDeckTask, input), clock))();
+    return roadshowView(root, params.id);
+  });
+  // Draw the files again from the slides already written (new photos), with no AI.
+  add('POST', '/api/ideas/:id/roadshow/render', async ({ params }) => {
+    await redrawDeck(root, params.id, clock);
+    return roadshowView(root, params.id);
+  });
+  // The deck's files, to open in a tab (Present, the script) or download (the PowerPoint); and the photos' previews.
+  add('GET', '/api/ideas/:id/roadshow/files/:name', async ({ params, query }) => deckFile(root, params.id, params.name, query?.download === '1'));
+  add('GET', '/api/ideas/:id/roadshow/photos/:file', async ({ params }) => photoFile(root, params.id, params.file));
   // Show the idea's folder (where those files are) in Finder or File Explorer.
   add('POST', '/api/ideas/:id/open-folder', async ({ params }) => { const dir = await ideaDir(root, params.id); await openFolder(dir); return { folder: `data/${dataKey(root, dir)}` }; });
   // Import. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.

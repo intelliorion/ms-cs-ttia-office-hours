@@ -34,8 +34,22 @@ export function mergeNeeds(
   prev: PrepNeed[], out: { need: string; ask: string; met: boolean; answer?: string }[], note: (s: string) => string = (s) => s,
 ): PrepNeed[] {
   let n = Math.max(0, ...prev.map((p) => Number(/^n(\d+)$/.exec(p.id)?.[1] ?? 0)));
-  return out.map((o) => {
-    const p = prev.find((x) => sameNeed(x, o));
+  // Each earlier item is kept by one item only: the same words first, then the same question in other words. A new item
+  // whose question merely looks like a kept one gets an id of its own (two items never share one).
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const match = new Map<number, PrepNeed>();
+  const used = new Set<string>();
+  out.forEach((o, i) => {
+    const p = prev.find((x) => !used.has(x.id) && (same(x.need, o.need) || same(x.ask, o.ask)));
+    if (p) { match.set(i, p); used.add(p.id); }
+  });
+  out.forEach((o, i) => {
+    if (match.has(i)) return;
+    const p = prev.find((x) => !used.has(x.id) && sameNeed(x, o));
+    if (p) { match.set(i, p); used.add(p.id); }
+  });
+  return out.map((o, i) => {
+    const p = match.get(i);
     const said = o.met && o.answer?.trim() ? note(o.answer) : undefined;
     return {
       id: p?.id ?? `n${++n}`, need: o.need, ask: o.ask, met: o.met,

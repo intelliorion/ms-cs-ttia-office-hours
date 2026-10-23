@@ -133,6 +133,14 @@ function answerRules(key: string | string[]): string[] {
     'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
     'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
     'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
+    ...learnedRules(key),
+  ];
+}
+
+/** The brief part of answerRules alone: what the answers add to the submission, one point per topic (the roadshow uses only this). */
+export function learnedRules(key: string | string[]): string[] {
+  const at = (Array.isArray(key) ? key : [key]).map((k) => `DATA.${k}`).join(' and ');
+  return [
     `learned: what ${at} add to the submission, written as a short brief for someone reading the idea, not the answers as given.`,
     'One point per topic (such as Builder, Team, Data, Systems, Scope, What was tried, Existing tools), each a topic of one or two words',
     'and one or two clear sentences. Merge answers on the same topic, drop repeats, and when answers disagree the later one wins.',
@@ -1063,6 +1071,237 @@ export const designPlanTask: Task<DesignPlanOutput> = {
     ], DESIGN_PLAN_SCHEMA, designPlanData(i), 'an approved Café design: the idea, its summary, its features and tools, and the design answers');
   },
   parse: parseDesignPlan,
+};
+
+/* ---------- Launch and Learn: the roadshow's to-do list and its deck ---------- */
+
+/** Everything the idea holds, for the roadshow (names coded): the story so far, from the form to the plan. */
+export interface RoadshowInput {
+  idea: IdeaText & { use_case_category?: string[]; support?: string[] };
+  form?: { function?: string; region?: string; participation?: string; maturity?: string; experimented?: string };
+  /** The people on the idea, as codes, with their roles ("submitter" for the one who sent the form). */
+  team: { code: string; roles: string[] }[];
+  /** The decision and its reason. */
+  decision?: { decision: string; label: string; reason: string; at?: string };
+  /** "Learned since the form": what the answers added. */
+  learned?: LearnedBrief[];
+  /** Every answer on the idea: the form's questions, the emails, the decision's, the tool's, the design's and the roadshow's. */
+  answers?: { question: string; answer: string; source?: string }[];
+  /** The features, with where the design put them ("built", "out of scope", "outside the build: <tool>"). */
+  features?: { name: string; what?: string; status: string }[];
+  /** The one tool, with its pros, cons and how it fits each feature. */
+  tool?: { tool: string; pathway?: string; reason?: string; pros: string[]; cons: string[]; fit: { feature: string; fit: string; note?: string }[] };
+  /** The design: its summary, the points it settled and the questions and answers. */
+  design?: { summary?: string; approved?: string; points: Record<string, string>; steps: { question: string; answer: string }[]; parts?: string[] };
+  /** The build plan (plan.md): the tasks (done or not) and the risks. */
+  plan?: { tasks: { title: string; done: boolean }[]; risks: string[] };
+  /** The dates so far (submitted, selected, design series, tool picked, design approved, Launch and Learn, the roadshow). */
+  dates: { what: string; date: string }[];
+  /** The roadshow: the round's name and date, when set. */
+  roadshow?: { name?: string; date?: string };
+  /** The visuals the app can draw for this idea (the deck may use only these). */
+  visuals: string[];
+  /** The roadshow to-do list from the last suggestion, so a re-evaluation keeps its items. Prep only. */
+  todo?: { need: string; ask: string }[];
+}
+export interface RoadshowPrepOutput { needs: ReviewNeed[]; learned: LearnedPoint[] }
+
+export const ROADSHOW_NEEDS_MAX = 10;
+export const ROADSHOW_PREP_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['needs', 'learned'],
+  properties: {
+    learned: LEARNED_SCHEMA,
+    needs: {
+      type: 'array', maxItems: ROADSHOW_NEEDS_MAX,
+      items: {
+        type: 'object', additionalProperties: false, required: ['need', 'ask', 'met'],
+        properties: {
+          need: { type: 'string', minLength: 1, maxLength: NEED_MAX },
+          ask: { type: 'string', minLength: 1, maxLength: ASK_MAX },
+          met: { type: 'boolean' },
+          answer: { type: 'string', maxLength: NEED_ANSWER_MAX },
+        },
+      },
+    },
+  },
+};
+
+const capList = (v: unknown, n: number, max: number) => (Array.isArray(v) ? v : []).slice(0, n).map((x) => cap(x, max));
+
+/** Only the fields the AI needs, capped: nothing else from the idea leaves the app. */
+function roadshowData(i: RoadshowInput) {
+  return {
+    idea: { ...ideaData(i.idea), ...(i.idea.use_case_category?.length ? { category: capList(i.idea.use_case_category, 6, 80) } : {}), ...(i.idea.support?.length ? { support: capList(i.idea.support, 8, 120) } : {}) },
+    ...(i.form ? { form: Object.fromEntries(Object.entries(i.form).filter(([, v]) => v).map(([k, v]) => [k, cap(v, 80)])) } : {}),
+    team: (i.team ?? []).slice(0, 12).map((p) => ({ code: cap(p.code, 8), roles: capList(p.roles, 5, 20) })),
+    ...(i.decision ? { decision: { decision: cap(i.decision.decision, 20), label: cap(i.decision.label, 60), reason: cap(i.decision.reason, 400), ...(i.decision.at ? { at: cap(i.decision.at, 20) } : {}) } } : {}),
+    ...learnedData(i.learned),
+    ...(i.answers?.length ? { answers: i.answers.slice(-30).map((a) => ({ question: cap(a.question, 220), answer: cap(a.answer, 600), ...(a.source ? { source: cap(a.source, 30) } : {}) })) } : {}),
+    ...(i.features?.length ? { features: i.features.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), status: cap(f.status, 80) })) } : {}),
+    ...(i.tool ? {
+      tool: {
+        tool: cap(i.tool.tool, 40), ...(i.tool.pathway ? { pathway: cap(i.tool.pathway, 60) } : {}), ...(i.tool.reason ? { reason: cap(i.tool.reason, 200) } : {}),
+        pros: capList(i.tool.pros, 5, 200), cons: capList(i.tool.cons, 5, 200),
+        fit: (i.tool.fit ?? []).slice(0, FEATURES_MAX).map((f) => ({ feature: cap(f.feature, 60), fit: cap(f.fit, 10), ...(f.note ? { note: cap(f.note, 200) } : {}) })),
+      },
+    } : {}),
+    ...(i.design ? {
+      design: {
+        ...(i.design.summary ? { summary: cap(i.design.summary, 600) } : {}), ...(i.design.approved ? { approved: cap(i.design.approved, 20) } : {}),
+        points: Object.fromEntries(Object.entries(i.design.points ?? {}).slice(0, 10).map(([k, v]) => [cap(k, 20), cap(v, POINT_MAX)])),
+        steps: (i.design.steps ?? []).slice(0, 20).map((s) => ({ question: cap(s.question, 200), answer: cap(s.answer, 600) })),
+        ...(i.design.parts?.length ? { parts: capList(i.design.parts, NODES_MAX, 80) } : {}),
+      },
+    } : {}),
+    ...(i.plan ? { plan: { tasks: (i.plan.tasks ?? []).slice(0, 12).map((t) => ({ title: cap(t.title, 80), done: Boolean(t.done) })), risks: capList(i.plan.risks, 5, 160) } } : {}),
+    dates: (i.dates ?? []).slice(0, 12).map((d) => ({ what: cap(d.what, 40), date: cap(d.date, 20) })),
+    ...(i.roadshow ? { roadshow: Object.fromEntries(Object.entries(i.roadshow).filter(([, v]) => v).map(([k, v]) => [k, cap(v, 60)])) } : {}),
+    visuals: capList(i.visuals, 6, 20),
+    ...(i.todo?.length ? { todo: i.todo.slice(0, ROADSHOW_NEEDS_MAX).map((t) => ({ need: cap(t.need, NEED_MAX), ask: cap(t.ask, ASK_MAX) })) } : {}),
+  };
+}
+
+/** The ten-minute structure (the E10 email's), the deck's backbone. */
+export const ROADSHOW_STRUCTURE = [
+  'the problem, in one sentence, the way the people who have it would say it',
+  'what it replaces, shown: the old mailbox or spreadsheet',
+  'the demo, on realistic but non-sensitive data',
+  'what it took: which tool, which pathway, how long, what was hard',
+  'what someone else would need to reuse it: licences, access, a builder, a data source',
+  'one question for the room',
+] as const;
+
+const CAFE_STORY_RULES = [
+  "Café rules: the Café proves an idea works, not what it is worth. Never claim or ask about value, return on investment, savings, costs, benefits or KPIs, and never put a figure in that DATA does not hold.",
+  'A proof of concept runs on synthetic, aggregated or sample data: never ask for, or name, personal, client or third-party data.',
+  'People appear as codes such as [P1]: write a person as their code alone; never ask for a name.',
+];
+
+export const roadshowPrepTask: Task<RoadshowPrepOutput> = {
+  name: 'roadshow-prep',
+  schema: ROADSHOW_PREP_SCHEMA,
+  prompt(input) {
+    const data = roadshowData(input as RoadshowInput);
+    return build('roadshow-prep', [
+      "The team behind this Creators' Café idea presents it at a Launch and Learn roadshow: about ten minutes, with a demo. Before the deck is written, list what the story still needs from the team, as a to-do list.",
+      `The deck follows this structure: ${ROADSHOW_STRUCTURE.map((s, k) => `${k + 1}. ${s}`).join('; ')}. It also shows the team, the design, the headaches and the lessons, and the next steps.`,
+      'Read all of DATA first: the form, the decision, the brief of what was learned, every answer (from emails, the decision, the tool, the design and earlier roadshow answers), the features, the tool, the design, the plan and the dates.',
+      'Typical gaps: what was hard (the headaches), what surprised them, what they would do differently, the demo link or how the demo runs, what it replaces shown before and after, how long it took, what someone else needs to reuse it, and the one question they want the room to answer.',
+      'Only ask what DATA does not already hold: an item DATA covers is met (with answer: what covered it, in a few words). Never ask the same thing twice in other words.',
+      `Each item: need (what is needed, a few words, at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters), met, and answer when met.`,
+      `Keep every item in DATA.todo, in the same words, in the same order, marking each met or not; then add new open items only for real gaps, at most 8 open in all and ${ROADSHOW_NEEDS_MAX} items in all.`,
+      ...CAFE_STORY_RULES,
+      ...learnedRules('answers'),
+      ...(data.learned ? ['learned: the whole brief again, not only what is new: keep each point of DATA.learned (change it where a later answer says otherwise) and add what the answers add.'] : []),
+    ], ROADSHOW_PREP_SCHEMA, data, "a Café idea's whole record: the form, the decision, the answers, the tool, the design and the plan");
+  },
+  parse: (raw) => parseChecked<RoadshowPrepOutput>(raw, ROADSHOW_PREP_SCHEMA, (v) => {
+    const o = asObj(v); if (!o) return;
+    trimAnswerParts(o);
+    if (Array.isArray(o.needs)) for (const n of o.needs) {
+      const x = asObj(n); if (!x) continue;
+      x.need = trimStrings(oneLine(x.need), NEED_MAX); x.ask = trimStrings(oneLine(x.ask), ASK_MAX);
+      if (x.answer !== undefined) x.answer = trimStrings(oneLine(x.answer), NEED_ANSWER_MAX);
+    }
+  }),
+};
+
+export const DECK_KINDS = ['title', 'problem', 'today', 'team', 'solution', 'demo', 'diagram', 'tool', 'headaches', 'lessons', 'reuse', 'next', 'question', 'thanks'] as const;
+export type DeckKind = (typeof DECK_KINDS)[number];
+export const DECK_VISUALS = ['diagram', 'before-after', 'timeline', 'team', 'fit-table'] as const;
+export type DeckVisual = (typeof DECK_VISUALS)[number];
+export const DECK_SLIDES_MIN = 6;
+export const DECK_SLIDES_MAX = 16;
+export const DECK_POINTS_MAX = 6;
+export const DECK_POINT_MAX = 160;
+export const DECK_NOTES_MAX = 1400;
+export const DECK_TITLE_MAX = 90;
+
+export interface DeckSlide {
+  kind: DeckKind;
+  title: string;
+  points: string[];
+  quote?: string;
+  visual?: DeckVisual;
+  /** Before-after only: how it is done today, and with the proof of concept. */
+  before?: string[];
+  after?: string[];
+  /** The speaker script for this slide, in the presenter's voice. */
+  notes: string;
+  minutes: number;
+}
+export interface DeckSpec { title: string; subtitle: string; slides: DeckSlide[] }
+
+const DECK_LINES: JsonSchema = { type: 'array', maxItems: DECK_POINTS_MAX, items: { type: 'string', minLength: 1, maxLength: DECK_POINT_MAX } };
+export const ROADSHOW_DECK_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['title', 'subtitle', 'slides'],
+  properties: {
+    title: { type: 'string', minLength: 1, maxLength: DECK_TITLE_MAX },
+    subtitle: { type: 'string', maxLength: 160 },
+    slides: {
+      type: 'array', minItems: DECK_SLIDES_MIN, maxItems: DECK_SLIDES_MAX,
+      items: {
+        type: 'object', additionalProperties: false, required: ['kind', 'title', 'points', 'notes', 'minutes'],
+        properties: {
+          kind: { type: 'string', enum: DECK_KINDS },
+          title: { type: 'string', minLength: 1, maxLength: DECK_TITLE_MAX },
+          points: DECK_LINES,
+          quote: { type: 'string', maxLength: 240 },
+          visual: { type: 'string', enum: DECK_VISUALS },
+          before: DECK_LINES,
+          after: DECK_LINES,
+          notes: { type: 'string', minLength: 1, maxLength: DECK_NOTES_MAX },
+          minutes: { type: 'number', minimum: 0.1, maximum: 5 },
+        },
+      },
+    },
+  },
+};
+
+function trimDeck(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  o.title = trimStrings(oneLine(o.title), DECK_TITLE_MAX);
+  o.subtitle = trimStrings(oneLine(o.subtitle), 160);
+  if (!Array.isArray(o.slides)) return;
+  for (const sl of o.slides) {
+    const x = asObj(sl);
+    if (!x) continue;
+    x.title = trimStrings(oneLine(x.title), DECK_TITLE_MAX);
+    if (Object.hasOwn(x, 'quote')) x.quote = trimStrings(oneLine(x.quote), 240);
+    for (const k of ['points', 'before', 'after']) {
+      if (Array.isArray(x[k])) x[k] = (x[k] as unknown[]).map((p) => trimStrings(oneLine(p), DECK_POINT_MAX)).filter((p) => p !== '').slice(0, DECK_POINTS_MAX);
+    }
+    // The script keeps its paragraphs; only runs of spaces within a line are tidied.
+    if (typeof x.notes === 'string') x.notes = trimStrings(x.notes.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim(), DECK_NOTES_MAX);
+  }
+}
+
+export const roadshowDeckTask: Task<DeckSpec> = {
+  name: 'roadshow-deck',
+  schema: ROADSHOW_DECK_SCHEMA,
+  // A whole deck with its script is a long reply.
+  timeoutMs: 300_000,
+  prompt(input) {
+    const data = roadshowData(input as RoadshowInput);
+    return build('roadshow-deck', [
+      "Write the slides and the speaker script for a Creators' Café Launch and Learn roadshow: the team presents this idea in about ten minutes, with a live demo. The app draws the slides from your reply; you write the words.",
+      'Give a comprehensive walk-through of the idea: the problem, how it is done today, the team, the solution, the design, the tool, the demo, the headaches, the lessons, what someone needs to reuse it, the next steps and one question for the room.',
+      `Follow the ten-minute structure the presenters were sent: ${ROADSHOW_STRUCTURE.map((s, k) => `${k + 1}. ${s}`).join('; ')}.`,
+      `Slides: ${DECK_SLIDES_MIN} to ${DECK_SLIDES_MAX}, about 10 to 14, in this order where DATA supports them: title, problem, today, team, solution, diagram, tool, demo, headaches, lessons, reuse, next, question, thanks. Leave out a slide DATA has nothing for (never pad).`,
+      `Each slide: kind (one of ${DECK_KINDS.join(', ')}), title (a short headline that says the point, at most ${DECK_TITLE_MAX} characters), points (0 to ${DECK_POINTS_MAX} short lines for the slide, at most ${DECK_POINT_MAX} characters each, plain words, no full stops needed), notes, minutes.`,
+      'quote: optional, one short line in the voice of the people who have the problem, only when DATA says it (never invent a quote).',
+      `visual: optional, one of DATA.visuals only: "team" on the team slide (the app draws each person with their photo, name and roles: do not list the people in points); "diagram" on the diagram slide (the app draws the design diagram); "fit-table" on the tool slide (the app draws how the tool fits each feature); "timeline" on a slide about how long it took (the app draws DATA.dates); "before-after" on the today or solution slide, with "before" (how it is done today) and "after" (with the proof of concept), each 2 to 5 short lines.`,
+      'notes: the speaker script for that slide, what the presenter says out loud, in their voice ("we", "our team"), plain and warm, in short spoken sentences. About 120 words for each minute. Add cues in square brackets where an action happens, such as "[click to the demo]" or "[switch to the demo]". The demo slide\'s notes walk through what to show, step by step, on the sample data.',
+      'minutes: how long the slide takes; all slides together about 10 (between 8 and 12). The demo gets the most time (about 3).',
+      'The headaches slide: what was hard, from the answers and the tool\'s cons, honestly. The lessons slide: what surprised them and what they would do differently. The reuse slide: licences, access, a builder, a data source. The next slide: the plan tasks not done yet and what happens after the roadshow.',
+      'The question slide asks the room ONE question, the one the team wants answered (from the answers if they gave one): its title IS that question, word for word; its points (0 to 2) only say what kind of answer helps.',
+      'Use only what DATA says. Where DATA says nothing about a point, leave it out rather than guess; never invent a system, a number, a date, a quote or a person.',
+      ...CAFE_STORY_RULES,
+      'title and subtitle: the deck\'s title (the idea, said as what it does) and a subtitle (who presents it and where, from DATA.roadshow when given).',
+    ], ROADSHOW_DECK_SCHEMA, data, "a Café idea's whole record: the form, the team, the decision, the answers, the tool, the design, the plan and the dates");
+  },
+  parse: (raw) => parseChecked<DeckSpec>(raw, ROADSHOW_DECK_SCHEMA, trimDeck),
 };
 
 /* ---------- Import: pictures and scanned PDFs ---------- */

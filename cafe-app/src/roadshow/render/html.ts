@@ -35,6 +35,19 @@ export function notesHtml(notes: string): string {
 export const DECK_TEXT = { node: 20, lane: 17, edge: 15 };
 /** The area the full-bleed diagram has on a 1280 × 720 slide, under the kicker and the title. */
 export const DECK_DIAGRAM_AREA = { w: 1176, h: 540 };
+/** The design diagram's styles (the deck's diagram slide and the standalone design-diagram.html share them). */
+export const DIAGRAM_CSS = `.diagram{width:100%;height:100%}
+.diagram .ln rect{fill:color-mix(in srgb,var(--text) 3%,transparent);stroke:var(--line)}.diagram .ln.alt rect{fill:color-mix(in srgb,var(--text) 5%,transparent)}
+.diagram .ln .tab{fill:color-mix(in srgb,var(--accent) 10%,transparent);stroke:none}
+.diagram .lk{font:700 11px var(--head);letter-spacing:.12em;fill:var(--accent)}.diagram .lt{font:600 13px var(--body);fill:var(--text)}
+.diagram .ed path{fill:none;stroke:var(--muted);stroke-width:1.8}.diagram .ed.back path{stroke-dasharray:5 5}
+.diagram marker path{fill:var(--muted)}
+.diagram .ed rect{fill:var(--slide);stroke:var(--line)}.diagram .ed text{font:600 11px var(--body);fill:var(--muted)}
+.diagram .nd>rect:first-child{fill:var(--card);stroke:var(--line);stroke-width:1.5}
+.diagram .nd .bar{fill:var(--k-step)}.diagram .nd .nk{font:700 10px var(--head);letter-spacing:.1em;fill:var(--muted)}.diagram .nd .nt{font:600 13.5px var(--body);fill:var(--text)}
+.diagram.big .nd .nt{font-size:${DECK_TEXT.node}px}.diagram.big .lk{font-size:14px}.diagram.big .lt{font-size:${DECK_TEXT.lane}px}.diagram.big .ed text{font-size:${DECK_TEXT.edge}px}.diagram.big .ed path{stroke-width:2.2}
+${(['input', 'store', 'step', 'output', 'person', 'gap'] as const).map((k) => `.diagram .k-${k} .bar{fill:var(--k-${k})}.diagram .k-${k}>rect:first-child{stroke:color-mix(in srgb,var(--k-${k}) 45%,var(--line))}`).join('')}`;
+
 
 /**
  * The design diagram as SVG, laid out as the design pack lays it out. `big` is the deck's full-slide drawing: the
@@ -194,17 +207,7 @@ blockquote{margin:28px 0 0;padding:16px 0 16px 28px;border-left:5px solid var(--
 .dia{flex:1;min-height:0;background:var(--soft);border-radius:16px;padding:10px;display:flex}
 .slide.bleed{padding:40px 40px 50px 52px}.bleed .kicker{margin-bottom:8px}.bleed h2{font-size:30px;line-height:1.15;margin-bottom:12px;max-width:none}
 .dia.full{padding:6px;border-radius:14px}
-.diagram{width:100%;height:100%}
-.diagram .ln rect{fill:color-mix(in srgb,var(--text) 3%,transparent);stroke:var(--line)}.diagram .ln.alt rect{fill:color-mix(in srgb,var(--text) 5%,transparent)}
-.diagram .ln .tab{fill:color-mix(in srgb,var(--accent) 10%,transparent);stroke:none}
-.diagram .lk{font:700 11px var(--head);letter-spacing:.12em;fill:var(--accent)}.diagram .lt{font:600 13px var(--body);fill:var(--text)}
-.diagram .ed path{fill:none;stroke:var(--muted);stroke-width:1.8}.diagram .ed.back path{stroke-dasharray:5 5}
-.diagram marker path{fill:var(--muted)}
-.diagram .ed rect{fill:var(--slide);stroke:var(--line)}.diagram .ed text{font:600 11px var(--body);fill:var(--muted)}
-.diagram .nd>rect:first-child{fill:var(--card);stroke:var(--line);stroke-width:1.5}
-.diagram .nd .bar{fill:var(--k-step)}.diagram .nd .nk{font:700 10px var(--head);letter-spacing:.1em;fill:var(--muted)}.diagram .nd .nt{font:600 13.5px var(--body);fill:var(--text)}
-.diagram.big .nd .nt{font-size:${DECK_TEXT.node}px}.diagram.big .lk{font-size:14px}.diagram.big .lt{font-size:${DECK_TEXT.lane}px}.diagram.big .ed text{font-size:${DECK_TEXT.edge}px}.diagram.big .ed path{stroke-width:2.2}
-${(['input', 'store', 'step', 'output', 'person', 'gap'] as const).map((k) => `.diagram .k-${k} .bar{fill:var(--k-${k})}.diagram .k-${k}>rect:first-child{stroke:color-mix(in srgb,var(--k-${k}) 45%,var(--line))}`).join('')}
+${DIAGRAM_CSS}
 .fit{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card)}
 .fit{max-height:470px}.fit-h{display:flex;gap:14px;align-items:baseline;padding:12px 18px;background:var(--soft);font-size:22px}.fit-h span{color:var(--muted);font-size:17px}
 .fit table{width:100%;border-collapse:collapse;font-size:15px;line-height:1.3}.fit th{text-align:left;color:var(--muted);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px}

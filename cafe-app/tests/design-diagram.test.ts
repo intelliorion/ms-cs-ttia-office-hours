@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { startServer, sampleIdea } from './helpers';
 import { saveIdea } from '../src/ideas/store';
@@ -118,6 +119,16 @@ describe('drawn when the design completes, and on Redraw', () => {
     await writeDesign(s.root, ID, { ...st, diagram: undefined });
     const again = await json(await s.post(`/api/ideas/${ID}/design/diagram`));
     expect(again.state.diagram.by).toBe('ai');
+    // The diagram is a file too, beside design.md, and opens as a page.
+    const { readFile } = await import('node:fs/promises');
+    const { ideaDir } = await import('../src/ideas/store');
+    const html = await readFile(path.join(await ideaDir(s.root, ID), 'design-diagram.html'), 'utf8');
+    expect(html).toContain('<svg class="diagram"');
+    expect(html).toContain('Request intake form');
+    const page = await fetch(`${s.base}/api/ideas/${ID}/design/view/design-diagram.html`);
+    expect(page.headers.get('content-type')).toMatch(/text\/html/);
+    expect(await page.text()).toBe(html);
+    expect((await fetch(`${s.base}/api/ideas/${ID}/design/view/idea.yaml`)).status).toBe(400);
   });
 
   it('an AI that cannot draw leaves the design done with no diagram; Redraw says so', async () => {
@@ -129,7 +140,7 @@ describe('drawn when the design completes, and on Redraw', () => {
     expect(done.state.diagram).toBeUndefined();
     // It says so, rather than failing quietly: in the reply and in the idea's history.
     expect(done.diagramError).toBeTruthy();
-    const history = await (await fetch(`${s.base}/api/ideas/${ID}/history`)).json();
+    const history = await (await fetch(`${s.base}/api/ideas/${ID}/history`)).json() as any[];
     expect(history.some((h: any) => /Diagram not drawn/.test(h.detail ?? ''))).toBe(true);
     const r = await s.post(`/api/ideas/${ID}/design/diagram`);
     expect(r.status).toBe(400);

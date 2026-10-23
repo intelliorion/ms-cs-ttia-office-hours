@@ -5,7 +5,7 @@ import { NO_AI_TIP } from './aiUi';
 import { DesignDiagram } from './DesignDiagram';
 import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
-import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows } from './designPack';
+import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, opensInTab, diagramUrl } from './designPack';
 import { RecipeFlowDiagram } from './RecipeFlowDiagram';
 import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
 import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
@@ -36,7 +36,7 @@ export function DesignPackPopout({ id }: { id: string }) {
   const tool: any = s?.tool;
   const main = kitSlug(tool?.tool);
   // The design's files only: the roadshow has its own section in Launch and Learn, with Present, the script and the exports.
-  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main);
+  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main, Boolean(s?.diagram));
   // The Dataiku kit's recipe flow, drawn here from its flow.json (checked again, as the server checked it).
   const hasFlow = (plan?.files ?? []).includes(FLOW_JSON);
   const featureNames = features.map((f) => String(f.name)).join('\n');
@@ -171,16 +171,17 @@ export function DesignPackPopout({ id }: { id: string }) {
             <ul className="dp-files">
               {files.map((f) => {
                 const n = fileNote(f, main);
-                const drawn = f === FLOW_HTML && flow;
                 return (
                   <li key={f} data-file={f}>
                     <div className="dp-file-h">
                       <span className="dp-file-t">{n.title}</span>
                       <code>{f}</code>
-                      <button className="link-btn" data-action="view-file" onClick={() => void view(f)}>{open[f] !== undefined ? 'Hide' : 'Read it'}</button>
+                      {opensInTab(f)
+                        ? <button className="link-btn" data-action="open-file" onClick={() => window.open(diagramUrl(id, f), '_blank', 'noopener')}>Open</button>
+                        : <button className="link-btn" data-action="view-file" onClick={() => void view(f)}>{open[f] !== undefined ? 'Hide' : 'Read it'}</button>}
                     </div>
                     {n.use && <div className="dp-file-u">{n.use}</div>}
-                    {open[f] !== undefined && (drawn ? <RecipeFlowDiagram flow={flow} /> : <pre className="dp-file-text">{open[f]}</pre>)}
+                    {open[f] !== undefined && <pre className="dp-file-text">{open[f]}</pre>}
                   </li>
                 );
               })}

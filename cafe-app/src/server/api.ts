@@ -35,6 +35,7 @@ import { extractInput, planAiLinks } from '../ai/apply';
 import { suggestRoadshowPrep, answerRoadshowNeed, draftRoadshowNeedsEmail, markRoadshowAsked } from '../roadshow/prep';
 import { setPhotoFromPath, setPhotoFromUpload, removePhoto } from '../roadshow/photos';
 import { buildDeck, redrawDeck } from '../roadshow/deck';
+import { diagramReply } from '../design/diagramFile';
 import { roadshowView, deckFile, photoFile } from '../roadshow/view';
 import { growIdea } from '../ai/grow';
 import { reviewInput } from '../review/suggestInput';
@@ -58,7 +59,7 @@ export function fileNameOf(header: unknown): string {
   return path.basename(decoded.replace(/\\/g, '/'));
 }
 /** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
-const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html))$/;
+const DESIGN_FILE = /^(design\.md|design-diagram\.html|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html))$/;
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
@@ -421,6 +422,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // The deck's files, to open in a tab (Present, the script) or download (the PowerPoint); and the photos' previews.
   add('GET', '/api/ideas/:id/roadshow/files/:name', async ({ params, query }) => deckFile(root, params.id, params.name, query?.download === '1'));
   add('GET', '/api/ideas/:id/roadshow/photos/:file', async ({ params }) => photoFile(root, params.id, params.file));
+  // The design pack's two diagrams, opened in a browser tab: the design diagram and the Dataiku recipe flow.
+  add('GET', '/api/ideas/:id/design/view/:name', async ({ params }) => diagramReply(root, params.id, params.name, (await loadIdea(root, params.id)).title));
   // Show the idea's folder (where those files are) in Finder or File Explorer.
   add('POST', '/api/ideas/:id/open-folder', async ({ params }) => { const dir = await ideaDir(root, params.id); await openFolder(dir); return { folder: `data/${dataKey(root, dir)}` }; });
   // Import. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.

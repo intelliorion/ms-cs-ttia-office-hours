@@ -16,12 +16,19 @@ const KIT_FILES: Record<string, string> = {
   'flow.md': "Each Dataiku recipe's actual steps, in flow order, from uploading the sample to the dashboard.",
   'datasets.md': 'The input and output datasets and their schemas: set the types when you upload.',
   'rules.csv': 'The rules sheet template: fill it in and upload it as its own dataset.',
-  'flow-diagram.html': 'The recipe flow as Dataiku draws it: datasets, recipes, outputs. It opens in any browser; Read it shows it here.',
+  'flow-diagram.html': 'The recipe flow as Dataiku draws it: datasets, recipes, outputs. Open shows it in a new tab, to share or print.',
   'flow.json': 'The recipe flow as data: what the diagram is drawn from.',
   'BUILD-WITH-AGENT.md': 'The instruction to paste into Claude Code or GitHub Copilot: the agent builds the proof of concept inside this folder, on the sample.',
 };
 /** A kit for a tool the design uses outside the build. */
 const OUTSIDE_README = 'A short kit for a tool the design uses for its gaps, outside the main build: what it covers, what to set up and how to test it.';
+/** The design diagram, written beside design.md whenever the AI draws it. */
+export const DIAGRAM_FILE = 'design-diagram.html';
+/** A file the pack opens in a new tab (a page to look at), not one it shows as text. */
+export const opensInTab = (path: string) => path.endsWith('.html');
+/** Where a diagram page is opened from. */
+export const diagramUrl = (id: string, path: string) => `/api/ideas/${encodeURIComponent(id)}/design/view/${path.split('/').pop()}`;
+
 /** The kit's files in the order of work. */
 const KIT_ORDER = ['README.md', 'sample-data.csv', 'instructions.md', 'knowledge.md', 'skills.md', 'prompts.md', 'data-model.md', 'screens.md', 'flows.md',
   'datasets.md', 'rules.csv', 'flow.md', 'flow-diagram.html', 'flow.json', 'BUILD-WITH-AGENT.md', 'test-checklist.md'];
@@ -32,6 +39,7 @@ export const kitSlug = (tool: string | undefined) => (tool ?? '').toLowerCase().
 /** What a file in the pack is and how to use it, by its path in the idea folder. `main` is the picked tool's kit folder. */
 export function fileNote(path: string, main?: string): { title: string; use: string } {
   if (path === 'design.md') return { title: 'The design', use: 'The proof of concept on one page: what it shows, with what input, for whom, built by whom, and how to build it. Share it with the team before the first session.' };
+  if (path === DIAGRAM_FILE) return { title: 'The design diagram', use: 'The design as a picture: who and what, lane by lane, with every part explained under it. Open shows it in a new tab, to share or print.' };
   if (path === 'approach.md') return { title: 'The tool and why', use: 'The tool picked, with its pros and cons and the facts it rests on. The builder starts here.' };
   if (path === 'plan.md') return { title: 'The build plan', use: 'The build tasks in order, each with its tool and when it is done, plus the risks. Work through it in the design sessions.' };
   const m = /^kit\/([^/]+)\/(.+)$/.exec(path);
@@ -65,7 +73,7 @@ export function pointRows(state: { steps?: any[]; settled?: Record<string, strin
  * The pack's files in reading order: the design, the tool, the plan, then the picked tool's kit (README first, then
  * the files in the order of work, the checklist last), then each outside tool's kit.
  */
-export function packFiles(planFiles: string[], hasApproach: boolean, main?: string): string[] {
+export function packFiles(planFiles: string[], hasApproach: boolean, main?: string, hasDiagram = false): string[] {
   const parts = (f: string) => { const [, folder = '', ...rest] = f.split('/'); return { folder, name: rest.join('/') }; };
   const rank = (name: string) => { const i = KIT_ORDER.indexOf(name); return i < 0 ? KIT_ORDER.length - 1.5 : i; };
   const kit = planFiles.filter((f) => f.startsWith('kit/')).sort((a, b) => {
@@ -73,7 +81,7 @@ export function packFiles(planFiles: string[], hasApproach: boolean, main?: stri
     if (x.folder !== y.folder) return x.folder === main ? -1 : y.folder === main ? 1 : x.folder.localeCompare(y.folder);
     return rank(x.name) - rank(y.name) || x.name.localeCompare(y.name);
   });
-  return ['design.md', ...(hasApproach ? ['approach.md'] : []), ...(planFiles.includes('plan.md') ? ['plan.md'] : []), ...kit];
+  return ['design.md', ...(hasDiagram ? [DIAGRAM_FILE] : []), ...(hasApproach ? ['approach.md'] : []), ...(planFiles.includes('plan.md') ? ['plan.md'] : []), ...kit];
 }
 
 /** Where the Dataiku kit keeps its recipe flow (drawn in the pack). */

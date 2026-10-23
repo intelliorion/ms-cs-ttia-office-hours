@@ -33,7 +33,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); el.remove(); });
 
 describe('the design pack', () => {
-  it('a Dataiku kit: the recipe flow drawn in the pack, and Read it on flow-diagram.html shows it too', async () => {
+  it('a Dataiku kit: the recipe flow drawn in the pack, and flow-diagram.html opens in a new tab', async () => {
     api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: state('Dataiku') }
       : what === 'plan' ? { files: ['plan.md', 'kit/dataiku/README.md', 'kit/dataiku/flow.json', 'kit/dataiku/flow-diagram.html', 'kit/power-automate/README.md'] } : { deck: null }));
     api.post.mockImplementation(async (_url: string, body: any) => (body?.path === 'kit/dataiku/flow.json' ? { path: body.path, text: JSON.stringify(FLOW) } : { path: body?.path, text: '<!doctype html>' }));
@@ -45,9 +45,11 @@ describe('the design pack', () => {
     const rows = [...el.querySelectorAll('.dp-files li')].map((li) => li.getAttribute('data-file'));
     expect(rows.slice(-4)).toEqual(['kit/dataiku/README.md', 'kit/dataiku/flow-diagram.html', 'kit/dataiku/flow.json', 'kit/power-automate/README.md']);
     expect(el.querySelector('[data-file="kit/power-automate/README.md"] .dp-file-t')!.textContent).toBe('Outside the build: power automate · README.md');
-    await act(async () => (el.querySelector('[data-file="kit/dataiku/flow-diagram.html"] [data-action="view-file"]') as HTMLButtonElement).click());
-    await flush();
-    expect(el.querySelector('[data-file="kit/dataiku/flow-diagram.html"] [data-testid="recipe-flow"]')).not.toBeNull();
+    const opened = vi.spyOn(window, 'open').mockImplementation(() => null);
+    expect(el.querySelector('[data-file="kit/dataiku/flow-diagram.html"] [data-action="view-file"]')).toBeNull();
+    await act(async () => (el.querySelector('[data-file="kit/dataiku/flow-diagram.html"] [data-action="open-file"]') as HTMLButtonElement).click());
+    expect(opened).toHaveBeenCalledWith(`/api/ideas/${ID}/design/view/flow-diagram.html`, '_blank', 'noopener');
+    opened.mockRestore();
   });
 
   it('an older record that chose UiPath says it is no longer approved; no flow without a Dataiku kit', async () => {

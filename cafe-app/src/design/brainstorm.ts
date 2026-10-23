@@ -22,6 +22,7 @@ import {
 import { toolFeatures } from './choice';
 import { reviewInput } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
+import { writeDiagramFile } from './diagramFile';
 
 /** Where design.md is the source of a background tick. */
 export const DESIGN_FILE = 'design.md';
@@ -286,6 +287,8 @@ export async function drawDiagram(
   const now = await readDesign(root, id);
   now.diagram = { spec, by: 'ai', at: clock(), provider, basis: basisOf(state) };
   await writeDesign(root, id, now);
+  // The diagram as a file too, beside design.md and approach.md.
+  await writeDiagramFile(root, id, idea.title);
   return now;
 }
 

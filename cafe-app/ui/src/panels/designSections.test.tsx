@@ -355,6 +355,19 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="review-card"]')!.textContent).toContain('No decision recorded');
   });
 
+  it('in Launch and Learn the decision, the tool and the design are shown without Edit; the plan can still be written again', async () => {
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design'
+      ? { state: designState({ summary: 'Done.', approvedAt: '2026-10-20' }), designMd: '# Design' } : { files: ['plan.md'] }));
+    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 4 }] } } as any);
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    for (const card of ['review-card', 'tools-card', 'design-card']) {
+      expect(el.querySelector(`[data-testid="${card}"]`)).toBeTruthy();
+      expect(el.querySelector(`[data-action="edit-${card}"]`)).toBeNull();
+    }
+    expect(el.querySelector('[data-action="edit-plan-card"]')).toBeTruthy();
+  });
+
   it('a closed idea shows cards without Edit links', async () => {
     useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 3, closed: { as: 'csic' } }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));

@@ -159,7 +159,10 @@ export function IdeaDetails({ id }: { id: string }) {
     }, () => `${where(t)}.`);
   const stageValue = idea.closed ? `close:${idea.closed.as}` : `stage:${idea.stage}`;
   const gates = sectionsFor(idea, design?.state, editing, plan);
-  const edit = (k: SectionKey) => (idea.closed ? undefined : () => setEditing((xs) => (xs.includes(k) ? xs : [...xs, k])));
+  // In Launch and Learn the decision, the features and tool and the design are settled: shown, not edited (nor once closed).
+  const LOCKED_IN_LAUNCH: SectionKey[] = ['review', 'tools', 'design'];
+  const edit = (k: SectionKey) => (idea.closed || (idea.stage === 4 && LOCKED_IN_LAUNCH.includes(k)) ? undefined
+    : () => setEditing((xs) => (xs.includes(k) ? xs : [...xs, k])));
   const mine = suggest && suggest.id === id ? suggest : null;
 
   return (

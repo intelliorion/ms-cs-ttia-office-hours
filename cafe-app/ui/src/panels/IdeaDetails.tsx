@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useStore } from '../state/store';
+import { useStore, useStageRing } from '../state/store';
 import { ideaGet, ideaPost, post } from '../api';
 import { NO_AI_TIP, providerName } from '../popouts/aiUi';
 import { ideaCardModel } from '../popouts/ideaHelpers';
@@ -21,6 +21,7 @@ import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
  */
 export function IdeaDetails({ id }: { id: string }) {
   const { state, graph, refresh, openPopout, backToList, notice, setNotice, suggest, setSuggest, ai } = useStore();
+  const ring = useStageRing();
   const [aiBusy, setAiBusy] = useState(false);
   const idea = state?.ideas.find((i: any) => i.id === id);
   const [busy, setBusy] = useState(false);
@@ -144,7 +145,7 @@ export function IdeaDetails({ id }: { id: string }) {
     );
   }
 
-  const m = ideaCardModel(idea, graph, state.outbox ?? []);
+  const m = ideaCardModel(idea, graph, state.outbox ?? [], ring);
   const where = (t: { stage?: number; closeAs?: string }) =>
     t.closeAs ? `Closed: ${state.closures[t.closeAs]}` : `Moved to ${state.stageNames[t.stage!]}`;
   // The suggestion goes away only once the move is saved; on failure it stays so the operator can try again.

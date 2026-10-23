@@ -181,7 +181,7 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
 
   return (
     <>
-      {palette.mech
+      {palette.workshop
         ? <Workshop floorY={-radius * 1.3} reach={radius * 4.5} />
         : palette.blueprint
         ? <DraftingTable floorY={-radius * 1.3} reach={radius * 4.5} />
@@ -202,10 +202,9 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
       />
       {/* Lite draws straight to the screen: no bloom passes, no multisampled buffers. */}
       {/* Bloom makes light glow, which only works on dark: Frost has none. */}
-      {!lite && !palette.frost && !palette.blueprint && (
+      {!lite && !palette.frost && !palette.blueprint && !palette.workshop && (
         <EffectComposer multisampling={4}>
-          {/* Mech: only the LEDs (well over the metal's brightness) glow. */}
-          <Bloom intensity={palette.mech ? 0.9 : 1.1} luminanceThreshold={palette.mech ? 0.85 : 0.2} luminanceSmoothing={0.25} mipmapBlur />
+          <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
         </EffectComposer>
       )}
     </>

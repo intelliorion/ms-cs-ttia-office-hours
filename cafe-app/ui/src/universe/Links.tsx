@@ -66,7 +66,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
           />
         );
       })}
-      {lite && !palette.frost && pulses.map((e) => (
+      {lite && !palette.frost && !palette.workshop && pulses.map((e) => (
         <Line
           key={`glow-${e.id}`}
           points={points.get(e.id)!}
@@ -80,7 +80,7 @@ export const Links = memo(function Links({ edges, pos, selectedId, lit = null, d
         />
       ))}
       {pulses.map((e) => (
-        <Pulse key={e.id} from={pos.get(selectedId === e.from ? e.from : e.to)!} to={pos.get(selectedId === e.from ? e.to : e.from)!} amber={!e.confirmed} frost={palette.frost} />
+        <Pulse key={e.id} from={pos.get(selectedId === e.from ? e.from : e.to)!} to={pos.get(selectedId === e.from ? e.to : e.from)!} amber={!e.confirmed} frost={palette.frost || !!palette.workshop} hot={palette.linkHot} />
       ))}
     </group>
   );
@@ -107,7 +107,7 @@ export function linkBatches(edges: GEdge[], points: Map<string, [Vec3, Vec3]>, s
   return [...m.values()];
 }
 
-function Pulse({ from, to, amber, frost = false }: { from: Vec3; to: Vec3; amber: boolean; frost?: boolean }) {
+function Pulse({ from, to, amber, frost = false, hot }: { from: Vec3; to: Vec3; amber: boolean; frost?: boolean; hot?: string }) {
   const ref = useRef<Sprite>(null);
   const [a, b] = useMemo(() => [new Vector3(...from), new Vector3(...to)], [from, to]);
   const offset = useMemo(() => Math.random(), []);
@@ -122,7 +122,7 @@ function Pulse({ from, to, amber, frost = false }: { from: Vec3; to: Vec3; amber
   return (
     <sprite ref={ref}>
       {/* A glow adds light, which shows on dark only; on Frost the bead is a soft pine (or gold) dot instead. */}
-      <spriteMaterial map={haloTexture()} color={frost ? (amber ? '#b8862b' : '#1f6f5c') : amber ? '#ffd29a' : '#c9fffa'}
+      <spriteMaterial map={haloTexture()} color={frost ? (amber ? '#b8862b' : hot ?? '#1f6f5c') : amber ? '#ffd29a' : '#c9fffa'}
         blending={frost ? NormalBlending : AdditiveBlending} transparent depthWrite={false} toneMapped={false} />
     </sprite>
   );

@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
-import { useStore, ideasByStage, supportCounts, functionRegion } from '../state/store';
-import { STAGE_RING } from '../universe/graphView';
+import { useStore, useStageRing, ideasByStage, supportCounts, functionRegion } from '../state/store';
 
 /**
  * The right panel's charts, drawn in the universe's own language: stages as glowing stars on one line, demand as
@@ -15,6 +14,7 @@ export const starRadius = (n: number) => (n <= 0 ? 6 : Math.min(26, 10 + 5 * Mat
 
 export function StageChart() {
   const state = useStore((s) => s.state);
+  const ring = useStageRing();
   const rows = useMemo(() => (state ? ideasByStage(state) : []), [state]);
   const W = 400; const H = 176; const y = 86;
   const xs = rows.map((_, i) => 40 + (i * (W - 80)) / Math.max(1, rows.length - 1));
@@ -22,7 +22,7 @@ export function StageChart() {
     <svg className="constellation" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Ideas by stage" data-testid="stage-chart">
       {xs.length > 1 && <line className="orbit" x1={xs[0]} y1={y} x2={xs[xs.length - 1]} y2={y} />}
       {rows.map(([name, count], i) => {
-        const c = STAGE_RING[STAGE_KEYS[i]] ?? STAGE_RING.closed;
+        const c = ring[STAGE_KEYS[i]] ?? ring.closed;
         const r = starRadius(count);
         return (
           <g key={name} className={`stage-star${count ? '' : ' empty'}`} style={{ ['--c' as string]: c }} data-stage={name} data-count={count}>

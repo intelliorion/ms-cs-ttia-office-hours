@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { getState, getGraph, getAiStatus, getInbox } from '../api';
 import type { AiStatus } from '../popouts/aiUi';
 import type { InboxView } from '../popouts/inboxHelpers';
-import { DEFAULT_LABELS, nextLabelMode, type LabelMode } from '../universe/graphView';
+import { DEFAULT_LABELS, nextLabelMode, paletteFor, type LabelMode } from '../universe/graphView';
 
 export type Popout =
   | null
@@ -18,16 +18,19 @@ export type Drawer = 'ideas' | 'charts' | null;
 /** Pill label for the Focus button. */
 export const focusLabel = (on: boolean) => (on ? 'Show panels' : 'Focus');
 /** The look: Default (the night sky) or Frost (a light winter morning). Remembered in this browser only. */
-export type Theme = 'default' | 'frost' | 'blueprint' | 'mech';
+export type Theme = 'default' | 'frost' | 'blueprint' | 'workshop';
 export const THEMES: { id: Theme; name: string; note: string }[] = [
   { id: 'default', name: 'Default', note: 'Night sky: glowing stars on dark' },
   { id: 'frost', name: 'Frost', note: 'Winter morning: baubles on light' },
   { id: 'blueprint', name: 'Blueprint', note: 'Drafting table: wireframes on blue' },
-  { id: 'mech', name: 'Mech', note: 'Robot workshop: steel and LEDs' },
+  { id: 'workshop', name: 'Workshop', note: 'Hardware store: gears, hammers, pegboard' },
 ];
 const THEME_KEY = 'cafe-theme';
+/** The stage colours for the theme in use (light themes need deeper ones). */
+export const useStageRing = (): Record<string, string> => paletteFor(useStore((s) => s.theme)).ring;
 export function readTheme(): Theme {
-  try { const t = localStorage.getItem(THEME_KEY); return t === 'frost' || t === 'blueprint' || t === 'mech' ? t : 'default'; } catch { return 'default'; }
+  try { const t = localStorage.getItem(THEME_KEY); // 'mech' was the robot theme Workshop replaced.
+    return t === 'frost' || t === 'blueprint' || t === 'workshop' ? t : t === 'mech' ? 'workshop' : 'default'; } catch { return 'default'; }
 }
 function writeTheme(t: Theme) { try { localStorage.setItem(THEME_KEY, t); } catch { /* storage unavailable */ } }
 const FOCUS_KEY = 'cafe-focus';

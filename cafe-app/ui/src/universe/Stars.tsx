@@ -4,6 +4,7 @@ import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
 import { BLUEPRINT_TINT, DIM, NIGHT, NODE_COLOURS, labelSpotVisible, type ScenePalette, labelsMayOverlap, wantsLabel, type LabelMode, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture, softHaloTexture } from './haloTexture';
+import { HAMMER, gearGeometry } from './workshopShapes';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
 
@@ -37,8 +38,8 @@ export const LITE_HALO_OPACITY = 0.55;
 /** Lite also puts a small white-hot glint on each star, standing in for the bright centre bloom gives in Full. */
 export const LITE_GLINT = 1.5;
 const WHITE = new Color('#ffffff');
-const STEEL = new Color('#9aa4ae');
-const X_AXIS = new Vector3(1, 0, 0);
+const Z_AXIS = new Vector3(0, 0, 1);
+const tmpR = new Quaternion(); const tmpZ = new Quaternion();
 /**
  * Lite labels move in whole pixels and only once a label has drifted a pixel or more: on software graphics
  * re-styling a few hundred labels every frame costs more than drawing the scene.
@@ -111,10 +112,13 @@ export const WIRE_FROM = 4.5;
 export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, palette = NIGHT, onSelect, onHover }: StarsProps) {
   const frost = palette.frost;
   const blueprint = !!palette.blueprint;
-  const mech = !!palette.mech;
-  /** Frost, Blueprint and Mech draw solid colour with no halo; the night sky lights its stars. */
-  const flat = frost || blueprint || mech;
-  const band = useRef<InstancedMesh>(null);
+  const workshop = !!palette.workshop;
+  /** Frost, Blueprint and Workshop draw solid colour with no halo; the night sky lights its stars. */
+  const flat = frost || blueprint || workshop;
+  const gearGeo = useMemo(() => (workshop ? gearGeometry() : null), [workshop]);
+  const hammerGeo = useMemo(() => (workshop ? { handle: HAMMER.handle(), head: HAMMER.head() } : null), [workshop]);
+  const handle = useRef<InstancedMesh>(null);
+  const head = useRef<InstancedMesh>(null);
   const cap = useRef<InstancedMesh>(null);
   const wire = useRef<InstancedMesh>(null);
   const bg = useMemo(() => new Color(palette.bg), [palette.bg]);
@@ -150,12 +154,6 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       hit.current!.setMatrixAt(i, dummy.matrix);
       halo.current!.setMatrixAt(i, dummy.matrix); halo.current!.setColorAt(i, base[i]);
       // Only the big stars (the division, teams) carry the drafting wireframe: on a small one the lines wash the colour out.
-      if (band.current) {
-        // Mech: the LED band lies flat round the sphere's middle.
-        dummy.position.set(...p); dummy.quaternion.setFromAxisAngle(X_AXIS, Math.PI / 2);
-        dummy.scale.setScalar(gone ? 0 : sizes[i]); dummy.updateMatrix(); band.current.setMatrixAt(i, dummy.matrix);
-        dummy.quaternion.identity();
-      }
       if (wire.current) { dummy.position.set(...p); dummy.scale.setScalar(gone || sizes[i] < WIRE_FROM ? 0 : sizes[i]); dummy.updateMatrix(); wire.current.setMatrixAt(i, dummy.matrix); }
       if (cap.current) {
         dummy.position.set(p[0], p[1] + sizes[i] * CAP.lift, p[2]);
@@ -165,12 +163,11 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
     });
     if (cap.current) { cap.current.instanceMatrix.needsUpdate = true; cap.current.computeBoundingSphere(); }
     if (wire.current) { wire.current.instanceMatrix.needsUpdate = true; wire.current.computeBoundingSphere(); }
-    if (band.current) { band.current.instanceMatrix.needsUpdate = true; band.current.computeBoundingSphere(); }
     for (const m of [core.current!, hit.current!, halo.current!]) {
       m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere();
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
-  }, [nodes, pos, sizes, base, hood, dim, frost, blueprint, mech]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodes, pos, sizes, base, hood, dim, frost, blueprint, workshop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(({ clock, camera }) => {
     const c = core.current, h = halo.current; if (!c || !h || !n) return; // no stars yet: nothing to light
@@ -184,11 +181,23 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
       b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId || picked?.has(id) ? 1.4 : 1) * twinkle;
       // Frost: a bauble doesn't glow; out of view it fades toward the snow, picked it catches the light.
-      if (mech) {
-        // Steel tinted by the kind; the LED band carries the kind's colour, bright enough to bloom, brighter when picked.
+      if (workshop) {
+        // A painted gear (a hammer for a tool) faces the camera and turns slowly, neighbours the other way.
         const hot = i === hoverIndex || id === selectedId || picked?.has(id);
-        c.setColorAt(i, tmpC.copy(base[i]).lerp(STEEL, 0.55).lerp(bg, lit ? 0 : 1 - dim));
-        band.current?.setColorAt(i, tmpC.copy(base[i]).multiplyScalar((lit ? 1 : dim) * (hot ? 2.4 : 1.5) * (0.92 + 0.08 * Math.sin(t * 2 + phases[i] * 6.283))));
+        const gone = hidden(id);
+        const isTool = nodes[i].type === 'Tool';
+        const p = pos.get(id)!;
+        tmpP.set(p[0], p[1], p[2]);
+        c.setColorAt(i, tmpC.copy(base[i]).lerp(bg, lit ? 0 : 1 - dim).lerp(WHITE, hot ? 0.2 : 0));
+        const spin = (i % 2 ? 1 : -1) * (t * 0.35 + phases[i] * 6.283);
+        tmpR.copy(tmpQ).multiply(tmpZ.setFromAxisAngle(Z_AXIS, isTool ? HAMMER.tilt : spin));
+        tmpS.setScalar(gone || isTool ? 0 : sizes[i] * (hot ? 2.75 : 2.5));
+        c.setMatrixAt(i, tmpM.compose(tmpP, tmpR, tmpS));
+        if (handle.current && head.current) {
+          tmpS.setScalar(gone || !isTool ? 0 : sizes[i] * (hot ? 2.8 : 2.5));
+          tmpM.compose(tmpP, tmpR, tmpS);
+          handle.current.setMatrixAt(i, tmpM); head.current.setMatrixAt(i, tmpM);
+        }
       } else if (flat) {
         const hot = i === hoverIndex || id === selectedId || picked?.has(id);
         c.setColorAt(i, tmpC.copy(base[i]).lerp(bg, lit ? 0 : 1 - dim).lerp(WHITE, hot ? 0.18 : 0));
@@ -197,7 +206,10 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
     const g = lite ? glint.current : null;
     writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g, hide: dim <= 0 });
     c.instanceColor!.needsUpdate = true; h.instanceColor!.needsUpdate = true; h.instanceMatrix.needsUpdate = true;
-    if (band.current?.instanceColor) band.current.instanceColor.needsUpdate = true;
+    if (workshop) {
+      c.instanceMatrix.needsUpdate = true;
+      if (handle.current && head.current) { handle.current.instanceMatrix.needsUpdate = true; head.current.instanceMatrix.needsUpdate = true; }
+    }
     if (g) { g.instanceColor!.needsUpdate = true; g.instanceMatrix.needsUpdate = true; }
     if (frame.current++ % 3 === 0) placeLabels(camera);
   });
@@ -245,22 +257,26 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
 
   return (
     <group ref={root}>
-      <instancedMesh key={`core-${n}`} ref={core} args={[undefined, undefined, n]} frustumCulled={false}>
-        <sphereGeometry args={blueprint ? [1, 12, 8] : lite ? [1, 16, 12] : [1, 24, 16]} />
-        {mech
-          ? <meshStandardMaterial key="steel" color="#ffffff" metalness={0.9} roughness={0.28} envMapIntensity={1.1} />
+      <instancedMesh key={`core-${n}-${workshop}`} ref={core} args={[gearGeo ?? undefined, undefined, n]} frustumCulled={false}>
+        {!workshop && <sphereGeometry args={blueprint ? [1, 12, 8] : lite ? [1, 16, 12] : [1, 24, 16]} />}
+        {workshop
+          ? <meshStandardMaterial key="painted" color="#ffffff" metalness={0.1} roughness={0.6} envMapIntensity={0.25} toneMapped={false} fog={false} />
           : blueprint
           ? <meshBasicMaterial key="draft" color="#ffffff" fog={false} toneMapped={false} />
           : frost
           ? <meshPhysicalMaterial key="bauble" color="#ffffff" metalness={0.3} roughness={0.2} clearcoat={1} clearcoatRoughness={0.06} envMapIntensity={1.15} />
           : <meshStandardMaterial key="star" color="#000000" emissive="#ffffff" emissiveIntensity={1.6} roughness={1} metalness={0} toneMapped={false} onUpdate={emissiveByInstance} />}
       </instancedMesh>
-      {/* Mech: a glowing LED band round each sphere's middle, in its kind's colour. */}
-      {mech && (
-        <instancedMesh key={`band-${n}`} ref={band} args={[undefined, undefined, n]} frustumCulled={false} raycast={() => null}>
-          <torusGeometry args={[1.04, 0.09, 6, 32]} />
-          <meshBasicMaterial color="#ffffff" toneMapped={false} />
-        </instancedMesh>
+      {/* Workshop: a tool is a hammer, a wooden handle and a steel head. */}
+      {workshop && hammerGeo && (
+        <>
+          <instancedMesh key={`handle-${n}`} ref={handle} args={[hammerGeo.handle, undefined, n]} frustumCulled={false} raycast={() => null}>
+            <meshStandardMaterial color="#a8743f" roughness={0.7} metalness={0} />
+          </instancedMesh>
+          <instancedMesh key={`head-${n}`} ref={head} args={[hammerGeo.head, undefined, n]} frustumCulled={false} raycast={() => null}>
+            <meshStandardMaterial color="#8e979f" roughness={0.3} metalness={0.85} envMapIntensity={1} />
+          </instancedMesh>
+        </>
       )}
       {/* Blueprint: a thin white drafting wireframe over each solid star. */}
       {blueprint && (

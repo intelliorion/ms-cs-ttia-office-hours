@@ -42,8 +42,8 @@ export interface ScenePalette {
   frost: boolean;
   /** Blueprint: wireframe stars on drafting blue, no glow. */
   blueprint?: boolean;
-  /** Mech: polished metal spheres with a glowing LED band, in a dark workshop. */
-  mech?: boolean;
+  /** Workshop: painted gears (tools are hammers) on pegboard, hardware-store orange. */
+  workshop?: boolean;
   bg: string;
   link: string;
   /** Links in view (a selection's, or between lit stars). */
@@ -64,12 +64,12 @@ export const BLUEPRINT: ScenePalette = {
 };
 /** Blueprint draws each kind in its full colour (no lightening): solid stars that stand out on the blue. */
 export const BLUEPRINT_TINT = 0;
-export const MECH: ScenePalette = {
-  frost: false, mech: true, bg: '#101317', link: '#3ee6ff', linkHot: '#ffb000', unconfirmed: '#ffb000', linkBoost: 1.15,
-  ring: { 2: '#ffb000', 3: '#3ee6ff', 4: '#78ff8c', closed: '#55606b' },
+export const WORKSHOP: ScenePalette = {
+  frost: false, workshop: true, bg: '#d8bf98', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', linkBoost: 2.2,
+  ring: { 2: '#f96302', 3: '#2e7d32', 4: '#1f4e8c', closed: '#8a7f73' },
 };
 export const paletteFor = (theme?: string): ScenePalette =>
-  (theme === 'frost' ? FROST : theme === 'blueprint' ? BLUEPRINT : theme === 'mech' ? MECH : NIGHT);
+  (theme === 'frost' ? FROST : theme === 'blueprint' ? BLUEPRINT : theme === 'workshop' ? WORKSHOP : NIGHT);
 
 /** The node itself plus its direct neighbours. */
 export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<string> {

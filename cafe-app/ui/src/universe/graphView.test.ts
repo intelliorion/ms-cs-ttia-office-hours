@@ -126,3 +126,21 @@ describe('theme palettes', () => {
     expect(paletteFor('unknown')).toBe(paletteFor('default'));
   });
 });
+
+describe('workshop shapes', () => {
+  it('a gear has its teeth, and its SVG path closes the outline and the hole', async () => {
+    const { gearOutline, gearPath, GEAR_TEETH } = await import('./workshopShapes');
+    const pts = gearOutline();
+    expect(pts).toHaveLength(GEAR_TEETH * 4);
+    expect(Math.max(...pts.map(([x, y]) => Math.hypot(x, y)))).toBeCloseTo(1);
+    const d = gearPath(100, 100, 10);
+    expect(d.match(/Z/g)).toHaveLength(2);
+    expect(d).not.toContain('NaN');
+  });
+  it("an old 'mech' choice now reads as Workshop", async () => {
+    localStorage.setItem('cafe-theme', 'mech');
+    const { readTheme } = await import('../state/store');
+    expect(readTheme()).toBe('workshop');
+    localStorage.removeItem('cafe-theme');
+  });
+});

@@ -4,6 +4,7 @@ import {
   DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelSpotVisible, labelsMayOverlap, neighbourhood, ringColour,
   paletteFor, spreadApart, starSize, wantsLabel, zoomAt, type Graph, type LabelMode, type Vec3,
 } from './graphView';
+import { GEAR_TEETH, gearPath } from './workshopShapes';
 
 interface Props {
   graph: Graph;
@@ -27,18 +28,15 @@ const boxFor = (w: number, h: number, focus: boolean) => (focus ? { x: 80, y: 90
 const PAD = 40;
 const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, Tool: 3, Capability: 4, System: 5, PainPoint: 6, Support: 6, Outcome: 6, Beneficiary: 6, Category: 6, Person: 7 };
 const radius = (n: Graph['nodes'][number], links: number) => starSize(n, links) * 3.2;
-/** A flat-topped hexagon's corners, for Mech's bolt-heads. */
-const hexPoints = (cx: number, cy: number, r: number) =>
-  Array.from({ length: 6 }, (_, k) => `${(cx + r * Math.cos((Math.PI / 3) * k)).toFixed(1)},${(cy + r * Math.sin((Math.PI / 3) * k)).toFixed(1)}`).join(' ');
 
 /** No WebGL (or Quality: Flat): the same graph drawn flat in SVG, dots pushed apart so none crowd; wheel zooms, drag pans. */
 export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, theme }: Props) {
   const pal = paletteFor(theme);
   const frost = pal.frost;
   const draft = !!pal.blueprint;
-  const mech = !!pal.mech;
+  const shop = !!pal.workshop;
   /** How far right of its dot a label starts, as a radius: Frost's baubles are bigger, and an idea's ring wider still. */
-  const labelGap = (n: Graph['nodes'][number], links: number) => radius(n, links) * (frost || draft || mech ? (n.type === 'Idea' ? 1.55 : 1.0) : 1);
+  const labelGap = (n: Graph['nodes'][number], links: number) => radius(n, links) * (frost || draft || shop ? (n.type === 'Idea' ? 1.55 : 1.0) : 1);
   const { w: stageW, h: stageH } = useStageSize();
   const BOX = boxFor(stageW, stageH, focus);
   const deg = useMemo(() => degrees(graph), [graph]);
@@ -133,7 +131,8 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
             <stop offset="0" stopColor="#ffffff" stopOpacity="0.95" /><stop offset="0.22" stopColor={c} /><stop offset="0.85" stopColor={c} /><stop offset="1" stopColor="#1b2a3a" stopOpacity="0.55" />
           </radialGradient>
         ))}
-        {mech && <linearGradient id="steel" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#d3dae1" /><stop offset="0.5" stopColor="#8a949e" /><stop offset="1" stopColor="#3b434b" /></linearGradient>}
+        {shop && <linearGradient id="steel" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#e3e8ec" /><stop offset="0.5" stopColor="#9aa3ab" /><stop offset="1" stopColor="#4d555c" /></linearGradient>}
+        {shop && <linearGradient id="wood" x1="0" x2="1"><stop offset="0" stopColor="#8a5a2b" /><stop offset="0.5" stopColor="#c08a52" /><stop offset="1" stopColor="#8a5a2b" /></linearGradient>}
         {frost && <linearGradient id="cap" x1="0" x2="1"><stop offset="0" stopColor="#8a6a26" /><stop offset="0.45" stopColor="#e6c873" /><stop offset="1" stopColor="#8a6a26" /></linearGradient>}
       </defs>
       <g>
@@ -141,7 +140,7 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
           const s = edgeStyle(e, litSet ? null : selectedId, litSet, dim);
           const hotLink = s.pulse || (!!litSet && litSet.has(e.from) && litSet.has(e.to));
-          const stroke = frost || draft || mech ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
+          const stroke = frost || draft || shop ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
           return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeOpacity={Math.min(1, (s.pulse ? 0.9 : s.opacity * 1.6) * (frost ? 1.5 : draft ? 1.3 : 1))} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>
@@ -158,13 +157,20 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
           <g key={n.id} opacity={o} style={{ cursor: 'pointer' }} data-id={n.id}
             onMouseEnter={() => onHover(n.id)} onMouseLeave={() => onHover(null)}
             onClick={(e) => { e.stopPropagation(); if (dragged.current) { dragged.current = false; return; } onSelect(n.id, e.ctrlKey || e.metaKey); }}>
-            {mech ? (
+            {shop ? (
               <>
-                {/* A steel hex bolt-head with an LED ring in the kind's colour; ideas get their stage ring outside. */}
-                {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={rb * 1.6} fill="none" stroke={ringColour(n, pal.ring)} strokeWidth={1.3} strokeDasharray="2 3" />}
-                <polygon points={hexPoints(p[0], p[1], rb * (hot ? 1.15 : 1))} fill="url(#steel)" stroke="#0b0d10" strokeWidth={1} />
-                <circle cx={p[0]} cy={p[1]} r={rb * 0.55} fill="none" stroke={NODE_COLOURS[n.type]} strokeWidth={5} opacity={0.3} />
-                <circle cx={p[0]} cy={p[1]} r={rb * 0.55} fill="#14181c" stroke={NODE_COLOURS[n.type]} strokeWidth={2} />
+                {/* A painted gear in the kind's colour, its centre hole showing the pegboard; a tool is a hammer.
+                    Ideas get their stage ring outside the teeth. */}
+                {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={rb * 1.6} fill="none" stroke={ringColour(n, pal.ring)} strokeWidth={2} />}
+                {n.type === 'Tool' ? (
+                  <g transform={`rotate(-26 ${p[0]} ${p[1]})`}>
+                    <rect x={p[0] - rb * 0.13} y={p[1] - rb * 0.45} width={rb * 0.26} height={rb * 1.55} rx={rb * 0.08} fill="url(#wood)" stroke="#4a3b2c" strokeWidth={0.8} />
+                    <rect x={p[0] - rb * 0.62} y={p[1] - rb * 0.95} width={rb * 1.3} height={rb * 0.5} rx={rb * 0.06} fill="url(#steel)" stroke="#2f343a" strokeWidth={0.8} />
+                  </g>
+                ) : (
+                  <path d={gearPath(p[0], p[1], rb * (hot ? 1.18 : 1.05), GEAR_TEETH, (deg.get(n.id) ?? 0) * 0.3)} fill={NODE_COLOURS[n.type]} fillRule="evenodd"
+                    stroke="#3a2f24" strokeWidth={hot ? 1.8 : 1} />
+                )}
               </>
             ) : draft ? (
               <>

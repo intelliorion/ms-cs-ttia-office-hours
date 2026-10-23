@@ -1,12 +1,12 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '../state/store';
+import { useStore, useStageRing } from '../state/store';
 import { useChat } from '../state/chat';
-import { STAGE_RING } from '../universe/graphView';
 import { filterIdeas, stageKey, emailChips } from './filterIdeas';
 
 /** The list stays mounted while an idea's details show (hidden), so its search, chips and scroll are kept for Back. */
 export function IdeasList({ hidden = false }: { hidden?: boolean }) {
   const { state, hover, openIdea, selectedId, selectedIds, clickStar, setHighlight } = useStore();
+  const ring = useStageRing();
   const picked = new Set(selectedIds);
   const listRef = useRef<HTMLUListElement>(null);
   const scrollTop = useRef(0);
@@ -31,7 +31,7 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
       <input className="search" type="search" placeholder="Search ID, title or function" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search ideas" />
       <div className="chips">
         {chips.map(([k, n]) => (
-          <button key={k} className={`chip${stages.includes(k) ? ' on' : ''}`} style={{ ['--c' as string]: STAGE_RING[k] }} aria-pressed={stages.includes(k)} onClick={() => toggle(k)}>{n}</button>
+          <button key={k} className={`chip${stages.includes(k) ? ' on' : ''}`} style={{ ['--c' as string]: ring[k] }} aria-pressed={stages.includes(k)} onClick={() => toggle(k)}>{n}</button>
         ))}
       </div>
       <div className="count">{shown.length} of {ideas.length} ideas</div>
@@ -54,7 +54,7 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
               <div className="r1" title={i.title}><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
               <div className="r2">
                 <span className="fr">{[i.function, i.region].filter(Boolean).join(' · ') || '—'}</span>
-                <span className="stg" style={{ ['--c' as string]: STAGE_RING[key] }}>{i.closed ? 'Closed' : state.stageNames[i.stage]}</span>
+                <span className="stg" style={{ ['--c' as string]: ring[key] }}>{i.closed ? 'Closed' : state.stageNames[i.stage]}</span>
               </div>
               {(mails.length > 0 || i.flags?.length > 0) && (
                 <div className="r3">

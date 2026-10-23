@@ -91,10 +91,10 @@ export const cafeIdOf = (nodeId: string | null | undefined) => (nodeId?.startsWi
 export interface IdeaCardModel { id: string; title: string; stageLabel: string; stageColour: string; where: string; emails: string[]; late: string | null; linkCount: number }
 
 /** What the floating card for a selected idea star shows. */
-export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[] } | null | undefined, outbox: any[] = []): IdeaCardModel {
+export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[] } | null | undefined, outbox: any[] = [], ring: Record<string, string> = STAGE_RING): IdeaCardModel {
   const node: any = graph?.nodes.find((n) => n.id === `idea:${idea.id}`);
   const stageLabel = idea.closed ? `Closed · ${idea.closed}` : String(node?.attrs?.stageLabel ?? '');
-  const stageColour = idea.closed ? STAGE_RING.closed : node ? ringColour(node as any) : STAGE_RING[stageKey(idea)] ?? STAGE_RING[2];
+  const stageColour = idea.closed ? ring.closed : node ? ringColour(node as any, ring) : ring[stageKey(idea)] ?? ring[2];
   const nodeId = `idea:${idea.id}`;
   return {
     id: idea.id,

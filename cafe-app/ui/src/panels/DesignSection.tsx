@@ -69,6 +69,13 @@ function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
   );
 }
 
+/** The design series' stage: Redesign is offered there only. */
+const DESIGN_STAGE = 3;
+export const REDESIGN_ASK = 'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay.';
+/** What the plan says after a Redesign, until it is written again from the new design. */
+export const planStaleText = (at: string, approved: boolean) => `The design was started again on ${at}: plan.md and the kits are out of date. ${approved
+  ? 'Write them again from the new design.' : 'Write them again once the new design is approved.'}`;
+
 /** Opens the design pack: everything the design series made, with each file and how to use it. */
 export function SeeDesign({ id }: { id: string }) {
   const openPopout = useStore((s) => s.openPopout);
@@ -119,6 +126,8 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   const openPopout = useStore((x) => x.openPopout);
   const [handQ, setHandQ] = useState<{ question: string; suggested: string } | null>(null);
   const [finish, setFinish] = useState<string | null>(null);
+  /** Redesign asks first: it clears the questions, the answers, the summary, the approval and the diagram. */
+  const [redo, setRedo] = useState(false);
   const qRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (handQ && !handQ.question) qRef.current?.focus(); }, [handQ]);
   const id = idea.id;
@@ -144,6 +153,14 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
     if (finish === null) return;
     const r = await call(() => designPost(id, 'design/finish', { summary: finish }), { ok: () => 'Design complete. Check the summary, then approve it.' });
     if (r) setFinish(null);
+  };
+  // Redesign: offered in the Design series once the design has questions (in progress, complete or approved).
+  const canRedo = idea.stage === DESIGN_STAGE && !idea.closed && (steps.length > 0 || Boolean(s.summary));
+  const doRedo = async () => {
+    const r = await call(() => designPost(id, 'design/redesign'), {
+      ok: (x: any) => `Design started again: the features and the tool are kept.${x.planStale ? ' plan.md and the kits are out of date: write them again once the new design is approved.' : ''}`,
+    });
+    if (r) setRedo(false);
   };
 
   return (
@@ -207,8 +224,18 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
         {finish === null && steps.length > 0 && (
           <button className="btn" data-action="hand-finish" disabled={off} onClick={() => setFinish(s.summary ?? '')}>Finish by hand</button>
         )}
+        {canRedo && !redo && <button className="btn" data-action="redesign" disabled={off} onClick={() => setRedo(true)}>Redesign</button>}
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
+      {canRedo && redo && (
+        <div className="ds-form ds-redo" data-testid="redesign-confirm" role="group" aria-label="Start the design again">
+          <div>{REDESIGN_ASK}</div>
+          <div className="ds-form-acts">
+            <button className="btn ghost" data-action="redesign-cancel" onClick={() => setRedo(false)}>Cancel</button>
+            <button className="btn primary" data-action="redesign-yes" disabled={off} onClick={() => void doRedo()}>Start again</button>
+          </div>
+        </div>
+      )}
       {phase === 'done' && <div className="hint">Adding a question by hand reopens the design.</div>}
     </section>
   );
@@ -247,7 +274,10 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           <ul className="pk-files" aria-label="Plan and kit files">
             {files.map((f) => <li key={f}>{f}</li>)}
           </ul>
-          <div className="hint">{approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}</div>
+          <div className={`hint${design.state.planStale ? ' warn' : ''}`} data-testid={design.state.planStale ? 'plan-stale' : undefined}>
+            {design.state.planStale ? planStaleText(design.state.planStale, approved)
+              : approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}
+          </div>
         </>
       ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a filled-in starter kit for the picked tool (and for any tool the design adds for its gaps): a synthetic sample, the tool\'s own files and a test checklist. No code.'}</div>}
       {hasAgentKit(files) && (

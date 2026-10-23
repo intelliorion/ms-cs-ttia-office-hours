@@ -1,5 +1,5 @@
 import { shortDate } from './filterIdeas';
-import { SeeDesign, type DesignView, type PlanView } from './DesignSection';
+import { planStaleText, SeeDesign, type DesignView, type PlanView } from './DesignSection';
 import { hasAgentKit } from './designHelpers';
 
 /**
@@ -73,13 +73,14 @@ export function DesignCard({ id, design, onEdit }: { id: string; design: DesignV
   );
 }
 
-export function PlanCard({ id, plan, onEdit }: { id: string; plan: PlanView | null; onEdit?: () => void }) {
+export function PlanCard({ id, plan, stale, onEdit }: { id: string; plan: PlanView | null; stale?: { at: string; approved: boolean }; onEdit?: () => void }) {
   const files = plan?.files ?? [];
   return (
     <Card title="Plan and kits" note={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : undefined} testId="plan-card" onEdit={onEdit}>
       {files.length ? (
         <>
           <ul className="pk-files" aria-label="Plan and kit files">{files.map((f) => <li key={f}>{f}</li>)}</ul>
+          {stale && <div className="hint warn" data-testid="plan-stale">{planStaleText(stale.at, stale.approved)}</div>}
           {hasAgentKit(files) && <div className="hint">The custom-app part goes to the CSIC Repository with its build instruction (under Edit).</div>}
           <SeeDesign id={id} />
         </>

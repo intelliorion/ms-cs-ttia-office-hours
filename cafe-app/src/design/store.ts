@@ -60,6 +60,11 @@ export interface DesignState {
   toolQuestions?: ToolQuestions;
   /** The tool picker's to-do list (what the AI needs to be sure of the tool), as the decision has. */
   toolPrep?: { at: string; provider?: string; needs: PrepNeed[] };
+  /**
+   * When the design was started again (Redesign) after plan.md and the kits were written: the plan is out of date until
+   * it is written again from the new, approved design. Cleared when the plan is written.
+   */
+  planStale?: string;
 }
 
 /** Said in design.md and on approval when the tool choice has a CSIC flag (csicFlags). */

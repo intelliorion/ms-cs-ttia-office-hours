@@ -232,7 +232,7 @@ export function IdeaDetails({ id }: { id: string }) {
           <PlanSection key={`plan-${id}`} idea={idea} design={design} plan={plan} busy={busy || (aiBusy && aiFor !== 'plan')} aiWorking={aiFor === 'plan'}
             noAi={noAi} call={designCall} />
         )}
-        {gates.plan === 'summary' && <PlanCard id={id} plan={plan} onEdit={edit('plan')} />}
+        {gates.plan === 'summary' && <PlanCard id={id} plan={plan} stale={design?.state?.planStale ? { at: design.state.planStale, approved: Boolean(design.state.approvedAt) } : undefined} onEdit={edit('plan')} />}
         {/* Launch and Learn: the active work of the stage (the cards above are read-only there). */}
         {roadshowGate(idea, roadshow) === 'active' && (
           <RoadshowSection key={`roadshow-${id}`} idea={idea} view={roadshow} busy={busy || (aiBusy && aiFor !== 'roadshow')} aiWorking={aiFor === 'roadshow'}

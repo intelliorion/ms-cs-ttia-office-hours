@@ -24,10 +24,10 @@ import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, type DesignKitOutput } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
-import { readDesign, renderDesignMd } from '../design/store';
+import { readDesign, renderDesignMd, writeDesign } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
-  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, stepEvent, DesignError, SUMMARY_MAX,
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
 import { codedKitInput, decodeKit } from '../design/kitInput';
@@ -332,6 +332,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return applyDesignEvent(root, idea, { t: 'done', summary }, clock);
   });
   add('POST', '/api/ideas/:id/design/approve', async ({ params }) => approveDesign(root, params.id, clock));
+  // Redesign: the design starts again from the first question; the features and the tool stay, plan.md and the kits are
+  // not touched (marked out of date). Never moves the stage.
+  add('POST', '/api/ideas/:id/design/redesign', async ({ params }) => redesign(root, params.id, clock));
   // Design series: plan.md and the starter kits, from an approved design. The kits are templates; the app writes no code.
   add('POST', '/api/ideas/:id/plan', async ({ params }) => {
     const idea = await loadIdea(root, params.id);
@@ -349,6 +352,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
       kit = decodeKit((await ai.runWith(designKitTask, input)).output, codes);
     } catch { kit = undefined; }
     const { files } = await writePlan(root, idea, state, output, kit);
+    // Written from the new design: the plan is no longer out of date (read again, the design may have moved meanwhile).
+    const now = await readDesign(root, idea.id);
+    if (now.planStale) { delete now.planStale; await writeDesign(root, idea.id, now); }
     return { files, ...(kit ? {} : { note: KIT_NO_AI }) };
   });
   add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));

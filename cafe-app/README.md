@@ -523,6 +523,13 @@ nothing is saved until you press a button, and you can do everything except plan
    custom app, or the tool or a feature flagged as needing a live system or personal data), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it
    needs approving again.
+   **Redesign** (in the Design series, once the design has questions, whether in progress, complete or approved)
+   starts the design again from the first question. It asks first ("Start the design again? The questions, answers,
+   summary, approval and diagram are cleared; the features and the tool stay."), then clears the questions and
+   answers, the summary and what it said was settled, the approval and the diagram, and the design's own answers on
+   the idea; the feature list (as it is now) and the tool stay, design.md is rewritten and the idea's history says
+   "Design started again". plan.md and the kits are not touched: when they exist, the Plan and kits section says they
+   are out of date until they are written again from the new, approved design. It never moves the stage.
 4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, and the
    CSIC note when the tool choice has a CSIC flag) and a filled-in starter kit for the picked tool. A second AI
    task (design-kit) reads the whole approved design (the features with their status and fit, the tool's pros and
@@ -539,7 +546,8 @@ nothing is saved until you press a button, and you can do everything except plan
 ```
 approach.md            the features, then the one tool: pathway, reason, pros, cons, a fit table per feature, why
 design.yaml            the design's state: features (and where the design moved them), the tool, questions and
-                       answers, the settled build points, summary, the diagram, approval date
+                       answers, the settled build points, summary, the diagram, approval date, and (after a
+                       Redesign) the date the plan went out of date
 design.md              the design, readable: the points, the build points, the features and tool, the decisions
 plan.md                the plan: the one thing to show, tasks for the tool, risks
 kit/<tool>/...         the starter kit for the picked tool (below)

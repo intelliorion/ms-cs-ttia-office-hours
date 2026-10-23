@@ -11,6 +11,9 @@ import { isDesignTag, pointOf, POINT_MAX } from './points';
 import { basisOf, checkDiagram, type DiagramSpec } from './diagram';
 import { csicFlags, scopeWords } from './choice';
 import { retiredToolNote } from '../graph/ontology';
+import { ideaDir } from '../ideas/store';
+import { appendHistory } from '../workspace/files';
+import { readPlan } from './kits';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
   type DesignState, type DesignStep, type DesignTag, type StepSource,
@@ -370,4 +373,37 @@ export async function approveDesign(
   const suggest = flags.length ? suggestion(await loadIdea(root, id), { closeAs: 'csic' }) : undefined;
   const notice = flags.length ? `Design approved. ${CSIC_NOTE} (${flags.join(', ')})` : 'Design approved.';
   return { ...out, notice, ...(suggest ? { suggest } : {}) };
+}
+
+/** The design series' stage: Redesign is offered there only. */
+export const DESIGN_STAGE = 3;
+export const REDESIGN_LOG = 'Design started again';
+
+/**
+ * Redesign: the design starts again from the first question. The questions and answers, the summary, what it said was
+ * settled, the approval and the diagram go, and so do the design's own answers on the idea (saveDesignAnswers keeps them
+ * in step, so with no steps they leave). The features (as they are now, scopes included) and the tool stay. plan.md and
+ * the kits are not touched; when they exist the plan is marked out of date (planStale) until it is written again.
+ * Rewrites design.md and logs it in the idea's history. Never moves the stage, never ticks or unticks a step.
+ */
+export async function redesign(root: string, id: string, clock: Clock): Promise<{ state: DesignState; designMd: string; planStale: boolean }> {
+  const idea = await loadIdea(root, id);
+  if (idea.closed) throw new DesignError('This idea is closed');
+  if (idea.stage !== DESIGN_STAGE) throw new DesignError('The design can be started again in the Design series only');
+  const prev = await readDesign(root, id);
+  if (!prev.steps.length && !prev.summary) throw new DesignError('The design has no questions yet: nothing to start again');
+  const { summary: _s, settled: _t, approvedAt: _a, diagram: _d, planStale: _p, ...rest } = prev;
+  const hasPlan = (await readPlan(root, id)).files.length > 0;
+  const at = clock();
+  const state: DesignState = {
+    ...rest, steps: [], status: prev.features.length || prev.tool ? 'picking' : 'not-started', ...(hasPlan ? { planStale: at } : {}),
+  };
+  await writeDesign(root, id, state);
+  await writeDesignMd(root, idea, state);
+  await saveDesignAnswers(root, id, state);
+  await appendHistory(await ideaDir(root, id), {
+    at, action: 'design', by: 'operator', source: DESIGN_FILE,
+    detail: hasPlan ? `${REDESIGN_LOG}; the plan and kits are out of date until written again` : REDESIGN_LOG,
+  });
+  return { state, designMd: renderDesignMd(idea, state), planStale: hasPlan };
 }

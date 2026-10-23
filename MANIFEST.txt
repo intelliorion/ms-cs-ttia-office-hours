@@ -128,6 +128,7 @@ cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-points.test.ts
+cafe-app/tests/design-redesign.test.ts
 cafe-app/tests/design-retired-tool.test.ts
 cafe-app/tests/design-scope.test.ts
 cafe-app/tests/design-store.test.ts

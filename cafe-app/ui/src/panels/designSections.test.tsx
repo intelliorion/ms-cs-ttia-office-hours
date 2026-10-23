@@ -16,7 +16,7 @@ vi.mock('../api', () => api);
 import { useStore } from '../state/store';
 import { IdeaDetails } from './IdeaDetails';
 import { ToolPickerSection } from './ToolPickerSection';
-import { DesignSection, type DesignCall } from './DesignSection';
+import { DesignSection, PlanSection, type DesignCall } from './DesignSection';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom has no scrolling.
@@ -190,6 +190,52 @@ describe('DesignSection', () => {
     const idea = { ...IDEA, updates: [{ id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' }] };
     await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
     expect(el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')).toBeNull();
+  });
+
+  it('Redesign asks first; Cancel does nothing; Start again posts design/redesign and says the plan is out of date', async () => {
+    const calls: string[] = [];
+    const call: DesignCall = async (fn, o) => { try { const r = await fn(); calls.push(o.ok(r) ?? ''); return r; } catch { return null; } };
+    api.designPost.mockImplementation(async () => ({ state: designState({ steps: [], status: 'picking', planStale: '2026-10-20' }), designMd: '', planStale: true }));
+    const approved = designState({ summary: 'Shows the list.', approvedAt: '2026-10-19', status: 'approved' });
+    await act(async () => root.render(<DesignSection idea={IDEA} design={{ state: approved, designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    expect(el.querySelector('[data-testid="redesign-confirm"]')).toBeNull();
+    await click('[data-action="redesign"]');
+    expect(el.querySelector('[data-testid="redesign-confirm"]')!.textContent).toContain(
+      'Start the design again? The questions, answers, summary, approval and diagram are cleared; the features and the tool stay.');
+    await click('[data-action="redesign-cancel"]');
+    expect(el.querySelector('[data-testid="redesign-confirm"]')).toBeNull();
+    expect(api.designPost).not.toHaveBeenCalled();
+    await click('[data-action="redesign"]');
+    await click('[data-action="redesign-yes"]');
+    await flush();
+    expect(api.designPost.mock.calls).toEqual([[ID, 'design/redesign']]);
+    expect(calls[0]).toMatch(/^Design started again: the features and the tool are kept\. plan\.md and the kits are out of date/);
+    expect(el.querySelector('[data-testid="redesign-confirm"]')).toBeNull();
+  });
+
+  it('Redesign shows in the Design series only, and only once the design has questions', async () => {
+    const call: DesignCall = async () => null;
+    const render = async (idea: any, state: any) => act(async () => root.render(
+      <DesignSection idea={idea} design={{ state, designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    await render(IDEA, designState());
+    expect(el.querySelector('[data-action="redesign"]')).not.toBeNull();
+    await render(IDEA, designState({ steps: [] }));
+    expect(el.querySelector('[data-action="redesign"]')).toBeNull();
+    await render({ ...IDEA, stage: 4 }, designState());
+    expect(el.querySelector('[data-action="redesign"]')).toBeNull();
+    await render({ ...IDEA, closed: { as: 'csic' } }, designState());
+    expect(el.querySelector('[data-action="redesign"]')).toBeNull();
+  });
+});
+
+describe('PlanSection after a Redesign', () => {
+  it('says plan.md and the kits are out of date until written again', async () => {
+    const call: DesignCall = async () => null;
+    await act(async () => root.render(<PlanSection idea={IDEA} design={{ state: designState({ steps: [], planStale: '2026-10-20' }), designMd: '' }}
+      plan={{ files: ['plan.md', 'kit/power-apps/README.md'] }} busy={false} aiWorking={false} noAi={false} call={call} />));
+    expect(el.querySelector('[data-testid="plan-stale"]')!.textContent).toBe(
+      'The design was started again on 2026-10-20: plan.md and the kits are out of date. Write them again once the new design is approved.');
+    expect((el.querySelector('[data-action="write-plan"]') as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

@@ -47,6 +47,7 @@ export function historyLine(h: HistoryEntry, steps: { id: string; text: string }
     case 'inbox-undo': return `Import: ${baseNames(h.detail)}`;
     // What the answers changed in the record, applied by the AI (older records: by the operator's Yes or Undo).
     case 'answers-update': case 'data-update': case 'review-update': return String(h.detail ?? 'Updated from the answers');
+    case 'kit-cleanup': return String(h.detail ?? 'Kit files removed');
     default: return [h.action, h.detail].filter(Boolean).join(': ');
   }
 }

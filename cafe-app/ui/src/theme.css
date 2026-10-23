@@ -1019,6 +1019,8 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .sd-go .rel{min-width:0;flex:none}
 /* What the answers changed in the record (applied by themselves), read-only, in every section that takes in answers. */
 .rs-updates{margin:12px 0 4px}
+.dp-older{margin-top:12px;padding:8px 10px;border-left:3px solid var(--amber);background:rgba(var(--rgb-warm),.06);border-radius:4px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.dp-older-list{margin:0;padding-left:18px;font-size:13px}.dp-older-list code{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
 .rs-ulist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
 .rs-u{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:start;padding:8px 10px;border:1px solid rgba(var(--rgb-accent),.35);border-radius:6px;background:rgba(var(--rgb-accent),.06)}
 .rs-u.applied{border-color:rgba(var(--rgb-line),.18);background:none;opacity:.85}

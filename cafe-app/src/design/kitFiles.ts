@@ -176,7 +176,7 @@ function readme(c: KitContext, extra: string[] = []): string {
     '## Rules', '',
     `- ${DATA_RULE}`,
     ...(csic.length ? [`- ${CSIC_NOTE} (${csic.map(mdLine).join(', ')})`] : []),
-    '- The app rewrites only the files it made here and never deletes yours: add your own notes in this folder.', '',
+    '- The app rewrites only the files it made here and takes away its own files it no longer writes (it keeps a list in ../.cafe-written.json); it never deletes yours: add your own notes in this folder.', '',
   ]);
 }
 

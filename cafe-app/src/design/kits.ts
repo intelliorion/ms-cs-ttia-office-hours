@@ -116,16 +116,92 @@ export function kitFiles(idea: Idea, state: DesignState, plan: DesignPlanOutput,
   return out;
 }
 
+/* ---------- what the app wrote in kit/: kit/.cafe-written.json ---------- */
+
+/** The list of kit files the app wrote last time, so the next write can take away only its own files it no longer writes. */
+export const WRITTEN_FILE = `${KIT_DIR}/.cafe-written.json`;
 /**
- * Writes plan.md and the kits. Re-running overwrites only these files; anything else in kit/
- * (the operator's notes, an agent's work) is left alone. Returns the files written, sorted.
+ * Every file name a kit has ever had (from the history of kits.ts and kitFiles.ts: topics.md and process.md were the
+ * Copilot Studio and UiPath outlines before the kits were filled in). Only for an idea written before the list existed:
+ * such a file the new layout does not write is shown as an "older kit file" for the operator to remove (it may be one
+ * they edited), never removed by itself.
  */
-export async function writePlan(root: string, idea: Idea, state: DesignState, plan: DesignPlanOutput, kit?: DesignKitOutput): Promise<{ files: string[]; planMd: string }> {
+export const KNOWN_KIT_NAMES = new Set([
+  'README.md', 'sample-data.csv', 'test-checklist.md', 'prompts.md', 'instructions.md', 'knowledge.md', 'skills.md', 'topics.md', 'data-model.md',
+  'screens.md', 'flows.md', 'datasets.md', 'rules.csv', 'flow.md', 'flow.json', 'flow-diagram.html', 'BUILD-WITH-AGENT.md', 'process.md',
+]);
+interface Written { files: string[]; older?: string[] }
+
+/** A path the app may take away: under kit/, no step out, not the list itself. */
+const isKitPath = (rel: string) => rel.startsWith(`${KIT_DIR}/`) && rel !== WRITTEN_FILE && !rel.split('/').some((p) => p === '..' || p === '.' || !p);
+
+async function readWritten(dir: string): Promise<Written | undefined> {
+  const text = await readText(path.join(dir, ...WRITTEN_FILE.split('/')));
+  if (text === undefined) return undefined;
+  try {
+    const raw = JSON.parse(text) as Partial<Written>;
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && isKitPath(x)) : []);
+    return { files: list(raw.files), older: list(raw.older) };
+  } catch { return { files: [] }; }
+}
+const writeWritten = (dir: string, w: Written) =>
+  writeFileAtomic(path.join(dir, ...WRITTEN_FILE.split('/')), `${JSON.stringify({ note: 'The kit files the Café app wrote. It removes only these.', files: [...w.files].sort(), ...(w.older?.length ? { older: [...w.older].sort() } : {}) }, null, 1)}\n`);
+const exists = async (file: string) => fs.stat(file).then((s) => s.isFile(), () => false);
+
+/** Takes away one kit file the app wrote, and its folder when that leaves it empty (never anything else). */
+async function removeKitFile(dir: string, rel: string): Promise<boolean> {
+  if (!isKitPath(rel)) return false;
+  const file = path.join(dir, ...rel.split('/'));
+  if (!(await exists(file))) return false;
+  await fs.rm(file);
+  // Empty folders up to kit/ go too: a tool that is no longer picked leaves no empty folder behind.
+  let folder = path.dirname(file);
+  const kitRoot = path.join(dir, KIT_DIR);
+  while (folder.startsWith(kitRoot) && folder !== kitRoot) {
+    if ((await fs.readdir(folder).catch(() => ['x'])).length) break;
+    await fs.rmdir(folder).catch(() => {});
+    folder = path.dirname(folder);
+  }
+  return true;
+}
+
+/**
+ * Writes plan.md and the kits. Re-running overwrites only these files; anything else in kit/ (the operator's notes,
+ * an agent's work) is left alone. A file the app wrote last time (kit/.cafe-written.json) that the new layout no longer
+ * writes is taken away. For an idea written before that list, the files with a name the kits used to have that are not
+ * written now are kept as "older kit files" for the operator to remove (removeOlderKitFiles). Returns the files
+ * written, sorted, what was taken away and the older files.
+ */
+export async function writePlan(
+  root: string, idea: Idea, state: DesignState, plan: DesignPlanOutput, kit?: DesignKitOutput,
+): Promise<{ files: string[]; planMd: string; removed: string[]; older: string[] }> {
   const dir = await ideaDir(root, idea.id);
   const planMd = renderPlanMd(idea, state, plan);
   const files: Record<string, string> = { [PLAN_FILE]: planMd, ...kitFiles(idea, state, plan, kit) };
+  const before = await readWritten(dir);
   for (const [rel, content] of Object.entries(files)) await writeFileAtomic(path.join(dir, ...rel.split('/')), content);
-  return { files: Object.keys(files).sort(), planMd };
+  const now = Object.keys(files).filter(isKitPath);
+  const removed: string[] = [];
+  let older: string[];
+  if (before) {
+    for (const rel of before.files) if (!now.includes(rel) && (await removeKitFile(dir, rel))) removed.push(rel);
+    older = [];
+    for (const rel of before.older ?? []) if (!now.includes(rel) && (await exists(path.join(dir, ...rel.split('/'))))) older.push(rel);
+  } else {
+    older = (await walk(path.join(dir, KIT_DIR), KIT_DIR)).filter((rel) => isKitPath(rel) && !now.includes(rel) && KNOWN_KIT_NAMES.has(rel.split('/').pop()!) && rel.split('/').length === 3);
+  }
+  await writeWritten(dir, { files: now, older });
+  return { files: Object.keys(files).sort(), planMd, removed: removed.sort(), older: older.sort() };
+}
+
+/** The operator's "Remove older kit files": only the files listed as older, each still a kit file; the list is cleared. */
+export async function removeOlderKitFiles(root: string, id: string): Promise<{ removed: string[] }> {
+  const dir = await ideaDir(root, id);
+  const w = await readWritten(dir);
+  const removed: string[] = [];
+  for (const rel of w?.older ?? []) if (await removeKitFile(dir, rel)) removed.push(rel);
+  if (w) await writeWritten(dir, { files: w.files, older: [] });
+  return { removed };
 }
 
 async function walk(dir: string, rel: string): Promise<string[]> {
@@ -140,10 +216,11 @@ async function walk(dir: string, rel: string): Promise<string[]> {
   return out;
 }
 
-/** What is on disk: plan.md (if written) and every file under kit/, sorted. */
-export async function readPlan(root: string, id: string): Promise<{ planMd?: string; files: string[] }> {
+/** What is on disk: plan.md (if written) and every file under kit/ (not the app's own list), sorted; and the older kit files still there. */
+export async function readPlan(root: string, id: string): Promise<{ planMd?: string; files: string[]; older?: string[] }> {
   const dir = await ideaDir(root, id);
   const planMd = await readText(path.join(dir, PLAN_FILE));
-  const files = [...(planMd !== undefined ? [PLAN_FILE] : []), ...(await walk(path.join(dir, KIT_DIR), KIT_DIR))].sort();
-  return planMd !== undefined ? { planMd, files } : { files };
+  const files = [...(planMd !== undefined ? [PLAN_FILE] : []), ...(await walk(path.join(dir, KIT_DIR), KIT_DIR)).filter((f) => f !== WRITTEN_FILE)].sort();
+  const older = ((await readWritten(dir))?.older ?? []).filter((f) => files.includes(f));
+  return { ...(planMd !== undefined ? { planMd } : {}), files, ...(older.length ? { older } : {}) };
 }

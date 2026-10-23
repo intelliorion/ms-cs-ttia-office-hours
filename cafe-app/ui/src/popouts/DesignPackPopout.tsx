@@ -21,7 +21,8 @@ export function DesignPackPopout({ id }: { id: string }) {
   const [drawing, setDrawing] = useState(false);
   const idea = (state?.ideas ?? []).find((i: any) => i.id === id);
   const [design, setDesign] = useState<any>(null);
-  const [plan, setPlan] = useState<{ files: string[] } | null>(null);
+  const [plan, setPlan] = useState<{ files: string[]; older?: string[] } | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [open, setOpen] = useState<Record<string, string | undefined>>({});
   const [flow, setFlow] = useState<RecipeFlow | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -38,7 +39,15 @@ export function DesignPackPopout({ id }: { id: string }) {
   const data: any = s?.data;
   const main = kitSlug(tool?.tool);
   // The design's files only: the roadshow has its own section in Launch and Learn, with Present, the script and the exports.
-  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main, Boolean(s?.diagram));
+  // Older kit files (written before the app kept its list of what it wrote) are listed apart, for the operator to remove.
+  const older = plan?.older ?? [];
+  const files = packFiles((plan?.files ?? []).filter((f) => !older.includes(f)), features.length > 0 || Boolean(tool), main, Boolean(s?.diagram));
+  const removeOlder = async () => {
+    setRemoving(true); setMsg(null);
+    try { const r = await post(`/api/ideas/${encodeURIComponent(id)}/plan/remove-older`); setPlan(r); setMsg(`${r.removed.length} older kit file${r.removed.length === 1 ? '' : 's'} removed.`); }
+    catch (e) { setMsg((e as Error).message); }
+    finally { setRemoving(false); }
+  };
   // The Dataiku kit's recipe flow, drawn here from its flow.json (checked again, as the server checked it).
   const hasFlow = (plan?.files ?? []).includes(FLOW_JSON);
   const featureNames = features.map((f) => String(f.name)).join('\n');
@@ -221,6 +230,14 @@ export function DesignPackPopout({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
+            {older.length > 0 && (
+              <div className="dp-older" data-testid="older-kit-files">
+                <div className="dp-file-t">Older kit files</div>
+                <div className="dp-file-u">The kits had these files before the layout changed, and the plan no longer writes them. They may be out of date, or you may have edited them: remove them when you no longer need them.</div>
+                <ul className="dp-older-list">{older.map((f) => <li key={f}><code>{f}</code></li>)}</ul>
+                <button className="btn sm" data-action="remove-older-kit-files" disabled={removing} onClick={() => void removeOlder()}>{removing ? 'Removing…' : 'Remove older kit files'}</button>
+              </div>
+            )}
           </section>
         </div>
       )}

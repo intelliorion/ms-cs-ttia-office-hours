@@ -29,7 +29,7 @@ import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolN
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
-import { writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
+import { writePlan, readPlan, removeOlderKitFiles, NOT_APPROVED, PLAN_NEEDS_AI, KIT_NO_AI } from '../design/kits';
 import { codedKitInput, codedPlanInput, decodeKit, decodePlan } from '../design/kitInput';
 import { extractInput, planAiLinks } from '../ai/apply';
 import { suggestRoadshowPrep, answerRoadshowNeed, draftRoadshowNeedsEmail, markRoadshowAsked } from '../roadshow/prep';
@@ -402,13 +402,22 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
       // sample-data.csv has the confirmed sample input's real columns; its values stay made up.
       kit = { ...decoded, sample: fitSampleToData(decoded.sample, state.data).sample };
     } catch { kit = undefined; }
-    const { files } = await writePlan(root, idea, state, output, kit);
+    const { files, removed, older } = await writePlan(root, idea, state, output, kit);
+    if (removed.length) {
+      await appendHistory(await ideaDir(root, idea.id), { at: clock(), action: 'kit-cleanup', by: 'app', detail: `Kit files the app wrote before and no longer writes, removed: ${removed.join(', ')}` });
+    }
     // Written from the new design: the plan is no longer out of date (read again, the design may have moved meanwhile).
     const now = await readDesign(root, idea.id);
     if (now.planStale) { delete now.planStale; await writeDesign(root, idea.id, now); }
-    return { files, ...(kit ? {} : { note: KIT_NO_AI }) };
+    return { files, ...(removed.length ? { removed } : {}), ...(older.length ? { older } : {}), ...(kit ? {} : { note: KIT_NO_AI }) };
   });
   add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));
+  // The operator's "Remove older kit files": only the ones listed as older (written before the app kept its list).
+  add('POST', '/api/ideas/:id/plan/remove-older', async ({ params }) => {
+    const { removed } = await removeOlderKitFiles(root, params.id);
+    if (removed.length) await appendHistory(await ideaDir(root, params.id), { at: clock(), action: 'kit-cleanup', by: 'operator', detail: `Older kit files removed: ${removed.join(', ')}` });
+    return { removed, ...(await readPlan(root, params.id)) };
+  });
   // The design pack: one of the files the design series wrote (design.md, approach.md, plan.md, kit/...), read-only.
   add('POST', '/api/ideas/:id/design-file', async ({ params, body }) => {
     const rel = String(body.path ?? '');

@@ -591,7 +591,13 @@ nothing is saved until you press a button, and you can do everything except plan
    tool also gets a short kit for each other tool the design uses for its gaps (a feature done outside the build,
    such as Power Automate). If the kit AI fails, the kits are still written from the design alone and the README
    says so. For a custom app, **Copy build instruction** copies a ready-made instruction for Claude Code or GitHub
-   Copilot. Running it again rewrites only the files the app made and keeps any you added.
+   Copilot. Running it again rewrites only the files the app made and keeps any you added. The app keeps a list of
+   the kit files it wrote (`kit/.cafe-written.json`): writing again takes away only the files on that list the new
+   layout no longer writes (a tool no longer picked, a file the kits stopped having), and a folder that leaves empty;
+   it is logged in the idea's history. For an idea written before the list existed, files with a name the kits used
+   to have (such as topics.md) that are no longer written are shown in the design pack as **Older kit files**, with
+   **Remove older kit files**: you decide, as you may have edited them. A file you or a coding agent added is never
+   on either list.
 
 **The files it writes** (under `ideas/<id>/`):
 

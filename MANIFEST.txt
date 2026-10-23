@@ -55,6 +55,7 @@ cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
 cafe-app/src/design/recipeFlow.ts
 cafe-app/src/design/sampleData.ts
+cafe-app/src/design/scaffold.ts
 cafe-app/src/design/scope.ts
 cafe-app/src/design/store.ts
 cafe-app/src/design/tools.ts
@@ -149,6 +150,7 @@ cafe-app/tests/design-plan-names.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-redesign.test.ts
 cafe-app/tests/design-retired-tool.test.ts
+cafe-app/tests/design-scaffold.test.ts
 cafe-app/tests/design-scope.test.ts
 cafe-app/tests/design-store.test.ts
 cafe-app/tests/design-tools.test.ts

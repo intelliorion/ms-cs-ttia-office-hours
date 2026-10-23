@@ -169,28 +169,10 @@ describe('ToolPickerSection', () => {
 });
 
 describe('DesignSection', () => {
-  it('shows "From your answers" for the design answers only (not the decision\'s); Yes goes to the idea\'s list', async () => {
-    const calls: string[] = [];
-    const call: DesignCall = async (fn, o) => { try { const r = await fn(); calls.push(o.ok(r as any) ?? ''); return r; } catch { return null; } };
-    api.post.mockImplementation(async () => ({ id: 'u1', label: 'Make Person 2 the builder' }) as any);
-    const idea = { ...IDEA, updates: [
-      { id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' },
-      { id: 'u2', kind: 'flag', label: 'Clear the flag: x', status: 'dismissed', from: 'design' },
-      { id: 'u3', kind: 'participation', label: 'Set participation to Team', status: 'proposed', from: 'decision' },
-      { id: 'u4', kind: 'facts', label: 'Save this answer', status: 'applied' },
-    ] };
-    await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
-    const list = el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')!;
-    expect(list.textContent).toContain('From your answers');
-    expect([...list.querySelectorAll('[data-update]')].map((x) => x.getAttribute('data-update'))).toEqual(['u1']);
-    await click('[data-testid="design"] [data-update="u1"] [data-action="update-yes"]');
-    await flush();
-    expect(api.post).toHaveBeenCalledWith(`/api/ideas/${ID}/prep/update`, { update: 'u1', do: 'yes' });
-    expect(calls).toEqual(['Done: Make Person 2 the builder']);
-  });
-  it('with nothing proposed there is no list', async () => {
+  it('the design shows no "From your answers" list: its answers save themselves', async () => {
     const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
-    await act(async () => root.render(<DesignSection idea={IDEA} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    const idea = { ...IDEA, updates: [{ id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' }] };
+    await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
     expect(el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')).toBeNull();
   });
 });

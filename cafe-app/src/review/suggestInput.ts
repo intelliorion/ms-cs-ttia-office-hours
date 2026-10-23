@@ -19,9 +19,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * `basis` says, in the app's words, what the suggestion was based on, so a new email visibly changes it.
  */
 export async function reviewInput(
-  root: string, id: string, added: { question: string; answer: string }[] = [],
+  root: string, id: string, added: { question: string; answer: string }[] = [], opts: { skipSource?: string } = {},
 ): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
-  const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string }[] };
+  const loaded = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
+  // The design questions read their own answers as steps: their copies on the idea are left out for them.
+  const idea = opts.skipSource ? { ...loaded, answers: (loaded.answers ?? []).filter((a) => a.source !== opts.skipSource) } : loaded;
   const graph = await rebuildGraph(root);
   // Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet).
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));

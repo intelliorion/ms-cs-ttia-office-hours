@@ -499,8 +499,8 @@ describe('the design questions build on the features and the tool', () => {
   });
 });
 
-describe('design answers, taken in like the decision\'s', () => {
-  it('a builder named in a design answer becomes a proposal on the idea\'s one list; names coded on the way out; the brief goes on the idea', async () => {
+describe('design answers save themselves', () => {
+  it('every design answer goes on the idea at once (nothing to say yes to); names coded on the way out; the brief goes on the idea', async () => {
     const sp = spy((p) => {
       if (!p.startsWith('TASK: design-step')) return undefined;
       const code = /\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"stepsSoFar"')))?.[1];
@@ -515,22 +515,26 @@ describe('design answers, taken in like the decision\'s', () => {
     await s.post(`/api/ideas/${ID}/tools`, PICKS);
     await s.post(`/api/ideas/${ID}/design/step`, { question: 'Who builds it?', suggested: [] });
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Person 2 will build it in Power Apps.' });
-    // A hand-written question asks no AI and proposes nothing.
-    expect((await loadIdea(s.root, ID) as any).updates ?? []).toEqual([]);
+    // The answer is on the idea already, with the question, from the design questions.
+    expect((await loadIdea(s.root, ID) as any).answers).toEqual([{ question: 'Who builds it?', answer: 'Person 2 will build it in Power Apps.', source: 'design questions' }]);
     const r = await json(await s.post(`/api/ideas/${ID}/design/step`));
     expect(r.step.question).toBe('What is the smallest input?');
     const d = sp.data('design-step');
     expect(d.stepsSoFar[0].answer).toMatch(/^\[P\d+\] will build it in Power Apps\.$/);
     expect(sp.prompts.at(-1)).not.toContain('Person 2');
     expect(sp.prompts.at(-1)).toMatch(/updates: what DATA.stepsSoFar and DATA.teamAnswers change/);
+    // The design's own answers ride in as its steps, not again as team answers.
+    expect(d.teamAnswers ?? []).toEqual([]);
     const idea = await loadIdea(s.root, ID) as any;
-    expect(idea.updates.map((u: any) => [u.kind, u.label, u.status])).toEqual([['builder', 'Make Person 2 the builder', 'proposed']]);
+    expect(idea.updates ?? []).toEqual([]);
     expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it in Power Apps.' }]);
     expect(idea.learned.from).toBe(1);
-    // The same answer again proposes nothing new: the list keeps one of each.
+    // A changed answer changes the copy on the idea; nothing is proposed.
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 2, answer: 'A sample' });
-    await s.post(`/api/ideas/${ID}/design/step`);
-    expect((await loadIdea(s.root, ID) as any).updates).toHaveLength(1);
+    await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Person 2, in Power Apps.' });
+    const after = await loadIdea(s.root, ID) as any;
+    expect(after.answers.map((a: any) => a.answer)).toEqual(['Person 2, in Power Apps.', 'A sample']);
+    expect(after.updates ?? []).toEqual([]);
   });
 });
 

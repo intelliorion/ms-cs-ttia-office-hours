@@ -1,6 +1,6 @@
 import type { Clock } from '../clock';
 import type { Idea } from '../ideas/idea';
-import { loadIdea } from '../ideas/store';
+import { loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import { loadSteps } from '../rules/stages';
 import { suggestion, type Suggest } from '../ideas/suggest';
@@ -128,11 +128,29 @@ export async function applyDesignEvents(
   state.cafeCheck = cafeCheck(idea, state);
   await writeDesign(root, idea.id, state);
   await writeDesignMd(root, idea, state);
+  await saveDesignAnswers(root, idea.id, state);
   if (ticks.length) {
     const steps = await loadSteps(root);
     for (const t of [...new Set(ticks)]) await tick(root, idea.id, t, true, { by: 'app', source: DESIGN_FILE, clock, steps });
   }
   return { state, designMd: renderDesignMd(idea, state) };
+}
+
+/** Where the design questions' answers say they came from, on the idea. */
+export const DESIGN_SOURCE = 'design questions';
+
+/**
+ * Every answered design question goes on the idea as an answer, at once and without asking: the decision, the tool
+ * picker, the brief and later suggestions read them like any other. Kept in step with the design (a changed or removed
+ * answer changes or leaves the idea too); "asked the team" is not an answer.
+ */
+export async function saveDesignAnswers(root: string, id: string, state: DesignState): Promise<void> {
+  const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
+  const mine = state.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: s.question, answer: s.answer!.trim(), source: DESIGN_SOURCE }));
+  const others = (idea.answers ?? []).filter((a) => a.source !== DESIGN_SOURCE);
+  const before = JSON.stringify((idea.answers ?? []).filter((a) => a.source === DESIGN_SOURCE));
+  if (before === JSON.stringify(mine)) return;
+  await saveIdea(root, { ...idea, answers: [...others, ...mine] } as Idea);
 }
 
 export const applyDesignEvent = (root: string, idea: Idea, event: DesignEvent, clock: Clock) =>
@@ -170,7 +188,7 @@ export async function codedDesignInput(root: string, idea: Idea, state: DesignSt
   // The brief and each step (its question, then its answer) ride in as extra answers, so their names get the same codes
   // as everything else; they come back out in the same order.
   const steps = base.stepsSoFar.flatMap((s) => [{ question: 'Q', answer: s.question }, { question: 'A', answer: s.answer }]);
-  const { input: seen, codes } = await reviewInput(root, idea.id, [...brief.map((p) => ({ question: p.topic, answer: p.text })), ...steps]);
+  const { input: seen, codes } = await reviewInput(root, idea.id, [...brief.map((p) => ({ question: p.topic, answer: p.text })), ...steps], { skipSource: DESIGN_SOURCE });
   const all = seen.answers ?? [];
   const nTeam = all.length - brief.length - steps.length;
   const teamAnswers = all.slice(0, nTeam);

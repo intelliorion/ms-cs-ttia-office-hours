@@ -727,6 +727,8 @@ script to talk, in three steps.
                     design diagram fills the slide under the title, with larger text (the app picks wide or
                     narrower, taller parts, whichever draws it largest), and any point the AI gave that slide
                     goes into its speaker notes; the tool slide the fit table; a timeline slide the idea's dates.
+                    A slide whose content would run past its space (a long title, a long fit table, two files going
+                    in) is drawn smaller until it fits. The question slide's title is the team's question, whole.
                     Printing gives one slide per page.
    script.md        the talk track, slide by slide, with timings and cues
    run-of-show.md   who does what, when: the demo cue, the one question, the four feedback questions

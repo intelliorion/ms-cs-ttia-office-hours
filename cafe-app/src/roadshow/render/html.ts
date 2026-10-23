@@ -90,8 +90,10 @@ function teamHtml(team: DeckPerson[]): string {
 
 function fitHtml(m: DeckModel): string {
   if (!m.fit) return '';
-  const rows = m.fit.rows.slice(0, 9).map((r) => `<tr class="f-${r.mark}"><td>${esc(r.feature)}</td><td><span class="mk">${FIT_SIGN[r.mark]}</span>${esc(FIT_WORD[r.mark])}</td><td><div class="nt">${esc(r.note)}</div></td></tr>`).join('');
-  return `<div class="fit"><div class="fit-h"><b>${esc(m.fit.tool)}</b>${m.fit.pathway ? `<span>${esc(m.fit.pathway)}</span>` : ''}</div>`
+  const shown = m.fit.rows.slice(0, 9);
+  const rows = shown.map((r) => `<tr class="f-${r.mark}"><td>${esc(r.feature)}</td><td><span class="mk">${FIT_SIGN[r.mark]}</span>${esc(FIT_WORD[r.mark])}</td><td><div class="nt">${esc(r.note)}</div></td></tr>`).join('');
+  // A long list gets tighter rows (one line of note each), so the table stays on the slide.
+  return `<div class="fit${shown.length > 6 ? ' many' : ''}"><div class="fit-h"><b>${esc(m.fit.tool)}</b>${m.fit.pathway ? `<span>${esc(m.fit.pathway)}</span>` : ''}</div>`
     + `<table><thead><tr><th>Feature</th><th>Fit</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -143,7 +145,7 @@ function slideBody(s: DeckSlide, m: DeckModel): string {
   }
   if (s.kind === 'question') {
     // The title is the question; the points, when any, say what kind of answer helps.
-    return `<div class="ask"><div class="ask-q">${esc(s.title)}</div>${pointsHtml(s)}</div>`;
+    return `<div class="ask"><div class="ask-q${s.title.length > 90 ? ' long' : ''}">${esc(s.title)}</div>${pointsHtml(s)}</div>`;
   }
   const head = `<h2>${esc(s.title)}</h2>`;
   if (s.kind === 'demo') {
@@ -196,7 +198,7 @@ body.notes-on .stage{bottom:34vh}
 .slide[hidden]{display:none}
 .accent{position:absolute;left:0;top:0;bottom:0;width:12px;background:linear-gradient(180deg,var(--accent),var(--accent2))}
 .kicker{font:700 15px/1 var(--head);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
-.content{flex:1;display:flex;flex-direction:column;min-height:0}
+.content{flex:1;display:flex;flex-direction:column;min-height:0}.content>*{zoom:var(--z,1)}
 h1,h2{font-family:var(--head);margin:0;letter-spacing:-.02em}
 h2{font-size:46px;line-height:1.1;font-weight:750;margin-bottom:30px;max-width:1040px}
 footer{position:absolute;left:96px;right:64px;bottom:26px;display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
@@ -233,7 +235,7 @@ blockquote{margin:28px 0 0;padding:16px 0 16px 28px;border-left:5px solid var(--
 .dia.full{padding:6px;border-radius:14px}
 ${DIAGRAM_CSS}
 .fit{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card)}
-.fit{max-height:470px}.fit-h{display:flex;gap:14px;align-items:baseline;padding:12px 18px;background:var(--soft);font-size:22px}.fit-h span{color:var(--muted);font-size:17px}
+.fit.many td{padding:5px 12px}.fit.many .nt{-webkit-line-clamp:1}.fit.many table{font-size:14px}.fit-h{display:flex;gap:14px;align-items:baseline;padding:12px 18px;background:var(--soft);font-size:22px}.fit-h span{color:var(--muted);font-size:17px}
 .fit table{width:100%;border-collapse:collapse;font-size:15px;line-height:1.3}.fit th{text-align:left;color:var(--muted);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px}
 .fit td{padding:7px 14px;border-top:1px solid var(--line);vertical-align:top}.fit .nt{font-size:13.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.fit td:nth-child(2){white-space:nowrap}.fit td:first-child{font-weight:650}
 .fit .mk{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;margin-right:8px;font-size:14px;font-weight:800;color:#fff;background:#059669}
@@ -250,7 +252,7 @@ ${DIAGRAM_CSS}
 .ba-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}.after .ba-h{color:var(--accent)}
 .ba ul{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:12px;font-size:22px;line-height:1.3}.ba.many ul{font-size:18px;gap:8px}.ba.many .ba-c{padding:20px 24px}
 .ba-arrow{display:grid;place-items:center;font-size:44px;color:var(--accent)}
-.dt{display:grid;grid-template-columns:1.2fr 54px .8fr 54px 1.2fr;align-items:center;gap:0;max-height:470px}
+.dt{display:grid;grid-template-columns:1.2fr 54px .8fr 54px 1.2fr;align-items:center;gap:0}
 .dt-col{display:flex;flex-direction:column;gap:12px;min-width:0}.dt-h{font:700 15px var(--head);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .dt-f{border-radius:16px;padding:14px 18px;background:var(--soft);border:1px solid var(--line);overflow:hidden}.dt-f b{font:700 21px/1.2 var(--head);word-break:break-word}
 .dt-f.rules{border-style:dashed}.dt-f.out{background:color-mix(in srgb,var(--accent) 9%,var(--slide));border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
@@ -263,6 +265,7 @@ ${DIAGRAM_CSS}
 .demo-t{font:800 34px var(--head)}.demo-l{font-size:18px;opacity:.85;word-break:break-all}
 .ask{flex:1;display:flex;flex-direction:column;justify-content:center;gap:30px}
 .ask-q{font:750 54px/1.15 var(--head);letter-spacing:-.02em;max-width:1050px;position:relative;padding-left:56px}
+.ask-q.long{font-size:44px}
 .ask-q::before{content:"?";position:absolute;left:0;top:-6px;font-size:64px;color:var(--accent)}
 .muted{color:var(--muted)}
 .deckbar{position:fixed;left:0;right:0;bottom:0;height:48px;display:flex;align-items:center;gap:8px;padding:0 14px;background:color-mix(in srgb,var(--slide) 92%,transparent);border-top:1px solid var(--line);font-size:14px;z-index:5}
@@ -285,6 +288,10 @@ ${DIAGRAM_CSS}
 const SCRIPT = `(()=>{const slides=[...document.querySelectorAll('.slide')];const N=slides.length;const frame=document.getElementById('frame');const stage=document.getElementById('stage');
 const notes=document.getElementById('notes');const count=document.getElementById('count');const bar=document.querySelector('.progress i');const live=document.getElementById('live');
 let i=Math.min(N-1,Math.max(0,(parseInt(location.hash.slice(1),10)||1)-1));let t0=null;
+// A slide whose content runs past its space (a long title, many rows, two files going in) is drawn smaller, step by
+// step, until it fits: nothing spills over the footer or is cut off.
+const shrink=()=>slides.forEach(s=>{const h=s.hidden;s.hidden=false;const c=s.querySelector('.content');if(c){let z=1;c.style.removeProperty('--z');while(c.scrollHeight>c.clientHeight+1&&z>0.6){z=Math.round((z-0.04)*100)/100;c.style.setProperty('--z',z);}}s.hidden=h;});
+shrink();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{shrink();show(i);});
 const fit=()=>{const r=stage.getBoundingClientRect();const k=Math.min(r.width/1280,r.height/720)*0.96;frame.style.transform='scale('+k+')';};
 const total=${'${TOTAL}'};const clock=s=>{s=Math.round(s);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');};
 const show=n=>{i=Math.min(N-1,Math.max(0,n));slides.forEach((s,k)=>{s.hidden=k!==i;s.setAttribute('aria-hidden',k!==i);});count.textContent=(i+1)+' / '+N;

@@ -118,6 +118,17 @@ describe('the two AI tasks', () => {
     expect(p).toMatch(/return on investment/);
     expect(p).toContain('"todo"');
   });
+  it("the question slide keeps the team's whole question (up to 160 characters); other titles stay headlines (90)", () => {
+    const q = 'Which other checks from your own expense or invoice reviews could run on the same rules-sheet pattern, week after week?';
+    const long = 'A headline that runs on and on well past the ninety characters a slide title may have on it';
+    const slide = (kind: string, title = 'T') => ({ kind, title, points: [], notes: 'Say it.', minutes: 1 });
+    const spec = roadshowDeckTask.parse(JSON.stringify({ title: 'Deck', subtitle: '', slides: [slide('title'), slide('problem', long), slide('team'), slide('demo'), slide('question', q), slide('thanks')] }));
+    expect(spec.slides[4].title).toBe(q);
+    expect(spec.slides[1].title.length).toBeLessThanOrEqual(90);
+    const { spec: checked } = checkDeck(spec, { visuals: [], data: '', hasTeam: false });
+    expect(checked.slides.find((x) => x.kind === 'question')!.title).toBe(q);
+  });
+
   it('roadshow-deck: a strict spec (kinds, visuals, sizes), a long time limit, the E10 structure and the Café rules in the prompt', () => {
     expect(ROADSHOW_DECK_SCHEMA.required).toEqual(['title', 'subtitle', 'slides']);
     expect(DECK_KINDS).toContain('headaches');
@@ -404,6 +415,9 @@ describe('the roadshow, end to end on the server', () => {
     const dir = path.join(await ideaDir(s.root, ID), 'roadshow');
     const html = await readFile(path.join(dir, 'deck.html'), 'utf8');
     expect(html.match(/<section class="slide /g)).toHaveLength(n);
+    // A slide that runs past its space is drawn smaller until it fits (the content's children zoom by --z).
+    expect(html).toContain('.content>*{zoom:var(--z,1)}');
+    expect(html).toContain('const shrink=()=>');
     expect(html.match(/<div class="sn" hidden/g)).toHaveLength(n);
     expect(html).toContain(`data:image/png;base64,${png(24, 24).toString('base64')}`);
     expect(html).toContain('Person 2'); // no photo: initials

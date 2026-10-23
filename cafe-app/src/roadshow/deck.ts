@@ -10,7 +10,7 @@ import { writeFileAtomic, appendHistory } from '../workspace/files';
 import { showNames, type Coded } from '../command/names';
 import { pointOf } from '../design/points';
 import {
-  DECK_POINT_MAX, DECK_POINTS_MAX, DECK_TITLE_MAX, type DeckSlide, type DeckSpec, type DeckVisual, type RoadshowInput,
+  DECK_POINT_MAX, DECK_POINTS_MAX, DECK_TITLE_MAX, deckTitleMax, type DeckSlide, type DeckSpec, type DeckVisual, type RoadshowInput,
 } from '../ai/tasks';
 import type { DiagramSpec } from '../design/diagram';
 import { columnsOf, isUsable, KIND_LABELS, whatOf, type DataFile } from '../data/model';
@@ -92,7 +92,7 @@ export function checkDeck(spec: DeckSpec, ctx: { visuals: DeckVisual[]; data: st
     if (!visual && s.kind === 'tool' && ctx.visuals.includes('fit-table')) visual = 'fit-table';
     if (!visual && s.kind === 'data' && ctx.visuals.includes('data')) visual = 'data';
     const quote = s.quote && !bad(s.quote) ? one(s.quote, 240) : '';
-    const title = one(s.title, DECK_TITLE_MAX);
+    const title = one(s.title, deckTitleMax(s.kind));
     return {
       kind: s.kind, title: bad(title) ? s.kind[0].toUpperCase() + s.kind.slice(1) : title, points: lines(s.points),
       ...(quote ? { quote } : {}), ...(visual ? { visual } : {}),

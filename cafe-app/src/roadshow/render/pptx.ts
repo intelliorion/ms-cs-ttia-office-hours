@@ -146,7 +146,7 @@ export async function renderDeckPptx(m: DeckModel): Promise<Uint8Array> {
     slide.addText(`${m.ideaTitle} · Creators' Café`, { x: X0, y: H - 0.5, w: 8, h: 0.3, fontSize: 10, color: MUTED, fontFace: body, margin: 0 });
     slide.addText(`${i + 1} / ${n}`, { x: W - 2.0, y: H - 0.5, w: 1.3, h: 0.3, fontSize: 10, color: MUTED, align: 'right', fontFace: body, margin: 0 });
     if (s.kind === 'question') {
-      slide.addText(`? ${s.title}`, { x: X0, y: 1.6, w: CW, h: 3.4, fontSize: 40, bold: true, color: ink, fontFace: head, valign: 'middle' });
+      slide.addText(`? ${s.title}`, { x: X0, y: 1.6, w: CW, h: 3.4, fontSize: s.title.length > 90 ? 32 : 40, bold: true, color: ink, fontFace: head, valign: 'middle' });
       bullets(slide, s.points, { x: X0, y: 5.1, w: CW, h: 1.5 }, 18);
       return;
     }

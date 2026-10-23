@@ -1461,6 +1461,9 @@ export const DECK_POINTS_MAX = 6;
 export const DECK_POINT_MAX = 160;
 export const DECK_NOTES_MAX = 1400;
 export const DECK_TITLE_MAX = 90;
+/** The question slide's title is the team's question, word for word: it may run longer than a headline. */
+export const DECK_QUESTION_MAX = 160;
+export const deckTitleMax = (kind: unknown) => (kind === 'question' ? DECK_QUESTION_MAX : DECK_TITLE_MAX);
 
 export interface DeckSlide {
   kind: DeckKind;
@@ -1489,7 +1492,7 @@ export const ROADSHOW_DECK_SCHEMA: JsonSchema = {
         type: 'object', additionalProperties: false, required: ['kind', 'title', 'points', 'notes', 'minutes'],
         properties: {
           kind: { type: 'string', enum: DECK_KINDS },
-          title: { type: 'string', minLength: 1, maxLength: DECK_TITLE_MAX },
+          title: { type: 'string', minLength: 1, maxLength: DECK_QUESTION_MAX },
           points: DECK_LINES,
           quote: { type: 'string', maxLength: 240 },
           visual: { type: 'string', enum: DECK_VISUALS },
@@ -1512,7 +1515,7 @@ function trimDeck(v: unknown): void {
   for (const sl of o.slides) {
     const x = asObj(sl);
     if (!x) continue;
-    x.title = trimStrings(oneLine(x.title), DECK_TITLE_MAX);
+    x.title = trimStrings(oneLine(x.title), deckTitleMax(x.kind));
     if (Object.hasOwn(x, 'quote')) x.quote = trimStrings(oneLine(x.quote), 240);
     for (const k of ['points', 'before', 'after']) {
       if (Array.isArray(x[k])) x[k] = (x[k] as unknown[]).map((p) => trimStrings(oneLine(p), DECK_POINT_MAX)).filter((p) => p !== '').slice(0, DECK_POINTS_MAX);
@@ -1534,7 +1537,7 @@ export const roadshowDeckTask: Task<DeckSpec> = {
       'Give a comprehensive walk-through of the idea: the problem, how it is done today, the team, the solution, the design, the tool, the demo, the headaches, the lessons, what someone needs to reuse it, the next steps and one question for the room.',
       `Follow the ten-minute structure the presenters were sent: ${ROADSHOW_STRUCTURE.map((s, k) => `${k + 1}. ${s}`).join('; ')}.`,
       `Slides: ${DECK_SLIDES_MIN} to ${DECK_SLIDES_MAX}, about 10 to 14, in this order where DATA supports them: title, problem, today, team, solution, data, diagram, tool, demo, headaches, lessons, reuse, next, question, thanks. Leave out a slide DATA has nothing for (never pad).`,
-      `Each slide: kind (one of ${DECK_KINDS.join(', ')}), title (a short headline that says the point, at most ${DECK_TITLE_MAX} characters), points (0 to ${DECK_POINTS_MAX} short lines for the slide, at most ${DECK_POINT_MAX} characters each, plain words, no full stops needed), notes, minutes.`,
+      `Each slide: kind (one of ${DECK_KINDS.join(', ')}), title (a short headline that says the point, at most ${DECK_TITLE_MAX} characters; the question slide's title is the question itself, at most ${DECK_QUESTION_MAX}), points (0 to ${DECK_POINTS_MAX} short lines for the slide, at most ${DECK_POINT_MAX} characters each, plain words, no full stops needed), notes, minutes.`,
       'quote: optional, one short line in the voice of the people who have the problem, only when DATA says it (never invent a quote).',
       `visual: optional, one of DATA.visuals only: "team" on the team slide (the app draws each person with their photo, name and roles: do not list the people in points); "diagram" on the diagram slide (the app draws the design diagram); "fit-table" on the tool slide (the app draws how the tool fits each feature); "timeline" on a slide about how long it took (the app draws DATA.dates); "before-after" on the today or solution slide, with "before" (how it is done today) and "after" (with the proof of concept), each 2 to 5 short lines.`,
       'notes: the speaker script for that slide, what the presenter says out loud, in their voice ("we", "our team"), plain and warm, in short spoken sentences. About 120 words for each minute. Add cues in square brackets where an action happens, such as "[click to the demo]" or "[switch to the demo]". The demo slide\'s notes walk through what to show, step by step, on the sample data.',

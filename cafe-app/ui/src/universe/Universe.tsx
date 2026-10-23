@@ -213,7 +213,7 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
         ? <Snowfall floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
         : <><Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} /><ambientLight intensity={0.2} /></>}
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} palette={palette} />
+        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} palette={palette} hood={lit || multi ? null : hood} />
         <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} palette={palette} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls

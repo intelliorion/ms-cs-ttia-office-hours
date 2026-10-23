@@ -90,11 +90,14 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
         edge(ideaId, rel, id, column, `${src}:${column}`);
       }
     }
+    // The saved features: the idea NEEDS each one; only the ones the tool covers are BUILT_WITH it.
     const tools = idea.tools ?? {};
-    for (const [feature, tool] of Object.entries(tools)) {
+    for (const feature of idea.features ?? Object.keys(tools)) {
       const cid = node({ id: nodeId('Capability', feature), type: 'Capability', label: feature });
+      const tool = tools[feature];
+      edge(ideaId, 'NEEDS', cid, tool ? 'Feature' : 'Feature, not covered by the tool', `${src}:approach.md`);
+      if (!tool) continue;
       const tid = node({ id: nodeId('Tool', tool), type: 'Tool', label: tool });
-      edge(ideaId, 'NEEDS', cid, 'Feature', `${src}:approach.md`);
       edge(cid, 'BUILT_WITH', tid, 'Tool pick', `${src}:approach.md`);
     }
   }

@@ -91,12 +91,18 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
   const answer = async (need: string, text: string) => { await call(() => designPost(idea.id, 'tools/prep/answer', { need, answer: text }), { ok: () => undefined }); };
   const draftEmail = () => call(() => designPost(idea.id, 'tools/prep/email'), { ok: (o: any) => openedText(o.email.template) });
   const problem = dirty ? picksProblem(rows) : null;
+  /** After a save: saved features that look like a star the idea already had. Merge, or keep both. */
+  const [similar, setSimilar] = useState<{ feature: string; featureId: string; star: string; starId: string }[]>([]);
+  const merge = async (x: { feature: string; featureId: string; star: string; starId: string }) => {
+    const r = await call(() => post('/api/graph/merge', { from: x.starId, into: x.featureId }), { ok: () => `Merged ${x.star} into ${x.feature}: its links moved over.` });
+    if (r) setSimilar((xs) => xs.filter((y) => y.starId !== x.starId));
+  };
   const save = async () => {
     const b = picksBody(rows, choice);
     const r = await call(() => designPost(idea.id, 'tools', b), {
       ok: () => `Saved ${features(b.features.length)}${choice ? ` and ${choice.tool}` : ''}. approach.md is written and the universe shows the tool.`,
     });
-    if (r) { setDirty(false); setRows(featureRows(r.state.features)); setChoice(toolView(r.state.tool, tools)); }
+    if (r) { setDirty(false); setRows(featureRows(r.state.features)); setChoice(toolView(r.state.tool, tools)); setSimilar(r.similar ?? []); }
   };
   const builder = buildersOf(idea)[0];
   const off = busy || aiWorking;
@@ -218,11 +224,27 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
 
       {dirty && (
         <div className="rv-foot">
-          <span className={`hint${problem ? ' warn' : ''}`}>{problem ?? 'Saving writes approach.md and links each feature to the tool.'}</span>
+          <span className={`hint${problem ? ' warn' : ''}`}>{problem ?? 'Saving writes approach.md and links each feature the tool covers to it.'}</span>
           <span className="tp-acts">
             <button className="btn ghost" data-action="tools-undo" disabled={off} onClick={() => { reset(); setDirty(false); }}>Undo changes</button>
             <button className="btn primary" data-action="tools-save" disabled={off || Boolean(problem)} onClick={() => void save()}>Save</button>
           </span>
+        </div>
+      )}
+      {similar.length > 0 && (
+        <div className="tp-similar" data-testid="similar-stars">
+          <div className="rs-th"><span>Already in the universe?</span></div>
+          <ul>
+            {similar.map((x) => (
+              <li key={x.starId} data-similar={x.starId}>
+                <span><b>{x.feature}</b> looks like <b>{x.star}</b>, which the AI found in the submission.</span>
+                <span className="tp-acts">
+                  <button className="btn sm primary" data-action="merge-star" disabled={off} onClick={() => void merge(x)}>Merge</button>
+                  <button className="btn sm" data-action="keep-both" disabled={off} onClick={() => setSimilar((xs) => xs.filter((y) => y.starId !== x.starId))}>Keep both</button>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

@@ -344,7 +344,7 @@ describe('the one tool: suggested, or the operator\'s evaluated', () => {
 });
 
 describe('saving the features and the tool', () => {
-  it('save writes approach.md, ticks s3e, sets status and links every feature to the one tool, once after two saves', async () => {
+  it('save writes approach.md, ticks s3e, sets status and links the features the tool covers, once after two saves', async () => {
     const s = await server();
     const r1 = await s.post(`/api/ideas/${ID}/tools`, PICKS);
     expect(r1.status).toBe(200);
@@ -357,14 +357,16 @@ describe('saving the features and the tool', () => {
     expect(await exists(path.join(dir, 'design.md'))).toBe(true);
     const idea = await loadIdea(s.root, ID);
     expect(idea.checklist.s3e).toMatchObject({ done: true, by: 'app', source: 'approach.md' });
-    expect(idea.tools).toEqual({ 'Request intake form': 'Power Apps', 'Draft replies': 'Power Apps' });
+    // Draft replies is a "no" in the fit: needed by the idea, not built with Power Apps.
+    expect(idea.tools).toEqual({ 'Request intake form': 'Power Apps' });
+    expect(idea.features).toEqual(['Request intake form', 'Draft replies']);
     expect((await readDesign(s.root, ID)).features).toHaveLength(2);
 
     const r2 = await s.post(`/api/ideas/${ID}/tools`, PICKS);
     expect(r2.status).toBe(200);
     const g = await s.get('/api/graph');
     const built = g.edges.filter((e: any) => e.rel === 'BUILT_WITH');
-    expect(built).toHaveLength(2);
+    expect(built).toHaveLength(1);
     for (const e of built) expect(e).toMatchObject({ confidence: 1, confirmed: true, source: `form:${ID}:approach.md` });
     const needs = g.edges.filter((e: any) => e.rel === 'NEEDS' && e.source === `form:${ID}:approach.md`);
     expect(needs).toHaveLength(2);
@@ -377,13 +379,13 @@ describe('saving the features and the tool', () => {
     expect(d.designMd).toContain('Request intake form');
   });
 
-  it('changing the tool replaces every BUILT_WITH link', async () => {
+  it('changing the tool replaces its BUILT_WITH links', async () => {
     const s = await server();
     await s.post(`/api/ideas/${ID}/tools`, PICKS);
     await s.post(`/api/ideas/${ID}/tools`, { features: FEATURES, tool: { ...TOOL, tool: 'Copilot Studio', by: 'operator' } });
     const g = await s.get('/api/graph');
     const built = g.edges.filter((e: any) => e.rel === 'BUILT_WITH').map((e: any) => e.id).sort();
-    expect(built).toEqual(['capability:draft-replies|BUILT_WITH|tool:copilot-studio', 'capability:request-intake-form|BUILT_WITH|tool:copilot-studio']);
+    expect(built).toEqual(['capability:request-intake-form|BUILT_WITH|tool:copilot-studio']);
   });
 
   it('an older client\'s body (a tool on each feature) saves as one tool, the most common', async () => {
@@ -542,5 +544,40 @@ describe('the design pack', () => {
       expect((await json(await s.post(`/api/ideas/${ID}/design-file`, { path: bad }))).error).toBe('Not a design file');
     }
     expect((await json(await s.post(`/api/ideas/${ID}/design-file`, { path: 'plan.md' }))).error).toBe('plan.md is not written yet');
+  });
+});
+
+describe('saved features and tool in the universe', () => {
+  const tool = (fit: { feature: string; fit: 'yes' | 'partly' | 'no' }[]) => ({
+    tool: 'Dataiku', reason: 'Rule checks over an export', pros: ['Works on exports'], cons: ['Cannot email people'], context: ['Export input'], flags: [],
+    fit: fit.map((f) => ({ ...f, note: f.fit === 'no' ? 'Needs Power Automate' : '' })),
+  });
+  const features = [{ name: 'Weekend spend check', what: 'Flags weekend spend' }, { name: 'Claimant query emails', what: 'Emails the claimant' }];
+
+  it('a feature the tool cannot do is needed by the idea but not built with the tool', async () => {
+    const s = await server();
+    const r = await json(await s.post(`/api/ideas/${ID}/tools`, { features, tool: tool([{ feature: 'Weekend spend check', fit: 'yes' }, { feature: 'Claimant query emails', fit: 'no' }]) }));
+    expect(r.error).toBeUndefined();
+    const idea = await loadIdea(s.root, ID);
+    expect(idea.tools).toEqual({ 'Weekend spend check': 'Dataiku' });
+    expect(idea.features).toEqual(['Weekend spend check', 'Claimant query emails']);
+    const { rebuildGraph } = await import('../src/graph/store');
+    const rels = (await rebuildGraph(s.root)).edges.map((e) => `${e.from} ${e.rel} ${e.to} ${e.description}`);
+    expect(rels).toContain(`idea:${ID} NEEDS capability:claimant-query-emails Feature, not covered by the tool`);
+    expect(rels).toContain('capability:weekend-spend-check BUILT_WITH tool:dataiku Tool pick');
+    expect(rels.some((r) => r.startsWith('capability:claimant-query-emails BUILT_WITH'))).toBe(false);
+  });
+
+  it('a saved feature that looks like a star the idea already has is listed, and Merge moves its links', async () => {
+    const s = await server();
+    const { appendAiLink, rebuildGraph } = await import('../src/graph/store');
+    await appendAiLink(s.root, { from: `idea:${ID}`, rel: 'NEEDS', to: 'capability:weekend-spend-policy-check', description: 'x', source: 'ai:fake:challenge', confidence: 0.9, status: 'confirmed', newNodes: [{ id: 'capability:weekend-spend-policy-check', type: 'Capability', label: 'Weekend spend policy check' }] });
+    const r = await json(await s.post(`/api/ideas/${ID}/tools`, { features, tool: tool([{ feature: 'Weekend spend check', fit: 'yes' }, { feature: 'Claimant query emails', fit: 'yes' }]) }));
+    expect(r.similar).toEqual([{ feature: 'Weekend spend check', featureId: 'capability:weekend-spend-check', star: 'Weekend spend policy check', starId: 'capability:weekend-spend-policy-check' }]);
+    const m = await json(await s.post('/api/graph/merge', { from: r.similar[0].starId, into: r.similar[0].featureId }));
+    expect(m).toMatchObject({ merged: true, from: 'Weekend spend policy check', into: 'Weekend spend check' });
+    const g = await rebuildGraph(s.root);
+    expect(g.nodes.some((n) => n.id === 'capability:weekend-spend-policy-check')).toBe(false);
+    expect((await json(await s.post('/api/graph/merge', { from: 'capability:nope', into: r.similar[0].featureId }))).error).toBe('Those two stars cannot be merged');
   });
 });

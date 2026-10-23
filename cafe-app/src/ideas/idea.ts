@@ -137,6 +137,8 @@ export interface Idea {
   route?: string;
   /** feature name → approved tool, derived from approach.md (the tool picker). Replaced whole on every save. */
   tools?: Record<string, string>;
+  /** Every feature the tool picker saved, in its order; the ones missing from `tools` are not covered by the tool. */
+  features?: string[];
   source?: { file: string; row: number };
   dedupe_key: string;
 }
@@ -171,6 +173,7 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     sent: raw.sent ?? {},
     flags: arr(raw.flags),
     ...(raw.tools !== undefined ? { tools: toolMap(raw.tools) } : {}),
+    ...(raw.features !== undefined ? { features: arr<unknown>(raw.features).filter((f): f is string => typeof f === 'string' && f.trim() !== '') } : {}),
     dedupe_key: String(raw.dedupe_key ?? ''),
   };
 }

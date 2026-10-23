@@ -6,7 +6,7 @@ import { StageChart, SupportChart, FunctionChart } from './Charts';
 import { LinkTable } from '../popouts/LinkTable';
 import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
-import { NODE_COLOURS } from '../universe/graphView';
+import { NODE_COLOURS, throughFeatures } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
 import { ideasAround, inCommon, rightContext, type RightContext } from './contextHelpers';
 
@@ -113,7 +113,31 @@ function IdeaConnections({ id }: { id: string }) {
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
           onOpen={followLink} />
+        <ThroughFeatures id={id} />
       </> : <History history={history} steps={state?.steps} />}
+    </div>
+  );
+}
+
+/** What the idea reaches through its features: the tool they are built with, the systems they use data from. */
+function ThroughFeatures({ id }: { id: string }) {
+  const { graph, followLink } = useStore();
+  const rows = graph ? throughFeatures(graph, `idea:${id}`) : [];
+  if (!rows.length) return null;
+  return (
+    <div className="ctx-through" data-testid="through-features">
+      <div className="rs-th"><span>Through its features</span></div>
+      <ul className="sd-list">
+        {rows.map((r) => (
+          <li key={r.node.id}>
+            <button className="sd-go" data-go={r.node.id} onClick={() => followLink(r.node.id)}>
+              <span className="dot" style={{ background: (NODE_COLOURS as Record<string, string>)[r.node.type] ?? '#9fb0ae' }} />
+              <span className="sd-l">{r.node.label}</span>
+              <span className="rel">{r.rel === 'BUILT_WITH' ? 'built with' : 'uses data from'} · {r.via} feature{r.via === 1 ? '' : 's'}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

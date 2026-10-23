@@ -175,8 +175,9 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
   const was = idea.formWas ?? {};
   const learned = idea.learned;
   // The tool and features saved in the tool picker (idea.tools: feature → tool), added after the form.
-  const picked = Object.entries((idea.tools ?? {}) as Record<string, string>);
-  const chosen = [...new Set(picked.map(([, t]) => t))];
+  const toolOf = (idea.tools ?? {}) as Record<string, string>;
+  const picked: [string, string | undefined][] = ((idea.features as string[] | undefined) ?? Object.keys(toolOf)).map((f) => [f, toolOf[f]]);
+  const chosen = [...new Set(Object.values(toolOf))];
   const anyAdded = picked.length > 0 || !!learned?.points?.length || answers.length > 0 || Object.keys(was).length > 0 || team.some((p) => p.joined || p.added?.length) || !!idea.people?.builder;
   return (
     <section className="sec">
@@ -222,7 +223,9 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
       {picked.length > 0 && (
         <div className="field-row" data-testid="picked">
           <Field label="Features">
-            <div className="tags">{picked.map(([f]) => <span key={f} className="tg added" data-feature={f}>{f}</span>)}</div>
+            <div className="tags">{picked.map(([f, t]) => (
+              <span key={f} className={`tg added${t ? '' : ' uncovered'}`} data-feature={f} title={t ? `Built with ${t}` : 'Not covered by the tool'}>{f}{!t && <em> not covered</em>}</span>
+            ))}</div>
           </Field>
           <Field label={chosen.length > 1 ? 'Tools' : 'Tool'}>
             <div className="tags">{chosen.map((t) => <span key={t} className="tg added" data-tool={t}>{t}</span>)}</div>

@@ -62,4 +62,11 @@ describe('the Submission: what the form said, and what came after', () => {
     expect([...el.querySelectorAll('[data-testid="picked"] [data-tool]')].map((x) => [x.textContent, x.className])).toEqual([['Dataiku', 'tg added']]);
     expect(el.querySelector('[data-testid="added-legend"]')).not.toBeNull();
   });
+
+  it('a saved feature the tool cannot do says so', () => {
+    render(<Details idea={{ id: 'x', people: { team: [] }, features: ['Check', 'Emails'], tools: { Check: 'Dataiku' } }} />);
+    expect(el.querySelector('[data-feature="Emails"]')!.className).toBe('tg added uncovered');
+    expect(el.querySelector('[data-feature="Emails"] em')!.textContent).toBe(' not covered');
+    expect(el.querySelector('[data-feature="Check"] em')).toBeNull();
+  });
 });

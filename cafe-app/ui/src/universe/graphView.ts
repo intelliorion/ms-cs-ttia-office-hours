@@ -78,7 +78,25 @@ export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<stri
     if (e.from === id) out.add(e.to);
     else if (e.to === id) out.add(e.from);
   }
+  // An idea also keeps what its features stand on: the tool each is built with and the systems they use data from.
+  if (id.startsWith('idea:')) {
+    const first = new Set(out);
+    for (const e of graph.edges) if ((e.rel === 'BUILT_WITH' || e.rel === 'USES_DATA') && first.has(e.from) && e.from !== id) out.add(e.to);
+  }
   return out;
+}
+
+/** The stars an idea reaches through its features (tools, systems), each with how many of its features lead there. */
+export function throughFeatures(graph: Pick<Graph, 'edges' | 'nodes'>, id: string): { node: GNode; rel: string; via: number }[] {
+  const first = new Set(graph.edges.filter((e) => e.from === id && e.rel === 'NEEDS').map((e) => e.to));
+  const seen = new Map<string, { node: GNode; rel: string; via: number }>();
+  for (const e of graph.edges) {
+    if ((e.rel !== 'BUILT_WITH' && e.rel !== 'USES_DATA') || !first.has(e.from)) continue;
+    const node = graph.nodes.find((n) => n.id === e.to); if (!node) continue;
+    const have = seen.get(node.id);
+    if (have) have.via++; else seen.set(node.id, { node, rel: e.rel, via: 1 });
+  }
+  return [...seen.values()].sort((a, b) => b.via - a.via || a.node.label.localeCompare(b.node.label));
 }
 
 
@@ -127,10 +145,14 @@ export const LABEL_MAX = 40;
 export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
 
 /** A selected star wins; otherwise a lit set (the stars an answer rests on) shows the links between them. */
-export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'>, selected: string | null, lit?: Set<string> | null, dim = DIM) {
+export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'> & { rel?: string }, selected: string | null, lit?: Set<string> | null, dim = DIM, hood?: Set<string> | null) {
   const dashed = !edge.confirmed;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
+    // A selected idea's features keep their tool and system links in view too (no pulse: only the idea's own links travel).
+    if (!touches && hood && (edge.rel === 'BUILT_WITH' || edge.rel === 'USES_DATA') && hood.has(edge.from) && hood.has(edge.to)) {
+      return { opacity: LINK_IN_VIEW, dashed, pulse: false };
+    }
     // Links in view stay quieter than the stars they join: the eye goes to the stars first.
     return { opacity: touches ? LINK_IN_VIEW : dim / 3, dashed, pulse: touches };
   }

@@ -11,7 +11,9 @@ import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { tick } from '../checklist/checklist';
 import type { StepDef } from '../rules/stages';
 import { writeFileAtomic } from '../workspace/files';
-import { canonicalTool, slug } from '../graph/ontology';
+import { canonicalTool, nodeId, slug } from '../graph/ontology';
+import { rebuildGraph } from '../graph/store';
+import { wordOverlap } from '../inbox/conflicts';
 import {
   FEATURE_FLAGS, FEATURE_ONLY_FLAGS, FEATURES_MAX, type FeatureFlag, type FeatureListInput, type FeatureListOutput,
   type FeatureSuggestion, type ToolPickInput, type ToolPickOutput,
@@ -114,9 +116,14 @@ export function validateChoice(raw: unknown, features: { name: string }[], build
   };
 }
 
-/** feature name → tool, for the graph (idea NEEDS capability, capability BUILT_WITH tool): every feature, the one tool. */
-export const toolsMap = (state: Pick<DesignState, 'features' | 'tool'>): Record<string, string> =>
-  Object.fromEntries(toolFeatures(state).filter((f) => f.tool).map((f) => [f.name, f.tool!]));
+/**
+ * feature name → tool, for the graph (capability BUILT_WITH tool): the features the one tool covers. A feature its fit
+ * says it cannot do ("no") is left out: the graph must not say it is built with a tool that cannot build it.
+ */
+export const toolsMap = (state: Pick<DesignState, 'features' | 'tool'>): Record<string, string> => {
+  const cannot = new Set((state.tool?.fit ?? []).filter((x) => x.fit === 'no').map((x) => x.feature.trim().toLowerCase()));
+  return Object.fromEntries(toolFeatures(state).filter((f) => f.tool && !cannot.has(f.name.trim().toLowerCase())).map((f) => [f.name, f.tool!]));
+};
 
 const FIT_WORD: Record<FitLevel, string> = { yes: 'Yes', partly: 'Partly', no: 'No' };
 /** A table cell: one line, and a pipe cannot open a new column. */
@@ -299,7 +306,8 @@ export async function saveToolPicks(
   const state: DesignState = { ...prev, status, features };
   if (tool) state.tool = tool; else delete state.tool;
   if (reopen) delete state.approvedAt;
-  const withTools: Idea = { ...idea, tools: toolsMap(state) };
+  // Every feature (idea NEEDS it) and the ones the tool covers (BUILT_WITH it), for the graph and the Submission.
+  const withTools: Idea = { ...idea, tools: toolsMap(state), features: state.features.map((f) => f.name) };
   state.cafeCheck = cafeCheck(withTools, state);
   await writeDesign(root, id, state);
   const dir = await ideaDir(root, id);
@@ -339,4 +347,27 @@ export async function markToolAsked(root: string, id: string, at: string, asked 
   });
   state.toolPrep = { ...state.toolPrep, needs };
   await writeDesign(root, id, state);
+}
+
+/** A saved feature and a star already on the idea that looks like the same thing. */
+export interface SimilarStar { feature: string; featureId: string; star: string; starId: string }
+
+/**
+ * Features that look like a capability already linked to the idea (the AI's, from the submission): half or more of
+ * their words shared. Never merged by the app: the operator says Merge or Keep both.
+ */
+export async function similarStars(root: string, idea: Idea): Promise<SimilarStar[]> {
+  const features = idea.features ?? Object.keys(idea.tools ?? {});
+  if (!features.length) return [];
+  const graph = await rebuildGraph(root);
+  const me = `idea:${idea.id}`;
+  const mine = new Set(features.map((f) => nodeId('Capability', f)));
+  const others = graph.edges.filter((e) => e.from === me && e.rel === 'NEEDS' && !mine.has(e.to))
+    .map((e) => graph.nodes.find((n) => n.id === e.to)).filter((n): n is NonNullable<typeof n> => n?.type === 'Capability');
+  const out: SimilarStar[] = [];
+  for (const f of features) {
+    const best = others.map((n) => ({ n, score: wordOverlap(f, n.label) })).filter((x) => x.score >= 0.5).sort((a, b) => b.score - a.score)[0];
+    if (best && !out.some((o) => o.starId === best.n.id)) out.push({ feature: f, featureId: nodeId('Capability', f), star: best.n.label, starId: best.n.id });
+  }
+  return out;
 }

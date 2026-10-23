@@ -1058,3 +1058,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ds-steps.one{margin:0}
 .ds-see{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .tg.added{border-color:rgba(var(--rgb-added),.7);color:var(--added);border-style:dashed}
+.tg.added.uncovered{opacity:.75}
+.tg.added.uncovered em{font-style:normal;color:var(--amber);margin-left:6px;font-size:12px}
+.ctx-through{margin-top:12px}
+.tp-similar{margin-top:12px}
+.tp-similar ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tp-similar li{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid rgba(var(--rgb-warm),.45);border-radius:6px;font-size:14px}

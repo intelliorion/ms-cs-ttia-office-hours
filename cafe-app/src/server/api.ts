@@ -19,11 +19,12 @@ import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
+import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
-import { saveToolPicks, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
+import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
@@ -34,7 +35,7 @@ import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
-import { edgeId, APPROVED_TOOLS } from '../graph/ontology';
+import { edgeId, APPROVED_TOOLS, MERGEABLE } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -249,7 +250,18 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   });
   add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
     const { state, designFile } = await saveToolPicks(root, params.id, { features: body.features, tool: body.tool }, { clock, steps: await steps() });
-    return { state, designMd: await readFile(designFile, 'utf8') };
+    // Saved features that look like a star the idea already has: listed for Merge or Keep both, never merged here.
+    return { state, designMd: await readFile(designFile, 'utf8'), similar: await similarStars(root, await loadIdea(root, params.id)) };
+  });
+  // Merge one star into another (its links move): the same operator edit the assistant's merge makes, so it can be undone there.
+  add('POST', '/api/graph/merge', async ({ body }) => {
+    const from = String(body.from ?? ''); const into = String(body.into ?? '');
+    const graph = await rebuildGraph(root);
+    const a = graph.nodes.find((n) => n.id === from); const b = graph.nodes.find((n) => n.id === into);
+    if (!a || !b || a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) throw new Error('Those two stars cannot be merged');
+    const id = await nextEditId(root);
+    await appendEdit(root, { id, at: clock(), status: 'active', t: 'merge', from, into } as never);
+    return { merged: true, from: a.label, into: b.label, edit: id };
   });
   // Design series: the brainstorm. One question at a time; every change re-renders design.md and the Café check.
   add('POST', '/api/ideas/:id/design/step', async ({ params, body }) => {

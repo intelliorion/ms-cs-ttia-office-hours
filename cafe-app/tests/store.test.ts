@@ -66,3 +66,16 @@ describe('settings', () => {
     expect(file).not.toContain('capacity');
   });
 });
+
+describe('start-up never overwrites rules', () => {
+  it('an existing settings.yaml or stages.yaml, even an empty one, is left as it is', async () => {
+    const { initWorkspace } = await import('../src/workspace/init');
+    const root = await tmpWorkspace();
+    await writeFile(path.join(root, 'rules', 'settings.yaml'), '');
+    await writeFile(path.join(root, 'rules', 'stages.yaml'), '');
+    const { created } = await initWorkspace(root);
+    expect(created).not.toContain('rules/settings.yaml');
+    expect(created).not.toContain('rules/stages.yaml');
+    expect(await readFile(path.join(root, 'rules', 'settings.yaml'), 'utf8')).toBe('');
+  });
+});

@@ -20,7 +20,7 @@ export function sampleIdea(over: Partial<Idea> = {}): Idea {
     slug: 'email-scheduler',
     title: 'Email scheduler',
     round: 'ROUND-2026-Q4',
-    stage: 1,
+    stage: 2,
     function: 'BSI',
     region: 'AMER',
     people: { submitter: 'Person 1', team: [] },

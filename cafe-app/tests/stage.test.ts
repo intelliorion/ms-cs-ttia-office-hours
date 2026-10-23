@@ -20,7 +20,7 @@ describe('setStage', () => {
     await saveIdea(root, sampleIdea());
     expect((await setStage(root, ID, { stage: 3 }, clock)).stage).toBe(3);
     expect((await loadIdea(root, ID)).stage).toBe(3);
-    expect(await stageLog(root)).toEqual([{ at: '2026-10-19', action: 'stage', by: 'operator', detail: 'Submit Idea → Design series' }]);
+    expect(await stageLog(root)).toEqual([{ at: '2026-10-19', action: 'stage', by: 'operator', detail: 'Review and Select → Design series' }]);
   });
 
   it('moves an idea back', async () => {
@@ -58,9 +58,11 @@ describe('setStage', () => {
   it('rejects an unknown stage or closure in plain English, and writes nothing', async () => {
     const root = await tmpWorkspace();
     await saveIdea(root, sampleIdea());
-    await expect(setStage(root, ID, { stage: 7 } as never, clock)).rejects.toThrow('Pick a stage from 1 to 4, or a way to close it');
-    await expect(setStage(root, ID, { closeAs: 'binned' } as never, clock)).rejects.toThrow('Pick a stage from 1 to 4, or a way to close it');
-    await expect(setStage(root, ID, {} as never, clock)).rejects.toThrow('Pick a stage');
+    await expect(setStage(root, ID, { stage: 7 } as never, clock)).rejects.toThrow('Pick Review and Select, Design series or Launch and Learn, or a way to close it');
+    await expect(setStage(root, ID, { closeAs: 'binned' } as never, clock)).rejects.toThrow('Pick Review and Select, Design series or Launch and Learn, or a way to close it');
+    // Submit Idea (the old stage 1) is gone.
+    await expect(setStage(root, ID, { stage: 1 } as never, clock)).rejects.toThrow('Pick Review and Select');
+    await expect(setStage(root, ID, {} as never, clock)).rejects.toThrow('Pick Review and Select');
     expect(await stageLog(root)).toEqual([]);
   });
 
@@ -77,12 +79,12 @@ describe('setStage', () => {
   it('logs every change', async () => {
     const root = await tmpWorkspace();
     await saveIdea(root, sampleIdea());
-    for (const t of [{ stage: 2 }, { stage: 3 }, { closeAs: 'stop' }, { stage: 1 }] as const) await setStage(root, ID, t, clock);
+    for (const t of [{ stage: 3 }, { stage: 4 }, { closeAs: 'stop' }, { stage: 2 }] as const) await setStage(root, ID, t, clock);
     expect((await stageLog(root)).map((h) => h.detail)).toEqual([
-      'Submit Idea → Review and Select',
       'Review and Select → Design series',
-      'Design series → Closed · Stopped, learning kept',
-      'Closed · Stopped, learning kept → Submit Idea',
+      'Design series → Launch and Learn',
+      'Launch and Learn → Closed · Stopped, learning kept',
+      'Closed · Stopped, learning kept → Review and Select',
     ]);
   });
 

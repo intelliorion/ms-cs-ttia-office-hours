@@ -134,7 +134,7 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
     });
     expect(item.status).toBe('triaged');
     const idea = await loadIdea(root, 'CAFE-2026-001') as any;
-    expect(idea.stage).toBe(1);
+    expect(idea.stage).toBe(2);
     expect(idea.people.builder).toBeUndefined();
     expect(idea.flags).toEqual([]);
     expect(idea.checklist.s2d).toMatchObject({ done: true, by: 'app', source: item.file });
@@ -304,12 +304,12 @@ describe('Needs your OK: applied only on Apply', () => {
     const { root, item } = await setup();
     const r = rec(item, 'suggest_stage');
     expect(r.action).toMatchObject({ stage: 3 });
-    expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(1);
+    expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(2);
     const after = await applyRecords(root, item.id, [r.id], clock);
     expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(3);
     expect((after.actions as ActionRecord[]).find((x) => x.id === r.id)!.status).toBe('applied');
     await undoRecord(root, item.id, r.id, clock);
-    expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(1);
+    expect((await loadIdea(root, 'CAFE-2026-001')).stage).toBe(2);
     const stage = (await readHistory(await ideaDir(root, 'CAFE-2026-001'))).filter((h) => h.action === 'stage').at(-1);
     expect(stage).toMatchObject({ detail: 'Undone in the Import' });
   });

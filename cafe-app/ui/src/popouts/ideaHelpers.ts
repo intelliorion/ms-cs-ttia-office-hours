@@ -142,7 +142,7 @@ export interface IdeaCardModel { id: string; title: string; stageLabel: string; 
 export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[] } | null | undefined, outbox: any[] = []): IdeaCardModel {
   const node: any = graph?.nodes.find((n) => n.id === `idea:${idea.id}`);
   const stageLabel = idea.closed ? `Closed · ${idea.closed}` : String(node?.attrs?.stageLabel ?? '');
-  const stageColour = idea.closed ? STAGE_RING.closed : node ? ringColour(node as any) : STAGE_RING[stageKey(idea)] ?? STAGE_RING[1];
+  const stageColour = idea.closed ? STAGE_RING.closed : node ? ringColour(node as any) : STAGE_RING[stageKey(idea)] ?? STAGE_RING[2];
   const nodeId = `idea:${idea.id}`;
   return {
     id: idea.id,

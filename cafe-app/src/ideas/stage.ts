@@ -5,16 +5,17 @@ import { loadIdea, saveIdea, ideaDir } from './store';
 import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
 import { loadSettings } from '../round/store';
 import { renderHandoff } from '../review/review';
+import { STAGES, type StageNo } from '../rules/stages';
 import { changes, whereLabel, type StageTarget } from './suggest';
 
-const BAD_TARGET = 'Pick a stage from 1 to 4, or a way to close it';
+const BAD_TARGET = 'Pick Review and Select, Design series or Launch and Learn, or a way to close it';
 
 /** Checks a target that came from the page; anything else is refused in plain words. */
 export function parseTarget(raw: unknown): StageTarget {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   if (t.stage !== undefined && t.closeAs === undefined) {
     const n = Number(t.stage);
-    if ([1, 2, 3, 4].includes(n) && String(t.stage).trim() !== '') return { stage: n as 1 | 2 | 3 | 4 };
+    if ((STAGES as number[]).includes(n) && String(t.stage).trim() !== '') return { stage: n as StageNo };
   }
   if (t.closeAs !== undefined && t.stage === undefined && typeof t.closeAs === 'string' && Object.hasOwn(CLOSURE_LABELS, t.closeAs)) {
     return { closeAs: t.closeAs as Closure };

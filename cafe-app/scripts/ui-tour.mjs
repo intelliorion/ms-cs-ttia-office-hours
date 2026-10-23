@@ -535,16 +535,16 @@ async function designShots(p) {
   await shot(p, '45-stage4-cards.png');
   await p.click(`${D} [data-action="edit-tools-card"]`);
   await p.waitForSelector(`${D} [data-testid="tool-picker"]`);
-  // Stage 1: no action section at all, only the Next hint.
+  // Review and Select, the first stage: a fresh idea shows the Decision at once and nothing from the design series.
   await p.click(`${D} [data-action="back"]`);
   await p.waitForSelector(D, { state: 'detached' });
-  const first = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.stage === 1 && !i.closed);
-  assert(first, 'no stage-1 idea to show');
+  const first = (await (await fetch(`${base}/api/state`)).json()).ideas.find((i) => i.stage === 2 && !i.review && !i.closed);
+  assert(first, 'no fresh Review and Select idea to show');
   await p.evaluate((id) => window.__cafe.openIdea(id), first.id);
-  await p.waitForSelector(`${D} [data-action="stage"]`);
-  assert((await p.locator(`${D} [data-testid="review"], ${D} [data-testid="tool-picker"], ${D} [data-testid="design"]`).count()) === 0, 'an action section shows at stage 1');
+  await p.waitForSelector(`${D} [data-testid="review"]`);
+  assert((await p.locator(`${D} [data-testid="tool-picker"], ${D} [data-testid="design"]`).count()) === 0, 'a design-series section shows in Review and Select');
   await sleep(1500);
-  await shot(p, '46-stage1.png');
+  await shot(p, '46-first-stage.png');
 }
 
 // A real pointer click on an idea star opens the idea in the panels, with no card in between.

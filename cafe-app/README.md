@@ -392,16 +392,18 @@ first, so the tour can catch a step while it runs.
 
 ## What the idea panel shows, by stage
 
-In the idea head, **Only related** draws just that idea and what it links to (one hop) and nothing else; **Show all** or Back brings the whole universe back. Stars keep their positions.
-
 Each action section has a home stage. Before it, the section is hidden; at it, the full form; after it (or once the idea is closed) a compact read-only card with an Edit link. Anything already saved is never hidden.
 
 | Stage | Editable | Cards |
 |---|---|---|
-| 1 Submit Idea | nothing yet: send E1 from Emails | |
-| 2 Review and Select | Decision (the choice first, the five checks fold away under it) | |
-| 3 Design series | Tool picker, then Design, then Plan and kits | Decision |
-| 4 Launch and Learn | nothing new | Decision, Tools, Design, Plan |
+| 1 Review and Select | Decision (the choice first, the five checks fold away under it); the acknowledgement (E1) is sent from Emails | |
+| 2 Design series | Tool picker, then Design, then Plan and kits | Decision |
+| 3 Launch and Learn | nothing new | Decision, Tools, Design, Plan |
+
+There is no Submit Idea stage: an imported idea starts in Review and Select, and the checks that used to sit in
+Submit Idea (own words, no personal data, duplicates, acknowledgement) are Review and Select steps. In the files the
+three stages are still numbered 2, 3 and 4, so older workspaces keep working; an idea or a stages.yaml step saved
+with stage 1 is read as Review and Select.
 
 ## Design series: tool picker, brainstorm, plan and kits
 

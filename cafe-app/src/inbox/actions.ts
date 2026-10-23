@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Clock } from '../clock';
 import { paths } from '../workspace/paths';
 import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
-import { loadSteps, type StageNo } from '../rules/stages';
+import { FIRST_STAGE, STAGE_NAMES, loadSteps, type StageNo } from '../rules/stages';
 import { listIdeas, loadIdea, saveIdea, ideaDir, nextId, slugify } from '../ideas/store';
 import { normalizeIdea, type Closure, type Idea } from '../ideas/idea';
 import { setStage } from '../ideas/stage';
@@ -124,7 +124,7 @@ export function labelOf(a: Action): string {
     case 'log_step': return `Log "${STEP_WORDS[a.step] ?? a.step}" on ${a.ideaId}${a.why ? ` (${a.why})` : ''}`;
     case 'add_flag': return `Add a flag on ${a.ideaId}: ${a.text}`;
     case 'name_builder': return `Name ${a.name} as the builder of ${a.ideaId}`;
-    case 'suggest_stage': return a.closeAs ? `Close ${a.ideaId} (${a.closeAs})` : `Move ${a.ideaId} to stage ${a.stage}`;
+    case 'suggest_stage': return a.closeAs ? `Close ${a.ideaId} (${a.closeAs})` : `Move ${a.ideaId} to ${STAGE_NAMES[a.stage!]}`;
     case 'create_idea': return `Create an idea: ${a.fields.title}`;
     case 'graph_links': {
       const n = a.links.length; const fresh = new Set(a.links.flatMap((l) => (l.newNodes ?? []).map((x) => x.label)));
@@ -317,7 +317,7 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       const title = a.fields.title.trim();
       if (!title) throw new Error('An idea needs a title');
       const idea = normalizeIdea({
-        id, slug: slugify(title), title, round: '', stage: 1,
+        id, slug: slugify(title), title, round: '', stage: FIRST_STAGE,
         ...(a.fields.challenge ? { challenge: a.fields.challenge } : {}),
         people: { submitter: a.fields.submitter, team: [] }, dedupe_key: `${key(title)}|${key(a.fields.submitter ?? '')}`,
       });

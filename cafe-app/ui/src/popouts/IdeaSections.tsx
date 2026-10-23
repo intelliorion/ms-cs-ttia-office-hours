@@ -57,7 +57,7 @@ export function StageButton({ state, value, label, colour, busy, onPick }: {
       {open && at && createPortal(
         <ul ref={menu} className="stage-pop" role="menu" aria-label="Stage" data-testid="stage-menu" style={{ position: 'fixed', top: at.top, right: at.right }}>
           <li className="stage-h">Stages</li>
-          {Object.keys(state.stageNames).map((n) => item(`stage:${n}`, `${n} · ${state.stageNames[n]}`))}
+          {Object.keys(state.stageNames).map((n, i) => item(`stage:${n}`, `${i + 1} · ${state.stageNames[n]}`))}
           <li className="stage-h">Close as</li>
           {Object.keys(state.closures).map((c) => item(`close:${c}`, state.closures[c]))}
         </ul>, document.body)}

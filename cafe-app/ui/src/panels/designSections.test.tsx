@@ -218,22 +218,13 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-testid="design"]')?.textContent).not.toContain('Loading');
   });
 
-  it('stage 1 shows no action section, only the Next hint', async () => {
-    useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 1 }] } } as any);
-    await act(async () => root.render(<IdeaDetails id={ID} />));
-    await flush();
-    expect(el.querySelector('[data-testid="review"]')).toBeNull();
-    expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
-    expect(el.querySelector('[data-testid="design"]')).toBeNull();
-    expect(el.textContent).toContain('The decision opens at stage 2');
-  });
-
-  it('stage 2 shows the Decision form and nothing from the design series', async () => {
+  it('stage 2 (Review and Select, the first stage) shows the Decision form at once and nothing from the design series', async () => {
     useStore.setState({ state: { ...STATE, decisions: { select: 'Select (E3)' }, ideas: [{ ...IDEA, stage: 2 }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
     expect(el.querySelector('[data-testid="review"] input[type="radio"][value="select"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
+    expect(el.textContent).not.toContain('The decision opens');
   });
 
   it('stage 3 shows the decision as a card above the tool picker; Edit reopens the form', async () => {

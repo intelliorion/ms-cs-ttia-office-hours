@@ -12,8 +12,8 @@ const BASE_SIZE: Record<NodeType, number> = {
 };
 const ALWAYS: NodeType[] = ['Idea', 'Team', 'Tool', 'Entity', 'Round'];
 
-/** Ring colour of an idea star, by stage (1–4) or closed. */
-export const STAGE_RING: Record<string, string> = { 1: '#9fb0ae', 2: '#f5b36b', 3: '#7dd3cf', 4: '#e7d8b1', closed: '#5c6b6a' };
+/** Ring colour of an idea star, by stage (2–4: Review and Select is the first) or closed. */
+export const STAGE_RING: Record<string, string> = { 2: '#f5b36b', 3: '#7dd3cf', 4: '#e7d8b1', closed: '#5c6b6a' };
 export const LINK_COLOUR = '#7dd3cf';
 /** How strong a link in view is (a selected star's links, or links between lit stars): about half, so stars lead. */
 export const LINK_IN_VIEW = 0.42;
@@ -34,7 +34,7 @@ export function visibleGraph<G extends Graph>(graph: G, hidden: readonly string[
 
 export function ringColour(node: GNode): string {
   if (node.attrs?.closed) return STAGE_RING.closed;
-  return STAGE_RING[String(node.attrs?.stage ?? 1)] ?? STAGE_RING[1];
+  return STAGE_RING[String(node.attrs?.stage ?? 2)] ?? STAGE_RING[2];
 }
 
 /** The node itself plus its direct neighbours. */

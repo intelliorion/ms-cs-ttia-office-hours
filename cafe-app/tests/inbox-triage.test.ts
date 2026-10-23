@@ -367,7 +367,7 @@ describe('triageItem', () => {
     const t2 = (await triageItem(root, d2.id, hints.connector)).triage as TriageRecord;
     expect(t2.ai?.facts.stageHint).toBe('launch');
     const idea = await loadIdea(root, 'CAFE-2026-001');
-    expect(idea.stage).toBe(1);
+    expect(idea.stage).toBe(2);
     expect(idea.people.team).toEqual([]);
     expect(idea.checklist).toEqual({});
   });

@@ -51,7 +51,7 @@ describe('api', () => {
     });
     expect((await j(res)).created).toHaveLength(3);
     const state = await j(await fetch(`${base}/api/state`));
-    expect(state.ideas[0]).toMatchObject({ stage: 1, overdue: [], offerE2R: false, sent: {}, due: {} });
+    expect(state.ideas[0]).toMatchObject({ stage: 2, overdue: [], offerE2R: false, sent: {}, due: {} });
     expect(state.ideas[0]).not.toHaveProperty('progress');
     expect(state.ideas[0]).not.toHaveProperty('status');
     expect(state.ideas[0]).not.toHaveProperty('missingToAdvance');
@@ -80,10 +80,10 @@ describe('api', () => {
     expect(closed.closed).toEqual({ as: 'csic', at: '2026-10-19', followUp: '2026-11-16' });
     const bad = await post(base, '/api/ideas/CAFE-2026-001/stage', { stage: 9 });
     expect(bad.status).toBe(400);
-    expect((await j(bad)).error).toContain('Pick a stage');
+    expect((await j(bad)).error).toContain('Pick Review and Select');
     const history = await j(await fetch(`${base}/api/ideas/CAFE-2026-001/history`));
     expect(history.filter((h: { action: string }) => h.action === 'stage').map((h: { detail: string }) => h.detail))
-      .toEqual(['Submit Idea → Launch and Learn', 'Launch and Learn → Closed · Routed to CSIC']);
+      .toEqual(['Review and Select → Launch and Learn', 'Launch and Learn → Closed · Routed to CSIC']);
     expect(history[0].action).toBe('created');
     expect((await fetch(`${base}/api/ideas/..%2Fx/history`)).status).toBe(400);
   });

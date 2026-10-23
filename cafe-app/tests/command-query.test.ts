@@ -5,11 +5,11 @@ import { sampleIdea } from './helpers';
 import type { AiLink } from '../src/graph/ontology';
 
 const ideas = [
-  sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', region: 'APAC', entity: 'CS', stage: 1, round: 'ROUND-001', dedupe_key: 'a',
+  sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', region: 'APAC', entity: 'CS', stage: 3, round: 'ROUND-001', dedupe_key: 'a',
     people: { submitter: 'Person 1', team: [{ name: 'Person 1', role: 'lead' }, { name: 'Person 2', role: 'sponsor' }] } }),
   sampleIdea({ id: 'CAFE-2026-002', title: 'Procurement FAQ bot', function: 'GSS', region: 'AMER', entity: 'CS', stage: 2, dedupe_key: 'b',
     people: { submitter: 'Person 3', team: [{ name: 'Person 3', role: 'lead' }, { name: 'Person 4', role: 'member' }] } }),
-  sampleIdea({ id: 'CAFE-2026-003', title: 'Expense anomaly finder', function: 'BSI', region: 'EMEA', entity: 'CS', stage: 1, dedupe_key: 'c',
+  sampleIdea({ id: 'CAFE-2026-003', title: 'Expense anomaly finder', function: 'BSI', region: 'EMEA', entity: 'CS', stage: 3, dedupe_key: 'c',
     people: { submitter: 'Person 5', team: [] } }),
 ];
 const ai = (from: string, rel: AiLink['rel'], to: string, type: 'Capability' | 'System' | 'PainPoint', label: string): AiLink =>
@@ -47,7 +47,7 @@ describe('the knowledge-graph query', () => {
   it('ideas by stage and function, counted', () => {
     const r = q([{ op: 'stars', type: 'Idea', function: 'GSS' }, { op: 'count_by', by: 'stage' }]);
     expect(r.final).toHaveLength(2);
-    expect(r.counts).toEqual({ 'Submit Idea': 1, 'Review and Select': 1 });
+    expect(r.counts).toEqual({ 'Design series': 1, 'Review and Select': 1 });
     expect(q([{ op: 'stars', type: 'Idea', round: '2026 Q4' }]).final).toEqual(['idea:CAFE-2026-001']);
   });
 

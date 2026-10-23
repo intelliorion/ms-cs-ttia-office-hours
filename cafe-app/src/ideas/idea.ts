@@ -1,4 +1,4 @@
-import type { StageNo } from '../rules/stages';
+import { FIRST_STAGE, toStage, type StageNo } from '../rules/stages';
 
 export type Closure = 'reuse' | 'csic' | 'notnow' | 'pattern' | 'stop';
 
@@ -84,7 +84,7 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     slug: String(raw.slug ?? ''),
     title: String(raw.title ?? ''),
     round: String(raw.round ?? ''),
-    stage: ([1, 2, 3, 4].includes(stage) ? stage : 1) as StageNo,
+    stage: toStage(stage) ?? FIRST_STAGE,
     outcomes: arr(raw.outcomes),
     support: arr(raw.support),
     beneficiaries: arr(raw.beneficiaries),

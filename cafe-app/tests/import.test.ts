@@ -52,7 +52,7 @@ describe('importExport', () => {
     );
 
     const rfx = await loadIdea(root, 'CAFE-2026-002');
-    expect(rfx).toMatchObject({ function: 'GSS', region: 'APAC', entity: 'CS', round: '', stage: 1 });
+    expect(rfx).toMatchObject({ function: 'GSS', region: 'APAC', entity: 'CS', round: '', stage: 2 });
     expect(rfx.people.submitter).toBe('Person 2');
     expect(rfx.people.team.map((p) => p.role)).toEqual(['lead', 'sponsor', 'member']);
     expect(rfx.support).toEqual(['Agent Design Guidance', 'Collab…']);

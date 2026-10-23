@@ -189,9 +189,6 @@ export function IdeaDetails({ id }: { id: string }) {
               [`Saved. ${r.email.template} is drafted in the Outbox.`, r.handoff ? 'CSIC handoff written.' : '', ...(r.warnings ?? [])].filter(Boolean).join(' '))} />
         )}
         {gates.review === 'summary' && <ReviewCard idea={idea} state={state} onEdit={edit('review')} />}
-        {idea.stage === 1 && !idea.closed && (
-          <section className="sec"><h3>Next</h3><div className="hint">Send the acknowledgement (E1) from Emails below. The decision opens at stage 2.</div></section>
-        )}
         {gates.tools === 'active' && (
           <ToolPickerSection key={`tools-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'tools')} aiWorking={aiFor === 'tools'}
             noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />

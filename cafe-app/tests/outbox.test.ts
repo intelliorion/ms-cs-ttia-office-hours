@@ -176,7 +176,7 @@ describe('outbox', () => {
     expect((await send('E3')).suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
     expect((await send('E5')).suggest).toEqual({ closeAs: 'csic', label: 'Close it as Routed to CSIC?' });
     const idea = await loadIdea(root, 'CAFE-2026-001');
-    expect(idea.stage).toBe(1);
+    expect(idea.stage).toBe(2);
     expect(idea.closed).toBeUndefined();
     expect(idea.sent).toMatchObject({ E1: '2026-10-19', E3: '2026-10-19', E5: '2026-10-19' });
   });

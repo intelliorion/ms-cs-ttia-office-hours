@@ -7,8 +7,8 @@ import { STAGE_RING } from '../universe/graphView';
  * light beams. Plain SVG and CSS, no axes or grids. Lite quality drops the glow and the grow-in (theme.css).
  */
 
-const STAGE_KEYS = ['1', '2', '3', '4', 'closed'];
-const SHORT: Record<string, string> = { 'Submit Idea': 'Submit', 'Review and Select': 'Review', 'Design series': 'Design', 'Launch and Learn': 'Launch', Closed: 'Closed' };
+const STAGE_KEYS = ['2', '3', '4', 'closed'];
+const SHORT: Record<string, string> = { 'Review and Select': 'Review', 'Design series': 'Design', 'Launch and Learn': 'Launch', Closed: 'Closed' };
 
 /** Star radius for a count: 0 is a small hollow ring, then grows with the square root so 1 and 9 both read. */
 export const starRadius = (n: number) => (n <= 0 ? 6 : Math.min(26, 10 + 5 * Math.sqrt(n)));

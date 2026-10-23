@@ -26,14 +26,14 @@ async function setup() {
 }
 
 describe('saveReview', () => {
-  it('reviews a stage-1 idea too: no stage is required', async () => {
+  it('reviews a newly imported idea: it starts in Review and Select', async () => {
     const root = await tmpWorkspace();
     await importExport(root, FIXTURE, ctx);
     const r = await saveReview(root, 'CAFE-2026-003', { decision: 'select', reason: 'Looks good' }, ctx);
-    expect(r.idea.stage).toBe(1);
+    expect(r.idea.stage).toBe(2);
     expect(r.suggest).toEqual({ stage: 3, label: 'Move it to Design series?' });
     const idea = await loadIdea(root, 'CAFE-2026-003');
-    expect(idea.stage).toBe(1);
+    expect(idea.stage).toBe(2);
     expect(idea.review?.decision).toBe('select');
     await access(path.join(await ideaDir(root, 'CAFE-2026-003'), 'review.md'));
     expect((await listOutbox(root)).map((m) => m.template)).toEqual(['E3']);

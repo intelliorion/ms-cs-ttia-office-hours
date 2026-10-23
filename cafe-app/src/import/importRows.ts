@@ -5,7 +5,7 @@ import { listIdeas, nextId, saveIdea, slugify } from '../ideas/store';
 import { normalizeIdea } from '../ideas/idea';
 import { withTick } from '../checklist/checklist';
 import { appendHistory } from '../workspace/files';
-import type { StepDef } from '../rules/stages';
+import { FIRST_STAGE, type StepDef } from '../rules/stages';
 import type { Clock } from '../clock';
 
 export interface ImportReport {
@@ -79,7 +79,7 @@ export async function importExport(
     const source = `${name} row ${rowNo}`;
     const at = opts.clock();
     let idea = normalizeIdea({
-      id, slug: slugify(title), title, round: '', stage: 1,
+      id, slug: slugify(title), title, round: '', stage: FIRST_STAGE,
       entity: submitter.entity,
       function: opt(get('function')),
       region: opt(get('region')),

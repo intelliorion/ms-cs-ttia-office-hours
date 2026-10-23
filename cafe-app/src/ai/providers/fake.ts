@@ -431,6 +431,8 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: design-kit')) return JSON.stringify(kitFor(prompt));
       if (prompt.startsWith('TASK: roadshow-prep')) return JSON.stringify(roadshowPrepFor(prompt));
       if (prompt.startsWith('TASK: roadshow-deck')) return JSON.stringify(roadshowDeckFor(prompt));
+      if (prompt.startsWith('TASK: data-understand')) return JSON.stringify(dataUnderstandFor(prompt));
+      if (prompt.startsWith('TASK: data-step')) return JSON.stringify(dataStepFor(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';
       return '{}';
@@ -471,4 +473,69 @@ function agentFor(prompt: string) {
   if (/^\s*merge/i.test(cmd) && a && b) return propose(`You asked to merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
   if (/^\s*move/i.test(cmd) && a) return propose(`You asked to move [${a}] to another stage.`, [{ op: 'stage', a }]);
   return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
+}
+
+/** The kind keys by their labels, as the prompt sends them. */
+const KIND_BY_LABEL: Record<string, string> = {
+  'Sample input': 'input', 'Sample output (what it should produce)': 'output', "Today's output or report": 'today', 'Rules or reference': 'rules',
+  'Process document': 'process', 'Example email': 'email', Other: 'other',
+};
+
+/**
+ * One file understood, by rule from its profile: first a closer look at its first category column (when it may look),
+ * then every column with a plain meaning, a rule for a rules file, derivations for an output from the other files'
+ * first column, and the features it serves (all of them). Never a column the profile does not have.
+ */
+function dataUnderstandFor(prompt: string) {
+  const data = dataOf(prompt) as {
+    file?: { name: string; kind: string; tables?: { name: string; columns: { name: string; type: string }[] }[]; doc?: { headings: string[] } };
+    otherFiles?: { name: string; columns: string[] }[]; features?: { name: string }[]; lookAllowed?: boolean; looks?: unknown[];
+  };
+  const f = data.file ?? { name: 'file', kind: 'Other' };
+  const cols = (f.tables ?? []).flatMap((t) => t.columns.map((c) => ({ ...c, table: (f.tables ?? []).length > 1 ? t.name : '' })));
+  const cat = cols.find((c) => c.type === 'category' && /type|kind|code/.test(c.name)) ?? cols.find((c) => c.type === 'category');
+  if (data.lookAllowed && !data.looks?.length && cat) return { look: [{ column: cat.name, why: 'To read its codes' }], what: 'A table', kindHint: KIND_BY_LABEL[f.kind] ?? 'other', columns: [], points: [], rules: [], derivations: [], serves: [], issues: [], missing: [] };
+  const kind = KIND_BY_LABEL[f.kind] ?? 'other';
+  const other = data.otherFiles?.[0]?.columns?.[0];
+  return {
+    look: [], what: cols.length ? `${f.kind} with ${cols.length} columns` : `${f.kind}: ${(f.doc?.headings ?? []).slice(0, 2).join(', ') || 'a short document'}`,
+    kindHint: kind,
+    columns: [...cols.map((c) => ({ name: c.name, table: c.table, meaning: `The ${c.name.replace(/_/g, ' ')} of each row`, role: c.type === 'money' ? 'amount' : c.type === 'date' ? 'date' : c.type === 'category' ? 'category' : 'input', ...(c === cat ? { codes: 'Each code is a kind of row' } : {}) })),
+      { name: 'not_a_column', meaning: 'Made up by the AI' }],
+    points: cols.length ? [] : ['It says how the work is done today'],
+    rules: kind === 'rules' && cols.length >= 2 ? [{ rule: `${cols[1].name} per ${cols[0].name}`, columns: [cols[0].name, cols[1].name] }] : [],
+    derivations: kind === 'output' && cols.length ? cols.slice(0, 2).map((c) => ({ output: c.name, from: other ? [other] : [], how: `Worked out from ${other ?? 'the input'}` })) : [],
+    serves: (data.features ?? []).map((x) => x.name),
+    issues: [], missing: kind === 'input' && cat ? [`What the codes in ${cat.name} mean`] : [],
+  };
+}
+
+/** The data questions, by rule: the output first when no output file is there, then the volumes, then complete. */
+function dataStepFor(prompt: string) {
+  const data = dataOf(prompt) as { stepsSoFar?: { question: string; answer: string; topic?: string }[]; gaps?: { topic: string }[]; files?: { name: string; kind: string }[] };
+  const steps = data.stepsSoFar ?? [];
+  const asked = (t: string) => steps.some((s) => s.topic === t);
+  const last = steps[steps.length - 1]?.answer ?? '';
+  const from = /from (?:the )?([A-Z][A-Za-z ]{2,30}?)(?: export| system|[.,]|$)/.exec(last)?.[1];
+  const updates = {
+    ...NO_ANSWER_PARTS.updates,
+    facts: /\d/.test(last) && steps[steps.length - 1]?.topic === 'volumes' ? [{ question: steps[steps.length - 1].question, answer: last }] : [],
+    graph: from ? {
+      nodes: [{ type: 'Capability', label: 'Sample data check' }, { type: 'System', label: from }],
+      links: [{ from: 'idea', to: 'Sample data check', rel: 'NEEDS', description: 'Checks the sample data', confidence: 0.8 }, { from: 'Sample data check', to: from, rel: 'USES_DATA', description: 'The export comes from it', confidence: 0.8 }],
+    } : { nodes: [], links: [] },
+  };
+  const gap = (t: string) => (data.gaps ?? []).some((g) => g.topic === t);
+  if (gap('output') && !asked('output')) {
+    return { done: false, topic: 'output', question: 'What should the proof of concept produce from the sample?', why: 'There is no sample of the output yet.', suggested: ['A list of flagged rows with a reason', 'A summary by category', 'I will drop a sample output'], updates, learned: [] };
+  }
+  if (!asked('volumes')) {
+    return { done: false, topic: 'volumes', question: 'How many rows does a real run have, and how often?', why: 'The size and rhythm shape the build.', suggested: ['About 1,000 rows a month', 'About 200 rows a week', 'A few thousand rows a quarter'], updates, learned: [] };
+  }
+  const names = (data.files ?? []).map((x) => x.name).join(', ') || 'the answers';
+  return {
+    done: true,
+    summary: { text: `The data is understood: ${names}.`, input: 'The sample input as dropped.', output: 'As the answers say.', knowledge: '', rules: 'As the rules file says.', gapsClosed: ['The output', 'The volumes'] },
+    updates, learned: [],
+  };
 }

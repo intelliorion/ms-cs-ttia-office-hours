@@ -93,6 +93,52 @@ export async function planUpdates(
   return [...kept, ...out.map((x) => ({ ...x, id: `u${++n}` }) as PrepUpdate)];
 }
 
+/**
+ * Applies one update to the idea (the builder, participation, a flag, the answers as facts, a graph link) and returns
+ * how to undo it. The decision's Yes does this; the data questions do it by themselves (src/data). `source` is where
+ * saved answers and ticks say they came from.
+ */
+export async function applyUpdate(
+  root: string, id: string, u: PrepUpdate, clock: Clock, opts: { by: 'operator' | 'app'; source: string },
+): Promise<NonNullable<PrepUpdate['undo']>> {
+  const idea = await loadIdea(root, id) as WithAnswers;
+  const steps = await loadSteps(root);
+  const tickIf = async (step: string, ok: boolean): Promise<string[]> => {
+    const now = await loadIdea(root, id);
+    if (!ok || now.checklist[step]?.done) return [];
+    await tick(root, id, step, true, { by: opts.by, source: opts.source, clock, steps });
+    return [step];
+  };
+  const undo: NonNullable<PrepUpdate['undo']> = {};
+  if (u.kind === 'builder' && u.builder) {
+    // The builder: the one named takes the role; anyone else who had it keeps their other roles.
+    let team = idea.people.team;
+    for (const other of withRoleOn(idea, 'builder')) if (norm(other.name) !== norm(u.builder.name)) team = withoutRole(team, other.name, 'builder');
+    team = withAddedRole(team, u.builder.name, 'builder');
+    undo.team = idea.people.team; undo.teamAfter = team;
+    await saveIdea(root, { ...idea, people: { ...idea.people, team } });
+    undo.ticked = await tickIf('s2e', u.builder.canAttend);
+  } else if (u.kind === 'participation' && u.participation) {
+    undo.participation = idea.participation ?? null;
+    // Keep what the form said, the first time the field changes.
+    const formWas = idea.formWas?.participation !== undefined || !idea.participation ? idea.formWas : { ...idea.formWas, participation: idea.participation };
+    await saveIdea(root, { ...idea, participation: u.participation, ...(formWas ? { formWas } : {}) });
+  } else if (u.kind === 'flag' && u.flag) {
+    await saveIdea(root, { ...idea, flags: idea.flags.filter((f) => f !== u.flag) });
+  } else if (u.kind === 'facts' && u.facts) {
+    const replaced = (idea.answers ?? []).filter((a) => a.source === opts.source && u.facts!.some((f) => sameQuestion(f.question, a.question)));
+    const kept = (idea.answers ?? []).filter((a) => !replaced.includes(a));
+    undo.replaced = replaced;
+    await saveIdea(root, { ...idea, answers: [...kept, ...u.facts.map((f) => ({ ...f, source: opts.source }))] } as Idea);
+    // The team answered our questions: the reply is in.
+    undo.ticked = await tickIf('s2d', !!(idea.sent?.E2 || idea.sent?.E2R));
+  } else if (u.kind === 'link' && u.link) {
+    await appendAiLink(root, { ...(u.link as AiLink), status: 'confirmed' });
+    undo.edgeId = edgeId(u.link.from, u.link.rel as AiLink['rel'], u.link.to);
+  }
+  return undo;
+}
+
 /** Yes, No or Undo on one proposed update. Each change goes in the idea's history; Undo puts back only what it changed. */
 export async function decideUpdate(root: string, id: string, uid: string, act: unknown, clock: Clock): Promise<PrepUpdate> {
   const idea = await loadIdea(root, id) as WithAnswers;
@@ -111,47 +157,15 @@ export async function decideUpdate(root: string, id: string, uid: string, act: u
     if (u.status !== 'proposed') throw new Error('Only a proposed update can be said no to');
     return save({ ...u, status: 'dismissed' });
   }
-  const steps = await loadSteps(root);
-  const tickIf = async (step: string, ok: boolean): Promise<string[]> => {
-    const now = await loadIdea(root, id);
-    if (!ok || now.checklist[step]?.done) return [];
-    await tick(root, id, step, true, { by: 'operator', source: REVIEW_SOURCE, clock, steps });
-    return [step];
-  };
   if (act === 'yes') {
     if (u.status !== 'proposed') throw new Error(`That update is already ${u.status}`);
-    let undo: PrepUpdate['undo'] = {};
-    if (u.kind === 'builder' && u.builder) {
-      // The builder: the one named takes the role; anyone else who had it keeps their other roles.
-      let team = idea.people.team;
-      for (const other of withRoleOn(idea, 'builder')) if (norm(other.name) !== norm(u.builder.name)) team = withoutRole(team, other.name, 'builder');
-      team = withAddedRole(team, u.builder.name, 'builder');
-      undo.team = idea.people.team; undo.teamAfter = team;
-      await saveIdea(root, { ...idea, people: { ...idea.people, team } });
-      undo.ticked = await tickIf('s2e', u.builder.canAttend);
-    } else if (u.kind === 'participation' && u.participation) {
-      undo.participation = idea.participation ?? null;
-      // Keep what the form said, the first time the field changes.
-      const formWas = idea.formWas?.participation !== undefined || !idea.participation ? idea.formWas : { ...idea.formWas, participation: idea.participation };
-      await saveIdea(root, { ...idea, participation: u.participation, ...(formWas ? { formWas } : {}) });
-    } else if (u.kind === 'flag' && u.flag) {
-      await saveIdea(root, { ...idea, flags: idea.flags.filter((f) => f !== u.flag) });
-    } else if (u.kind === 'facts' && u.facts) {
-      const replaced = (idea.answers ?? []).filter((a) => a.source === REVIEW_SOURCE && u.facts!.some((f) => sameQuestion(f.question, a.question)));
-      const kept = (idea.answers ?? []).filter((a) => !replaced.includes(a));
-      undo.replaced = replaced;
-      await saveIdea(root, { ...idea, answers: [...kept, ...u.facts.map((f) => ({ ...f, source: REVIEW_SOURCE }))] } as Idea);
-      // The team answered our questions: the reply is in.
-      undo.ticked = await tickIf('s2d', !!(idea.sent?.E2 || idea.sent?.E2R));
-    } else if (u.kind === 'link' && u.link) {
-      await appendAiLink(root, { ...(u.link as AiLink), status: 'confirmed' });
-      undo.edgeId = edgeId(u.link.from, u.link.rel as AiLink['rel'], u.link.to);
-    }
+    const undo = await applyUpdate(root, id, u, clock, { by: 'operator', source: REVIEW_SOURCE });
     await log(`Applied from your answers: ${u.label}`);
     return save({ ...u, status: 'applied', undo });
   }
   if (act === 'undo') {
     if (u.status !== 'applied') throw new Error('Only an applied update can be undone');
+    const steps = await loadSteps(root);
     const now = await loadIdea(root, id) as WithAnswers;
     if (u.kind === 'builder' && u.builder) {
       // As it was, when nothing about the team has changed since; else only the builder role goes (and someone this

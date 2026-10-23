@@ -8,6 +8,7 @@ import { csicFlags, dropRetiredFlags, legacyChoice, scopeOf, toolFeatures, type 
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 import { retiredToolNote } from '../graph/ontology';
+import { columnsOf, dataOf, KIND_LABELS, meaningOf, sizeWords, whatOf, type DataState } from '../data/model';
 
 export type { Pathway, ToolChoice, DesignTag, StoredDiagram, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
@@ -65,6 +66,8 @@ export interface DesignState {
    * it is written again from the new, approved design. Cleared when the plan is written.
    */
   planStale?: string;
+  /** "Understand the data": the dropped files, what they hold, the data questions and the one confirmation (src/data). */
+  data?: DataState;
 }
 
 /** Said in design.md and on approval when the tool choice has a CSIC flag (csicFlags). */
@@ -131,11 +134,13 @@ function normalize(raw: Partial<DesignState>): DesignState {
       ...(scope ? { scope } : {}),
     };
   });
-  const { settled: rawSettled, diagram: rawDiagram, ...others } = rest;
+  const { settled: rawSettled, diagram: rawDiagram, data: rawData, ...others } = rest;
   const settled = settledOf(rawSettled);
   const diagram = diagramOf(rawDiagram);
+  const data = dataOf(rawData);
   return {
     ...others,
+    ...(data ? { data } : {}),
     ...(settled ? { settled } : {}),
     ...(diagram ? { diagram } : {}),
     version: 1,
@@ -180,6 +185,7 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   const mustShow = mdLine(state.summary) || mdLine(pointOf(state, 'must-show'));
   out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || NOT_ANSWERED, '');
   out.push('## Smallest input', '', mdLine(pointOf(state, 'smallest-input')) || NOT_ANSWERED, '');
+  if (state.data?.files.length || state.data?.steps.length) out.push(...renderDataMd(state.data), '');
   // Who uses it, what it replaces, who builds it: one line each (the summary covers them in prose too).
   const who = BASE_TAGS.filter((t) => t !== 'must-show' && t !== 'smallest-input');
   out.push('## Who and what', '', ...who.map((t) => `- **${POINT_LABELS[t]}**: ${mdLine(pointOf(state, t)) || NOT_ANSWERED}`), '');
@@ -204,6 +210,42 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
 
+/** design.md's Data section: each file (kind, what it is, columns and meaning, rules, issues), the data questions and whether it is confirmed. */
+export function renderDataMd(d: DataState): string[] {
+  const out: string[] = ['## Data', ''];
+  out.push(d.confirmedAt ? `Confirmed by the operator on ${d.confirmedAt}.` : d.summary ? 'Not confirmed yet: the AI calls it complete; the operator confirms it in the Data step.' : 'Not confirmed yet: the understanding is still being worked out.', '');
+  if (d.summary?.text) out.push(mdLine(d.summary.text), '');
+  for (const f of d.files) {
+    out.push(`### ${mdLine(f.name).replace(/[*~]/g, '')} (${KIND_LABELS[f.kind]})`, '');
+    if (f.check?.status === 'held') { out.push('Held: it may hold personal data, so nothing in it is used yet.', ''); continue; }
+    if (f.unreadable) { out.push(`Not read: ${mdLine(f.unreadable)}`, ''); continue; }
+    const what = whatOf(f);
+    out.push(`${what ? mdLine(what).replace(/\.?$/, '.') : '(not understood yet)'}${sizeWords(f) ? ` ${sizeWords(f)}.` : ''}`, '');
+    if (f.check?.masked.length) out.push(`Masked (never shown to the AI): ${f.check.masked.map((c) => `\`${c}\``).join(', ')}.`, '');
+    const cols = columnsOf(f);
+    if (cols.length) {
+      for (const c of cols.slice(0, 60)) {
+        const codes = f.understanding?.columns.find((x) => x.name === c.name)?.codes;
+        out.push(`- \`${c.name.replace(/`/g, "'")}\` (${c.type}): ${mdLine(meaningOf(f, c.name)) || '(meaning not said)'}${codes ? ` Codes: ${mdLine(codes)}` : ''}`);
+      }
+      out.push('');
+    }
+    const u = f.understanding;
+    if (u?.points.length) out.push(...u.points.map((p) => `- ${mdLine(p)}`), '');
+    if (u?.rules.length) out.push('Rules:', '', ...u.rules.map((r) => `- ${mdLine(r.rule)}${r.columns.length ? ` (${r.columns.map(mdLine).join(', ')})` : ''}`), '');
+    if (u?.derivations.length) out.push('How the output is worked out:', '', ...u.derivations.map((x) => `- \`${x.output}\`: ${mdLine(x.how)}${x.from.length ? ` (from ${x.from.map(mdLine).join(', ')})` : ''}`), '');
+    const issues = [...(f.tables?.flatMap((t) => t.issues) ?? []), ...(u?.issues ?? [])];
+    if (issues.length) out.push('Issues:', '', ...issues.slice(0, 8).map((x) => `- ${mdLine(x)}`), '');
+  }
+  const answered = d.steps.filter((x) => x.answer?.trim() || x.askedTeam);
+  if (answered.length) {
+    out.push('### Data questions', '');
+    for (const x of answered) out.push(`**D${x.n}. ${mdLine(x.question).replace(/\*/g, '')}**`, '', mdLine(x.answer) || '(asked the team in an E2; waiting for the reply)', '');
+  }
+  if (d.summary?.open.length && !d.confirmedAt) out.push('Still open:', '', ...d.summary.open.map((x) => `- ${mdLine(x)}`), '');
+  return out.slice(0, out[out.length - 1] === '' ? -1 : undefined);
+}
+
 export async function writeDesignMd(root: string, idea: Idea, state: DesignState): Promise<string> {
   const dir = await ideaDir(root, idea.id);
   const file = path.join(dir, 'design.md');
@@ -212,8 +254,8 @@ export async function writeDesignMd(root: string, idea: Idea, state: DesignState
 }
 
 // ---- embedded skills (guidance text for prompts, never executed) ----
-/** cafe-design is written for the app; writing-plans is the Superpowers skill, copied. */
-export type SkillName = 'cafe-design' | 'writing-plans';
+/** cafe-design and cafe-data are written for the app; writing-plans is the Superpowers skill, copied. */
+export type SkillName = 'cafe-design' | 'cafe-data' | 'writing-plans';
 const SKILLS_DIR = fileURLToPath(new URL('../../skills/', import.meta.url));
 const skillCache = new Map<SkillName, string>();
 

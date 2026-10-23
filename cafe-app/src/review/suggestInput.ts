@@ -25,21 +25,10 @@ export async function reviewInput(
   // The design questions read their own answers as steps: their copies on the idea are left out for them.
   const idea = opts.skipSource ? { ...loaded, answers: (loaded.answers ?? []).filter((a) => a.source !== opts.skipSource) } : loaded;
   const graph = await rebuildGraph(root);
-  // Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet).
-  const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
-  const named = [idea.people.submitter, ...idea.people.team.map((p) => p.name)].filter((x): x is string => !!x?.trim());
-  const people: GNode[] = [
-    ...graph.nodes.filter((n) => n.type === 'Person'),
-    ...named.filter((x) => !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person' as const, label })),
-  ];
+  const people = peopleOf(graph, idea);
   // One code list for the whole suggestion, so a person has the same code in every text, and the reply can be decoded.
   const codes = new Map<string, Coded>();
-  const coded = (s?: string) => {
-    if (!s) return s;
-    const h = hideNames(s, people, { seed: codes });
-    for (const [c, v] of h.codes) if (!codes.has(c)) codes.set(c, v);
-    return h.text;
-  };
+  const coded = coder(people, codes);
   const text = extractInput(idea, []).idea;
   const ideaText = {
     ...text, challenge: coded(text.challenge), current_process: coded(text.current_process),
@@ -95,4 +84,33 @@ export async function reviewInput(
   const basis = `Based on ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]}`
     + (waiting ? `. ${plural(waiting, 'change')} from the Import still wait${waiting === 1 ? 's' : ''} for your Yes and ${waiting === 1 ? 'is' : 'are'} not read yet` : '');
   return { input, basis, waiting, codes };
+}
+
+/** Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet). */
+export function peopleOf(graph: { nodes: GNode[] }, idea: Pick<Idea, 'people'>): GNode[] {
+  const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
+  const named = [idea.people.submitter, ...idea.people.team.map((p) => p.name)].filter((x): x is string => !!x?.trim());
+  return [
+    ...graph.nodes.filter((n) => n.type === 'Person'),
+    ...named.filter((x) => !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person' as const, label })),
+  ];
+}
+
+/** A text with the people coded, adding to `codes` (one list for a whole call, so a person keeps one code). */
+export function coder(people: GNode[], codes: Map<string, Coded>) {
+  return <S extends string | undefined>(s: S): S => {
+    if (!s) return s;
+    const h = hideNames(s, people, { seed: codes });
+    for (const [c, v] of h.codes) if (!codes.has(c)) codes.set(c, v);
+    return h.text as S;
+  };
+}
+
+/** Every string in a value with the people coded (the idea's people, everyone in the graph), adding to `codes`. */
+export async function codeValue<T>(root: string, id: string, value: T, codes: Map<string, Coded>): Promise<T> {
+  const idea = await loadIdea(root, id);
+  const code = coder(peopleOf(await rebuildGraph(root), idea), codes);
+  const walk = (v: unknown): unknown => (typeof v === 'string' ? code(v) : Array.isArray(v) ? v.map(walk)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)])) : v);
+  return walk(value) as T;
 }

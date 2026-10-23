@@ -13,6 +13,7 @@ cafe-app/scripts/make-test-data.mjs
 cafe-app/scripts/ui-tour.mjs
 cafe-app/skills/LICENSE-superpowers.md
 cafe-app/skills/README.md
+cafe-app/skills/cafe-data.md
 cafe-app/skills/cafe-design.md
 cafe-app/skills/writing-plans.md
 cafe-app/src/ai/apply.ts
@@ -37,7 +38,10 @@ cafe-app/src/comms/templates.ts
 cafe-app/src/data/check.ts
 cafe-app/src/data/model.ts
 cafe-app/src/data/profile.ts
+cafe-app/src/data/questions.ts
 cafe-app/src/data/read.ts
+cafe-app/src/data/store.ts
+cafe-app/src/data/understand.ts
 cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/diagram.ts
@@ -129,6 +133,8 @@ cafe-app/tests/command-query.test.ts
 cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/data-read-check.test.ts
+cafe-app/tests/data-routes.test.ts
+cafe-app/tests/data-tasks.test.ts
 cafe-app/tests/dataFixtures.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts

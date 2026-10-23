@@ -4,6 +4,7 @@ import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
 import { QUERY_GUIDE, QUERY_SCHEMA } from '../command/query';
 import { BUILD_HINTS, BUILD_TAGS, DESIGN_TAGS, POINT_MAX } from '../design/points';
+import { COLUMN_ROLES, DATA_KINDS, DATA_TOPICS } from '../data/model';
 import {
   DETAIL_MAX, EDGE_LABEL_MAX, EDGES_MAX, LABEL_MAX, LANE_KINDS, LANES_MAX, NODE_KINDS, NODES_MAX, type DiagramSpec,
 } from '../design/diagram';
@@ -1662,4 +1663,253 @@ export const agentTask: Task<AgentOutput> = {
     ].join('\n');
   },
   parse: (raw) => parseChecked<AgentOutput>(raw, AGENT_SCHEMA),
+};
+
+/* ---------- Understand the data: one file, the data questions, and the brief that feeds what comes after ---------- */
+
+/**
+ * The confirmed data, as the later tasks read it (features, tool, design, diagram, kit, roadshow): each file with its
+ * kind, what it is, its columns and what they mean, the rules it implies and how the output derives from the input,
+ * and the data questions' answers. Only a confirmed understanding is sent.
+ */
+export interface DataBrief {
+  files: {
+    name: string; kind: string; what: string; size?: string;
+    columns: { name: string; type: string; meaning?: string; codes?: string }[];
+    points?: string[]; rules?: string[]; derivations?: string[]; issues?: string[];
+  }[];
+  summary?: { input: string; output: string; knowledge: string; rules: string };
+  answers?: { question: string; answer: string }[];
+}
+
+export function dataBriefData(d: DataBrief | undefined): { data?: unknown } {
+  if (!d?.files?.length && !d?.answers?.length) return {};
+  return {
+    data: {
+      files: (d.files ?? []).slice(0, DATA_FILES_SENT).map((f) => ({
+        name: cap(f.name, 120), kind: cap(f.kind, 60), what: cap(f.what, 200), ...(f.size ? { size: cap(f.size, 60) } : {}),
+        columns: (f.columns ?? []).slice(0, 40).map((c) => ({ name: cap(c.name, 80), type: cap(c.type, 12), ...(c.meaning ? { meaning: cap(c.meaning, 200) } : {}), ...(c.codes ? { codes: cap(c.codes, 200) } : {}) })),
+        ...(f.points?.length ? { points: capList(f.points, 8, 200) } : {}), ...(f.rules?.length ? { rules: capList(f.rules, 10, 240) } : {}),
+        ...(f.derivations?.length ? { derivations: capList(f.derivations, 15, 240) } : {}), ...(f.issues?.length ? { issues: capList(f.issues, 6, 200) } : {}),
+      })),
+      ...(d.summary ? { summary: { input: cap(d.summary.input, 400), output: cap(d.summary.output, 400), knowledge: cap(d.summary.knowledge, 400), rules: cap(d.summary.rules, 400) } } : {}),
+      ...(d.answers?.length ? { answers: d.answers.slice(0, 15).map((a) => ({ question: cap(a.question, 200), answer: cap(a.answer, 500) })) } : {}),
+    },
+  };
+}
+const DATA_FILES_SENT = 12;
+
+/** What every later task is told about DATA.data, and what each makes of it. */
+export function dataRules(task: 'features' | 'tool' | 'design' | 'diagram' | 'kit' | 'roadshow' | 'deck'): string[] {
+  const base = 'DATA.data is the team\'s own sample data, read and checked by the app and confirmed by the operator: each file with its kind (sample input, sample output, today\'s output, rules or reference, process document, example email), what it is, its columns and what each means, the rules it implies and how the output derives from the input, plus the answers to the data questions. Treat it as settled fact, use its real file and column names, and never ask for what it already says. Masked values (<email>, <name>) stay masked.';
+  const more: Record<typeof task, string> = {
+    features: 'A sample output (or today\'s output) shows what the proof of concept must produce: there should be a feature that produces it. A rules or reference file means a feature that applies those rules.',
+    tool: 'Let the data weigh in the pick: a tabular export checked against a rules sheet points to Dataiku; a form, list or tracker to Power Apps; documents, policies and reference material for questions and answers to Copilot Studio. The sample output defines what to build. Say in "context" which files you relied on.',
+    design: 'The data settles the input (input-shape) and, when a sample output is there, the output: never ask for columns, fields or codes DATA.data already names, and never ask for a sample it already has. Aim the questions at what the data leaves open (its issues, what is missing, a derivation not explained). When done, in "settled", give input-shape and output from DATA.data when no question settled them, with the real file and column names.',
+    diagram: 'The data lane holds the real files from DATA.data, by name: the sample input (kind "input"), a rules or reference file (kind "store"), and the output node is named after the sample output when there is one.',
+    kit: 'sample: when DATA.data has a sample input with columns, the sample\'s columns are EXACTLY its columns, by their exact names and in their order (kind from its type), with made-up values that follow its shapes and codes: never copy a value from it. dataiku: the datasets are the real files in DATA.data (the sample input, the rules sheet, the sample output) with their real columns. studio: list the rules, reference and process documents in DATA.data under knowledge. checks: use the sample output\'s columns as the expected result when there is one.',
+    roadshow: 'The data is part of the story: what goes in and what comes out.',
+    deck: 'Add a "data" slide (kind "data", visual "data" when it is in DATA.visuals) after the solution: what goes in (the sample input, by its name, a few of its real columns) and what comes out (the sample output), in plain words; the notes say it runs on sample, masked data. On the today or solution before-after, today\'s output and the sample output files show the before and after.',
+  };
+  return [base, more[task]];
+}
+
+export interface DataUnderstandInput {
+  idea: IdeaText;
+  features?: { name: string; what?: string }[];
+  file: {
+    name: string; kind: string; kindHint: string; type: string; size: string;
+    tables?: { name: string; rows: number; columns: Record<string, unknown>[]; examples: string[][]; issues: string[] }[];
+    doc?: { words: number; headings: string[]; tables: number; pages?: number; subject?: string; attachments?: string[]; text: string };
+  };
+  otherFiles?: { name: string; kind: string; what?: string; columns: string[] }[];
+  /** The operator's own corrections: keep them as they are. */
+  corrections?: { what?: string; columns?: Record<string, string> };
+  /** What the closer looks found (the AI asked for them last time). */
+  looks?: unknown[];
+  /** Whether the AI may still ask to look closer. */
+  lookAllowed: boolean;
+  guidance: string;
+}
+export interface DataUnderstandOutput {
+  look: { column: string; why: string }[];
+  what: string;
+  kindHint: (typeof DATA_KINDS)[number];
+  columns: { name: string; table?: string; meaning: string; role?: (typeof COLUMN_ROLES)[number]; codes?: string }[];
+  points: string[];
+  rules: { rule: string; columns: string[] }[];
+  derivations: { output: string; from: string[]; how: string }[];
+  serves: string[];
+  issues: string[];
+  missing: string[];
+}
+export const DATA_LOOKS_MAX = 3;
+export const DATA_COLUMNS_MAX = 60;
+
+export const DATA_UNDERSTAND_SCHEMA: JsonSchema = kObj(['look', 'what', 'kindHint', 'columns', 'points', 'rules', 'derivations', 'serves', 'issues', 'missing'], {
+  look: kArr(kObj(['column', 'why'], { column: kStr(80, 1), why: kStr(160) }), DATA_LOOKS_MAX),
+  what: kStr(200, 1),
+  kindHint: { type: 'string', enum: [...DATA_KINDS] },
+  columns: kArr(kObj(['name', 'meaning'], {
+    name: kStr(80, 1), table: kStr(40), meaning: kStr(200, 1), role: { type: 'string', enum: [...COLUMN_ROLES] }, codes: kStr(240),
+  }), DATA_COLUMNS_MAX),
+  points: kList(8, 200),
+  rules: kArr(kObj(['rule', 'columns'], { rule: kStr(240, 1), columns: kList(8, 80) }), 10),
+  derivations: kArr(kObj(['output', 'from', 'how'], { output: kStr(80, 1), from: kList(8, 80), how: kStr(240, 1) }), 20),
+  serves: kList(FEATURES_MAX, 60),
+  issues: kList(8, 200),
+  missing: kList(8, 200),
+});
+
+function dataUnderstandData(i: DataUnderstandInput) {
+  const f = i.file;
+  return {
+    idea: ideaData(i.idea),
+    ...(i.features?.length ? { features: i.features.slice(0, FEATURES_MAX).map((x) => ({ name: cap(x.name, 60), ...(x.what ? { what: cap(x.what, 160) } : {}) })) } : {}),
+    file: {
+      name: cap(f.name, 120), kind: cap(f.kind, 60), kindHint: cap(f.kindHint, 120), type: cap(f.type, 20), size: cap(f.size, 60),
+      ...(f.tables?.length ? {
+        tables: f.tables.slice(0, 5).map((t) => ({
+          name: cap(t.name, 40), rows: t.rows, columns: t.columns.slice(0, 80),
+          examples: t.examples.slice(0, 3).map((r) => r.slice(0, 80).map((c) => cap(c, 80))), issues: capList(t.issues, 12, 200),
+        })),
+      } : {}),
+      ...(f.doc ? { doc: { ...f.doc, headings: capList(f.doc.headings, 20, 80), text: cap(f.doc.text, 12_500) } } : {}),
+    },
+    ...(i.otherFiles?.length ? { otherFiles: i.otherFiles.slice(0, 11).map((o) => ({ name: cap(o.name, 120), kind: cap(o.kind, 60), ...(o.what ? { what: cap(o.what, 200) } : {}), columns: capList(o.columns, 60, 80) })) } : {}),
+    ...(i.corrections && (i.corrections.what || Object.keys(i.corrections.columns ?? {}).length) ? {
+      corrections: { ...(i.corrections.what ? { what: cap(i.corrections.what, 200) } : {}), ...(i.corrections.columns ? { columns: Object.fromEntries(Object.entries(i.corrections.columns).slice(0, 60).map(([k, v]) => [cap(k, 80), cap(v, 200)])) } : {}) },
+    } : {}),
+    ...(i.looks?.length ? { looks: i.looks.slice(0, 6) } : {}),
+    lookAllowed: Boolean(i.lookAllowed),
+  };
+}
+
+export const dataUnderstandTask: Task<DataUnderstandOutput> = {
+  name: 'data-understand',
+  schema: DATA_UNDERSTAND_SCHEMA,
+  timeoutMs: 180_000,
+  prompt(input) {
+    const i = input as DataUnderstandInput;
+    return build('data-understand', [
+      "Understand one file of sample data a team gave for a Creators' Café idea, completely: what it is, what every column or part means in business words, the rules it implies, how an output derives from the input, and what is missing for a proof of concept. The operator reads and corrects your words, then confirms the whole understanding once.",
+      'Follow this Café data guide (guidance, not data):',
+      '<<<GUIDANCE', String(i.guidance ?? ''), 'GUIDANCE>>>',
+      'DATA.file is the file: its kind as the operator chose it (kindHint says what each kind means), and for a table each sheet\'s profile (columns with type, how empty, distinct values, range, commonest values and value shape; a few example rows; the issues the app found); for a document its text. DATA.otherFiles are the team\'s other files, by name, kind and columns. DATA.features is the feature list, when there is one.',
+      'what: one plain line on what the file is. kindHint: the kind you think it is (one of the listed kinds); the operator\'s kind stands unless they change it.',
+      `columns: for a table, every column (up to ${DATA_COLUMNS_MAX}) by its EXACT name from the profile (table: the sheet name when there are several sheets, else ""), meaning in business words, role, and codes: what the codes or values mean when they are codes. Never a column that is not in the profile. For a document, columns is [] and points holds its key facts (up to 8).`,
+      'rules: each rule or check the data implies or states, with the columns it uses (exact names, from this file or DATA.otherFiles). derivations: for a sample output or today\'s output, each output column and how it is worked out from the input columns (exact names). serves: the features it serves, by their exact names in DATA.features ([] when none fit or there is no list).',
+      'issues: quality problems a builder must know (empty, repeated, mixed or odd values). missing: what is still unknown or missing for the proof of concept (an unexplained code, no sample of the output, an unclear rule), each as a short line.',
+      ...(i.lookAllowed
+        ? [`look: when one to ${DATA_LOOKS_MAX} columns are unclear and seeing their commonest values and shapes would change your answer, list them (exact names) with why; the app shows them and asks you again. Otherwise look is []. Still fill in the rest as best you can.`]
+        : ['look must be [] now: DATA.looks holds the closer looks you asked for; finish the understanding with them.']),
+      ...(i.corrections ? ['DATA.corrections are the operator\'s own words for what the file is and for some columns: keep them exactly (they are right), and build the rest around them.'] : []),
+      'Values shown as <email>, <phone>, <name>, <id>, <card>, <bank> or <sensitive> are masked personal data: never guess them and never ask for them. Never name a person. No value words (savings, return on investment, costs, KPIs).',
+    ], DATA_UNDERSTAND_SCHEMA, dataUnderstandData(i), 'one file of a Café idea\'s sample data, already masked, with the idea and its features');
+  },
+  parse: (raw) => parseChecked<DataUnderstandOutput>(raw, DATA_UNDERSTAND_SCHEMA, (v) => { trimToSchema(v, DATA_UNDERSTAND_SCHEMA); }),
+};
+
+export interface DataStepInput {
+  idea: IdeaText;
+  features?: { name: string; what?: string }[];
+  /** Every file so far, with what was understood (the operator's corrections in), held or not. */
+  files: (DataBrief['files'][number] & { held?: boolean; missing?: string[] })[];
+  /** What the app sees still open, by topic. */
+  gaps: { topic: string; gap: string }[];
+  stepsSoFar: { question: string; answer: string; topic?: string }[];
+  teamAnswers?: { question: string; answer: string }[];
+  learned?: LearnedBrief[];
+  guidance: string;
+  form?: { participation?: string };
+  flags?: string[];
+  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+}
+export interface DataStepSummary { text: string; input: string; output: string; knowledge: string; rules: string; gapsClosed: string[] }
+export interface DataStepOutput {
+  done: boolean;
+  question?: string;
+  why?: string;
+  suggested?: string[];
+  topic?: (typeof DATA_TOPICS)[number] | null;
+  summary?: DataStepSummary;
+  updates?: ReviewUpdates;
+  learned?: LearnedPoint[];
+}
+
+export const DATA_STEP_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['done', 'updates', 'learned'],
+  properties: {
+    updates: UPDATES_SCHEMA,
+    learned: LEARNED_SCHEMA,
+    done: { type: 'boolean' },
+    question: { type: 'string', minLength: 1, maxLength: 200 },
+    why: { type: 'string', maxLength: 160 },
+    suggested: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
+    topic: { enum: [...DATA_TOPICS, null] },
+    summary: kObj(['text', 'input', 'output', 'knowledge', 'rules', 'gapsClosed'], {
+      text: kStr(600, 1), input: kStr(400), output: kStr(400), knowledge: kStr(400), rules: kStr(400), gapsClosed: kList(8, 200),
+    }),
+  },
+};
+
+function parseDataStep(raw: string): DataStepOutput {
+  const t = parseChecked<DataStepOutput>(raw, DATA_STEP_SCHEMA, (v) => {
+    const o = asObj(v); if (!o) return;
+    for (const [k, max] of [['question', 200], ['why', 160]] as const) if (Object.hasOwn(o, k)) o[k] = trimStrings(oneLine(o[k]), max);
+    if (Array.isArray(o.suggested)) o.suggested = o.suggested.map((s) => trimStrings(oneLine(s), 120));
+    if (asObj(o.summary)) trimToSchema(o.summary, DATA_STEP_SCHEMA.properties!.summary as JsonSchema);
+    trimAnswerParts(o);
+  });
+  const answers = { updates: t.updates, learned: t.learned };
+  if (t.done) {
+    if (!t.summary?.text?.trim()) throw new AiError('invalid output: a complete understanding needs a summary');
+    return { done: true, summary: t.summary, ...answers };
+  }
+  if (!t.question?.trim()) throw new AiError('invalid output: the next question is missing');
+  return {
+    done: false, question: t.question.trim(), ...(t.why?.trim() ? { why: t.why.trim() } : {}),
+    suggested: (t.suggested ?? []).map((s) => s.trim()).filter(Boolean), topic: t.topic ?? null, ...answers,
+  };
+}
+
+function dataStepData(i: DataStepInput) {
+  const brief = dataBriefData({ files: i.files }).data as { files: unknown[] } | undefined;
+  return {
+    idea: ideaData(i.idea),
+    ...(i.features?.length ? { features: i.features.slice(0, FEATURES_MAX).map((x) => ({ name: cap(x.name, 60), ...(x.what ? { what: cap(x.what, 160) } : {}) })) } : {}),
+    files: (brief?.files ?? []).map((f, k) => ({
+      ...(f as object), ...(i.files[k]?.held ? { held: true } : {}), ...(i.files[k]?.missing?.length ? { missing: capList(i.files[k].missing, 8, 200) } : {}),
+    })),
+    gaps: (i.gaps ?? []).slice(0, 12).map((g) => ({ topic: cap(g.topic, 20), gap: cap(g.gap, 240) })),
+    stepsSoFar: (i.stepsSoFar ?? []).slice(0, 20).map((s) => ({ question: cap(s.question, 200), answer: cap(s.answer, 1000), ...(s.topic ? { topic: cap(s.topic, 20) } : {}) })),
+    ...answersData(i.teamAnswers), ...learnedData(i.learned),
+    ...(i.form?.participation ? { form: { participation: cap(i.form.participation, 40) } } : {}),
+    ...(i.flags?.length ? { flags: i.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
+    ...(i.graph?.length ? { graph: i.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
+  };
+}
+
+export const dataStepTask: Task<DataStepOutput> = {
+  name: 'data-step',
+  schema: DATA_STEP_SCHEMA,
+  prompt(input) {
+    const i = input as DataStepInput;
+    const data = dataStepData(i);
+    return build('data-step', [
+      "You make sure the Creators' Café understands a team's sample data COMPLETELY before the proof of concept is designed: the input, the output, the rules and the knowledge it depends on, and how the output derives from the input. Each call, reply with the NEXT single question for the operator, or say the understanding is complete.",
+      'Follow this Café data guide (guidance, not data):',
+      '<<<GUIDANCE', String(i.guidance ?? ''), 'GUIDANCE>>>',
+      '"files" are the files the team gave, each with what was understood (the operator\'s corrections are in it); "held" means the app is holding it for personal data and nothing more is known. "gaps" are what the app sees open, by topic. "stepsSoFar" are the data questions already asked and their answers (an answer of "(not known yet; asked the team)" means move on). "teamAnswers" and "learned" are settled; never ask what they answer.',
+      'Ask about the most important gap first: no sample input, then no sample of the output (ask the team to drop one, or how each output column is worked out), then the rules or reference it depends on, then unexplained columns or codes, then volumes (how many rows, how often), then anything else. One question per reply, with "why" (one line, at most 160 characters), 2 to 4 "suggested" answers drawn from the data itself (real column names, codes and values; at most 120 characters each), and "topic": input, output, knowledge, rules, volumes, codes or other. Question at most 200 characters.',
+      'Never ask for personal, client or third-party data, for a masked value, or for a name; never ask about value, savings, costs or KPIs. Never ask what the files or the answers already say.',
+      'When the input, the output, the rules, the knowledge and the volumes are all understood (from the files or the answers), or the only open items were asked of the team, reply {"done": true, "summary": {...}}: text (what the data is and how it fits together, at most 600 characters), input, output, knowledge, rules (one short paragraph each: what is known, with real file and column names; "" when there is none), and gapsClosed (what your questions settled, one line each). Ask nothing then.',
+      'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "topic": "..."}.',
+      'Every reply, done or not, also carries "updates" and "learned": what the data answers and the files change in the idea\'s record. The app applies these by itself (no one says yes to them), so propose only what an answer or a file clearly says. Every system or data source a file or answer names (the expense system an export comes from, a policy library) is a System node linked by USES_DATA from the Capability that reads it.',
+      'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
+      ...(data.learned ? ['learned: the whole brief again, not only what is new: keep each point of DATA.learned (change it where a later answer says otherwise) and add what the answers add (a "Data" point for what the data is).'] : []),
+      ...answerRules(['stepsSoFar', 'teamAnswers']),
+    ], DATA_STEP_SCHEMA, data, "a Café idea's sample data as understood so far, the gaps and the data questions so far");
+  },
+  parse: parseDataStep,
 };

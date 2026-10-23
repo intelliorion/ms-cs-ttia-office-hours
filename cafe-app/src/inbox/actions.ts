@@ -27,6 +27,7 @@ import { displayName } from './match';
 import { SIGNATURE } from '../comms/templates';
 import { openQuestionsOf, type TriageRecord } from './triage';
 import { fillDesignAnswers } from '../design/brainstorm';
+import { fillDataAnswers } from '../data/questions';
 import { sameQuestion } from './question';
 
 export { sameQuestion };
@@ -293,6 +294,8 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
       // Design questions we asked the team in an E2 ("I don't know") are filled from the matching answers,
       // against the idea as it is now saved.
       await fillDesignAnswers(root, await loadIdea(root, a.ideaId), a.answers, clock);
+      // So are the data questions asked the same way.
+      await fillDataAnswers(root, a.ideaId, a.answers);
       return { inverse: { t: 'unset-field', ideaId: a.ideaId, field: 'answers', entries: fresh.map((x) => ({ question: x.question, source: x.source })) } };
     }
     case 'add_flag': {

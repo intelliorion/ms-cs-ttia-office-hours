@@ -22,7 +22,7 @@ import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../gra
 import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, type DesignKitOutput } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, dataStepTask, type DesignKitOutput } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd, writeDesign } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
@@ -38,6 +38,8 @@ import { buildDeck, redrawDeck } from '../roadshow/deck';
 import { diagramReply } from '../design/diagramFile';
 import { roadshowView, deckFile, photoFile } from '../roadshow/view';
 import { growIdea } from '../ai/grow';
+import { dropDataFile, editDataFile, releaseDataFile, removeDataFile, runDataFile, setDataKind, type DataProgress } from '../data/understand';
+import { addDataQuestion, answerDataStep, confirmData, finishDataByHand, nextDataStep } from '../data/questions';
 import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
@@ -234,6 +236,40 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const rec = await draftEmail(root, { template: String(body.template), ideaId: params.id }, clock);
     return inOutlook(rec.key, async () => openEmail(root, rec.key, clock, await steps()));
   });
+  // Design series, first: "Understand the data". A dropped file runs Read → Check → Profile → Understand → Saved, its
+  // step cards streamed as it goes (Accept: application/x-ndjson); every reply is the design as it now is.
+  const designNow = async (id: string, extra: Record<string, unknown> = {}) => {
+    const idea = await loadIdea(root, id);
+    const state = await readDesign(root, id);
+    return { state, designMd: renderDesignMd(idea, state), ...extra };
+  };
+  const aiOrNull = async () => ((await ai.status()).provider ? ai : null);
+  const fileProgress = (progress?: (e: unknown) => void): DataProgress | undefined => (progress ? (e) => progress({ file: e.file }) : undefined);
+  add('POST', '/api/ideas/:id/data/drop', async ({ params, raw, headers, progress }) => {
+    const name = fileNameOf(headers['x-filename']);
+    if (!name) throw new Error('The file needs a name');
+    const file = await dropDataFile(root, params.id, name, new Uint8Array(raw), String(headers['x-kind'] ?? ''), await aiOrNull(), clock, fileProgress(progress));
+    return designNow(params.id, { file });
+  });
+  // "It is masked / synthetic — continue": a held file goes on from the profile, its flagged columns still masked.
+  add('POST', '/api/ideas/:id/data/:fid/release', async ({ params, progress }) =>
+    designNow(params.id, { file: await releaseDataFile(root, params.id, params.fid, await aiOrNull(), clock, fileProgress(progress)) }));
+  add('POST', '/api/ideas/:id/data/:fid/understand', async ({ params, progress }) =>
+    designNow(params.id, { file: await runDataFile(root, params.id, params.fid, 'understand', await aiOrNull(), clock, fileProgress(progress)) }));
+  add('POST', '/api/ideas/:id/data/:fid/read', async ({ params, progress }) =>
+    designNow(params.id, { file: await runDataFile(root, params.id, params.fid, 'read', await aiOrNull(), clock, fileProgress(progress)) }));
+  add('POST', '/api/ideas/:id/data/:fid/kind', async ({ params, body }) => { await setDataKind(root, params.id, params.fid, body.kind); return designNow(params.id); });
+  add('POST', '/api/ideas/:id/data/:fid/edit', async ({ params, body }) => { await editDataFile(root, params.id, params.fid, body, clock); return designNow(params.id); });
+  add('POST', '/api/ideas/:id/data/:fid/remove', async ({ params }) => { await removeDataFile(root, params.id, params.fid, clock); return designNow(params.id); });
+  // The data questions: the next one from the AI (or a hand-written one), an answer, the hand summary, the confirmation.
+  add('POST', '/api/ideas/:id/data/step', async ({ params, body }) => {
+    if (body.question !== undefined) { const { out } = await addDataQuestion(root, params.id, body); return designNow(params.id, { step: out }); }
+    const r = await byHand(() => nextDataStep(root, params.id, (input) => ai.runWith(dataStepTask, input), clock))();
+    return designNow(params.id, { ...(r.step ? { step: r.step } : {}), ...(r.done ? { done: true } : {}), applied: r.applied.map((u) => u.label) });
+  });
+  add('POST', '/api/ideas/:id/data/answer', async ({ params, body }) => { const r = await answerDataStep(root, params.id, body, clock); return designNow(params.id, 'emailKey' in r ? { emailKey: r.emailKey } : {}); });
+  add('POST', '/api/ideas/:id/data/finish', async ({ params, body }) => { await finishDataByHand(root, params.id, body.summary, clock); return designNow(params.id); });
+  add('POST', '/api/ideas/:id/data/confirm', async ({ params }) => { await confirmData(root, params.id, clock); return designNow(params.id); });
   // Design series: the tool picker. The AI only suggests; the operator's save is what counts.
   add('GET', '/api/ideas/:id/design', async ({ params }) => {
     const idea = await loadIdea(root, params.id);

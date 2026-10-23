@@ -168,6 +168,15 @@ describe('ToolPickerSection', () => {
 });
 
 describe('DesignSection', () => {
+  it('a finished design shows See the design and Approve design side by side', async () => {
+    const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
+    const done = designState({ summary: 'A proof of concept that shows the flagged list.', steps: [{ n: 1, question: 'Q?', answer: 'A', suggested: [] }] });
+    await act(async () => root.render(<DesignSection idea={IDEA} design={{ state: done, designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    const row = el.querySelector('[data-testid="design-final"]')!;
+    expect([...row.querySelectorAll('button')].map((x) => x.getAttribute('data-action'))).toEqual(['see-design', 'approve-design']);
+    expect(el.querySelectorAll('[data-action="approve-design"]')).toHaveLength(1);
+  });
+
   it('the design shows no "From your answers" list: its answers save themselves', async () => {
     const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
     const idea = { ...IDEA, updates: [{ id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed', from: 'design' }] };

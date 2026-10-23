@@ -1121,3 +1121,4 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .dd-redraw{display:flex;justify-content:flex-end;margin:-28px 0 4px}
 .dd-hint{font-size:12.5px}
 @media (max-width:760px){.dd-card{position:static;width:100%;max-height:none;margin-top:8px;box-shadow:none}.dd-box{max-height:420px}.dd-redraw{margin:0 0 4px;justify-content:flex-start}}
+.ds-final{margin-top:10px}

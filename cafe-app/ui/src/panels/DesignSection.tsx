@@ -116,6 +116,7 @@ export function StepCarousel({ steps, render }: { steps: any[]; render: (step: a
 export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSendQuestions }: {
   idea: any; design: DesignView | null; busy: boolean; aiWorking: boolean; noAi: boolean; call: DesignCall; onSendQuestions: () => void;
 }) {
+  const openPopout = useStore((x) => x.openPopout);
   const [handQ, setHandQ] = useState<{ question: string; suggested: string } | null>(null);
   const [finish, setFinish] = useState<string | null>(null);
   const qRef = useRef<HTMLInputElement>(null);
@@ -186,6 +187,16 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
           </div>
         </div>
       )}
+      {(phase === 'done' || phase === 'approved') && (
+        // The two things to do with a finished design, side by side: look at it, then approve it.
+        <div className="ai-row ds-final" data-testid="design-final">
+          <button className="btn primary" data-action="see-design" onClick={() => openPopout({ kind: 'design-pack', id })}>See the design</button>
+          {phase === 'done' && (
+            <button className="btn primary" data-action="approve-design" disabled={off}
+              onClick={() => void call(() => designPost(id, 'design/approve'), { ok: (r: any) => r.notice ?? 'Design approved.' })}>Approve design</button>
+          )}
+        </div>
+      )}
       <div className="ai-row ds-acts">
         {phase !== 'done' && phase !== 'approved' && (
           <button className="btn primary" data-action="next-question" disabled={noAi || off || Boolean(waiting)}
@@ -196,14 +207,9 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
         {finish === null && steps.length > 0 && (
           <button className="btn" data-action="hand-finish" disabled={off} onClick={() => setFinish(s.summary ?? '')}>Finish by hand</button>
         )}
-        {phase === 'done' && (
-          <button className="btn primary" data-action="approve-design" disabled={off}
-            onClick={() => void call(() => designPost(id, 'design/approve'), { ok: (r: any) => r.notice ?? 'Design approved.' })}>Approve design</button>
-        )}
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
       {phase === 'done' && <div className="hint">Adding a question by hand reopens the design.</div>}
-      {(phase === 'done' || phase === 'approved') && <SeeDesign id={id} />}
     </section>
   );
 }

@@ -216,6 +216,7 @@ cafe-app/ui/src/state/store.test.ts
 cafe-app/ui/src/state/store.ts
 cafe-app/ui/src/theme.css
 cafe-app/ui/src/universe/Backdrop.tsx
+cafe-app/ui/src/universe/DraftingTable.tsx
 cafe-app/ui/src/universe/Flat2D.test.tsx
 cafe-app/ui/src/universe/Flat2D.tsx
 cafe-app/ui/src/universe/Links.tsx
@@ -240,8 +241,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-B5va5tb_.js
-cafe-app/web/assets/index-BTvbXRZS.css
+cafe-app/web/assets/index-BMj-xX90.css
+cafe-app/web/assets/index-B_fE5R-q.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

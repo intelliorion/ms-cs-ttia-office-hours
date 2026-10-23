@@ -104,12 +104,15 @@ function emissiveByInstance(m: Material) {
 /** Glowing stars: instanced cores, additive halos, stage rings on ideas, and labels. */
 /** A bauble's cap: a short gold cylinder on top, as wide as a third of the ball. */
 export const CAP = { width: 0.36, height: 0.3, lift: 0.96 };
+/** Blueprint: stars at least this big get the white drafting wireframe. */
+export const WIRE_FROM = 4.5;
 export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, palette = NIGHT, onSelect, onHover }: StarsProps) {
   const frost = palette.frost;
   const blueprint = !!palette.blueprint;
   /** Frost and Blueprint draw solid colour with no glow; the night sky lights its stars. */
   const flat = frost || blueprint;
   const cap = useRef<InstancedMesh>(null);
+  const wire = useRef<InstancedMesh>(null);
   const bg = useMemo(() => new Color(palette.bg), [palette.bg]);
   const core = useRef<InstancedMesh>(null);
   const halo = useRef<InstancedMesh>(null);
@@ -142,6 +145,8 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       dummy.scale.setScalar(gone ? 0 : Math.max(sizes[i] * 2.2, 4)); dummy.updateMatrix();
       hit.current!.setMatrixAt(i, dummy.matrix);
       halo.current!.setMatrixAt(i, dummy.matrix); halo.current!.setColorAt(i, base[i]);
+      // Only the big stars (the division, teams) carry the drafting wireframe: on a small one the lines wash the colour out.
+      if (wire.current) { dummy.position.set(...p); dummy.scale.setScalar(gone || sizes[i] < WIRE_FROM ? 0 : sizes[i]); dummy.updateMatrix(); wire.current.setMatrixAt(i, dummy.matrix); }
       if (cap.current) {
         dummy.position.set(p[0], p[1] + sizes[i] * CAP.lift, p[2]);
         dummy.scale.set(gone ? 0 : sizes[i] * CAP.width, gone ? 0 : sizes[i] * CAP.height, gone ? 0 : sizes[i] * CAP.width); dummy.updateMatrix();
@@ -149,11 +154,12 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       }
     });
     if (cap.current) { cap.current.instanceMatrix.needsUpdate = true; cap.current.computeBoundingSphere(); }
+    if (wire.current) { wire.current.instanceMatrix.needsUpdate = true; wire.current.computeBoundingSphere(); }
     for (const m of [core.current!, hit.current!, halo.current!]) {
       m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere();
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
-  }, [nodes, pos, sizes, base, hood, dim, frost]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodes, pos, sizes, base, hood, dim, frost, blueprint]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(({ clock, camera }) => {
     const c = core.current, h = halo.current; if (!c || !h || !n) return; // no stars yet: nothing to light
@@ -225,11 +231,18 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       <instancedMesh key={`core-${n}`} ref={core} args={[undefined, undefined, n]} frustumCulled={false}>
         <sphereGeometry args={blueprint ? [1, 12, 8] : lite ? [1, 16, 12] : [1, 24, 16]} />
         {blueprint
-          ? <meshBasicMaterial key="draft" color="#ffffff" wireframe transparent opacity={0.95} toneMapped={false} />
+          ? <meshBasicMaterial key="draft" color="#ffffff" fog={false} toneMapped={false} />
           : frost
           ? <meshPhysicalMaterial key="bauble" color="#ffffff" metalness={0.3} roughness={0.2} clearcoat={1} clearcoatRoughness={0.06} envMapIntensity={1.15} />
           : <meshStandardMaterial key="star" color="#000000" emissive="#ffffff" emissiveIntensity={1.6} roughness={1} metalness={0} toneMapped={false} onUpdate={emissiveByInstance} />}
       </instancedMesh>
+      {/* Blueprint: a thin white drafting wireframe over each solid star. */}
+      {blueprint && (
+        <instancedMesh key={`wire-${n}`} ref={wire} args={[undefined, undefined, n]} frustumCulled={false} raycast={() => null}>
+          <sphereGeometry args={[1.08, 12, 8]} />
+          <meshBasicMaterial color="#ffffff" wireframe transparent opacity={0.4} depthWrite={false} toneMapped={false} />
+        </instancedMesh>
+      )}
       {frost && (
         <instancedMesh key={`cap-${n}`} ref={cap} args={[undefined, undefined, n]} frustumCulled={false}>
           <cylinderGeometry args={[1, 1, 1, 14]} />

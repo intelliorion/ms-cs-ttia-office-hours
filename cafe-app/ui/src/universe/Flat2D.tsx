@@ -157,9 +157,9 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
               <>
                 {/* A drafted circle: the kind's colour as a pencil ring with centre marks; ideas get a dashed stage ring. */}
                 {n.type === 'Idea' && <circle cx={p[0]} cy={p[1]} r={rb * 1.6} fill="none" stroke={ringColour(n, pal.ring)} strokeWidth={1.2} strokeDasharray="4 3" />}
-                <circle cx={p[0]} cy={p[1]} r={rb * (hot ? 1.15 : 1)} fill="rgba(18,62,107,.85)" stroke={NODE_COLOURS[n.type]} strokeWidth={hot ? 2.4 : 1.6} />
-                <line x1={p[0] - rb * 0.55} y1={p[1]} x2={p[0] + rb * 0.55} y2={p[1]} stroke="#d6e6ff" strokeWidth={0.8} opacity={0.8} />
-                <line x1={p[0]} y1={p[1] - rb * 0.55} x2={p[0]} y2={p[1] + rb * 0.55} stroke="#d6e6ff" strokeWidth={0.8} opacity={0.8} />
+                <circle cx={p[0]} cy={p[1]} r={rb * (hot ? 1.15 : 1)} fill={NODE_COLOURS[n.type]} stroke="#ffffff" strokeWidth={hot ? 2.2 : 1.3} />
+                <line x1={p[0] - rb * 0.55} y1={p[1]} x2={p[0] + rb * 0.55} y2={p[1]} stroke="#ffffff" strokeWidth={0.8} opacity={0.75} />
+                <line x1={p[0]} y1={p[1] - rb * 0.55} x2={p[0]} y2={p[1] + rb * 0.55} stroke="#ffffff" strokeWidth={0.8} opacity={0.75} />
               </>
             ) : frost ? (
               <>

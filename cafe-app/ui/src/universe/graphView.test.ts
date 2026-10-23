@@ -122,7 +122,7 @@ describe('theme palettes', () => {
     const { paletteFor } = await import('./graphView');
     expect(paletteFor('default').frost).toBe(false);
     expect(paletteFor('frost').frost).toBe(true);
-    expect(paletteFor('blueprint')).toMatchObject({ frost: false, blueprint: true, bg: '#123e6b' });
+    expect(paletteFor('blueprint')).toMatchObject({ frost: false, blueprint: true, bg: '#2b5f96' });
     expect(paletteFor('unknown')).toBe(paletteFor('default'));
   });
 });

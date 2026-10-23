@@ -104,3 +104,44 @@ describe('what your answers change in the record', () => {
     expect(await updates(root)).toEqual([]);
   });
 });
+
+describe('the same person, the same answers: no duplicates', () => {
+  const team = { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead', 'builder'] as any }, { name: 'Tomasz Wiśniewski', roles: ['sponsor'] as any, note: 'Sponsor' }] };
+  const start = async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, { ...idea, people: team });
+    return root;
+  };
+
+  it('a builder spelt another way, or with an extra word, is the person already known, and takes over as the builder', async () => {
+    const root = await start();
+    await suggestPrep(root, idea.id, ai({ builder: 'Tomasz Wiśniewski Viseiewki' }).run, clock);
+    let [b] = await updates(root);
+    expect(b.label).toBe('Make Tomasz Wiśniewski the builder (the answer says "Tomasz Wiśniewski Viseiewki") instead of Person 1');
+    await decideUpdate(root, idea.id, b.id, 'yes', clock);
+    expect((await loadIdea(root, idea.id)).people.team).toEqual([
+      { name: 'Person 1', roles: ['lead'] }, { name: 'Tomasz Wiśniewski', roles: ['sponsor', 'builder'], note: 'Sponsor' },
+    ]);
+    // Re-evaluated, the answer spelt yet another way: nothing new to do.
+    await suggestPrep(root, idea.id, ai({ builder: 'Tomasz Viseiewki' }).run, clock);
+    expect((await updates(root)).filter((x) => x.status === 'proposed')).toEqual([]);
+    // Undo puts the team back as it was.
+    [b] = await updates(root);
+    await decideUpdate(root, idea.id, b.id, 'undo', clock);
+    expect((await loadIdea(root, idea.id)).people.team).toEqual(team.team);
+  });
+
+  it('answers re-worded on a second re-evaluation replace the ones saved before', async () => {
+    const root = await start();
+    await suggestPrep(root, idea.id, ai({ facts: [{ question: 'Can the builder attend all sessions?', answer: 'Not confirmed yet.' }, { question: 'Is sample data enough?', answer: 'Yes.' }] }).run, clock);
+    await decideUpdate(root, idea.id, (await updates(root))[0].id, 'yes', clock);
+    await suggestPrep(root, idea.id, ai({ facts: [{ question: 'Can the builder attend all of the sessions?', answer: 'Confirmed, every session.' }, { question: 'Is sample data enough?', answer: 'Yes' }] }).run, clock);
+    const fresh = (await updates(root)).find((x) => x.status === 'proposed')!;
+    expect(fresh.facts).toEqual([{ question: 'Can the builder attend all of the sessions?', answer: 'Confirmed, every session.' }]);
+    expect(fresh.label).toMatch(/^Save this answer on the idea \(in place of 1 saved before\)/);
+    await decideUpdate(root, idea.id, fresh.id, 'yes', clock);
+    expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer)).toEqual(['Yes.', 'Confirmed, every session.']);
+    await decideUpdate(root, idea.id, fresh.id, 'undo', clock);
+    expect(((await loadIdea(root, idea.id)) as any).answers.map((a: any) => a.answer).sort()).toEqual(['Not confirmed yet.', 'Yes.']);
+  });
+});

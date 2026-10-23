@@ -63,12 +63,12 @@ export interface PrepUpdate {
   kind: 'builder' | 'participation' | 'flag' | 'facts' | 'link';
   label: string;
   status: 'proposed' | 'applied' | 'dismissed';
-  builder?: { name: string; canAttend: boolean };
+  builder?: { name: string; canAttend: boolean; typed?: string; instead?: string[] };
   participation?: string;
   flag?: string;
   facts?: { question: string; answer: string }[];
   link?: { from: string; to: string; rel: string; description: string; confidence: number; source: string; newNodes?: { id: string; type: string; label: string }[] };
-  undo?: { team?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string };
+  undo?: { team?: Person[]; teamAfter?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string; replaced?: { question: string; answer: string; source?: string }[] };
 }
 
 export interface ReviewPrep {

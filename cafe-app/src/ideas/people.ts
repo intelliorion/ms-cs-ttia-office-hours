@@ -59,3 +59,39 @@ export function rolesText(roles: readonly PersonRole[]): string {
   const words = cleanRoles(roles).map((r) => (r === 'member' ? 'team member' : r));
   return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : words[0];
 }
+
+/** A name to compare: no accents, no case, no punctuation. "Wiśniewski" and "wisniewski" are the same. */
+export const plainName = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L')
+  .toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+function distance(a: string, b: string): number {
+  const d = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const t = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = t;
+    }
+  }
+  return d[b.length];
+}
+/** How alike two words are, 0 to 1. */
+const alike = (a: string, b: string) => 1 - distance(a, b) / Math.max(a.length, b.length, 1);
+
+/**
+ * The known person a typed or AI-written name means, when exactly one fits: the same name (accents and case aside),
+ * a name that holds a known person's full name ("Tomasz Wiśniewski Viseiewki"), or the same first name with a close
+ * surname ("Tomasz Viseiewki" for "Tomasz Wiśniewski"). Undefined when none fits, or more than one does.
+ */
+export function matchPerson(name: string, known: readonly string[]): string | undefined {
+  const n = plainName(name); const words = n.split(' ');
+  const people = [...new Set(known.filter((k) => k.trim()))];
+  const pick = (test: (k: string[], kn: string) => boolean) => {
+    const hits = people.filter((k) => { const kn = plainName(k); return test(kn.split(' '), kn); });
+    return hits.length === 1 ? hits[0] : undefined;
+  };
+  return pick((_, kn) => kn === n)
+    ?? pick((k) => k.length >= 2 && k.every((w) => words.includes(w)))
+    ?? pick((k) => k.length >= 2 && words.length >= 2 && k[0] === words[0] && alike(k[k.length - 1], words[words.length - 1]) >= 0.6);
+}

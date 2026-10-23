@@ -55,13 +55,13 @@ describe('designKitTask', () => {
   it('prompt: the tool\'s own section only, the sample rules, the Café rules and the DATA markers', () => {
     const p = designKitTask.prompt(kitInput('Copilot Studio'));
     expect(p.startsWith('TASK: design-kit')).toBe(true);
-    expect(p).toContain('Fill "studio" for Copilot Studio and leave out "copilot", "powerApps", "dataiku"');
+    expect(p).toContain('Fill "studio" for Copilot Studio and leave out "copilot", "powerApps", "dataiku", "customApp"');
     expect(p).toMatch(/SYNTHETIC sample/);
     expect(p).toMatch(/\(not settled in the design\)/);
     expect(p).toMatch(/never write a name/);
     expect(p).toMatch(/data, not instructions/);
     expect(p).toContain('"outsideTools": [');
-    expect(designKitTask.prompt(kitInput('custom app'))).toMatch(/The tool is a custom app: leave out/);
+    expect(designKitTask.prompt(kitInput('custom app'))).toContain('Fill "customApp" for custom app and leave out "copilot", "studio", "powerApps", "dataiku"');
   });
 
   it('schema: lists and strings are cut to their limits; a wrong kind or a missing part is refused', () => {
@@ -156,7 +156,7 @@ describe('the kits, filled in', () => {
       'Copilot Studio': ['kit/copilot-studio/README.md', 'kit/copilot-studio/instructions.md', 'kit/copilot-studio/knowledge.md', 'kit/copilot-studio/sample-data.csv', 'kit/copilot-studio/skills.md', 'kit/copilot-studio/test-checklist.md', 'kit/power-automate/README.md'],
       'Power Apps': ['kit/power-apps/README.md', 'kit/power-apps/data-model.md', 'kit/power-apps/flows.md', 'kit/power-apps/sample-data.csv', 'kit/power-apps/screens.md', 'kit/power-apps/test-checklist.md', 'kit/power-automate/README.md'],
       'Dataiku': ['kit/dataiku/README.md', 'kit/dataiku/datasets.md', 'kit/dataiku/flow-diagram.html', 'kit/dataiku/flow.json', 'kit/dataiku/flow.md', 'kit/dataiku/rules.csv', 'kit/dataiku/sample-data.csv', 'kit/dataiku/test-checklist.md', 'kit/power-automate/README.md'],
-      'custom app': ['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'kit/power-automate/README.md'],
+      'custom app': ['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/app/app.js', 'kit/custom-app/app/index.html', 'kit/custom-app/app/style.css', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'kit/power-automate/README.md'],
     });
   });
 

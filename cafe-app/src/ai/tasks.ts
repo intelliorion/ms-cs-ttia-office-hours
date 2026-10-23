@@ -1150,6 +1150,11 @@ export interface KitDataiku {
   rules?: { columns: string[]; rows: string[][] };
 }
 export interface KitOutside { tool: string; setup: string[]; test: string[] }
+/** The custom app's starter scaffold: its screens and the rules to stub (the app writes the files). */
+export interface KitCustomApp {
+  screens: { name: string; feature?: string; shows: string; columns: string[]; action?: string }[];
+  rules: { name: string; feature?: string; logic: string; columns: string[] }[];
+}
 export interface DesignKitOutput {
   sample: KitSample;
   checks: KitCheck[];
@@ -1157,6 +1162,7 @@ export interface DesignKitOutput {
   studio?: KitStudio;
   powerApps?: KitPowerApps;
   dataiku?: KitDataiku;
+  customApp?: KitCustomApp;
   outside?: KitOutside[];
 }
 
@@ -1210,6 +1216,10 @@ export const DESIGN_KIT_SCHEMA: JsonSchema = kObj(['sample', 'checks'], {
     }), 12, 1),
     dashboard: kObj(['name', 'shows', 'from'], { name: kStr(60, 1), shows: kList(6, 160, 1), from: kList(4, 30, 1) }),
     rules: kObj(['columns', 'rows'], { columns: kList(10, 40, 1), rows: kArr(CELLS, 20) }),
+  }),
+  customApp: kObj(['screens', 'rules'], {
+    screens: kArr(kObj(['name', 'shows', 'columns'], { name: kStr(60, 1), feature: kStr(60), shows: kStr(200), columns: kList(KIT_COLUMNS_MAX, 40), action: kStr(40) }), 6, 1),
+    rules: kArr(kObj(['name', 'logic', 'columns'], { name: kStr(60, 1), feature: kStr(60), logic: kStr(240, 1), columns: kList(KIT_COLUMNS_MAX, 40) }), 8),
   }),
   outside: kArr(kObj(['tool', 'setup', 'test'], { tool: kStr(60, 1), setup: kList(8, 240, 1), test: kList(6, 240, 1) }), 5),
 });
@@ -1269,8 +1279,8 @@ function designKitData(i: DesignKitInput) {
 }
 
 /** Which part of the reply holds the picked tool's own files. */
-export const KIT_SECTION: Record<string, 'copilot' | 'studio' | 'powerApps' | 'dataiku' | undefined> = {
-  'Microsoft Copilot': 'copilot', 'Copilot Studio': 'studio', 'Power Apps': 'powerApps', 'Dataiku': 'dataiku', 'custom app': undefined,
+export const KIT_SECTION: Record<string, 'copilot' | 'studio' | 'powerApps' | 'dataiku' | 'customApp' | undefined> = {
+  'Microsoft Copilot': 'copilot', 'Copilot Studio': 'studio', 'Power Apps': 'powerApps', 'Dataiku': 'dataiku', 'custom app': 'customApp',
 };
 
 export const designKitTask: Task<DesignKitOutput> = {
@@ -1289,8 +1299,9 @@ export const designKitTask: Task<DesignKitOutput> = {
       'Sample values are made up: never a real person, client, company or account. A "person" column holds a role word only; the app writes Person 1, Person 2 in it. No email addresses or phone numbers.',
       'checks: one per check in the done-when point and one per feature that is built (feature: its exact name): what to do on the sample, and the expected result (counts from the sample when you can: the seeded rows).',
       section
-        ? `Fill "${section}" for ${i.tool.tool} and leave out ${['copilot', 'studio', 'powerApps', 'dataiku'].filter((x) => x !== section).map((x) => `"${x}"`).join(', ')}.`
-        : 'The tool is a custom app: leave out "copilot", "studio", "powerApps" and "dataiku" (a coding agent builds it from the design; you give the sample and the checks).',
+        ? `Fill "${section}" for ${i.tool.tool} and leave out ${['copilot', 'studio', 'powerApps', 'dataiku', 'customApp'].filter((x) => x !== section).map((x) => `"${x}"`).join(', ')}.`
+        : 'Leave out "copilot", "studio", "powerApps", "dataiku" and "customApp".',
+      'customApp (custom app: a coding agent builds it from a small starter the app writes): screens: one per built feature (feature: its exact name), name, shows (what the screen shows, one line), columns (the sample\'s exact column names it lists), action (the one button it needs, a few words, or leave it out). rules: one per rule in the logic point and the logic answers, name (a few words, it becomes the function name), logic (the rule exactly as the design says it, with the column names), columns (the sample columns it reads), feature.',
       'copilot (Microsoft Copilot, no build): one prompt per built feature (title, feature, prompt, expected), written against the sample\'s real column names and asking Copilot to use only the attached sample file; expected is the answer to check against (counts from the sample, such as the seeded rows).',
       'studio (Copilot Studio): the agent\'s instructions: name, purpose, tone, must (what it always does), mustNot (what it never does, including never asking for or storing personal or client data), handover (when it hands over to a person, as a role). skills: one per built feature (feature: its exact name): name, triggers (3 to 10 real phrases a user would type), inputs (what it asks for or reads), steps, answer (what it says back), action (the connector or Power Automate flow it needs, named and described, or "none"). knowledge: the sources to add (the sample file first, then the SharePoint pages or documents the design names), each with what it holds; add false, with why, for what must not be added. tests: questions with the expected answers from the sample.',
       'powerApps (Power Apps): tables: the SharePoint lists (or Dataverse tables) with their columns and types (the input list from the sample\'s columns, and the output list when the design has one). screens: each screen with its real controls (name, kind such as Gallery, Form, Button, Dropdown, Label), what each does, and the key Power Fx formula sketched (for example Filter(Claims, Weekday(ClaimDate) in [1,7])). flows: the Power Automate flows for what the app cannot do on its own (empty when none).',

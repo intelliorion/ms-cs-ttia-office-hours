@@ -633,7 +633,13 @@ Power Apps             data-model.md (lists and columns with types), screens.md 
 Dataiku                flow.md (each recipe's actual steps), datasets.md (schemas), rules.csv (the rules sheet
                        template, when the logic uses one), flow.json and flow-diagram.html (the recipe flow:
                        datasets → recipes → outputs and dashboard, one self-contained page)
-custom app             BUILD-WITH-AGENT.md (the instruction for a coding agent; no code is written by the app)
+custom app             BUILD-WITH-AGENT.md (the instruction for a coding agent, which starts from the scaffold) and
+                       app/: a small starter scaffold the agent finishes. index.html (one screen per feature),
+                       style.css and app.js (loads sample-data.csv from a file picker; one rule stub per logic
+                       answer, each a TODO). Plain HTML, CSS and JavaScript: no build step, no network. The README
+                       says how to run it (open app/index.html, load the sample). The kit AI proposes the screens
+                       and rules; the code keeps only built features and the sample's columns, makes the rule names
+                       safe function names, escapes everything and writes the files. Nothing runs from the app.
 ```
 
 A plan task on a tool other than the one picked is listed under "Not picked" in plan.md, with no kit.
@@ -658,8 +664,9 @@ from the Superpowers project, copied under the MIT licence (`skills/LICENSE-supe
 - A custom app is TTIA-Led, so an idea with one needs the CSIC Repository before any build beyond a proof
   of concept. The same goes for a live connection to a non-Microsoft system or personal, client or
   third-party data.
-- The app writes no application code. The kits are instructions, a synthetic sample, checklists, a diagram and,
-  for a custom app, an instruction for a coding agent that works only inside the kit folder.
+- The app runs no application code. The kits are instructions, a synthetic sample, checklists, a diagram and,
+  for a custom app, an instruction for a coding agent that works only inside the kit folder, with a small starter
+  scaffold (text files with TODOs) for it to finish. The design pack shows the scaffold's files as text.
 - The stage never moves on its own. Saving the features and tool, answering the must-show and smallest-input questions
   and approving the design tick their steps in the background (s3e, s3c, s3d, s3f).
 

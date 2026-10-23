@@ -67,6 +67,15 @@ describe('the pack\'s kit files', () => {
       'kit/dataiku/test-checklist.md', 'kit/power-automate/README.md']);
     expect(kitSlug('Copilot Studio')).toBe('copilot-studio');
   });
+  it('the custom app\'s starter scaffold: listed after the agent instruction, read as text in the pack (never run from it)', async () => {
+    const { opensInTab } = await import('./designPack');
+    const files = ['kit/custom-app/test-checklist.md', 'kit/custom-app/app/style.css', 'kit/custom-app/app/app.js', 'kit/custom-app/app/index.html', 'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md'];
+    expect(packFiles(files, false, 'custom-app').slice(1)).toEqual(['kit/custom-app/README.md', 'kit/custom-app/BUILD-WITH-AGENT.md',
+      'kit/custom-app/app/index.html', 'kit/custom-app/app/app.js', 'kit/custom-app/app/style.css', 'kit/custom-app/test-checklist.md']);
+    expect(opensInTab('kit/custom-app/app/index.html')).toBe(false);
+    expect(opensInTab('kit/dataiku/flow-diagram.html')).toBe(true);
+    for (const f of ['app/index.html', 'app/app.js', 'app/style.css']) expect(fileNote(`kit/custom-app/${f}`).use, f).not.toBe('A file in the starter kit folder.');
+  });
   it('every new file says what it is and how to use it; an outside tool\'s README says it is outside the build', () => {
     for (const f of ['sample-data.csv', 'test-checklist.md', 'prompts.md', 'instructions.md', 'skills.md', 'knowledge.md', 'data-model.md', 'screens.md', 'flows.md',
       'flow.md', 'datasets.md', 'rules.csv', 'flow-diagram.html', 'flow.json', 'BUILD-WITH-AGENT.md']) {

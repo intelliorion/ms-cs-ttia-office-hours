@@ -1,7 +1,8 @@
 /**
  * The starter kits' files, written in code from the approved design and the kit AI's content (designKitTask). Every
  * file is concrete: where the design says the answer it is written in; where it truly does not, "(not settled in the
- * design)". The app writes no application code: these are instructions, samples, checklists and a diagram.
+ * design)". These are instructions, samples, checklists and a diagram; the custom app's kit also has a small starter
+ * scaffold (scaffold.ts: plain HTML, CSS and JavaScript with TODOs) that a coding agent finishes. Nothing runs from the app.
  */
 import type { Idea } from '../ideas/idea';
 import type { DesignKitOutput, DesignPlanTask, KitPowerApps, KitStudio } from '../ai/tasks';
@@ -15,6 +16,7 @@ import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
 import { checkFlow, FLOW_DIAGRAM_FILE, FLOW_FILE, FLOW_KIND_WORD, renderFlowHtml, type RecipeFlow } from './recipeFlow';
 import { columnsOf, isUsable, KIND_LABELS, whatOf, type ColumnProfile, type DataFile } from '../data/model';
+import { renderScaffold, scaffoldOf, SCAFFOLD_DIR, SCAFFOLD_FILES } from './scaffold';
 
 export const NOT_SETTLED = '(not settled in the design)';
 export const TEST_FILE = 'test-checklist.md';
@@ -102,7 +104,7 @@ const INTRO: Record<string, string> = {
   'Copilot Studio': "This kit is the agent's content, ready to paste into Copilot Studio: its instructions, one skill (topic) per feature, the knowledge to add, the synthetic sample and the tests.",
   'Power Apps': 'This kit is the app on paper, ready to build in Power Apps: the lists and their columns, each screen with its controls and key formulas, the flows for what the app cannot do on its own, the synthetic sample and the tests.',
   'Dataiku': 'This kit is the Dataiku project on paper, ready to build: the datasets and their schemas, each recipe with its actual steps, the recipe flow as a diagram, the synthetic sample and the tests.',
-  'custom app': 'The Café app writes no application code. This kit is what a coding agent (Claude Code or GitHub Copilot) needs to build the proof of concept: the instruction, the synthetic sample and the tests.',
+  'custom app': 'This kit is what a coding agent (Claude Code or GitHub Copilot) needs to build the proof of concept: the instruction, a small starter scaffold to finish (plain HTML, CSS and JavaScript with TODOs), the synthetic sample and the tests.',
 };
 
 /** The files of a kit in the order of work, with what each is for (the README lists them). */
@@ -111,7 +113,7 @@ const ORDER: Record<string, [string, string][]> = {
   'Copilot Studio': [['instructions.md', "the agent's instructions, to paste into the Instructions box"], ['knowledge.md', 'the knowledge sources to add, what not to add, and test questions'], ['skills.md', 'one skill (topic) per feature: trigger phrases, inputs, steps, the answer and the action it needs']],
   'Power Apps': [['data-model.md', 'the lists (or tables) and their columns'], ['screens.md', 'each screen, its controls and the key formulas'], ['flows.md', 'the Power Automate flows for what the app cannot do on its own']],
   'Dataiku': [['datasets.md', 'the input and output datasets and their schemas'], ['rules.csv', 'the rules sheet template, to fill in and upload'], ['flow.md', "each recipe's actual steps, in flow order"], [FLOW_DIAGRAM_FILE, 'the recipe flow as a diagram: open it in a browser']],
-  'custom app': [[AGENT_FILE, 'the instruction to paste into the coding agent']],
+  'custom app': [[AGENT_FILE, 'the instruction to paste into the coding agent'], [SCAFFOLD_FILES[0], 'the starter: one screen per feature; open it in a browser'], [SCAFFOLD_FILES[2], 'the rule stubs (TODOs) and the code that loads the sample'], [SCAFFOLD_FILES[1], 'the starter styles']],
 };
 
 function featureLines(c: KitContext): string[] {
@@ -435,7 +437,10 @@ function dataikuFiles(c: KitContext, flow: RecipeFlow): Record<string, string> {
 }
 
 function customFiles(c: KitContext): Record<string, string> {
+  const scaffold = scaffoldOf(c.state, c.built, c.sample, c.kit?.customApp);
+  const columns = (c.sample?.columns ?? []).map((x) => x.name);
   return {
+    ...renderScaffold(c.idea.title, c.idea.id, scaffold, columns),
     [AGENT_FILE]: join(head('Build with Claude Code / Copilot', c), [
       '## The instruction to copy', '',
       'Open this kit folder in Claude Code or GitHub Copilot (agent mode) and paste the instruction below.', '',
@@ -452,6 +457,10 @@ function customFiles(c: KitContext): Record<string, string> {
       `The rule: ${fenced(pointOf(c.state, 'logic')) || NOT_SETTLED}`,
       `The output: ${fenced(pointOf(c.state, 'output')) || NOT_SETTLED}`,
       '',
+      `Start from the scaffold in ${SCAFFOLD_DIR}/ (index.html, style.css, app.js): it already loads ${SAMPLE_FILE} and has one screen per feature and one stub per rule:`,
+      ...scaffold.rules.map((r) => `- ${r.fn}: ${fenced(r.logic)}`),
+      'Fill in each TODO, make each screen show what the design says, and keep it plain HTML, CSS and JavaScript that runs by opening index.html (no build step, no server, no network).',
+      '',
       'Plan tasks for the custom app:',
       ...(c.tasks.length ? c.tasks.map((t) => `- ${fenced(t.title)}. Done when: ${fenced(t.done_when) || '(not said)'}`) : ['- (see plan.md)']),
       '',
@@ -461,7 +470,7 @@ function customFiles(c: KitContext): Record<string, string> {
       `- Every test in ${TEST_FILE} must pass on the sample.`,
       `- ${CUSTOM_APP_CSIC}`,
       '- Keep it a proof of concept: no sign-in, no deployment, nothing that runs outside this machine.',
-      '- When it works, add RUN.md in this folder saying how to run it on the sample.',
+      `- When it works, update "Run the starter" in README.md if the way to run it changed.`,
       '```', '',
     ]),
   };
@@ -497,10 +506,15 @@ export function renderKit(c: Omit<KitContext, 'sample' | 'files'>): Record<strin
   const extra = ctx.tool === 'custom app' ? [
     '## CSIC note', '', CUSTOM_APP_CSIC, '',
     '## How to use this kit', '',
-    `- The Café app writes no application code. A coding agent (Claude Code or GitHub Copilot) builds the proof of concept from ${AGENT_FILE}.`,
+    `- A coding agent (Claude Code or GitHub Copilot) builds the proof of concept from ${AGENT_FILE}, starting from the scaffold in [${SCAFFOLD_DIR}/](${SCAFFOLD_FILES[0]}).`,
     `- Open this folder in the agent and paste the instruction in ${AGENT_FILE}.`,
     '- The agent writes only inside this folder.',
     `- ${DATA_RULE}`, '',
+    '## Run the starter', '',
+    `1. Open [${SCAFFOLD_FILES[0]}](${SCAFFOLD_FILES[0]}) in a browser (double-click it: no install, no build, no server).`,
+    `2. Press **Load ${SAMPLE_FILE}** and pick [${SAMPLE_FILE}](${SAMPLE_FILE}) from this folder.`,
+    '3. Each screen lists the sample. The rules are stubs (TODO in app.js) until the agent writes them, so nothing is flagged yet.', '',
+    'It is a starting point, not the proof of concept: small on purpose, and nothing in it talks to another system.', '',
   ] : [];
   const main: Record<string, string> = {
     [README]: readme(ctx, extra),

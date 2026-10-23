@@ -330,6 +330,12 @@ function kitFor(prompt: string) {
       tests: [{ question: 'Which requests came in at the weekend?', expected: 'REQ-025 to REQ-034' }],
     };
   }
+  if (tool === 'custom app') {
+    kit.customApp = {
+      screens: built.map((f) => ({ name: f, feature: f, shows: `The requests, with what ${f} finds`, columns: ['request_id', 'received_on', 'desk', 'amount'], action: 'Export the flagged list' })),
+      rules: [{ name: 'Weekend request', feature: first, logic: 'Flag a request when received_on is a Saturday or Sunday', columns: ['received_on'] }],
+    };
+  }
   if (tool === 'Power Apps') {
     kit.powerApps = {
       tables: [{ name: 'Requests', purpose: 'The sample, one row per request', columns: [{ name: 'request_id', type: 'Single line of text', note: '' }, { name: 'received_on', type: 'Date only', note: '' }, { name: 'Weekend', type: 'Yes/No', note: 'Set by the app' }] }],

@@ -19,19 +19,22 @@ const KIT_FILES: Record<string, string> = {
   'flow-diagram.html': 'The recipe flow as Dataiku draws it: datasets, recipes, outputs. Open shows it in a new tab, to share or print.',
   'flow.json': 'The recipe flow as data: what the diagram is drawn from.',
   'BUILD-WITH-AGENT.md': 'The instruction to paste into Claude Code or GitHub Copilot: the agent builds the proof of concept inside this folder, on the sample.',
+  'app/index.html': 'The starter scaffold the coding agent finishes: one screen per feature. Open it from the idea folder in a browser and load the sample; the app itself never runs it.',
+  'app/app.js': 'The starter\'s code: it loads the sample and has one stub per rule, each a TODO for the coding agent.',
+  'app/style.css': 'The starter\'s plain styles.',
 };
 /** A kit for a tool the design uses outside the build. */
 const OUTSIDE_README = 'A short kit for a tool the design uses for its gaps, outside the main build: what it covers, what to set up and how to test it.';
 /** The design diagram, written beside design.md whenever the AI draws it. */
 export const DIAGRAM_FILE = 'design-diagram.html';
 /** A file the pack opens in a new tab (a page to look at), not one it shows as text. */
-export const opensInTab = (path: string) => path.endsWith('.html');
+export const opensInTab = (path: string) => path.endsWith('.html') && !/^kit\/[^/]+\/app\//.test(path);
 /** Where a diagram page is opened from. */
 export const diagramUrl = (id: string, path: string) => `/api/ideas/${encodeURIComponent(id)}/design/view/${path.split('/').pop()}`;
 
 /** The kit's files in the order of work. */
 const KIT_ORDER = ['README.md', 'sample-data.csv', 'instructions.md', 'knowledge.md', 'skills.md', 'prompts.md', 'data-model.md', 'screens.md', 'flows.md',
-  'datasets.md', 'rules.csv', 'flow.md', 'flow-diagram.html', 'flow.json', 'BUILD-WITH-AGENT.md', 'test-checklist.md'];
+  'datasets.md', 'rules.csv', 'flow.md', 'flow-diagram.html', 'flow.json', 'BUILD-WITH-AGENT.md', 'app/index.html', 'app/app.js', 'app/style.css', 'test-checklist.md'];
 
 /** The kit folder for a tool, as the server names it ("Power Apps" → "power-apps"). */
 export const kitSlug = (tool: string | undefined) => (tool ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

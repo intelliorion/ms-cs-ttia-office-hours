@@ -153,7 +153,7 @@ describe('plan.md and kits (renderers)', () => {
     });
     expect(Object.keys(all).sort()).toEqual([
       'kit/copilot-studio/README.md', 'kit/copilot-studio/instructions.md', 'kit/copilot-studio/knowledge.md', 'kit/copilot-studio/skills.md', 'kit/copilot-studio/test-checklist.md',
-      'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/test-checklist.md',
+      'kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/app/app.js', 'kit/custom-app/app/index.html', 'kit/custom-app/app/style.css', 'kit/custom-app/test-checklist.md',
       'kit/dataiku/README.md', 'kit/dataiku/datasets.md', 'kit/dataiku/flow-diagram.html', 'kit/dataiku/flow.json', 'kit/dataiku/flow.md', 'kit/dataiku/test-checklist.md',
       'kit/microsoft-copilot/README.md', 'kit/microsoft-copilot/prompts.md', 'kit/microsoft-copilot/test-checklist.md',
       'kit/power-apps/README.md', 'kit/power-apps/data-model.md', 'kit/power-apps/screens.md', 'kit/power-apps/test-checklist.md',
@@ -166,8 +166,8 @@ describe('plan.md and kits (renderers)', () => {
     // Never "write this yourself": what the design does not say is said to be not settled.
     for (const [p, text] of Object.entries(all)) expect(text, p).not.toMatch(/write (one line|5 to 10|this yourself)|copy it and fill it in/i);
     expect(all['kit/copilot-studio/skills.md']).toContain(NOT_SETTLED);
-    // No code files anywhere: instructions, checklists, a diagram and its data.
-    expect(Object.keys(all).every((p) => /\.(md|csv|json|html)$/.test(p))).toBe(true);
+    // Code only in the custom app's starter scaffold: everywhere else instructions, checklists, a diagram and its data.
+    expect(Object.keys(all).filter((p) => !/\.(md|csv|json|html)$/.test(p)).sort()).toEqual(['kit/custom-app/app/app.js', 'kit/custom-app/app/style.css']);
     // No tool, no kit.
     expect(kitFiles(idea, state, PLAN)).toEqual({});
   });
@@ -188,7 +188,7 @@ describe('plan routes', () => {
     const r = await s.post(`/api/ideas/${ID}/plan`);
     expect(r.status).toBe(200);
     const { files } = await json(r);
-    expect(files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
+    expect(files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/app/app.js', 'kit/custom-app/app/index.html', 'kit/custom-app/app/style.css', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
     const dir = await ideaDir(s.root, ID);
     const plan = await readFile(path.join(dir, 'plan.md'), 'utf8');
     expect(plan.startsWith('# Plan — Email scheduler')).toBe(true);
@@ -243,7 +243,7 @@ describe('plan routes', () => {
     expect(await readFile(path.join(dir, 'plan.md'), 'utf8')).toMatch(/^# Plan — /);
     expect(await readFile(path.join(dir, 'kit', 'custom-app', 'README.md'), 'utf8')).toContain(CUSTOM_APP_CSIC);
     const got = await json(await s.get(`/api/ideas/${ID}/plan`));
-    expect(got.files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/notes.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
+    expect(got.files).toEqual(['kit/custom-app/BUILD-WITH-AGENT.md', 'kit/custom-app/README.md', 'kit/custom-app/app/app.js', 'kit/custom-app/app/index.html', 'kit/custom-app/app/style.css', 'kit/custom-app/notes.md', 'kit/custom-app/sample-data.csv', 'kit/custom-app/test-checklist.md', 'plan.md']);
     expect(got.planMd).toMatch(/^# Plan — Email scheduler/);
   });
 

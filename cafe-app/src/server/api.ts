@@ -62,7 +62,7 @@ export function fileNameOf(header: unknown): string {
   return path.basename(decoded.replace(/\\/g, '/'));
 }
 /** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
-const DESIGN_FILE = /^(design\.md|design-diagram\.html|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html))$/;
+const DESIGN_FILE = /^(design\.md|design-diagram\.html|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html|js|css))$/;
 
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);

@@ -67,6 +67,27 @@ export function starSize(node: Pick<GNode, 'type'>, degree: number): number {
 
 export const labelAlways = (node: Pick<GNode, 'type'>) => ALWAYS.includes(node.type);
 
+/** The Labels button: every label, the important ones without overlaps, or none. */
+export type LabelMode = 'full' | 'smart' | 'none';
+const LABEL_MODES: LabelMode[] = ['full', 'smart', 'none'];
+export const DEFAULT_LABELS: LabelMode = 'smart';
+export const nextLabelMode = (m: LabelMode): LabelMode => LABEL_MODES[(LABEL_MODES.indexOf(m) + 1) % LABEL_MODES.length];
+export const labelModeText = (m: LabelMode) => `Labels: ${m[0].toUpperCase()}${m.slice(1)}`;
+/** In Smart, a star with at least this many links is important enough to label, whatever its kind. */
+export const SMART_LINKS = 4;
+/**
+ * Does this star want a label? The star under the pointer always does. None: only that and the picked star.
+ * Full: every star. Smart: the picked star and what it links to, the big kinds (ideas, teams, the division, rounds,
+ * tools), and any star with many links. Smart and None never let labels overlap; Full shows them all.
+ */
+export function wantsLabel(mode: LabelMode, node: Pick<GNode, 'type'>, links: number, s: { hover?: boolean; picked?: boolean; inView?: boolean }): boolean {
+  if (s.hover) return true;
+  if (mode === 'none') return !!s.picked;
+  if (mode === 'full') return true;
+  return !!s.picked || !!s.inView || labelAlways(node) || links >= SMART_LINKS;
+}
+export const labelsMayOverlap = (m: LabelMode) => m === 'full';
+
 /** Star labels show in full up to this many characters; a longer one is cut with an ellipsis (the full text stays in the tooltip). */
 export const LABEL_MAX = 40;
 export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
@@ -112,6 +133,47 @@ export function extent(points: ReadonlyArray<readonly [number, number, ...number
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const [x, y] of points) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
   return { x0, x1, y0, y1 };
+}
+
+/**
+ * Flat view: pushes dots apart until none sits closer to another than both their gaps, keeping each inside the box.
+ * Deterministic (same input, same picture); stops early once nothing moves.
+ */
+export function spreadApart(
+  pts: ReadonlyMap<string, readonly [number, number]>, gap: (id: string) => number,
+  box: { x0: number; y0: number; x1: number; y1: number }, rounds = 80,
+): Map<string, [number, number]> {
+  const ids = [...pts.keys()].sort();
+  const p = ids.map((id) => [pts.get(id)![0], pts.get(id)![1]] as [number, number]);
+  const g = ids.map(gap);
+  const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+  for (let r = 0; r < rounds; r++) {
+    let moved = false;
+    for (let i = 0; i < p.length; i++) {
+      for (let j = i + 1; j < p.length; j++) {
+        let dx = p[j][0] - p[i][0], dy = p[j][1] - p[i][1];
+        let d = Math.hypot(dx, dy);
+        const need = g[i] + g[j];
+        if (d >= need) continue;
+        // Two dots on the same spot part along a fixed angle, so the result never depends on chance.
+        if (d < 1e-6) { dx = Math.cos(i * 2.399 + j); dy = Math.sin(i * 2.399 + j); d = 1; }
+        const push = (need - d) / 2, ux = dx / d, uy = dy / d;
+        p[i][0] -= ux * push; p[i][1] -= uy * push; p[j][0] += ux * push; p[j][1] += uy * push;
+        moved = true;
+      }
+    }
+    for (const q of p) { q[0] = clamp(q[0], box.x0, box.x1); q[1] = clamp(q[1], box.y0, box.y1); }
+    if (!moved) break;
+  }
+  return new Map(ids.map((id, i) => [id, p[i]]));
+}
+
+/** Flat view zoom: the point under the cursor stays put while the scale changes, between 0.5× and 8×. */
+export const FLAT_ZOOM = { min: 0.5, max: 8 };
+export function zoomAt(view: { k: number; x: number; y: number }, at: [number, number], centre: [number, number], factor: number) {
+  const k = Math.min(FLAT_ZOOM.max, Math.max(FLAT_ZOOM.min, view.k * factor));
+  const f = k / view.k;
+  return { k, x: at[0] - centre[0] - (at[0] - centre[0] - view.x) * f, y: at[1] - centre[1] - (at[1] - centre[1] - view.y) * f };
 }
 
 /** The design frame is 1920 wide: the Ideas panel covers x < 480 and the Pipeline and Demand panels the last 480. */

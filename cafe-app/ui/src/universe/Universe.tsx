@@ -10,7 +10,7 @@ import { Flat2D } from './Flat2D';
 import { useFlyTo } from './useFlyTo';
 import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
-import { DIM, bounds, degrees, dimFromHide, neighbourhood, type Graph, type Vec3 } from './graphView';
+import { DIM, bounds, degrees, dimFromHide, neighbourhood, type Graph, type LabelMode, type Vec3 } from './graphView';
 
 export interface UniverseProps {
   graph: Graph;
@@ -21,7 +21,7 @@ export interface UniverseProps {
   /** How much of the universe outside a highlight is hidden, 0.5 to 1 (1: only what is in view shows). */
   hideUnlit?: number;
   hoverId: string | null;
-  labels: boolean;
+  labels: LabelMode;
   /** Focus mode: the graph fits the whole stage instead of the centre gap. */
   focus?: boolean;
   /** Bumped by Reset view. */

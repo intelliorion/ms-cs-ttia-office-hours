@@ -17,13 +17,13 @@ import { OutboxPopout } from './popouts/OutboxPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { TypeFilter } from './layout/TypeFilter';
-import { visibleGraph } from './universe/graphView';
+import { labelModeText, visibleGraph } from './universe/graphView';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
 
 declare global { interface Window { __cafe?: Record<string, (...a: any[]) => void> } }
 
 export default function App() {
-  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, selectedIds, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, resetView,
+  const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, selectedIds, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, setLabels, resetView,
     leftView, openIdea, backToList, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
   // A click shows what was clicked, with no card in between (see clickStar).
   const onSelect = clickStar;
@@ -40,9 +40,9 @@ export default function App() {
   useEffect(() => {
     // Hooks for the screenshot tour; only on this machine.
     if (import.meta.env.DEV || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh };
+      window.__cafe = { select, click: onSelect, openIdea, backToList, hover, toggleLabels, setLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh };
     }
-  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh]);
+  }, [select, onSelect, openIdea, backToList, hover, toggleLabels, setLabels, resetView, toggleFocus, openPopout, closePopout, setQuality, setNotice, refresh]);
   useEffect(() => {
     // One Esc handler: idea details go Back, then a drawer closes, then the star card closes. A modal handles its own Esc.
     const on = (e: KeyboardEvent) => {
@@ -85,7 +85,7 @@ export default function App() {
         <FocusBar />
         <div className="abs" style={{ left: 480, top: 'calc(var(--sh) - 70px)', width: 'calc(var(--sw) - 960px)', display: 'flex', justifyContent: 'center', gap: 16 }}>
           <button className="pill" data-action="reset-view" onClick={resetView}>Reset view</button>
-          <button className={`pill${labels ? ' on' : ''}`} data-action="labels" aria-pressed={labels} onClick={toggleLabels}>Labels</button>
+          <button className="pill" data-action="labels" data-labels={labels} title="Cycle Full → Smart → None" onClick={toggleLabels}>{labelModeText(labels)}</button>
           <button className={`pill${focus ? ' on' : ''}`} data-action="focus" aria-pressed={focus} title="Hide the panels (F)" onClick={toggleFocus}>{focusLabel(focus)}</button>
           <button className="pill" data-action="quality" data-quality={quality} title="Cycle Full → Lite → Flat" onClick={cycleQuality}>{qualityLabel(quality)}</button>
           <TypeFilter />

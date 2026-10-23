@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Billboard, Html, Line } from '@react-three/drei';
 import { AdditiveBlending, Color, Group, InstancedMesh, Matrix4, Object3D, Quaternion, Vector3, type Material } from 'three';
-import { DIM, NODE_COLOURS, labelAlways, labelSpotVisible, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
+import { DIM, NODE_COLOURS, labelSpotVisible, labelsMayOverlap, wantsLabel, type LabelMode, phase, ringColour, starLabel, starSize, type GNode, type Vec3 } from './graphView';
 import { haloTexture, softHaloTexture } from './haloTexture';
 
 const RING_PTS: [number, number, number][] = Array.from({ length: 65 }, (_, k) => [Math.cos((k / 64) * Math.PI * 2), Math.sin((k / 64) * Math.PI * 2), 0]);
@@ -16,7 +16,7 @@ export interface StarsProps {
   /** Every star picked with Ctrl/⌘+click: each glows like the selected one. */
   picked?: Set<string> | null;
   hoverId: string | null;
-  labels: boolean;
+  labels: LabelMode;
   /** Focus mode: no side panels, so labels may use the whole stage. */
   focus?: boolean;
   /** Lite quality: no bloom, so the halos carry the glow (larger, with a pulse on the selected star). */
@@ -185,7 +185,9 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       const left: Box = [x - off - 2 - wh[0], top, x - off + 4, bottom];
       // Not under the side panels (unless Focus hides them, or the window is narrow and they are drawers).
       const panels = !focus && !narrowNow;
-      const free = (b: Box) => labelSpotVisible(b[0], b[2], size.width, panels, size.width) && !placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+      // Full shows every label even where they overlap; Smart and None never let two overlap.
+      const overlaps = !labelsMayOverlap(labels);
+      const free = (b: Box) => labelSpotVisible(b[0], b[2], size.width, panels, size.width) && !(overlaps && placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]));
       const box = tmpV.z > 1 ? null : free(right) ? right : free(left) ? left : null;
       el.style.visibility = box ? 'visible' : 'hidden';
       el.classList.toggle('left', box === left);
@@ -235,7 +237,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       ))}
       {nodes.map((d) => {
         const lit = !hood || hood.has(d.id);
-        const show = labels || labelAlways(d) || d.id === hoverId || (hood !== null && hood.has(d.id));
+        const show = wantsLabel(labels, d, deg.get(d.id) ?? 0, { hover: d.id === hoverId, picked: d.id === selectedId || !!picked?.has(d.id), inView: hood !== null && hood.has(d.id) });
         if (!show || hidden(d.id)) return null;
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }} {...(lite ? LITE_LABEL : {})}>

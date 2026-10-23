@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { getState, getGraph, getAiStatus, getInbox } from '../api';
 import type { AiStatus } from '../popouts/aiUi';
 import type { InboxView } from '../popouts/inboxHelpers';
+import { DEFAULT_LABELS, nextLabelMode, type LabelMode } from '../universe/graphView';
 
 export type Popout =
   | null
@@ -104,7 +105,8 @@ export interface AppState {
   setHideUnlit: (v: number) => void;
   hoverId: string | null;
   /** Show every label in the universe, not only ideas, teams, tools and entities. */
-  labels: boolean;
+  labels: LabelMode;
+  setLabels: (m: LabelMode) => void;
   /** Bumped by Reset view; the universe flies home when it changes. */
   viewNonce: number;
   /** Only the open idea's one-hop neighbourhood is drawn; off again on Back. */
@@ -153,7 +155,7 @@ export interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: false, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: DEFAULT_HIDE, hiddenTypes: [], hoverId: null, labels: DEFAULT_LABELS, viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, notice: null, suggest: null, ai: null, inbox: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
@@ -171,7 +173,8 @@ export const useStore = create<AppState>((set) => ({
   },
   select: (id) => set({ selectedId: id, selectedIds: [], ...FRESH }),
   hover: (id) => set({ hoverId: id }),
-  toggleLabels: () => set((s) => ({ labels: !s.labels })),
+  toggleLabels: () => set((s) => ({ labels: nextLabelMode(s.labels) })),
+  setLabels: (m) => set({ labels: m }),
   resetView: () => set((s) => ({ selectedId: null, selectedIds: [], viewNonce: s.viewNonce + 1 })),
   // Entering focus starts clean; leaving it keeps the star clicked in focus mode, so the panels show it.
   toggleFocus: () => set((s) => { writeFocus(!s.focus); return { focus: !s.focus, drawer: null, selectedId: s.focus ? s.selectedId : null, selectedIds: s.focus ? s.selectedIds : [], viewNonce: s.viewNonce + 1 }; }),

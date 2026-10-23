@@ -1,8 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph } from './graphView';
+import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph, spreadApart, zoomAt, wantsLabel, nextLabelMode, labelModeText, SMART_LINKS } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
+  it('spreads dots apart, inside the box, the same way every time', () => {
+    const pts = new Map([['a', [100, 100]], ['b', [100, 100]], ['c', [102, 101]]] as [string, [number, number]][]);
+    const box = { x0: 0, y0: 0, x1: 400, y1: 400 };
+    const out = spreadApart(pts, () => 15, box);
+    const d = (x: string, y: string) => Math.hypot(out.get(x)![0] - out.get(y)![0], out.get(x)![1] - out.get(y)![1]);
+    expect(Math.min(d('a', 'b'), d('a', 'c'), d('b', 'c'))).toBeGreaterThanOrEqual(29.9);
+    expect(spreadApart(pts, () => 15, box)).toEqual(out);
+    const edge = spreadApart(new Map([['a', [0, 0]], ['b', [0, 0]]] as [string, [number, number]][]), () => 50, { x0: 0, y0: 0, x1: 10, y1: 10 });
+    for (const [x, y] of edge.values()) { expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThanOrEqual(10); expect(y).toBeLessThanOrEqual(10); }
+  });
+  it('zooms about the cursor, between 0.5× and 8×', () => {
+    const v = zoomAt({ k: 1, x: 0, y: 0 }, [300, 200], [100, 100], 2);
+    expect(v.k).toBe(2);
+    // The point under the cursor stays where it was.
+    expect(100 + (300 - 100) * v.k + v.x).toBeCloseTo(300 + (300 - 300));
+    expect(zoomAt({ k: 1, x: 0, y: 0 }, [0, 0], [0, 0], 100).k).toBe(8);
+    expect(zoomAt({ k: 1, x: 0, y: 0 }, [0, 0], [0, 0], 0.01).k).toBe(0.5);
+  });
+  it('labels cycle Full → Smart → None, and each mode wants the right ones', () => {
+    expect(nextLabelMode('full')).toBe('smart'); expect(nextLabelMode('smart')).toBe('none'); expect(nextLabelMode('none')).toBe('full');
+    expect(labelModeText('smart')).toBe('Labels: Smart');
+    const cap = { type: 'Capability' } as const;
+    expect(wantsLabel('full', cap, 0, {})).toBe(true);
+    expect(wantsLabel('none', cap, 99, {})).toBe(false);
+    expect(wantsLabel('none', cap, 0, { hover: true })).toBe(true);
+    expect(wantsLabel('none', cap, 0, { picked: true })).toBe(true);
+    expect(wantsLabel('smart', cap, 0, {})).toBe(false);
+    expect(wantsLabel('smart', cap, SMART_LINKS, {})).toBe(true);
+    expect(wantsLabel('smart', { type: 'Idea' }, 0, {})).toBe(true);
+    expect(wantsLabel('smart', cap, 0, { inView: true })).toBe(true);
+  });
   it('hides kinds of star from the picture with their links, keeps picked stars, and changes nothing when none are hidden', () => {
     expect(visibleGraph(g, [])).toBe(g);
     const v = visibleGraph(g, ['Tool']);

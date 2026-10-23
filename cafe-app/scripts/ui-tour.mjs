@@ -848,10 +848,10 @@ async function main() {
     await p.evaluate(() => window.__cafe.select('idea:CAFE-2026-002'));
     await sleep(3500); // software WebGL is slow; let the 0.9 s fly-to settle
     await shot(p, '02-selected.png');
-    await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); window.__cafe.toggleLabels(); });
+    await p.evaluate(() => { window.__cafe.select(null); window.__cafe.resetView(); window.__cafe.setLabels('full'); });
     await sleep(2200);
     await shot(p, '03-labels.png');
-    await p.evaluate(() => { window.__cafe.toggleLabels(); window.__cafe.hover('team:gss'); });
+    await p.evaluate(() => { window.__cafe.setLabels('smart'); window.__cafe.hover('team:gss'); });
     await sleep(800);
     await shot(p, '05-hover.png');
     await p.evaluate(() => window.__cafe.hover(null));

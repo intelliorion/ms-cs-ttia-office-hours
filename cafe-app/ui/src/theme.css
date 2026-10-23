@@ -890,3 +890,5 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .em-none{font-size:13px;color:var(--muted);padding:6px 10px}
 .em-foot{border-top:1px solid rgba(160,190,185,.18);margin-top:4px;padding-top:4px}
 .em-foot button{color:var(--teal) !important}
+.flat2d{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.flat2d.panning{cursor:grabbing}

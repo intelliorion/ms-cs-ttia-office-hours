@@ -13,7 +13,7 @@ describe('Universe', () => {
     const onSelect = vi.fn();
     const graph = { nodes: [{ id: 'team:gss', type: 'Team', label: 'GSS' }], edges: [] } as any;
     act(() => createRoot(el).render(
-      <Universe graph={graph} layout={{ 'team:gss': [0, 0, 0] }} selectedId="capability:gone" hoverId={null} labels={false} onSelect={onSelect} onHover={() => {}} />,
+      <Universe graph={graph} layout={{ 'team:gss': [0, 0, 0] }} selectedId="capability:gone" hoverId={null} labels="smart" onSelect={onSelect} onHover={() => {}} />,
     ));
     expect(onSelect).toHaveBeenCalledWith(null);
     expect(el.querySelector('[data-id="team:gss"]')?.getAttribute('opacity')).toBe('1');

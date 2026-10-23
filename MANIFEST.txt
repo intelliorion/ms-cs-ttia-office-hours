@@ -31,6 +31,7 @@ cafe-app/src/command/actions.ts
 cafe-app/src/command/chat.ts
 cafe-app/src/command/names.ts
 cafe-app/src/command/query.ts
+cafe-app/src/comms/eml.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
@@ -63,6 +64,8 @@ cafe-app/src/inbox/steps.ts
 cafe-app/src/inbox/store.ts
 cafe-app/src/inbox/triage.ts
 cafe-app/src/reminders/due.ts
+cafe-app/src/review/needs.ts
+cafe-app/src/review/prep.ts
 cafe-app/src/review/review.ts
 cafe-app/src/review/suggestInput.ts
 cafe-app/src/round/round.ts
@@ -127,6 +130,7 @@ cafe-app/tests/look.test.ts
 cafe-app/tests/operator-edits.test.ts
 cafe-app/tests/outbox.test.ts
 cafe-app/tests/pdf.test.ts
+cafe-app/tests/review-prep.test.ts
 cafe-app/tests/review-suggest.test.ts
 cafe-app/tests/review.test.ts
 cafe-app/tests/rounds.test.ts
@@ -165,9 +169,12 @@ cafe-app/ui/src/panels/Charts.tsx
 cafe-app/ui/src/panels/ContextPanels.test.tsx
 cafe-app/ui/src/panels/ContextPanels.tsx
 cafe-app/ui/src/panels/DesignSection.tsx
+cafe-app/ui/src/panels/EmailMenu.tsx
 cafe-app/ui/src/panels/IdeaDetails.tsx
 cafe-app/ui/src/panels/IdeasList.tsx
 cafe-app/ui/src/panels/IdeasPane.tsx
+cafe-app/ui/src/panels/ReviewSelect.test.tsx
+cafe-app/ui/src/panels/ReviewSelect.tsx
 cafe-app/ui/src/panels/StageSummaries.tsx
 cafe-app/ui/src/panels/ToolPickerSection.tsx
 cafe-app/ui/src/panels/contextHelpers.ts
@@ -176,6 +183,7 @@ cafe-app/ui/src/panels/designHelpers.ts
 cafe-app/ui/src/panels/designSections.test.tsx
 cafe-app/ui/src/panels/filterIdeas.ts
 cafe-app/ui/src/panels/ideasList.test.ts
+cafe-app/ui/src/panels/outlook.ts
 cafe-app/ui/src/panels/stageGate.test.ts
 cafe-app/ui/src/panels/stageGate.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
@@ -228,8 +236,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-B8nMnbtT.css
-cafe-app/web/assets/index-BE5S4sEZ.js
+cafe-app/web/assets/index-CgQ_CjDa.css
+cafe-app/web/assets/index-vcdg5leN.js
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

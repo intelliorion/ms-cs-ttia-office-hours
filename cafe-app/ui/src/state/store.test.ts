@@ -28,7 +28,10 @@ describe('selection', () => {
   it('reset view clears the selection and bumps the nonce; labels toggle', async () => {
     const { useStore } = await import('./store');
     useStore.getState().select('a'); useStore.getState().resetView(); useStore.getState().toggleLabels();
-    expect(useStore.getState()).toMatchObject({ selectedId: null, viewNonce: 1, labels: true });
+    // Labels start Smart and cycle Full → Smart → None.
+    expect(useStore.getState()).toMatchObject({ selectedId: null, viewNonce: 1, labels: 'none' });
+    useStore.getState().toggleLabels();
+    expect(useStore.getState().labels).toBe('full');
   });
 });
 

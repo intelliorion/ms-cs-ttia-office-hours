@@ -650,17 +650,19 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 @keyframes welcome-in{from{opacity:0}to{opacity:1}}
 [data-quality="lite"] .welcome,[data-quality="flat"] .welcome{animation:none}
 [data-quality="lite"] .welcome{backdrop-filter:none;background:rgba(var(--rgb-s8),.94)}
-/* The Import while the AI works: the whole edge runs the teal rim of the drop well and breathes, so the lock reads as "busy", not "broken". */
-.modal.ai-working{position:relative;border-color:rgba(var(--rgb-accent),.55);animation:ai-edge-glow 2.4s ease-in-out infinite}
-.modal.ai-working::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:2px;pointer-events:none;z-index:2;background:conic-gradient(from var(--ib-a),transparent 0 55%,rgba(var(--rgb-accent),.95) 75%,rgba(var(--rgb-cream),.9) 82%,transparent 100%);-webkit-mask:linear-gradient(var(--black) 0 0) content-box,linear-gradient(var(--black) 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:ib-rim 2.8s linear infinite}
+/* The Import while the AI works: the whole edge runs the teal rim of the drop well and breathes, so the lock reads as "busy", not "broken".
+   The Ideas panel does the same while the AI works on the open idea. */
+.modal.ai-working{position:relative}
+.modal.ai-working,.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working]){border-color:rgba(var(--rgb-accent),.55);animation:ai-edge-glow 2.4s ease-in-out infinite}
+.modal.ai-working::before,.panel:has(.idea-detail[data-ai-working])::before,.drawer:has(.idea-detail[data-ai-working])::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:2px;pointer-events:none;z-index:2;background:conic-gradient(from var(--ib-a),transparent 0 55%,rgba(var(--rgb-accent),.95) 75%,rgba(var(--rgb-cream),.9) 82%,transparent 100%);-webkit-mask:linear-gradient(var(--black) 0 0) content-box,linear-gradient(var(--black) 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:ib-rim 2.8s linear infinite}
 @keyframes ai-edge-glow{0%,100%{box-shadow:0 0 0 1px rgba(var(--rgb-accent),.25) inset,0 0 18px rgba(var(--rgb-accent),.22),0 30px 80px rgba(var(--rgb-shadow),.55)}50%{box-shadow:0 0 0 1px rgba(var(--rgb-accent),.4) inset,0 0 42px rgba(var(--rgb-accent),.42),0 30px 80px rgba(var(--rgb-shadow),.55)}}
 .modal .x:disabled{opacity:.35;cursor:not-allowed;border-color:var(--panel-border)}
 .ib-well input[type=file]:disabled,.ib-paste textarea:disabled{opacity:.45;cursor:not-allowed}
 .ib-locked{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--teal);max-width:560px}
 .ib-locked-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 10px var(--teal);animation:ib-orb-core 1.6s ease-in-out infinite alternate}
-[data-quality="lite"] .modal.ai-working,[data-quality="lite"] .modal.ai-working::before,[data-quality="lite"] .ib-locked-dot{animation:none}
-[data-quality="lite"] .modal.ai-working{box-shadow:0 0 0 1px rgba(var(--rgb-accent),.4) inset}
-[data-quality="lite"] .modal.ai-working::before{background:rgba(var(--rgb-accent),.7)}
+[data-quality="lite"] .modal.ai-working,[data-quality="lite"] .modal.ai-working::before,[data-quality="lite"] :is(.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working])),[data-quality="lite"] :is(.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working]))::before,[data-quality="lite"] .ib-locked-dot{animation:none}
+[data-quality="lite"] .modal.ai-working,[data-quality="lite"] :is(.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working])){box-shadow:0 0 0 1px rgba(var(--rgb-accent),.4) inset}
+[data-quality="lite"] .modal.ai-working::before,[data-quality="lite"] :is(.panel:has(.idea-detail[data-ai-working]),.drawer:has(.idea-detail[data-ai-working]))::before{background:rgba(var(--rgb-accent),.7)}
 .ib-well input[type=file]:disabled::file-selector-button{opacity:.45;cursor:not-allowed}
 /* The command bar: one line in the title bar, a chat panel below it while open. */
 .cmd{position:relative;flex:1;max-width:560px;margin:0 28px;z-index:40}

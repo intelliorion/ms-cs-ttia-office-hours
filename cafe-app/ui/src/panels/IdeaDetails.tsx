@@ -163,7 +163,8 @@ export function IdeaDetails({ id }: { id: string }) {
   const mine = suggest && suggest.id === id ? suggest : null;
 
   return (
-    <div className="idea-detail" data-testid="idea-details" role="region" aria-label={`${idea.id} ${idea.title}`}>
+    // While the AI works on this idea (a decision, the tools, the design), the panel's edge glows like the Import's.
+    <div className="idea-detail" data-testid="idea-details" role="region" aria-label={`${idea.id} ${idea.title}`} data-ai-working={aiBusy || undefined}>
       {head(<>
         <RoundChip ideaId={id} round={idea.round ?? ''} onDone={() => void refresh()} />
         <StageButton state={state} value={stageValue} label={m.stageLabel} colour={m.stageColour} busy={busy} onPick={setStage} />

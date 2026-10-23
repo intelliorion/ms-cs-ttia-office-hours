@@ -227,6 +227,7 @@ cafe-app/ui/src/universe/Snowfall.tsx
 cafe-app/ui/src/universe/Stars.tsx
 cafe-app/ui/src/universe/Universe.test.tsx
 cafe-app/ui/src/universe/Universe.tsx
+cafe-app/ui/src/universe/Workshop.tsx
 cafe-app/ui/src/universe/graphView.test.ts
 cafe-app/ui/src/universe/graphView.ts
 cafe-app/ui/src/universe/haloTexture.ts
@@ -244,8 +245,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-C-sV520M.css
-cafe-app/web/assets/index-E0ierFgd.js
+cafe-app/web/assets/index-CAPDK7TS.js
+cafe-app/web/assets/index-Dep6E_03.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

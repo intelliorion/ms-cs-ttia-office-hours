@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ getState: vi.fn(), getGraph: vi.fn(), getAiStatus: vi.fn() }));
 vi.mock('../api', () => api);
-import { ideasByStage, waitingSummary, supportCounts, functionRegion } from './store';
+import { ideasByStage, supportCounts, functionRegion } from './store';
 
 const idea = (o: any) => ({ id: 'CAFE-2026-001', title: 't', stage: 1, support: [], overdue: [], sent: {}, due: {}, flags: [], ...o });
 const state: any = {
@@ -18,8 +18,6 @@ const state: any = {
 describe('selectors', () => {
   it('counts ideas by stage with closed separate', () =>
     expect(ideasByStage(state)).toEqual([['Submit Idea', 1], ['Review and Select', 2], ['Design series', 0], ['Launch and Learn', 0], ['Closed', 1]]));
-  it('summarises what is waiting, leaving out replies already received', () =>
-    expect(waitingSummary(state)).toEqual({ unsent: 2, repliesDue: 1, late: 1, lateIdeas: ['CAFE-2026-003'] }));
   it('counts support across open ideas only', () => expect(supportCounts(state)).toEqual([['A', 1]]));
   it('groups function and region', () => expect(functionRegion(state)).toEqual([['GSS · APAC', 3], ['— · —', 1]]));
 });

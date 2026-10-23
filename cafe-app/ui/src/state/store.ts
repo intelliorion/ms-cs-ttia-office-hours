@@ -252,17 +252,6 @@ export function ideasByStage(s: any): [string, number][] {
   return out;
 }
 
-export function waitingSummary(s: any) {
-  const open = s.ideas.filter(isOpen);
-  const late = open.filter((i: any) => i.overdue.length > 0);
-  return {
-    // Emails drafted but not sent (opening one in Outlook counts as sent): only ones that couldn't open yet.
-    unsent: s.outbox.filter((m: any) => m.status !== 'sent' && !m.superseded).length,
-    repliesDue: open.filter((i: any) => i.due?.s2d && !i.checklist?.s2d?.done).length,
-    late: late.length,
-    lateIdeas: late.map((i: any) => i.id as string),
-  };
-}
 
 export function supportCounts(s: any): [string, number][] {
   return tally(s.ideas.filter(isOpen).flatMap((i: any) => i.support as string[]));

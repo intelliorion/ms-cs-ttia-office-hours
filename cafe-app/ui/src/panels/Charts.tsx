@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore, ideasByStage, waitingSummary, supportCounts, functionRegion } from '../state/store';
+import { useStore, ideasByStage, supportCounts, functionRegion } from '../state/store';
 import { STAGE_RING } from '../universe/graphView';
 
 /**
@@ -68,30 +68,3 @@ export function FunctionChart() {
   return <Beams rows={rows} colour="#7dd3cf" testId="function-chart" />;
 }
 
-export function Waiting() {
-  const { state, openIdea } = useStore();
-  if (!state) return null;
-  const w = waitingSummary(state);
-  const kpis: [number, string, boolean][] = [[w.unsent, 'Emails not sent', false], [w.repliesDue, 'Replies due', false], [w.late, 'Replies late', w.late > 0]];
-  const open = openIdea;
-  const byId = new Map<string, any>(state.ideas.map((i: any) => [i.id, i]));
-  return (
-    <>
-      <div className="kpis">
-        {kpis.map(([n, l, hot]) => <div key={l} className={`kpi${hot ? ' hot' : ''}${n ? '' : ' zero'}`}><b>{n}</b><span>{l}</span></div>)}
-      </div>
-      <ul className="latelist">
-        {w.lateIdeas.map((id: string) => {
-          const i = byId.get(id);
-          return (
-            <li key={id} onClick={() => open(id)} onMouseEnter={() => useStore.getState().hover(`idea:${id}`)} onMouseLeave={() => useStore.getState().hover(null)}>
-              <span className="iid">{id.replace('CAFE-', '')}</span><span className="ttl" title={i?.title}>{i?.title}</span>
-              <span className="why">{i?.overdue?.[0]?.text}</span>
-            </li>
-          );
-        })}
-        {!w.lateIdeas.length && <li className="none">Nothing is late.</li>}
-      </ul>
-    </>
-  );
-}

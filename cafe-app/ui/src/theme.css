@@ -46,9 +46,9 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .chip{border:1px solid var(--c);color:var(--c);background:transparent;border-radius:999px;padding:3px 11px;font:inherit;font-size:13px;cursor:pointer;opacity:.75}
 .chip.on{background:color-mix(in srgb,var(--c) 22%,transparent);opacity:1;color:var(--strong)}
 .count{font-size:12px;color:var(--muted);margin:2px 0 6px}
-.idea-list,.latelist{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;min-height:0}
-.idea-list::-webkit-scrollbar,.latelist::-webkit-scrollbar{width:6px}
-.idea-list::-webkit-scrollbar-thumb,.latelist::-webkit-scrollbar-thumb{background:rgba(var(--rgb-line),.3);border-radius:3px}
+.idea-list{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;min-height:0}
+.idea-list::-webkit-scrollbar{width:6px}
+.idea-list::-webkit-scrollbar-thumb{background:rgba(var(--rgb-line),.3);border-radius:3px}
 .idea-list li{padding:9px 10px;border-bottom:1px solid rgba(var(--rgb-line),.14);cursor:pointer;border-left:2px solid transparent}
 .idea-list li:hover,.idea-list li.sel{background:rgba(var(--rgb-accent),.09);border-left-color:var(--teal)}
 .idea-list li.none,.latelist li.none{cursor:default;color:var(--muted);border:0}
@@ -67,16 +67,6 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .sub-h{font-size:14px;color:var(--muted);margin:6px 0 2px;letter-spacing:.03em}
 .chart{width:100%}
 .nodata{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 8px}
-.kpi{display:flex;flex-direction:column;align-items:center;text-align:center}
-.kpi b{font-family:var(--mono);font-size:32px;font-weight:600;color:var(--cream);line-height:1.1}
-.kpi span{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.2}
-.kpi.hot b{color:var(--amber)}
-.latelist li{display:grid;grid-template-columns:auto 1fr;gap:0 4px;padding:6px 6px;border-bottom:1px solid rgba(var(--rgb-line),.14);cursor:pointer;font-size:13px}
-.latelist li:hover{background:rgba(var(--rgb-warm),.1)}
-.latelist .ttl{font-size:13px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.latelist .why{grid-column:1/3;color:var(--amber);font-size:12px}
-.latelist li.none{display:block;padding:8px 6px}
 .flat2d-empty{position:absolute;left:480px;top:72px;right:480px;bottom:72px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px}
 
 /* Pop-outs: the same glass as the panels, a little denser so text reads over the universe. */
@@ -477,11 +467,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .beam-dot{position:absolute;right:-4px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:var(--strong);box-shadow:0 0 6px var(--c),0 0 14px var(--c)}
 .beam-n{font-family:var(--mono);font-size:14px;color:var(--cream);text-align:left}
 .nodata{color:var(--muted);font-size:13px;padding:10px 0}
-.kpi b{text-shadow:0 0 12px rgba(var(--rgb-cream),.35)}
-.kpi.hot b{text-shadow:0 0 14px rgba(var(--rgb-warm),.6);animation:kpi-pulse 2.4s ease-in-out infinite}
-.kpi.zero b{color:var(--muted);text-shadow:none}
 @keyframes kpi-pulse{0%,100%{text-shadow:0 0 10px rgba(var(--rgb-warm),.4)}50%{text-shadow:0 0 20px rgba(var(--rgb-warm),.85)}}
-.latelist li{border-bottom:1px solid rgba(var(--rgb-line),.12)}
 /* Lite: no glow, no breathing. */
 [data-quality="lite"] .stage-star .core,[data-quality="lite"] .beam,[data-quality="lite"] .beam-dot,[data-quality="lite"] .kpi b{filter:none;box-shadow:none;text-shadow:none;animation:none}
 [data-quality="lite"] .stage-star .halo{animation:none;opacity:.12}

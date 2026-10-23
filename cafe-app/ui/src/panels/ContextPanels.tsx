@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { getHistory, post } from '../api';
 import { Panel } from '../layout/Panel';
-import { StageChart, SupportChart, FunctionChart, Waiting } from './Charts';
+import { StageChart, SupportChart, FunctionChart } from './Charts';
 import { LinkTable } from '../popouts/LinkTable';
 import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
@@ -63,7 +63,7 @@ export function ContextStack() {
 
 function Overview({ part }: { part: 'pipeline' | 'demand' }) {
   return part === 'pipeline'
-    ? <><div className="sub-h">Ideas by stage</div><StageChart /><div className="sub-h">Waiting on you</div><Waiting /></>
+    ? <><div className="sub-h">Ideas by stage</div><StageChart /></>
     : <><div className="sub-h">Support requested</div><SupportChart /><div className="sub-h">Function · region</div><FunctionChart /></>;
 }
 

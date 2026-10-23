@@ -950,3 +950,18 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 :root[data-theme="workshop"] .flat-sub{fill:#6e6256}
 :root[data-theme="workshop"] .universe-vignette{background:radial-gradient(ellipse 64% 72% at 50% 46%,rgba(0,0,0,0) 60%,rgba(120,90,55,.14) 100%)}
 .sw-workshop i:nth-child(1){background:#efe3cf}.sw-workshop i:nth-child(2){background:#f96302}.sw-workshop i:nth-child(3){background:#1f1a15}
+/* A star in the left panel (not an idea). */
+.sd-scroll{flex:1;min-height:0;overflow:auto;padding-right:4px}
+.star-detail .sd-title{padding:0;margin:4px 0 6px;font-size:22px;line-height:1.25;color:var(--strong)}
+.sd-facts{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin:10px 0 16px}
+.sd-facts div{display:flex;flex-direction:column;gap:1px}
+.sd-facts dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.sd-facts dd{margin:0;font-size:15px;color:var(--text)}
+.sd-list{list-style:none;margin:0 0 14px;padding:0}
+.sd-go{width:100%;display:flex;align-items:center;gap:8px;background:none;border:0;border-bottom:1px solid rgba(var(--rgb-line),.1);padding:7px 4px;font:inherit;font-size:14px;color:var(--text);text-align:left;cursor:pointer}
+.sd-go:hover{background:rgba(var(--rgb-accent),.08)}
+.sd-go:hover .sd-l{text-decoration:underline}
+.sd-go:focus-visible{outline:1px solid rgba(var(--rgb-accent),.6)}
+.sd-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sd-roles{font-style:normal;font-size:12px;color:var(--muted);flex:none}
+.sd-go .rel{min-width:0;flex:none}

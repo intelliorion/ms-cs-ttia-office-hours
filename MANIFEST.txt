@@ -46,6 +46,7 @@ cafe-app/src/graph/ontology.ts
 cafe-app/src/graph/operator.ts
 cafe-app/src/graph/store.ts
 cafe-app/src/ideas/idea.ts
+cafe-app/src/ideas/people.ts
 cafe-app/src/ideas/stage.ts
 cafe-app/src/ideas/store.ts
 cafe-app/src/ideas/suggest.ts
@@ -131,6 +132,7 @@ cafe-app/tests/look.test.ts
 cafe-app/tests/operator-edits.test.ts
 cafe-app/tests/outbox.test.ts
 cafe-app/tests/pdf.test.ts
+cafe-app/tests/people.test.ts
 cafe-app/tests/reveal.test.ts
 cafe-app/tests/review-prep.test.ts
 cafe-app/tests/review-suggest.test.ts

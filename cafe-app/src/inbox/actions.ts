@@ -6,7 +6,8 @@ import { dataKey, fromDataKey, paths } from '../workspace/paths';
 import { appendHistory, readText, writeFileAtomic } from '../workspace/files';
 import { FIRST_STAGE, STAGE_NAMES, loadSteps, type StageNo } from '../rules/stages';
 import { listIdeas, loadIdea, saveIdea, ideaDir, nextId, slugify } from '../ideas/store';
-import { normalizeIdea, type Closure, type Idea } from '../ideas/idea';
+import { normalizeIdea, type Closure, type Idea, type Person } from '../ideas/idea';
+import { hasRole, personOn, withRole, withoutRole } from '../ideas/people';
 import { setStage } from '../ideas/stage';
 import { changes, type StageTarget } from '../ideas/suggest';
 import { tick } from '../checklist/checklist';
@@ -58,6 +59,9 @@ export type Inverse =
   | { t: 'remove-file'; files: string[]; onlyDraft?: true }
   | { t: 'untick'; ideaId: string; step: string; source: string }
   | { t: 'unset-field'; ideaId: string; field: 'answers'; entries: { question: string; source: string }[] }
+  /** The idea's team as it was, and as the action left it; a team changed since is kept. */
+  | { t: 'set-team'; ideaId: string; before: Person[]; after: Person[] }
+  /** Older records: the builder was its own field. Undone as roles now. */
   | { t: 'set-field'; ideaId: string; field: 'people.builder'; value: string | null; expect: string }
   | { t: 'set-field'; ideaId: string; field: 'stage'; value: Where; expect: Where }
   | { t: 'remove-flag'; ideaId: string; text: string }
@@ -192,7 +196,7 @@ export async function planActions(root: string, item: InboxItem): Promise<{ acti
   }
   for (const text of facts.newFlags ?? []) if (!idea.flags.includes(text)) actions.push({ t: 'add_flag', ideaId, text });
   const builder = typeof facts.builderNamed === 'string' ? facts.builderNamed.trim() : '';
-  if (builder && builder !== (idea.people as { builder?: string }).builder) actions.push({ t: 'name_builder', ideaId, name: builder });
+  if (builder && !hasRole(personOn(idea, builder), 'builder')) actions.push({ t: 'name_builder', ideaId, name: builder });
   const target = facts.stageHint ? STAGE_HINT[facts.stageHint] : undefined;
   if (target && changes(idea, target)) actions.push({ t: 'suggest_stage', ideaId, ...target });
 
@@ -300,10 +304,12 @@ async function run(root: string, item: InboxItem, a: Action, clock: Clock): Prom
     }
     case 'name_builder': {
       const idea = await loadIdea(root, a.ideaId);
-      const people = idea.people as Idea['people'] & { builder?: string };
-      await saveIdea(root, { ...idea, people: { ...people, builder: a.name } as Idea['people'] });
+      // The builder role goes on the person (added to the team when new); their other roles stay.
+      const before = idea.people.team;
+      const after = withRole(before, a.name, 'builder');
+      await saveIdea(root, { ...idea, people: { ...idea.people, team: after } });
       await history(root, a.ideaId, at, `Builder named: ${a.name}`, item.file);
-      return { inverse: { t: 'set-field', ideaId: a.ideaId, field: 'people.builder', value: people.builder ?? null, expect: a.name } };
+      return { inverse: { t: 'set-team', ideaId: a.ideaId, before, after } };
     }
     case 'suggest_stage': {
       const before = whereOf(await loadIdea(root, a.ideaId));
@@ -439,6 +445,13 @@ async function replay(root: string, _item: InboxItem, inv: Inverse, clock: Clock
       out.did++;
       return out;
     }
+    case 'set-team': {
+      const idea = await loadIdea(root, inv.ideaId);
+      if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after)) { out.kept.push(`The team of ${inv.ideaId} has changed since, so it was kept`); return out; }
+      await saveIdea(root, { ...idea, people: { ...idea.people, team: inv.before } });
+      out.did++;
+      return out;
+    }
     case 'remove-flag': {
       const idea = await loadIdea(root, inv.ideaId);
       await saveIdea(root, { ...idea, flags: idea.flags.filter((f) => f !== inv.text) });
@@ -448,9 +461,10 @@ async function replay(root: string, _item: InboxItem, inv: Inverse, clock: Clock
     case 'set-field': {
       const idea = await loadIdea(root, inv.ideaId);
       if (inv.field === 'people.builder') {
-        const { builder, ...people } = idea.people as Idea['people'] & { builder?: string };
-        if (builder !== inv.expect) { out.kept.push(`The builder of ${inv.ideaId} has changed since, so it was kept`); return out; }
-        await saveIdea(root, { ...idea, people: (inv.value ? { ...people, builder: inv.value } : people) as Idea['people'] });
+        if (!hasRole(personOn(idea, inv.expect), 'builder')) { out.kept.push(`The builder of ${inv.ideaId} has changed since, so it was kept`); return out; }
+        let team = withoutRole(idea.people.team, inv.expect, 'builder');
+        if (inv.value) team = withRole(team, inv.value, 'builder');
+        await saveIdea(root, { ...idea, people: { ...idea.people, team } });
         out.did++;
         return out;
       }

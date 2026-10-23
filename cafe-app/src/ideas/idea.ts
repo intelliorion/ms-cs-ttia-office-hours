@@ -10,11 +10,13 @@ export const CLOSURE_LABELS: Record<Closure, string> = {
   stop: 'Stopped, learning kept',
 };
 
-export type PersonRole = 'lead' | 'sponsor' | 'member';
+/** What someone does on an idea. One person can have several (a lead who also builds it); "member" only when nothing else. */
+export type PersonRole = 'lead' | 'sponsor' | 'builder' | 'member';
 
 export interface Person {
   name: string;
-  role: PersonRole;
+  roles: PersonRole[];
+  /** The form's own words for them, as typed ("Lead, Builder"). */
   note?: string;
 }
 
@@ -98,6 +100,8 @@ export interface Idea {
   dedupe_key: string;
 }
 
+import { normalizePeople } from './people';
+
 const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const obj = (v: unknown): object => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
@@ -117,7 +121,7 @@ export function normalizeIdea(raw: Partial<Idea>): Idea {
     support: arr(raw.support),
     beneficiaries: arr(raw.beneficiaries),
     use_case_category: arr(raw.use_case_category),
-    people: { ...obj(raw.people), team: arr(raw.people?.team) },
+    people: normalizePeople(raw.people),
     checklist: raw.checklist ?? {},
     due: raw.due ?? {},
     sent: raw.sent ?? {},

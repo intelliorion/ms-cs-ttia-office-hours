@@ -2,6 +2,7 @@ import { ALLOWED, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type G
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
+import { personOn, rolesText, withRole, withoutRole } from '../ideas/people';
 import { appendHistory } from '../workspace/files';
 import { assignIdeas, createRound, listRounds, setIdeaRound } from '../round/store';
 import type { Round } from '../round/round';
@@ -16,7 +17,7 @@ import { setAiLinkStatus } from '../graph/store';
 export type CommandAction =
   | { t: 'link'; from: string; rel: Relation; to: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string; source: string }
-  | { t: 'role'; ideaId: string; person: string; role: PersonRole | 'builder' | null }
+  | { t: 'role'; ideaId: string; person: string; role: PersonRole | null; drop?: boolean }
   | { t: 'round'; ideaIds: string[]; roundId?: string; newName?: string }
   | { t: 'new_round'; name: string }
   | { t: 'rename'; node: string; label: string }
@@ -31,7 +32,7 @@ export type CommandInverse =
   | { t: 'edit-on'; id: string }
   | { t: 'edits-off'; ids: string[] }
   | { t: 'ai-links-off'; edgeIds: string[] }
-  | { t: 'team'; ideaId: string; before: Person[]; after: Person[]; builderBefore?: string | null; builderAfter?: string | null }
+  | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
 
 export interface Proposal { label: string; action: CommandAction }
@@ -40,10 +41,10 @@ const REL_WORD: Partial<Record<Relation, string>> = {
   HAS_TEAM: 'has the team', HAS_MEMBER: 'has the member', REPLACES: 'replaces', NEEDS: 'needs', USES_DATA: 'uses the data', ASKS_FOR: 'asks for',
   WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category',
 };
-const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor', member: 'a team member' };
+const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor', builder: 'builder', member: 'a team member' };
 /** Labels the form owns: ideas and people are renamed in their own files, rounds in the Rounds pop-out. */
 const RENAMEABLE: NodeType[] = ['Team', 'Entity', 'Capability', 'PainPoint', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category', 'Tool'];
-const ROLE_OF_REL: Partial<Record<Relation, PersonRole>> = { SPONSORS: 'sponsor', RELATED: 'member' };
+const ROLE_OF_REL: Partial<Record<Relation, PersonRole>> = { LEADS: 'lead', SPONSORS: 'sponsor', BUILDS: 'builder', RELATED: 'member' };
 /** Where a star the command bar can't create or remove comes from. */
 const OWNED_ELSEWHERE: Partial<Record<NodeType, (label: string) => string>> = {
   Tool: () => 'Tools are picked in the tool picker.',
@@ -75,22 +76,28 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
   const roundOf = (n: GNode) => ctx.rounds.find((r) => r.id === n.attrs?.roundId);
   const missing = (s: CommandStep) => problems.push(`I couldn't find ${[s.a, s.b].filter(Boolean).length > 1 ? 'both stars' : 'that star'} in the universe, so I left "${s.op}" out.`);
 
-  const roleProposal = (person: GNode | string, ideaNode: GNode, role: PersonRole | 'builder' | null) => {
+  // A role is added to the ones the person has (a lead can also build it); null takes them off the team.
+  const roleProposal = (person: GNode | string, ideaNode: GNode, role: PersonRole | null) => {
     const idea = ideaOf(ideaNode);
     if (!idea) return void problems.push(`${ideaNode.label} is not an idea I can change.`);
     const name = typeof person === 'string' ? person : person.label;
-    if (role === 'builder') {
-      if ((idea.people as { builder?: string }).builder === name) return void problems.push(`${name} is already the builder of ${idea.title}.`);
-      return void proposals.push({ label: `Make ${name} the builder of ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: name, role: 'builder' } });
-    }
-    const now = idea.people.team.find((p) => p.name === name);
+    const now = personOn(idea, name);
     if (role === null) {
       if (idea.people.submitter === name && !now) return void problems.push(`${name} submitted ${idea.title}; the submitter stays.`);
       if (!now) return void problems.push(`${name} is not on ${idea.title}'s team.`);
       return void proposals.push({ label: `Take ${name} off ${idea.title}'s team`, action: { t: 'role', ideaId: idea.id, person: name, role: null } });
     }
-    if (now?.role === role) return void problems.push(`${name} is already ${ROLE_WORD[role]} on ${idea.title}.`);
-    proposals.push({ label: `Make ${name} ${ROLE_WORD[role]} on ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: name, role } });
+    if (now && (now.roles.includes(role) || role === 'member')) return void problems.push(`${name} is already ${role === 'member' ? 'on the team of' : `${ROLE_WORD[role]} on`} ${idea.title}.`);
+    const also = now && !now.roles.includes('member') ? ` (also ${rolesText(now.roles)})` : '';
+    proposals.push({ label: `Make ${name} ${ROLE_WORD[role]} on ${idea.title}${also}`, action: { t: 'role', ideaId: idea.id, person: name, role } });
+  };
+
+  const dropRoleProposal = (person: GNode, ideaNode: GNode, role: PersonRole) => {
+    const idea = ideaOf(ideaNode);
+    if (!idea) return void problems.push(`${ideaNode.label} is not an idea I can change.`);
+    const now = personOn(idea, person.label);
+    if (!now?.roles.includes(role)) return void problems.push(`${person.label} is not ${ROLE_WORD[role]} on ${idea.title}.`);
+    proposals.push({ label: `${person.label} is no longer ${ROLE_WORD[role]} on ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: person.label, role, drop: true } });
   };
 
   for (const s of steps) {
@@ -102,7 +109,12 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!a || !b) { missing(s); continue; }
       const person = [a, b].find((n) => n.type === 'Person'); const idea = [a, b].find((n) => n.type === 'Idea');
       if (person && idea) {
-        if (s.op === 'unlink') { roleProposal(person, idea, null); continue; }
+        if (s.op === 'unlink') {
+          // Unlinking one role (LEADS, BUILDS, SPONSORS) takes off only that role; otherwise the person leaves the team.
+          const role = s.rel ? ROLE_OF_REL[s.rel] : undefined;
+          if (role && role !== 'member') dropRoleProposal(person, idea, role); else roleProposal(person, idea, null);
+          continue;
+        }
         if (s.rel === 'SUBMITTED') { problems.push('Who submitted an idea comes from the form, so I left it as it is.'); continue; }
         roleProposal(person, idea, (s.rel && ROLE_OF_REL[s.rel]) ?? 'member');
         continue;
@@ -253,22 +265,11 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     case 'role': {
       const idea = await loadIdea(root, a.ideaId);
       const before = idea.people.team;
-      if (a.role === 'builder') {
-        // The builder is the idea's own field (the Import fills it from emails); they join the team too, so their star shows.
-        const builderBefore = (idea.people as { builder?: string }).builder ?? null;
-        const team = before.some((p) => p.name === a.person) ? before : [...before, { name: a.person, role: 'member' as const }];
-        await saveIdea(root, { ...idea, people: { ...idea.people, team, builder: a.person } as Idea['people'] });
-        await log(root, idea.id, clock, `${a.person} named as the builder`);
-        return { inverse: { t: 'team', ideaId: idea.id, before, after: team, builderBefore, builderAfter: a.person } };
-      }
-      const role = a.role; // lead, sponsor, member or null here: the builder returned above
-      const after: Person[] = role === null
-        ? before.filter((p) => p.name !== a.person)
-        : before.some((p) => p.name === a.person)
-          ? before.map((p) => (p.name === a.person ? { name: p.name, role } : p))
-          : [...before, { name: a.person, role }];
+      const after: Person[] = a.role === null
+        ? before.filter((p) => p.name.toLowerCase() !== a.person.toLowerCase())
+        : a.drop ? withoutRole(before, a.person, a.role) : withRole(before, a.person, a.role);
       await saveIdea(root, { ...idea, people: { ...idea.people, team: after } });
-      await log(root, idea.id, clock, a.role === null ? `${a.person} taken off the team` : `${a.person} set as ${a.role}`);
+      await log(root, idea.id, clock, a.role === null ? `${a.person} taken off the team` : a.drop ? `${a.person} no longer ${a.role}` : `${a.person} set as ${a.role}`);
       return { inverse: { t: 'team', ideaId: idea.id, before, after } };
     }
     case 'round': {
@@ -297,11 +298,8 @@ export async function undoAction(root: string, inv: CommandInverse, clock: Clock
   if (inv.t === 'ai-links-off') { for (const id of inv.edgeIds) await setAiLinkStatus(root, id, 'removed').catch(() => {}); return undefined; }
   if (inv.t === 'team') {
     const idea = await loadIdea(root, inv.ideaId);
-    const builderNow = (idea.people as { builder?: string }).builder ?? null;
-    if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after) || (inv.builderAfter !== undefined && builderNow !== inv.builderAfter)) return `Kept: ${idea.title}'s team changed since`;
-    const people = { ...idea.people, team: inv.before } as Idea['people'] & { builder?: string };
-    if (inv.builderAfter !== undefined) { if (inv.builderBefore) people.builder = inv.builderBefore; else delete people.builder; }
-    await saveIdea(root, { ...idea, people });
+    if (JSON.stringify(idea.people.team) !== JSON.stringify(inv.after)) return `Kept: ${idea.title}'s team changed since`;
+    await saveIdea(root, { ...idea, people: { ...idea.people, team: inv.before } });
     await log(root, idea.id, clock, 'team change undone');
     return undefined;
   }

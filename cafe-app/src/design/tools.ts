@@ -25,8 +25,8 @@ export const ASSISTED_NOTE = 'Assisted Citizen until a builder is named';
 export const APPROACH_FILE = 'approach.md';
 export const TOOL_STEP = 's3e';
 
-export const builderOf = (idea: Idea): string | undefined =>
-  (idea.people as Idea['people'] & { builder?: string }).builder?.trim() || undefined;
+import { builderOf } from '../ideas/people';
+export { builderOf };
 
 /** The stored pathway for a pick: custom app is TTIA-Led; a citizen tool with no builder named yet is Assisted Citizen. */
 export function pathwayOf(tool: string, builder?: string): Pathway {

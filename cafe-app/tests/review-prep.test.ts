@@ -13,7 +13,7 @@ import type { ReviewSuggestInput, ReviewSuggestOutput } from '../src/ai/tasks';
 const clock = fixedClock('2026-10-22');
 const idea = sampleIdea({
   id: 'CAFE-2026-001', slug: 'faq', title: 'Procurement FAQ bot', dedupe_key: 'a', challenge: 'Person 1 answers the same questions.',
-  people: { submitter: 'Person 1', team: [{ name: 'Person 1', role: 'lead' }] },
+  people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }] },
 });
 const criteria = { feasible: true, builder: false, data: true, theme: true, reuse: true };
 /** A fake AI that records what it was given and replies with each output in turn. */

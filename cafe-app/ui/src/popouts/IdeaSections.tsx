@@ -7,7 +7,12 @@ import { historyLine, type HistoryEntry } from './ideaHelpers';
 
 /** Pieces of an idea's panels: the stage button, the round chip, Details, History, and what each decision means. */
 
-const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', member: 'Member' };
+const ROLE: Record<string, string> = { lead: 'Lead', sponsor: 'Sponsor', builder: 'Builder', member: 'Member' };
+/** A person's roles as one label: "Lead · Builder". Older records (one role) read the same. */
+const rolesLabel = (p: { role?: string; roles?: string[] }) => (p.roles ?? (p.role ? [p.role] : ['member'])).map((r) => ROLE[r] ?? r).join(' · ');
+/** Who builds it: everyone on the team with the builder role (older records: their builder field). */
+export const buildersOf = (idea: any): string[] =>
+  [...(idea?.people?.team ?? []).filter((p: any) => p.roles?.includes('builder')).map((p: any) => p.name), ...(idea?.people?.builder ? [idea.people.builder] : [])];
 
 /**
  * The stage badge in the idea head is a button; it opens this small menu of the stages and the close-as reasons.
@@ -170,13 +175,13 @@ export function Details({ idea }: { idea: any }) {
       <div className="field-row">
         <Field label="Team">
           {team.length
-            ? <div className="tags">{team.map((p) => <span key={p.name + p.role} className="tg person">{p.name}<em>{ROLE[p.role] ?? p.role}</em></span>)}</div>
+            ? <div className="tags">{team.map((p) => <span key={p.name} className="tg person" data-person={p.name}>{p.name}<em>{rolesLabel(p)}</em></span>)}</div>
             : idea.people?.submitter ? <span>{idea.people.submitter}<em className="role"> Submitter</em></span> : <span className="none">Not given</span>}
         </Field>
         <Field label="Tried it already">{idea.experimented || <span className="none">Not given</span>}</Field>
       </div>
       <div className="field-row">
-        <Field label="Builder">{idea.people?.builder || <span className="none">Not named yet</span>}</Field>
+        <Field label="Builder">{buildersOf(idea).join(', ') || <span className="none">Not named yet</span>}</Field>
       </div>
     </section>
   );

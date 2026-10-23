@@ -1,4 +1,4 @@
-import type { Idea } from '../ideas/idea';
+import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
@@ -8,7 +8,8 @@ export { nodeId } from './ontology';
 /** Longer than this, a choice-column answer is free text, not a choice other ideas could share. */
 export const CHOICE_MAX = 60;
 
-const ROLE_REL: Record<string, Relation> = { lead: 'RELATED', sponsor: 'SPONSORS', member: 'RELATED' };
+/** One link per role a person has on an idea. A plain team member is RELATED. */
+const ROLE_REL: Record<PersonRole, Relation> = { lead: 'LEADS', sponsor: 'SPONSORS', builder: 'BUILDS', member: 'RELATED' };
 
 export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = []): { nodes: GNode[]; edges: GEdge[] } {
   const nodes = new Map<string, GNode>();
@@ -53,21 +54,23 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     const entityId = idea.entity ? node({ id: nodeId('Entity', idea.entity), type: 'Entity', label: idea.entity === 'CS' ? 'Corporate Services (CS)' : idea.entity }) : undefined;
     if (entityId && teamId) edge(entityId, 'HAS_TEAM', teamId, 'CS Function', `${src}:CS Function`);
 
-    const roles = new Map<string, { rel: Relation; notes: string[] }>();
+    // One link for each thing a person does on the idea: the submitter who also leads and builds it has three.
     const submitter = idea.people.submitter?.trim();
-    if (submitter) roles.set(submitter, { rel: 'SUBMITTED', notes: ['Submitter Name'] });
+    if (submitter) {
+      const pid = node({ id: nodeId('Person', submitter), type: 'Person', label: submitter });
+      // A person's team is the CS Function on their own submission; being on someone else's idea says nothing about it.
+      if (teamId) edge(teamId, 'HAS_MEMBER', pid, 'CS Function of their submission', `${src}:CS Function`, 1);
+      edge(pid, 'SUBMITTED', ideaId, 'Submitter Name', `${src}:Submitter Name`);
+    }
     for (const p of idea.people.team) {
       const name = p.name.trim(); if (!name) continue;
-      const have = roles.get(name);
-      const note = p.note ? `also listed as ${p.note}` : 'Team member';
-      if (have) { if (have.rel === 'SUBMITTED' || p.role === 'member') have.notes.push(note); else have.rel = ROLE_REL[p.role]; }
-      else roles.set(name, { rel: ROLE_REL[p.role] ?? 'RELATED', notes: [p.note ?? 'Team member'] });
-    }
-    for (const [name, r] of roles) {
       const pid = node({ id: nodeId('Person', name), type: 'Person', label: name });
-      // A person's team is the CS Function on their own submission; being on someone else's idea says nothing about it.
-      if (teamId && r.rel === 'SUBMITTED') edge(teamId, 'HAS_MEMBER', pid, 'CS Function of their submission', `${src}:CS Function`, 1);
-      edge(pid, r.rel, ideaId, r.notes.join('; '), `${src}:Team Members and Lead`);
+      // The submitter is on the idea already: "team member" adds nothing to SUBMITTED.
+      const roles = submitter && name.toLowerCase() === submitter.toLowerCase() ? p.roles.filter((r) => r !== 'member') : p.roles;
+      for (const r of roles) {
+        const named = r === 'builder' && !/\b(builder|build|developer)\b/i.test(p.note ?? '');
+        edge(pid, ROLE_REL[r], ideaId, named ? 'Named as the builder' : (p.note ?? 'Team member'), named ? `${src}:builder` : `${src}:Team Members and Lead`);
+      }
     }
     // Help the submitter asked of the Café, not something the solution does: its own kind of star.
     for (const s of idea.support) {

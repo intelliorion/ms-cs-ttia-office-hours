@@ -12,7 +12,7 @@ import { appendAiLink, rebuildGraph, readAiLinks, setAiLinkStatus } from '../src
 import { setStage } from '../src/ideas/stage';
 import { kindOf, sameQuestion, directionOf, type Action, type ActionRecord } from '../src/inbox/actions';
 import { processDrop, applyRecords, undoRecord, viewOf } from '../src/inbox/flow';
-import { saveDrop, getItem, type InboxItem } from '../src/inbox/store';
+import { saveDrop, getItem, updateItem, type InboxItem } from '../src/inbox/store';
 import { saveSettings } from '../src/round/store';
 import { readHistory } from '../src/workspace/files';
 import type { AiLink } from '../src/graph/ontology';
@@ -291,13 +291,34 @@ describe('Needs your OK: applied only on Apply', () => {
     expect((await loadIdea(root, 'CAFE-2026-001')).flags).toEqual(['Operator flag']);
   });
 
-  it('name_builder: apply sets people.builder; undo clears it', async () => {
+  it('name_builder: apply gives the person the builder role (joining the team); undo takes it back', async () => {
+    const { root, item } = await setup();
+    const r = rec(item, 'name_builder');
+    const before = (await loadIdea(root, 'CAFE-2026-001')).people.team;
+    await applyRecords(root, item.id, [r.id], clock);
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toContainEqual({ name: 'Person 3', roles: ['builder'] });
+    await undoRecord(root, item.id, r.id, clock);
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toEqual(before);
+  });
+
+  it('a builder already on the team keeps their other roles: a lead named as builder is lead and builder', async () => {
+    const { root, item } = await setup();
+    const idea = await loadIdea(root, 'CAFE-2026-001');
+    await saveIdea(root, { ...idea, people: { ...idea.people, team: [{ name: 'Person 3', roles: ['lead'], note: 'Lead' }] } });
+    await applyRecords(root, item.id, [rec(item, 'name_builder').id], clock);
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team).toEqual([{ name: 'Person 3', roles: ['lead', 'builder'], note: 'Lead' }]);
+  });
+
+  it('an undo recorded before roles (the builder field) still takes the builder back', async () => {
     const { root, item } = await setup();
     const r = rec(item, 'name_builder');
     await applyRecords(root, item.id, [r.id], clock);
-    expect((await loadIdea(root, 'CAFE-2026-001') as any).people.builder).toBe('Person 3');
+    // What an older version saved as the way back: the builder field, set to Person 3 from nothing.
+    const saved = (await getItem(root, item.id))!;
+    const legacy = { t: 'set-field', ideaId: 'CAFE-2026-001', field: 'people.builder', value: null, expect: 'Person 3' };
+    await updateItem(root, item.id, { actions: (saved.actions as ActionRecord[]).map((x) => (x.id === r.id ? { ...x, inverse: legacy } : x)) as any });
     await undoRecord(root, item.id, r.id, clock);
-    expect((await loadIdea(root, 'CAFE-2026-001') as any).people.builder).toBeUndefined();
+    expect((await loadIdea(root, 'CAFE-2026-001')).people.team.some((p) => p.roles.includes('builder'))).toBe(false);
   });
 
   it('suggest_stage: the stage changes only on apply, and undo moves it back', async () => {

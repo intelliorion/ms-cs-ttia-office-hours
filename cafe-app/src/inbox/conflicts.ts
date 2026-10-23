@@ -2,6 +2,7 @@
 import type { Action } from './actions';
 import type { AiLink, GNode } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
+import { withRoleOn } from '../ideas/people';
 import type { DesignState } from '../design/store';
 
 /**
@@ -65,7 +66,7 @@ export function wordOverlap(a: string, b: string): number {
 export function isPersonLabel(label: string, ctx: ConflictContext): boolean {
   const people = [
     ...ctx.peoplePresent, ...(ctx.idea?.people.team.map((p) => p.name) ?? []),
-    ctx.idea?.people.submitter ?? '', (ctx.idea?.people as { builder?: string } | undefined)?.builder ?? '',
+    ctx.idea?.people.submitter ?? '',
   ];
   return people.some((p) => p && sameLabel(p, label));
 }
@@ -108,8 +109,9 @@ export function checkProposals(ctx: ConflictContext, actions: Action[]): { apply
         break;
       }
       case 'name_builder': {
-        const have = (ctx.idea?.people as { builder?: string } | undefined)?.builder;
-        if (have && !sameLabel(have, a.name)) hold.push({ action: a, rule: 'contradicts-fact', why: 'A second builder is named: the form names one already' });
+        // A builder the team names already, and this is someone else: hold it for the operator.
+        const have = ctx.idea ? withRoleOn(ctx.idea, 'builder').map((p) => p.name) : [];
+        if (have.length && !have.some((h) => sameLabel(h, a.name))) hold.push({ action: a, rule: 'contradicts-fact', why: 'A second builder is named: the form names one already' });
         else apply.push(a);
         break;
       }

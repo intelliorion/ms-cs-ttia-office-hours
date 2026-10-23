@@ -14,11 +14,11 @@ import path from 'node:path';
 const rfx = sampleIdea({
   id: 'CAFE-2026-002', slug: 'rfx', title: 'RFx CoE Intake', entity: 'CS', function: 'GSS', region: 'APAC', stage: 2,
   support: ['Agent Design Guidance', 'Collab…'],
-  people: { submitter: 'Person 2', team: [{ name: 'Person 2', role: 'lead', note: 'Lead' }, { name: 'Person 3', role: 'sponsor', note: 'Sponsor' }, { name: 'Person 4', role: 'member' }] },
+  people: { submitter: 'Person 2', team: [{ name: 'Person 2', roles: ['lead'], note: 'Lead' }, { name: 'Person 3', roles: ['sponsor'], note: 'Sponsor' }, { name: 'Person 4', roles: ['member'] }] },
 });
 const inv = sampleIdea({
   id: 'CAFE-2026-003', slug: 'inv', title: 'Invoice Assessment', entity: 'CS', function: 'GSS', region: 'APAC',
-  support: ['AI Solution Brainstorming'], people: { submitter: 'Person 5', team: [{ name: 'Person 3', role: 'member' }] },
+  support: ['AI Solution Brainstorming'], people: { submitter: 'Person 5', team: [{ name: 'Person 3', roles: ['member'] }] },
 });
 
 describe('buildGraph', () => {
@@ -32,10 +32,13 @@ describe('buildGraph', () => {
     const rels = g.edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
     expect(rels).toContain('entity:cs HAS_TEAM team:gss');
     expect(rels).toContain('team:gss HAS_MEMBER person:person-2');
+    // One link per role: the submitter who leads it has SUBMITTED and LEADS.
     expect(rels).toContain('person:person-2 SUBMITTED idea:CAFE-2026-002');
+    expect(rels).toContain('person:person-2 LEADS idea:CAFE-2026-002');
     expect(rels).toContain('person:person-3 SPONSORS idea:CAFE-2026-002');
     expect(rels).toContain('person:person-4 RELATED idea:CAFE-2026-002');
-    expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.description).toBe('Submitter Name; also listed as Lead');
+    expect(rels.filter((r) => r.startsWith('person:person-2 '))).toHaveLength(2);
+    expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.description).toBe('Submitter Name');
     expect(rels).toContain('idea:CAFE-2026-002 ASKS_FOR support:agent-design-guidance');
     expect(g.nodes.find((n) => n.id === 'support:agent-design-guidance')?.type).toBe('Support');
     expect(g.nodes.some((n) => n.type === 'Capability')).toBe(false);
@@ -62,7 +65,7 @@ describe('buildGraph', () => {
     });
     const gss = sampleIdea({
       id: 'CAFE-2026-005', slug: 'gss', title: 'FAQ bot', entity: 'CS', function: 'GSS', region: 'AMER',
-      support: [], people: { submitter: 'Person 7', team: [{ name: 'Person 7', role: 'lead' }, { name: 'Person 6', role: 'member' }, { name: 'Person 8', role: 'sponsor' }] },
+      support: [], people: { submitter: 'Person 7', team: [{ name: 'Person 7', roles: ['lead'] }, { name: 'Person 6', roles: ['member'] }, { name: 'Person 8', roles: ['sponsor'] }] },
     });
     const rels = buildGraph([bsi, gss], []).edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
     expect(rels).toContain('team:bsi HAS_MEMBER person:person-6');

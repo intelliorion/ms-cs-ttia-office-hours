@@ -6,9 +6,9 @@ import type { AiLink } from '../src/graph/ontology';
 
 const ideas = [
   sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', region: 'APAC', entity: 'CS', stage: 3, round: 'ROUND-001', dedupe_key: 'a',
-    people: { submitter: 'Person 1', team: [{ name: 'Person 1', role: 'lead' }, { name: 'Person 2', role: 'sponsor' }] } }),
+    people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['sponsor'] }] } }),
   sampleIdea({ id: 'CAFE-2026-002', title: 'Procurement FAQ bot', function: 'GSS', region: 'AMER', entity: 'CS', stage: 2, dedupe_key: 'b',
-    people: { submitter: 'Person 3', team: [{ name: 'Person 3', role: 'lead' }, { name: 'Person 4', role: 'member' }] } }),
+    people: { submitter: 'Person 3', team: [{ name: 'Person 3', roles: ['lead'] }, { name: 'Person 4', roles: ['member'] }] } }),
   sampleIdea({ id: 'CAFE-2026-003', title: 'Expense anomaly finder', function: 'BSI', region: 'EMEA', entity: 'CS', stage: 3, dedupe_key: 'c',
     people: { submitter: 'Person 5', team: [] } }),
 ];

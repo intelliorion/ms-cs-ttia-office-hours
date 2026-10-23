@@ -27,7 +27,7 @@ async function start(provider: Provider = fakeProvider(), opts: { builder?: stri
   const s = await startServer('2026-10-21', { connector: createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }) });
   close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
   // The idea the reply is about, with the E2 questions sent (so the answers and the reply are Safe).
-  const people = { submitter: 'Person 1', team: [], ...(opts.builder ? { builder: opts.builder } : {}) };
+  const people = { submitter: 'Person 1', team: opts.builder ? [{ name: opts.builder, roles: ['builder'] }] : [] };
   await saveIdea(s.root, sampleIdea({ sent: { E2: '2026-10-20' }, people } as any));
   const folder = (await readdir(path.join(s.root, 'data', 'ideas'))).find((f) => f.startsWith(ID))!;
   const dir = path.join(s.root, 'data', 'ideas', folder, 'emails');
@@ -145,7 +145,7 @@ describe('the pipeline', () => {
     const h = item.actions.find((a: any) => a.held?.rule === 'contradicts-fact');
     const r = await (await s.post(`/api/inbox/${item.id}/dismiss-action`, { actionId: h.id })).json();
     expect(r.item.actions.find((a: any) => a.id === h.id)).toMatchObject({ status: 'undone', note: 'Dropped by you' });
-    expect((await loadIdea(s.root, ID)).people).toMatchObject({ builder: 'Person 3' });
+    expect((await loadIdea(s.root, ID)).people.team).toEqual([{ name: 'Person 3', roles: ['builder'] }]);
     // Run again: what you dropped is not proposed again, and the history says it understood the file once.
     const again = await (await s.post(`/api/inbox/${item.id}/process`, {})).json();
     expect(again.item.actions.filter((a: any) => a.held?.rule === 'contradicts-fact')).toEqual([expect.objectContaining({ status: 'undone', note: 'Dropped by you' })]);

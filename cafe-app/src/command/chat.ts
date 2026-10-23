@@ -121,7 +121,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   // Names to code: every star, plus people the ideas' records name who are not stars yet (a builder named in an email).
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
-  const extraPeople: GNode[] = [...new Set(ideas.flatMap((i) => [i.people.submitter, (i.people as { builder?: string }).builder, ...i.people.team.map((p) => p.name)]))]
+  const extraPeople: GNode[] = [...new Set(ideas.flatMap((i) => [i.people.submitter, ...i.people.team.map((p) => p.name)]))]
     .filter((x): x is string => !!x?.trim() && !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person', label }));
   // A person picked with @ as "＋ New person" is coded like any other, so their name never reaches the AI.
   const newPeople: GNode[] = (opts.mentions ?? []).filter((m) => m.startsWith('new-person:'))

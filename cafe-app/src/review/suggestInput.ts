@@ -7,6 +7,7 @@ import { STAGE_NAMES } from '../rules/stages';
 import type { ReviewSuggestInput } from '../ai/tasks';
 import type { Idea } from '../ideas/idea';
 import { nodeId, type GNode } from '../graph/ontology';
+import { builderOf } from '../ideas/people';
 
 /** What review needs from the graph: the idea's pain points, capabilities and systems (systems through its capabilities). */
 const KINDS = new Set(['PainPoint', 'Capability', 'System']);
@@ -20,11 +21,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export async function reviewInput(
   root: string, id: string, added: { question: string; answer: string }[] = [],
 ): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
-  const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string }[]; people: Idea['people'] & { builder?: string } };
+  const idea = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string }[] };
   const graph = await rebuildGraph(root);
   // Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet).
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
-  const named = [idea.people.submitter, idea.people.builder, ...idea.people.team.map((p) => p.name)].filter((x): x is string => !!x?.trim());
+  const named = [idea.people.submitter, ...idea.people.team.map((p) => p.name)].filter((x): x is string => !!x?.trim());
   const people: GNode[] = [
     ...graph.nodes.filter((n) => n.type === 'Person'),
     ...named.filter((x) => !known.has(x)).map((label) => ({ id: nodeId('Person', label), type: 'Person' as const, label })),
@@ -47,7 +48,7 @@ export async function reviewInput(
   const answers = [...(idea.answers ?? []).slice(-20), ...added].map((a) => ({ question: a.question, answer: coded(a.answer)! }));
   const emailed = (idea.answers ?? []).slice(-20).length;
   const progress = {
-    builderNamed: !!idea.people.builder?.trim(),
+    builderNamed: !!builderOf(idea),
     replyReceived: !!idea.checklist.s2d?.done,
     attendanceConfirmed: !!idea.checklist.s3a?.done,
   };

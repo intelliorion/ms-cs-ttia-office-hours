@@ -8,10 +8,10 @@ import type { JsonSchema } from '../ai/schema';
  * them on the graph and the idea records, so every answer, count and lit star comes from the knowledge graph itself.
  */
 export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by'] as const;
-export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'member'] as const;
+export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
 const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
-const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'];
+const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'];
 
 export interface QueryStep {
   op: (typeof QUERY_OPS)[number];
@@ -56,12 +56,12 @@ export const QUERY_GUIDE = [
   '  With last: true it starts from the stars the previous answer in this conversation found ("those", "of these", "which of them"), narrowed the same way.',
   '- follow: go to the stars linked to the set, along rel (any when left out), dir out (set → star), in (star → set) or both (the default), keeping type when given.',
   '- filter: keep the stars of type, whose label contains match, or (ideas) with that stage, function, region or round.',
-  '- role: from ideas to their people with role (submitter, lead, sponsor, member; anyone when left out), or from people to the ideas they have that role on.',
+  '- role: from ideas to their people with role (submitter, lead, sponsor, builder, member; anyone when left out; one person can have several), or from people to the ideas they have that role on.',
   '- intersect: keep only the stars also found by the steps in with (a query of its own), for "both" and "shared" questions.',
   '- path: the shortest chain of links between the two stars in codes.',
   '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
   '- count_by: count the set by stage, function, region, round or type (the set stays as it is).',
-  'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/SPONSORS/RELATED Idea, Idea REPLACES PainPoint, Idea NEEDS Capability,',
+  'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
@@ -139,7 +139,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   };
   const people = (idea: Idea, role?: string) => [
     ...(idea.people.submitter ? [{ name: idea.people.submitter, role: 'submitter' }] : []),
-    ...idea.people.team.map((p) => ({ name: p.name, role: p.role as string })),
+    ...idea.people.team.flatMap((p) => p.roles.map((r) => ({ name: p.name, role: r as string }))),
   ].filter((p) => !role || p.role === role);
 
   const touched = new Set<string>();

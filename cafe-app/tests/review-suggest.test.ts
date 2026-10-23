@@ -8,7 +8,7 @@ import { reviewSuggestTask } from '../src/ai/tasks';
 const base = sampleIdea({
   id: 'CAFE-2026-001', slug: 'faq', title: 'Procurement FAQ bot', function: 'GSS', region: 'AMER', dedupe_key: 'a',
   challenge: 'Kwame Mensah answers the same questions every week.', support: ['Agent Design Guidance'], maturity: 'Idea',
-  people: { submitter: 'Kwame Mensah', team: [{ name: 'Kwame Mensah', role: 'lead' }] },
+  people: { submitter: 'Kwame Mensah', team: [{ name: 'Kwame Mensah', roles: ['lead'] }] },
 });
 const other = sampleIdea({ id: 'CAFE-2026-002', slug: 'travel', title: 'Travel policy assistant', function: 'GSS', dedupe_key: 'b', people: { submitter: 'Lucía Fernández', team: [] } });
 const link = (from: string, to: string, label: string) => ({ from, to, rel: 'NEEDS' as const, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: to, type: 'Capability' as const, label }] });

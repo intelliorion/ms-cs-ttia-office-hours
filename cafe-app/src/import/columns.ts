@@ -1,4 +1,5 @@
 import type { Person, PersonRole } from '../ideas/idea';
+import { addPerson } from '../ideas/people';
 
 export type Field =
   | 'title' | 'submitter' | 'function' | 'region' | 'participation' | 'team'
@@ -61,7 +62,17 @@ export function parseSubmitter(value: string): { name?: string; entity?: string 
 }
 
 const PRONOUNS = /^(he|she|they|ze|xe)\s*\/\s*\w+$/i;
-const ROLE_PREFIX = /^(lead|co-?lead|sponsor|team\s*member|member)\s*:\s*(.+)$/i;
+const ROLE_PREFIX = /^((?:lead|co-?lead|sponsor|builder|developer|team\s*member|member)(?:\s*(?:,|&|\/|and|\+)\s*(?:lead|co-?lead|sponsor|builder|developer|team\s*member|member))*)\s*:\s*(.+)$/i;
+
+/** Every role the form's words name: "Lead, Builder" or "Lead & Sponsor" is both. Developer counts as builder. */
+export function rolesIn(note: string | undefined): PersonRole[] {
+  const t = note ?? '';
+  const roles: PersonRole[] = [];
+  if (/\b(co-?)?lead\b/i.test(t)) roles.push('lead');
+  if (/\bsponsor\b/i.test(t)) roles.push('sponsor');
+  if (/\b(builder|build|developer)\b/i.test(t)) roles.push('builder');
+  return roles.length ? roles : ['member'];
+}
 
 /**
  * The form's "Team Members and Lead" cell, in any of the styles people type: one per line or split by ";",
@@ -82,8 +93,10 @@ export function parseTeam(value: string): Person[] {
       const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(text) ?? /^(.*?)\s+[-–]\s+(.+)$/.exec(text);
       const name = naturalName((m ? m[1] : text).trim());
       const note = m?.[2]?.trim() ?? prefix;
-      const role: PersonRole = /sponsor/i.test(note ?? '') ? 'sponsor' : /lead/i.test(note ?? '') ? 'lead' : 'member';
-      return note && !/^(team\s*)?member$/i.test(note) ? { name, role, note } : { name, role };
+      const roles = rolesIn(note);
+      return note && !/^(team\s*)?member$/i.test(note) ? { name, roles, note } : { name, roles };
     })
-    .filter((p) => p.name);
+    .filter((p) => p.name)
+    // The same person on two lines ("Alex (Lead)", "Alex (Builder)") is one person with both roles.
+    .reduce<Person[]>((team, p) => addPerson(team, p), []);
 }

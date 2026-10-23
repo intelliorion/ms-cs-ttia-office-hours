@@ -61,7 +61,7 @@ export function renderReview(idea: Idea, r: ReviewRecord): string {
 }
 
 export function renderHandoff(idea: Idea, settings: Settings): string {
-  const sponsor = idea.people.team.find((p) => p.role === 'sponsor');
+  const sponsor = idea.people.team.find((p) => p.roles.includes('sponsor'));
   const field = (title: string, value: string | undefined, source: string) => {
     const v = value?.trim();
     return [`## ${title}`, '', v || NOT_IN_SUBMISSION, '', `Source: ${v ? source : 'none'}`, ''];

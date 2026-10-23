@@ -10,10 +10,10 @@ export const NODE_COLOURS: Record<NodeType, string> = {
   PainPoint: '#14b8a6', Capability: '#f59e0b', Tool: '#ef4444', System: '#10b981', Round: '#e7d8b1', Support: '#f472b6',
   Outcome: '#a3e635', Beneficiary: '#facc15', Category: '#93c5fd',
 };
-export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'SPONSORS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY';
+export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'LEADS' | 'SPONSORS' | 'BUILDS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY';
 export const ALLOWED: Record<Relation, [NodeType, NodeType]> = {
   HAS_TEAM: ['Entity', 'Team'], HAS_MEMBER: ['Team', 'Person'],
-  SUBMITTED: ['Person', 'Idea'], SPONSORS: ['Person', 'Idea'], RELATED: ['Person', 'Idea'],
+  SUBMITTED: ['Person', 'Idea'], LEADS: ['Person', 'Idea'], SPONSORS: ['Person', 'Idea'], BUILDS: ['Person', 'Idea'], RELATED: ['Person', 'Idea'],
   REPLACES: ['Idea', 'PainPoint'], NEEDS: ['Idea', 'Capability'],
   BUILT_WITH: ['Capability', 'Tool'], USES_DATA: ['Capability', 'System'],
   IN_ROUND: ['Idea', 'Round'], ASKS_FOR: ['Idea', 'Support'],

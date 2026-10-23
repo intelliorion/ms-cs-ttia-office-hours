@@ -231,7 +231,7 @@ describe('screen', () => {
 
   it('builds known participants from every idea', async () => {
     const root = await tmpWorkspace();
-    await saveIdea(root, sampleIdea({ people: { submitter: 'Person 1', team: [{ name: 'Person 5', role: 'member' }] } }));
+    await saveIdea(root, sampleIdea({ people: { submitter: 'Person 1', team: [{ name: 'Person 5', roles: ['member'] }] } }));
     expect(await knownParticipants(root)).toEqual(['Person 1', 'Person 5']);
   });
 });

@@ -726,7 +726,7 @@ export const ACTIONS_SCHEMA: JsonSchema = {
     properties: {
       op: { type: 'string', enum: COMMAND_OPS },
       a: CODE, b: CODE,
-      rel: { type: 'string', enum: ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'SPONSORS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'] },
+      rel: { type: 'string', enum: ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'] },
       role: { type: 'string', enum: COMMAND_ROLES },
       ideas: { type: 'array', maxItems: 30, items: CODE },
       name: { type: 'string', minLength: 1, maxLength: 60 },

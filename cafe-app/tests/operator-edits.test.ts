@@ -8,7 +8,7 @@ import type { OperatorEdit } from '../src/graph/ontology';
 
 const a = sampleIdea({
   id: 'CAFE-2026-001', slug: 'a', title: 'Desk finder', function: 'BSI', entity: 'CS', support: ['Agent Design Guidance'],
-  people: { submitter: 'Person 1', team: [{ name: 'Person 1', role: 'lead' }, { name: 'Person 2', role: 'member' }] },
+  people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['member'] }] },
 });
 const b = sampleIdea({
   id: 'CAFE-2026-002', slug: 'b', title: 'FAQ bot', function: 'GSS', entity: 'CS', support: ['Agent design guidance support'], dedupe_key: 'b',

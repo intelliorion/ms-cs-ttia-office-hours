@@ -9,7 +9,7 @@ const link = (over: Partial<AiLink> = {}): AiLink => ({
   from: 'idea:CAFE-2026-001', to: 'capability:slot-finding', rel: 'NEEDS', description: 'd', source: 'ai:fake:reply.eml', confidence: 0.9, status: 'pending', ...over,
 });
 const ctx = (over: Partial<ConflictContext> = {}): ConflictContext => ({
-  idea: sampleIdea({ id: 'CAFE-2026-001', people: { team: [{ name: 'Person 1', role: 'lead' }], builder: 'Person 1' } as any }),
+  idea: sampleIdea({ id: 'CAFE-2026-001', people: { team: [{ name: 'Person 1', roles: ['lead'] }], builder: 'Person 1' } as any }),
   ideas: [sampleIdea({ id: 'CAFE-2026-001' }), sampleIdea({ id: 'CAFE-2026-003', title: 'Invoice checker' })],
   nodes: [{ id: 'capability:slot-finding', type: 'Capability', label: 'Slot finding' }, { id: 'tool:power-apps', type: 'Tool', label: 'Power Apps' }],
   peoplePresent: ['Person 2'],

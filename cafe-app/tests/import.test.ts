@@ -24,13 +24,13 @@ describe('parsing', () => {
 
   it('reads team roles from the form wording', () => {
     expect(parseTeam('Person 2 (Lead); Person 3 (Sponsor); Person 4')).toEqual([
-      { name: 'Person 2', role: 'lead', note: 'Lead' },
-      { name: 'Person 3', role: 'sponsor', note: 'Sponsor' },
-      { name: 'Person 4', role: 'member' },
+      { name: 'Person 2', roles: ['lead'], note: 'Lead' },
+      { name: 'Person 3', roles: ['sponsor'], note: 'Sponsor' },
+      { name: 'Person 4', roles: ['member'] },
     ]);
     expect(parseTeam('Person 6 - Team lead\nAnne-Marie Person')).toEqual([
-      { name: 'Person 6', role: 'lead', note: 'Team lead' },
-      { name: 'Anne-Marie Person', role: 'member' },
+      { name: 'Person 6', roles: ['lead'], note: 'Team lead' },
+      { name: 'Anne-Marie Person', roles: ['member'] },
     ]);
   });
 });
@@ -54,7 +54,7 @@ describe('importExport', () => {
     const rfx = await loadIdea(root, 'CAFE-2026-002');
     expect(rfx).toMatchObject({ function: 'GSS', region: 'APAC', entity: 'CS', round: '', stage: 2 });
     expect(rfx.people.submitter).toBe('Person 2');
-    expect(rfx.people.team.map((p) => p.role)).toEqual(['lead', 'sponsor', 'member']);
+    expect(rfx.people.team.map((p) => p.roles)).toEqual([['lead'], ['sponsor'], ['member']]);
     expect(rfx.support).toEqual(['Agent Design Guidance', 'Collab…']);
     expect(rfx.experimented).toBe('No');
     expect(rfx.checklist.s1d).toEqual({ done: true, by: 'app', at: '2026-10-19', source: 'sample-export.csv row 3' });
@@ -167,16 +167,16 @@ describe('the real form export: team lists and names as people type them', () =>
   it('"Lead: Name(he/him)", "Sponsor: Name", "Team Member: Name", one per line: roles kept, pronouns dropped', async () => {
     const { parseTeam } = await import('../src/import/columns');
     expect(parseTeam('Lead: Person One(he/him)\nSponsor: Person Two\nTeam Member: Person Three')).toEqual([
-      { name: 'Person One', role: 'lead', note: 'Lead' }, { name: 'Person Two', role: 'sponsor', note: 'Sponsor' }, { name: 'Person Three', role: 'member' },
+      { name: 'Person One', roles: ['lead'], note: 'Lead' }, { name: 'Person Two', roles: ['sponsor'], note: 'Sponsor' }, { name: 'Person Three', roles: ['member'] },
     ]);
   });
   it('"Name (Lead)" then plain names on their own lines; "Name (she/her) (Sponsor)"; "Doe, Jane" turns to "Jane Doe"', async () => {
     const { parseTeam } = await import('../src/import/columns');
     expect(parseTeam('Person Four (Lead)\nPerson Five\nPerson Six')).toEqual([
-      { name: 'Person Four', role: 'lead', note: 'Lead' }, { name: 'Person Five', role: 'member' }, { name: 'Person Six', role: 'member' },
+      { name: 'Person Four', roles: ['lead'], note: 'Lead' }, { name: 'Person Five', roles: ['member'] }, { name: 'Person Six', roles: ['member'] },
     ]);
-    expect(parseTeam('Person Seven (she/her) (Sponsor)')).toEqual([{ name: 'Person Seven', role: 'sponsor', note: 'Sponsor' }]);
-    expect(parseTeam('Doe, Jane (Lead)')).toEqual([{ name: 'Jane Doe', role: 'lead', note: 'Lead' }]);
+    expect(parseTeam('Person Seven (she/her) (Sponsor)')).toEqual([{ name: 'Person Seven', roles: ['sponsor'], note: 'Sponsor' }]);
+    expect(parseTeam('Doe, Jane (Lead)')).toEqual([{ name: 'Jane Doe', roles: ['lead'], note: 'Lead' }]);
   });
   it('the submitter "Doe, Jane (CS)" is stored as "Jane Doe" with entity CS', async () => {
     const { parseSubmitter } = await import('../src/import/columns');

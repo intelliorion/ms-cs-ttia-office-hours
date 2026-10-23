@@ -7,6 +7,7 @@ import {
   askedWithAnswers, pathwayText, picksBody, picksProblem, suggestWaiting, type FeatureRow,
 } from './designHelpers';
 import type { DesignCall, DesignView } from './DesignSection';
+import { buildersOf } from '../popouts/IdeaSections';
 
 /**
  * Tool picker: one row per feature (name, what, approved tool, pathway, flags, why this tool). "Suggest with AI" asks
@@ -51,7 +52,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     });
     if (r) { setDirty(false); setRows(featureRows(r.state.features, { tools })); }
   };
-  const builder = idea.people?.builder;
+  const builder = buildersOf(idea)[0];
   const off = busy || aiWorking;
 
   return (

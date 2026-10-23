@@ -219,12 +219,12 @@ export function IdeaDetails({ id }: { id: string }) {
           <DesignSection key={`design-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'design')} aiWorking={aiFor === 'design'}
             noAi={noAi} call={designCall} onSendQuestions={() => openTemplate('E2')} />
         )}
-        {gates.design === 'summary' && <DesignCard design={design} onEdit={edit('design')} />}
+        {gates.design === 'summary' && <DesignCard id={id} design={design} onEdit={edit('design')} />}
         {gates.plan === 'active' && (
           <PlanSection key={`plan-${id}`} idea={idea} design={design} plan={plan} busy={busy || (aiBusy && aiFor !== 'plan')} aiWorking={aiFor === 'plan'}
             noAi={noAi} call={designCall} />
         )}
-        {gates.plan === 'summary' && <PlanCard plan={plan} onEdit={edit('plan')} />}
+        {gates.plan === 'summary' && <PlanCard id={id} plan={plan} onEdit={edit('plan')} />}
       </div>
     </div>
   );

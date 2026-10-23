@@ -1,3 +1,4 @@
+import { useStore } from '../state/store';
 import { useEffect, useRef, useState } from 'react';
 import { copyText, designPost } from '../api';
 import { NO_AI_TIP } from '../popouts/aiUi';
@@ -10,17 +11,6 @@ export interface DesignView { state: any; designMd: string; folder?: string }
 export interface PlanView { planMd?: string; files: string[] }
 /** Runs one design call: busy state, notice, and a refresh after. `ai` names the section waiting on the AI. Null on failure. */
 export type DesignCall = <T = any>(fn: () => Promise<T>, o: { ai?: string; ok: (r: T) => string | undefined }) => Promise<T | null>;
-
-export function Toggle({ label, text, action }: { label: string; text: string | undefined; action: string }) {
-  const [open, setOpen] = useState(false);
-  if (!text) return null;
-  return (
-    <div className="md-toggle">
-      <button className="link-btn" data-action={action} aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? `Hide ${label}` : `Show ${label}`}</button>
-      {open && <pre className="md-pre" aria-label={label}>{text}</pre>}
-    </div>
-  );
-}
 
 export function CafeCheckCard({ check }: { check: any }) {
   const rows = cafeCheckRows(check);
@@ -95,6 +85,45 @@ function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
   );
 }
 
+/** Opens the design pack: everything the design series made, with each file and how to use it. */
+export function SeeDesign({ id }: { id: string }) {
+  const openPopout = useStore((s) => s.openPopout);
+  return (
+    <div className="ds-see">
+      <button className="btn primary" data-action="see-design" onClick={() => openPopout({ kind: 'design-pack', id })}>See the design</button>
+      <span className="hint">The proof of concept, the tool, and every file with how to use it.</span>
+    </div>
+  );
+}
+
+/**
+ * The design questions side by side, one in view: ‹ › move between them, the dots jump. It opens on the question
+ * waiting for an answer (else the newest), and moves to a new one when it is added.
+ */
+export function StepCarousel({ steps, render }: { steps: any[]; render: (step: any) => React.ReactNode }) {
+  const start = () => { const k = steps.findIndex((st) => !st.answer?.trim() && !st.askedTeam); return k >= 0 ? k : steps.length - 1; };
+  const [at, setAt] = useState(start);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setAt(start()); }, [steps.length]);
+  const i = Math.min(Math.max(at, 0), steps.length - 1);
+  return (
+    <div className="ds-carousel" data-testid="design-carousel">
+      <div className="ds-nav">
+        <button className="ds-arrow" data-action="prev-question" aria-label="Previous question" disabled={i <= 0} onClick={() => setAt(i - 1)}>‹</button>
+        <span className="ds-pos" data-testid="design-pos">Question {i + 1} of {steps.length}</span>
+        <span className="ds-dots">
+          {steps.map((st, k) => (
+            <button key={st.n} data-action="go-question" className={`ds-dot${k === i ? ' on' : ''}${st.answer?.trim() ? ' done' : ''}`} aria-label={`Question ${k + 1}`}
+              aria-current={k === i ? 'step' : undefined} onClick={() => setAt(k)} />
+          ))}
+        </span>
+        <button className="ds-arrow" data-action="next-step" aria-label="Next question" disabled={i >= steps.length - 1} onClick={() => setAt(i + 1)}>›</button>
+      </div>
+      <ol className="ds-steps one">{render(steps[i])}</ol>
+    </div>
+  );
+}
+
 /**
  * Design: the brainstorm as a conversation, one question at a time; the Café check; Approve. Works by hand with no AI:
  * the operator adds questions, answers them and writes the summary.
@@ -136,13 +165,11 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
       <h3>Design <span className="sec-n">{phase === 'approved' ? `approved ${s.approvedAt}` : phase === 'done' ? 'complete' : `${steps.length} question${steps.length === 1 ? '' : 's'}`}</span></h3>
       {!s.features?.length && <div className="hint ds-lead">Pick tools for the features first: the questions build on them.</div>}
       {steps.length > 0 && (
-        <ol className="ds-steps">
-          {steps.map((st) => (
-            <StepItem key={st.n} step={st} off={off} onSendQuestions={onSendQuestions}
-              onAnswer={(body) => answer(st.n, body)}
-              onIdk={() => void call(() => designPost(id, 'design/answer', { n: st.n, idk: true }), { ok: () => `Question ${st.n} added to the questions email (E2): send it from ✉ Emails. Carry on with the next question.` })} />
-          ))}
-        </ol>
+        <StepCarousel steps={steps} render={(st) => (
+          <StepItem key={st.n} step={st} off={off} onSendQuestions={onSendQuestions}
+            onAnswer={(body) => answer(st.n, body)}
+            onIdk={() => void call(() => designPost(id, 'design/answer', { n: st.n, idk: true }), { ok: () => `Question ${st.n} added to the questions email (E2): send it from ✉ Emails. Carry on with the next question.` })} />
+        )} />
       )}
       {(phase === 'done' || phase === 'approved') && (
         <div className="ds-done" data-testid="design-complete">
@@ -191,7 +218,7 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
       </div>
       {phase === 'done' && <div className="hint">Adding a question by hand reopens the design.</div>}
       <CafeCheckCard check={s.cafeCheck} />
-      <Toggle label="design.md" text={design.designMd} action="toggle-design-md" />
+      {(phase === 'done' || phase === 'approved') && <SeeDesign id={id} />}
     </section>
   );
 }
@@ -245,7 +272,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           )}
         </div>
       )}
-      <Toggle label="plan.md" text={plan?.planMd} action="toggle-plan-md" />
+      {files.length > 0 && <SeeDesign id={idea.id} />}
     </section>
   );
 }

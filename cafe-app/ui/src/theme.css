@@ -1008,3 +1008,33 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .tp-cons .tp-pc-h{color:var(--amber)}
 .tp-pros li::marker{color:var(--teal)}
 .tp-cons li::marker{color:var(--amber)}
+/* The design pack. */
+.dp-body{flex:1;min-height:0;overflow-y:auto;padding:12px 24px 22px;display:flex;flex-direction:column;gap:6px}
+.dp-summary{font-size:16px;line-height:1.5;color:var(--text);margin:0 0 10px}
+.dp-settles{display:flex;flex-direction:column;gap:6px;margin:0}
+.dp-settles div{display:grid;grid-template-columns:150px 1fr;gap:12px}
+.dp-settles dt{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.dp-settles dd{margin:0;font-size:15px;color:var(--text)}
+.dp-tool{border-left:3px solid rgba(var(--rgb-accent),.6);padding:4px 0 4px 12px;margin-bottom:10px}
+.dp-tool-h{font-size:16px;color:var(--strong)}
+.dp-why{font-size:14px;color:var(--muted);margin:2px 0 4px}
+.dp-how{margin:0;padding-left:20px;line-height:1.55;font-size:14.5px}
+.dp-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.dp-file-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.dp-file-t{font-weight:600;color:var(--strong)}
+.dp-file-h code{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.dp-file-u{font-size:13.5px;color:var(--text);opacity:.85;margin-top:2px}
+.dp-file-text{white-space:pre-wrap;font-family:var(--mono);font-size:12.5px;line-height:1.45;background:rgba(var(--rgb-s2),.6);border:1px solid var(--panel-border);border-radius:6px;padding:10px 12px;margin:6px 0 0;max-height:360px;overflow:auto}
+/* Design questions: one in view, ‹ › between them. */
+.ds-carousel{margin:4px 0 8px}
+.ds-nav{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ds-arrow{width:30px;height:30px;border-radius:50%;border:1px solid var(--panel-border);background:rgba(var(--rgb-s2),.6);color:var(--strong);font-size:18px;line-height:1;cursor:pointer;flex:none}
+.ds-arrow:disabled{opacity:.3;cursor:default}
+.ds-arrow:not(:disabled):hover{border-color:var(--teal)}
+.ds-pos{font-size:12.5px;color:var(--muted);min-width:110px}
+.ds-dots{display:flex;gap:5px;flex:1;flex-wrap:wrap}
+.ds-dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--muted);background:none;padding:0;cursor:pointer}
+.ds-dot.done{background:rgba(var(--rgb-accent),.5);border-color:transparent}
+.ds-dot.on{outline:2px solid var(--teal);outline-offset:1px}
+.ds-steps.one{margin:0}
+.ds-see{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}

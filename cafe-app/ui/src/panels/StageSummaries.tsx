@@ -1,5 +1,5 @@
 import { shortDate } from './filterIdeas';
-import { CafeCheckCard, Toggle, type DesignView, type PlanView } from './DesignSection';
+import { CafeCheckCard, SeeDesign, type DesignView, type PlanView } from './DesignSection';
 import { hasAgentKit } from './designHelpers';
 
 /**
@@ -51,7 +51,7 @@ export function ToolsCard({ design, onEdit }: { design: DesignView | null; onEdi
   );
 }
 
-export function DesignCard({ design, onEdit }: { design: DesignView | null; onEdit?: () => void }) {
+export function DesignCard({ id, design, onEdit }: { id: string; design: DesignView | null; onEdit?: () => void }) {
   const s = design?.state ?? {};
   const steps: any[] = s.steps ?? [];
   const note = s.approvedAt ? `approved ${s.approvedAt}` : s.summary ? 'complete, not approved' : `${steps.length} question${steps.length === 1 ? '' : 's'}, not finished`;
@@ -63,12 +63,12 @@ export function DesignCard({ design, onEdit }: { design: DesignView | null; onEd
         </ol>
       )}
       <CafeCheckCard check={s.cafeCheck} />
-      <Toggle label="design.md" text={design?.designMd} action="toggle-design-md" />
+      {s.summary && <SeeDesign id={id} />}
     </Card>
   );
 }
 
-export function PlanCard({ plan, onEdit }: { plan: PlanView | null; onEdit?: () => void }) {
+export function PlanCard({ id, plan, onEdit }: { id: string; plan: PlanView | null; onEdit?: () => void }) {
   const files = plan?.files ?? [];
   return (
     <Card title="Plan and kits" note={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : undefined} testId="plan-card" onEdit={onEdit}>
@@ -76,7 +76,7 @@ export function PlanCard({ plan, onEdit }: { plan: PlanView | null; onEdit?: () 
         <>
           <ul className="pk-files" aria-label="Plan and kit files">{files.map((f) => <li key={f}>{f}</li>)}</ul>
           {hasAgentKit(files) && <div className="hint">The custom-app part goes to the CSIC Repository with its build instruction (under Edit).</div>}
-          <Toggle label="plan.md" text={plan?.planMd} action="toggle-plan-md" />
+          <SeeDesign id={id} />
         </>
       ) : <div className="hint warn">The plan was never written. Use Edit to write plan.md and the kits.</div>}
     </Card>

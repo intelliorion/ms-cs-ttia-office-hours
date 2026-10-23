@@ -92,9 +92,9 @@ describe('ToolPickerSection', () => {
 });
 
 describe('IdeaDetails design sections', () => {
-  // Buttons that only show or open something (design.md, the Outbox) stay usable; everything that changes data waits.
+  // Buttons that only show or open something (moving between questions, the design pack) stay usable; everything that changes data waits.
   const actionButtons = () => [...el.querySelectorAll('[data-testid="tool-picker"] button, [data-testid="design"] button')]
-    .filter((b) => !/^(toggle-|open-outbox)/.test(b.getAttribute('data-action') ?? '')) as HTMLButtonElement[];
+    .filter((b) => !/^(toggle-|open-outbox|prev-question|next-step|go-question|see-design)/.test(b.getAttribute('data-action') ?? '')) as HTMLButtonElement[];
 
   it('while a call is in flight every action button in Tool picker and Design is disabled', async () => {
     let finish!: (v: unknown) => void;

@@ -10,7 +10,7 @@ import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
 import { setStage } from '../ideas/stage';
-import { writeFileAtomic, readHistory } from '../workspace/files';
+import { writeFileAtomic, readHistory, readText } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
@@ -50,6 +50,9 @@ export function fileNameOf(header: unknown): string {
   try { decoded = decodeURIComponent(sent); } catch { /* not encoded */ }
   return path.basename(decoded.replace(/\\/g, '/'));
 }
+/** The files the design pack may show: the design, the approach, the plan and the kit. */
+const DESIGN_FILE = /^(design\.md|approach\.md|plan\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv))$/;
+
 export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
   const steps = () => loadSteps(root);
   const ai = connector ?? createConnector({ providers: defaultProviders(), settings: () => loadSettings(root) });
@@ -295,6 +298,16 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return { files };
   });
   add('GET', '/api/ideas/:id/plan', async ({ params }) => readPlan(root, params.id));
+  // The design pack: one of the files the design series wrote (design.md, approach.md, plan.md, kit/...), read-only.
+  add('POST', '/api/ideas/:id/design-file', async ({ params, body }) => {
+    const rel = String(body.path ?? '');
+    if (!DESIGN_FILE.test(rel) || rel.split('/').some((p) => p === '..' || p === '.' || !p)) throw new Error('Not a design file');
+    const text = await readText(path.join(await ideaDir(root, params.id), ...rel.split('/')));
+    if (text === undefined) throw new Error(`${rel} is not written yet`);
+    return { path: rel, text };
+  });
+  // Show the idea's folder (where those files are) in Finder or File Explorer.
+  add('POST', '/api/ideas/:id/open-folder', async ({ params }) => { const dir = await ideaDir(root, params.id); await openFolder(dir); return { folder: `data/${dataKey(root, dir)}` }; });
   // Import. Every POST runs behind the server's lock; a drop triages and applies the Safe actions in one request.
   add('GET', '/api/inbox', async () => inboxView(root));
   add('POST', '/api/inbox/drop', async ({ body, raw, headers }) => {

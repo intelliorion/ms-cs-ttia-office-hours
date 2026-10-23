@@ -15,6 +15,7 @@ import { ImportPopout } from './popouts/ImportPopout';
 import { RoundPopout } from './popouts/RoundPopout';
 import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
+import { DesignPackPopout } from './popouts/DesignPackPopout';
 import { ConfigPopout } from './popouts/ConfigPopout';
 import { TypeFilter } from './layout/TypeFilter';
 import { labelModeText, visibleGraph } from './universe/graphView';
@@ -100,6 +101,7 @@ export default function App() {
         {popout?.kind === 'inbox' && <InboxPopout />}
         {popout?.kind === 'ai' && <AiPopout />}
         {popout?.kind === 'config' && <ConfigPopout />}
+        {popout?.kind === 'design-pack' && <DesignPackPopout id={popout.id} />}
       </Stage>
       {!focus && <Drawers />}
     </>

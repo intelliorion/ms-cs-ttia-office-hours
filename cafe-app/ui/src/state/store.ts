@@ -10,7 +10,9 @@ export type Popout =
   | { kind: 'round' }
   | { kind: 'inbox' }
   | { kind: 'ai' }
-  | { kind: 'config' };
+  | { kind: 'config' }
+  /** Everything the design series made for one idea. */
+  | { kind: 'design-pack'; id: string };
 
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
 export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }

@@ -283,3 +283,16 @@ describe('tool picker answers, taken in like the decision\'s', () => {
     expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it.' }]);
   });
 });
+
+describe('the design pack', () => {
+  it('reads the design files, and nothing else in the idea folder', async () => {
+    const s = await server();
+    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Form', tool: 'Power Apps', flags: [] }] });
+    const ok = await json(await s.post(`/api/ideas/${ID}/design-file`, { path: 'approach.md' }));
+    expect(ok.text).toContain('Form');
+    for (const bad of ['idea.yaml', '../../rules/settings.yaml', 'kit/../idea.yaml', 'emails/001-E1.md', '/etc/passwd']) {
+      expect((await json(await s.post(`/api/ideas/${ID}/design-file`, { path: bad }))).error).toBe('Not a design file');
+    }
+    expect((await json(await s.post(`/api/ideas/${ID}/design-file`, { path: 'plan.md' }))).error).toBe('plan.md is not written yet');
+  });
+});

@@ -1,30 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import {
   approvedTools, buildInstruction, cafeCheckRows, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
-  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS,
+  picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate,
 } from './designHelpers';
 
-// The suggest route's mixed reply: a saved DesignFeature first, then AI ToolPickFeatures.
+// The features route's mixed reply: a saved DesignFeature first, then AI suggestions (and an older row with a tool).
 const MIXED = [
-  { id: 'request-intake-form', name: 'Request intake form', tool: 'Power Apps', pathway: 'Assisted Citizen', flags: [] },
-  { name: 'Draft replies', what: 'Drafts a first reply', tool: 'Microsoft Copilot', reason: 'No build needed', flags: ['no-build'] },
-  { name: 'Scheduling engine', what: 'Works out a send slot', tool: 'custom app', reason: 'No low-code tool does this', flags: [] },
-  { name: 'Odd one', tool: 'PowerApps', flags: ['no-build', 7] },
+  { id: 'request-intake-form', name: 'Request intake form', flags: [] },
+  { name: 'Draft replies', what: 'Drafts a first reply', flags: ['personal-data'] },
+  { name: 'Scheduling engine', what: 'Works out a send slot', flags: [] },
+  { name: 'Odd one', tool: 'PowerApps', flags: ['no-build', 'custom-app', 7, 'needs-live-system'] },
   { name: '   ' },
   null,
 ];
 
 describe('featureRows', () => {
-  it('reads both shapes and marks only the AI rows as suggestions', () => {
+  it('reads saved features and suggestions, and marks only the AI rows as suggestions', () => {
     const rows = featureRows(MIXED, { fromAi: true });
     expect(rows.map((r) => r.name)).toEqual(['Request intake form', 'Draft replies', 'Scheduling engine', 'Odd one']);
     expect(rows.map((r) => r.suggested)).toEqual([false, true, true, true]);
-    expect(rows[0]).toMatchObject({ key: 'request-intake-form', what: '', reason: '', tool: 'Power Apps' });
+    expect(rows[0]).toMatchObject({ key: 'request-intake-form', what: '' });
   });
-  it('adds the custom-app flag to a custom app pick and drops tools that are not on the list', () => {
+  it('keeps feature flags only: a tool and its flags are not a feature\'s', () => {
     const rows = featureRows(MIXED, { fromAi: true });
-    expect(rows[2].flags).toEqual(['custom-app']);
-    expect(rows[3]).toMatchObject({ tool: '', flags: ['no-build'] });
+    expect(rows[3].flags).toEqual(['needs-live-system']);
+    expect(Object.keys(rows[3])).not.toContain('tool');
   });
   it('saved features are never suggestions; junk gives no rows', () => {
     expect(featureRows(MIXED).every((r) => !r.suggested)).toBe(true);
@@ -34,13 +34,17 @@ describe('featureRows', () => {
 });
 
 describe('picksBody', () => {
-  it('sends only name, what, tool, reason and flags, trimmed; drops empty rows', () => {
-    const rows = [...featureRows(MIXED, { fromAi: true }).slice(0, 3), emptyRow()];
+  it('sends the features (name, what, flags, trimmed; empty rows dropped) and the one tool when there is one', () => {
+    const rows = [...featureRows(MIXED, { fromAi: true }).slice(0, 3), emptyRow(), { ...emptyRow(), name: '  Padded  ', what: ' x ' }];
     const body = picksBody(rows);
-    expect(body.features).toHaveLength(3);
-    expect(body.features[0]).toEqual({ name: 'Request intake form', tool: 'Power Apps', flags: [] });
-    expect(body.features[2]).toEqual({ name: 'Scheduling engine', what: 'Works out a send slot', tool: 'custom app', reason: 'No low-code tool does this', flags: ['custom-app'] });
-    for (const f of body.features) expect(Object.keys(f).every((k) => ['name', 'what', 'tool', 'reason', 'flags'].includes(k))).toBe(true);
+    expect(body).toEqual({ features: [
+      { name: 'Request intake form', flags: [] },
+      { name: 'Draft replies', what: 'Drafts a first reply', flags: ['personal-data'] },
+      { name: 'Scheduling engine', what: 'Works out a send slot', flags: [] },
+      { name: 'Padded', what: 'x', flags: [] },
+    ] });
+    const tool = toolView({ tool: 'Power Apps', by: 'ai', pros: ['Quick'] })!;
+    expect(picksBody(rows, tool).tool).toBe(tool);
   });
   it('the custom-app flag follows the tool', () => {
     expect(flagsFor('Power Apps', ['custom-app', 'no-build'])).toEqual(['no-build']);
@@ -57,11 +61,31 @@ describe('picksProblem', () => {
 });
 
 describe('mergeRows', () => {
-  it('keeps the operator rows and adds only new names', () => {
-    const local = featureRows([{ name: 'Draft replies', tool: 'Power Apps', flags: [] }]);
+  it('keeps the operator rows as they are and adds only new names', () => {
+    const local = featureRows([{ name: 'Draft replies', what: 'Mine', flags: [] }]);
     const merged = mergeRows(local, featureRows(MIXED, { fromAi: true }));
     expect(merged.map((r) => r.name)).toEqual(['Draft replies', 'Request intake form', 'Scheduling engine', 'Odd one']);
-    expect(merged[0].tool).toBe('Power Apps');
+    expect(merged[0].what).toBe('Mine');
+  });
+});
+
+describe('the one tool', () => {
+  it('toolView keeps an approved tool only, with the custom-app flag following it and only good fit lines', () => {
+    expect(toolView({ tool: 'Excel' })).toBeNull();
+    expect(toolView(null)).toBeNull();
+    const t = toolView({ tool: 'custom app', by: 'ai', fit: [{ feature: 'A', fit: 'no', note: 'x' }, { feature: 'B', fit: 'maybe' }, { fit: 'yes' }] })!;
+    expect(t).toMatchObject({ tool: 'custom app', by: 'ai', flags: ['custom-app'], fit: [{ feature: 'A', fit: 'no', note: 'x' }] });
+    expect(toolView({ tool: 'New tool' }, ['New tool'])!.tool).toBe('New tool');
+  });
+  it('overrideTool: the operator\'s tool with no AI: pros, cons and fit cleared, evaluated for the rows there now', () => {
+    const rows = featureRows([{ name: 'A' }, { name: 'B' }]);
+    expect(overrideTool('UiPath', rows)).toEqual({ tool: 'UiPath', by: 'operator', reason: '', pros: [], cons: [], context: [], flags: [], fit: [], evaluatedFor: ['A', 'B'], needsAi: true });
+  });
+  it('outOfDate: true once the feature names differ from the ones the tool was evaluated for', () => {
+    const t = toolView({ tool: 'Power Apps', evaluatedFor: ['A', 'B'] })!;
+    expect(outOfDate([{ name: 'b' }, { name: 'A' }], t)).toBe(false);
+    expect(outOfDate([{ name: 'A' }], t)).toBe(true);
+    expect(outOfDate([{ name: 'A' }], null)).toBe(false);
   });
 });
 
@@ -161,9 +185,8 @@ describe('approvedTools', () => {
     expect(approvedTools({ approvedTools: [] })).toEqual([...APPROVED_TOOLS]);
     expect(approvedTools({ approvedTools: 'Power Apps' })).toEqual([...APPROVED_TOOLS]);
   });
-  it('featureRows keeps a tool only when it is on the list it is given', () => {
-    const raw = [{ id: 'a', name: 'A', tool: 'New tool', flags: [] }];
-    expect(featureRows(raw)[0].tool).toBe('');
-    expect(featureRows(raw, { tools: ['New tool'] })[0].tool).toBe('New tool');
+  it('toolView keeps a tool only when it is on the list it is given', () => {
+    expect(toolView({ tool: 'New tool' })).toBeNull();
+    expect(toolView({ tool: 'New tool' }, ['New tool'])!.tool).toBe('New tool');
   });
 });

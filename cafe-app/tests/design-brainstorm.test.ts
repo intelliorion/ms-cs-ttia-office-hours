@@ -140,7 +140,7 @@ describe('design brainstorm routes', () => {
     expect(early.status).toBe(400);
     expect((await json(early)).error).toBe('Design is not finished yet');
 
-    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Scheduling engine', tool: 'custom app' }] });
+    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Scheduling engine' }], tool: { tool: 'custom app' } });
     for (let n = 1; n <= 3; n++) {
       await s.post(`/api/ideas/${ID}/design/step`);
       await s.post(`/api/ideas/${ID}/design/answer`, { n, suggestedIndex: 0 });
@@ -164,9 +164,9 @@ describe('design brainstorm routes', () => {
   it('a feature flagged needs-live-system (no custom app) is a CSIC flag, and approval suggests closing as Routed to CSIC', async () => {
     const s = await server();
     await s.post(`/api/ideas/${ID}/tools`, { features: [
-      { name: 'Slot lookup', what: 'Reads free slots', tool: 'Power Apps', flags: ['needs-live-system'] },
-      { name: 'Requester list', tool: 'Power Apps', flags: ['personal-data'] },
-    ] });
+      { name: 'Slot lookup', what: 'Reads free slots', flags: ['needs-live-system'] },
+      { name: 'Requester list', flags: ['personal-data'] },
+    ], tool: { tool: 'Power Apps' } });
     const idea = await loadIdea(s.root, ID);
     await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows slots from sample data.' }, clock);
     const st = await readDesign(s.root, ID);
@@ -180,7 +180,7 @@ describe('design brainstorm routes', () => {
 
   it('the Café check reads a feature\'s "what" line', async () => {
     const s = await server();
-    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Sync', what: 'Keeps an API to Workday in step', tool: 'Power Apps' }] });
+    await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Sync', what: 'Keeps an API to Workday in step' }], tool: { tool: 'Power Apps' } });
     const idea = await loadIdea(s.root, ID);
     await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows a sync.' }, clock);
     expect((await readDesign(s.root, ID)).cafeCheck!.csicFlags).toEqual(expect.arrayContaining(['api to', 'workday']));

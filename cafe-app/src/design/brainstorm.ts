@@ -12,6 +12,9 @@ import {
   type DesignState, type DesignStep, type DesignTag, type StepSource,
 } from './store';
 import { cafeCheck } from './cafecheck';
+import { toolFeatures } from './choice';
+import { reviewInput } from '../review/suggestInput';
+import { showNames, type Coded } from '../command/names';
 
 /** Where design.md is the source of a background tick. */
 export const DESIGN_FILE = 'design.md';
@@ -135,13 +138,46 @@ export async function applyDesignEvents(
 export const applyDesignEvent = (root: string, idea: Idea, event: DesignEvent, clock: Clock) =>
   applyDesignEvents(root, idea, [event], clock);
 
-/** The AI's input for the next question: the idea, its features and the answers so far. */
-export function designStepInput(idea: Idea, state: DesignState): DesignStepInput {
+/**
+ * The AI's input for the next question: the idea, the feature list, the one tool with its cons and the features it fits
+ * only partly or not at all (what the questions should aim at), the answers so far and, when given, the "Learned since
+ * the form" brief and the team's answers (already coded: see codedDesignInput).
+ */
+export function designStepInput(
+  idea: Idea, state: DesignState, extra: { learned?: { topic: string; text: string }[]; teamAnswers?: { question: string; answer: string }[] } = {},
+): DesignStepInput {
+  const t = state.tool;
   return {
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
-    features: state.features.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
+    features: toolFeatures(state).map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
+    ...(t ? { tool: { tool: t.tool, pathway: t.pathway, cons: t.cons, gaps: t.fit.filter((x) => x.fit !== 'yes') } } : {}),
+    ...(extra.learned?.length ? { learned: extra.learned } : {}),
+    ...(extra.teamAnswers?.length ? { teamAnswers: extra.teamAnswers } : {}),
     stepsSoFar: state.steps.map((s) => ({ question: s.question, answer: s.answer?.trim() || ASKED_TEAM_ANSWER })),
     guidance: skillGuidance('brainstorming'),
+  };
+}
+
+/**
+ * designStepInput with the people coded the way the decision codes them (reviewInput): the idea text, the team's
+ * answers and the "Learned since the form" brief. The codes come back so the AI's reply can be decoded.
+ */
+export async function codedDesignInput(root: string, idea: Idea, state: DesignState): Promise<{ input: DesignStepInput; codes: Map<string, Coded> }> {
+  const brief = idea.learned?.points ?? [];
+  const { input: seen, codes } = await reviewInput(root, idea.id, brief.map((p) => ({ question: p.topic, answer: p.text })));
+  const all = seen.answers ?? [];
+  const teamAnswers = all.slice(0, all.length - brief.length);
+  const learned = all.slice(all.length - brief.length).map((a) => ({ topic: a.question, text: a.answer }));
+  const base = designStepInput(idea, state, { learned, teamAnswers });
+  return { input: { ...base, idea: { ...base.idea, challenge: seen.idea.challenge, current_process: seen.idea.current_process } }, codes };
+}
+
+/** The AI's reply with any person code turned back into the name. */
+export function decodeStep(out: DesignStepOutput, codes: Map<string, Coded>): DesignStepOutput {
+  const n = (t?: string) => (t === undefined ? t : showNames(t, codes));
+  return {
+    ...out, ...(out.question !== undefined ? { question: n(out.question) } : {}), ...(out.why !== undefined ? { why: n(out.why) } : {}),
+    ...(out.summary !== undefined ? { summary: n(out.summary) } : {}), ...(out.suggested ? { suggested: out.suggested.map((x) => showNames(x, codes)) } : {}),
   };
 }
 

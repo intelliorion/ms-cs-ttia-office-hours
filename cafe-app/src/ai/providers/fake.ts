@@ -129,11 +129,27 @@ function understandFor(prompt: string) {
   return UNDERSTAND_REPLY;
 }
 
-/** Three tool picks for any idea, one of them a custom app (a CSIC flag). */
-/** One pick with the context it rests on; when the data carries no challenge text and no team answers yet, the questions instead. */
+/** The DATA block of a prompt, parsed (empty when it is not JSON). */
+function dataOf(prompt: string): Record<string, any> {
+  try { return JSON.parse(prompt.slice(prompt.lastIndexOf('<<<DATA') + '<<<DATA'.length, prompt.lastIndexOf('DATA>>>'))); } catch { return {}; }
+}
+
+/** Three features for any idea; a feature the operator already has is never suggested again. */
+const FEATURES = [
+  { name: 'Request intake', what: 'Takes each request in one place', flags: [] },
+  { name: 'Send-slot scheduling', what: 'Works out a send slot for each request across time zones', flags: [] },
+  { name: 'Weekly summary', what: 'Shows the week\'s requests and their slots on one page', flags: [] },
+];
+function featuresFor(prompt: string) {
+  const have = new Set(((dataOf(prompt).existingFeatures ?? []) as { name: string }[]).map((f) => f.name.toLowerCase()));
+  const left = FEATURES.filter((f) => !have.has(f.name.toLowerCase()));
+  return { features: left.length ? left : [{ name: 'Sample data set', what: 'Twenty made-up requests to show it on', flags: [] }] };
+}
+
+/** One tool for the whole list, with the context it rests on and a fit line per feature; when the data carries no challenge text and no team answers yet, the questions instead. */
 const TOOL_PICK = {
   pick: {
-    name: 'Request intake and scheduling', what: 'Takes each request in one place and works out a send slot across time zones', tool: 'custom app',
+    tool: 'custom app',
     reason: 'No approved low-code tool does the scheduling logic; the form part alone would not show the idea', flags: ['custom-app'],
     context: [
       'The challenge describes requests arriving by email and a slot worked out across time zones',
@@ -143,11 +159,31 @@ const TOOL_PICK = {
     ],
     pros: ['Can hold the time-zone scheduling logic the idea needs', 'One place for every request'],
     cons: ['Not a Café build: a custom app is TTIA-Led and goes to the CSIC Repository', 'Needs a developer; no citizen builder can run it'],
+    fit: [] as { feature: string; fit: string; note: string }[],
   },
   needs: [],
   updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
   learned: [],
 };
+/** The operator's own tool, evaluated: never another tool. Every feature but the first fits only partly. */
+function toolPickFor(prompt: string) {
+  const data = dataOf(prompt);
+  const features: { name: string }[] = data.features ?? [];
+  const tool: string = data.evaluate ?? TOOL_PICK.pick.tool;
+  const fit = features.map((f, i) => (i === 0 || tool === 'custom app'
+    ? { feature: f.name, fit: 'yes', note: '' }
+    : { feature: f.name, fit: 'partly', note: `${tool} cannot do all of this on its own: add Power Automate` }));
+  if (!data.evaluate) return { ...TOOL_PICK, pick: { ...TOOL_PICK.pick, fit } };
+  return {
+    ...TOOL_PICK,
+    pick: {
+      tool, reason: `The operator chose ${tool}; evaluated for the features`, flags: tool === 'custom app' ? ['custom-app'] : [],
+      context: [`Evaluated ${tool} for ${features.length} feature${features.length === 1 ? '' : 's'}`],
+      pros: [`${tool} is on the approved list`], cons: tool === 'custom app' ? TOOL_PICK.pick.cons : [`${tool} cannot work out send slots on its own: add Power Automate`],
+      fit,
+    },
+  };
+}
 const TOOL_QUESTIONS = {
   needs: [
     { need: 'How a request arrives', ask: 'What does a request look like when it arrives: an email, a form, a chat message?', met: false },
@@ -179,7 +215,7 @@ const DESIGN_STEPS = [
 ];
 const DESIGN_DONE = {
   done: true,
-  summary: 'A proof of concept that shows the one thing agreed above, using a small synthetic sample, built by the team with the tools picked for each feature.',
+  summary: 'A proof of concept that shows the one thing agreed above, using a small synthetic sample, built by the team with the one tool picked for the features.',
 };
 
 /** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */
@@ -206,12 +242,8 @@ function planForPicks(prompt: string) {
 
 /** How many Q/A pairs the design-step prompt carries (its DATA block's stepsSoFar). */
 function stepsSoFar(prompt: string): number {
-  const start = prompt.lastIndexOf('<<<DATA');
-  const end = prompt.lastIndexOf('DATA>>>');
-  try {
-    const data = JSON.parse(prompt.slice(start + '<<<DATA'.length, end)) as { stepsSoFar?: unknown[] };
-    return Array.isArray(data.stepsSoFar) ? data.stepsSoFar.length : 0;
-  } catch { return 0; }
+  const data = dataOf(prompt) as { stepsSoFar?: unknown[] };
+  return Array.isArray(data.stepsSoFar) ? data.stepsSoFar.length : 0;
 }
 
 const enabled = () => process.env.CAFE_AI_FAKE === '1';
@@ -232,7 +264,8 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: extract')) return `Here is the JSON:\n${JSON.stringify(EXTRACT)}`;
       if (prompt.startsWith('TASK: review-suggest')) return JSON.stringify(REVIEW);
       if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));
-      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : TOOL_PICK);
+      if (prompt.startsWith('TASK: feature-list')) return JSON.stringify(featuresFor(prompt));
+      if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : toolPickFor(prompt));
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));

@@ -1,5 +1,6 @@
 import type { Idea } from '../ideas/idea';
 import type { DesignState } from './store';
+import { toolFeatures } from './choice';
 
 export interface CafeCheck {
   valueWords: string[];
@@ -31,7 +32,8 @@ export const valueWordsIn = (text: string): string[] => matches(VALUE_RE, text);
 /** Everything the idea and its design say, as one searchable text. */
 export function designText(idea: Idea, state: DesignState): string {
   const parts: string[] = [idea.title, idea.challenge ?? '', ...idea.outcomes, idea.current_process ?? '', state.summary ?? ''];
-  for (const f of state.features) parts.push(f.name, f.what ?? '', f.tool ?? '', f.reason ?? '');
+  for (const f of toolFeatures(state)) parts.push(f.name, f.what ?? '', f.tool ?? '');
+  if (state.tool) parts.push(state.tool.reason);
   for (const s of state.steps) parts.push(s.answer ?? '');
   return parts.filter(Boolean).join('\n');
 }
@@ -50,9 +52,11 @@ export function cafeCheck(idea: Idea, state: DesignState): CafeCheck {
       data.push(`personal data: ${name}`);
     }
   }
-  for (const f of state.features) {
-    if (f.tool && f.tool.toLowerCase() === 'custom app') csic.unshift('custom app');
-  }
+  // The one tool: a custom app is a CSIC flag, and so is a live system the tool's evaluation flagged.
+  const tool = state.tool;
+  if (tool?.tool.toLowerCase() === 'custom app') csic.unshift('custom app');
+  if (tool?.flags.includes('needs-live-system')) flagged.push(`live system: ${tool.tool}`);
+  if (tool?.flags.includes('personal-data')) { flagged.push(`personal data: ${tool.tool}`); data.push(`personal data: ${tool.tool}`); }
   const csicFlags = [...new Set([...csic, ...flagged])];
   const dataFlags = [...new Set(data)];
   return { valueWords: valueWordsIn(text), dataFlags, csicFlags, ok: csicFlags.length === 0 };

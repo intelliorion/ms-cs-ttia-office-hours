@@ -36,6 +36,7 @@ cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/cafecheck.ts
+cafe-app/src/design/choice.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/store.ts
 cafe-app/src/design/tools.ts
@@ -190,6 +191,7 @@ cafe-app/ui/src/panels/ToolPickerSection.tsx
 cafe-app/ui/src/panels/contextHelpers.ts
 cafe-app/ui/src/panels/designHelpers.test.ts
 cafe-app/ui/src/panels/designHelpers.ts
+cafe-app/ui/src/panels/designPack.test.tsx
 cafe-app/ui/src/panels/designSections.test.tsx
 cafe-app/ui/src/panels/filterIdeas.ts
 cafe-app/ui/src/panels/ideasList.test.ts
@@ -202,6 +204,7 @@ cafe-app/ui/src/panels/starProfile.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
 cafe-app/ui/src/popouts/ConfigPopout.test.tsx
 cafe-app/ui/src/popouts/ConfigPopout.tsx
+cafe-app/ui/src/popouts/DesignPackPopout.tsx
 cafe-app/ui/src/popouts/Details.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.tsx
@@ -216,6 +219,7 @@ cafe-app/ui/src/popouts/Modal.tsx
 cafe-app/ui/src/popouts/RoundPopout.tsx
 cafe-app/ui/src/popouts/aiUi.test.ts
 cafe-app/ui/src/popouts/aiUi.ts
+cafe-app/ui/src/popouts/designPack.ts
 cafe-app/ui/src/popouts/ideaHelpers.ts
 cafe-app/ui/src/popouts/ideaPopout.test.ts
 cafe-app/ui/src/popouts/inboxHelpers.test.ts
@@ -257,8 +261,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CsKv_y0w.css
-cafe-app/web/assets/index-DusPh2uB.js
+cafe-app/web/assets/index-DaGeiJao.js
+cafe-app/web/assets/index-DgABIPlv.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

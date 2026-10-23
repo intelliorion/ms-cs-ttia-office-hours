@@ -21,11 +21,11 @@ import { overdue, needsE2R } from '../reminders/due';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, designStepTask, designPlanTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask } from '../ai/tasks';
 import { readDesign, renderDesignMd } from '../design/store';
-import { saveToolPicks, suggestTools, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
+import { saveToolPicks, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
-  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, designStepInput, isDone, stepEvent, DesignError, SUMMARY_MAX,
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
@@ -233,8 +233,12 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return { state, designMd: renderDesignMd(idea, state), folder };
   });
   // Suggest with AI, or Re-evaluate: the pick it can stand behind and the to-do list of what it still needs, as the decision's.
-  add('POST', '/api/ideas/:id/tools/suggest', async ({ params }) => byHand(() =>
-    suggestTools(root, params.id, (input) => ai.runWith(toolPickTask, input), clock))());
+  // With `tool`, the operator's own tool is evaluated for the features sent (the AI may not change it).
+  add('POST', '/api/ideas/:id/tools/suggest', async ({ params, body }) => byHand(() =>
+    suggestTools(root, params.id, (input) => ai.runWith(toolPickTask, input), clock, { features: body.features, tool: body.tool }))());
+  // Suggest features with AI: new names only, merged after the rows sent; nothing saved until Save.
+  add('POST', '/api/ideas/:id/tools/features/suggest', async ({ params, body }) => byHand(() =>
+    suggestFeatures(root, params.id, body.features, (input) => ai.runWith(featureListTask, input)))());
   add('POST', '/api/ideas/:id/tools/prep/answer', async ({ params, body }) => ({ state: await answerToolNeed(root, params.id, String(body.need ?? ''), body.answer) }));
   // Draft email: the picker's open questions as the questions email (E2), opened in Outlook and counted as sent.
   add('POST', '/api/ideas/:id/tools/prep/email', async ({ params }) => {
@@ -244,7 +248,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     return out;
   });
   add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
-    const { state, designFile } = await saveToolPicks(root, params.id, body.features, { clock, steps: await steps() });
+    const { state, designFile } = await saveToolPicks(root, params.id, { features: body.features, tool: body.tool }, { clock, steps: await steps() });
     return { state, designMd: await readFile(designFile, 'utf8') };
   });
   // Design series: the brainstorm. One question at a time; every change re-renders design.md and the Café check.
@@ -261,7 +265,9 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     }
     if (isDone(state)) return { state, designMd: renderDesignMd(idea, state) };
     assertNoOpenStep(state);
-    const { output } = await byHand(() => ai.runWith(designStepTask, designStepInput(idea, state)))();
+    // The features, the one tool (its cons and gaps) and the brief go in, names coded; the reply comes back decoded.
+    const { input, codes } = await codedDesignInput(root, idea, state);
+    const output = decodeStep((await byHand(() => ai.runWith(designStepTask, input))()).output, codes);
     const out = await applyDesignEvent(root, idea, stepEvent(output), clock);
     return output.done ? out : { ...out, step: out.state.steps[out.state.steps.length - 1] };
   });

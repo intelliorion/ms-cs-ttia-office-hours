@@ -163,7 +163,7 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   return (
     <section className="sec" data-testid="design">
       <h3>Design <span className="sec-n">{phase === 'approved' ? `approved ${s.approvedAt}` : phase === 'done' ? 'complete' : `${steps.length} question${steps.length === 1 ? '' : 's'}`}</span></h3>
-      {!s.features?.length && <div className="hint ds-lead">Pick tools for the features first: the questions build on them.</div>}
+      {(!s.features?.length || !s.tool) && <div className="hint ds-lead">List the features and pick the tool first: the questions build on them, and on what the tool can't do.</div>}
       {steps.length > 0 && (
         <StepCarousel steps={steps} render={(st) => (
           <StepItem key={st.n} step={st} off={off} onSendQuestions={onSendQuestions}
@@ -223,7 +223,7 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
   );
 }
 
-/** Plan and kits, once the design is approved: plan.md and a starter kit per picked tool. The app writes no code. */
+/** Plan and kits, once the design is approved: plan.md and a starter kit for the picked tool. The app writes no code. */
 export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }: {
   idea: any; design: DesignView | null; plan: PlanView | null; busy: boolean; aiWorking: boolean; noAi: boolean; call: DesignCall;
 }) {
@@ -258,7 +258,7 @@ export function PlanSection({ idea, design, plan, busy, aiWorking, noAi, call }:
           </ul>
           <div className="hint">{approved ? 'Writing again rewrites plan.md and the kit files the app made; your own files are kept.' : 'The design was reopened: approve it again, then write the plan again.'}</div>
         </>
-      ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a starter kit for each picked tool. No code: the kits are templates.'}</div>}
+      ) : <div className="hint">{noAi ? 'plan.md and the kits need the AI. Connect one from the AI button in the title bar.' : 'Writes plan.md and a starter kit for the picked tool. No code: the kits are templates.'}</div>}
       {hasAgentKit(files) && (
         <div className="pk-agent">
           <div className="hint">The custom-app part is built with a coding agent and goes to the CSIC Repository.</div>

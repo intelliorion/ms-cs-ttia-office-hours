@@ -1,4 +1,5 @@
 /** Pure helpers for the Tool picker, Design and Plan sections of an idea's details. */
+export { outOfDate } from '../../../src/design/choice';
 
 /** The approved tools, canonical labels in the server's order (src/graph/ontology.ts APPROVED_TOOLS). */
 export const APPROVED_TOOLS = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'UiPath', 'custom app'] as const;
@@ -16,7 +17,7 @@ export function approvedTools(state?: { approvedTools?: unknown } | null): strin
 /** The server rejects a longer summary (POST …/design/finish). */
 export const SUMMARY_MAX = 600;
 export const AGENT_FILE = 'kit/custom-app/BUILD-WITH-AGENT.md';
-export const CUSTOM_APP_NOTE = 'Custom app is TTIA-Led: this feature goes to the CSIC Repository, not a Café build.';
+export const CUSTOM_APP_NOTE = 'Custom app is TTIA-Led: this proof of concept goes to the CSIC Repository, not a Café build.';
 export const AI_WAIT = 'Asking the AI, this can take a minute…';
 
 const PATHWAYS: Record<string, string> = {
@@ -45,21 +46,32 @@ const FLAG_WORDS: Record<string, string> = {
 };
 export const flagWord = (f: string) => FLAG_WORDS[f] ?? f;
 
-/** One row of the Tool picker, as the operator edits it. */
+/** One feature row of the Tool picker, as the operator edits it. Features have no tool: the one tool is the ToolView. */
 export interface FeatureRow {
   key: string;
   name: string;
   what: string;
-  tool: string;
-  reason: string;
+  /** Feature flags (live system, personal data, reuse what exists). */
   flags: string[];
-  /** "Why this tool": the facts and the rule the suggestion rested on; kept with the saved pick. */
-  context: string[];
-  /** What the tool does well for the idea, and what it cannot do (each part named); kept with the saved pick. */
-  pros: string[];
-  cons: string[];
   /** Filled by the AI and not saved yet: shown with a highlighted border. */
   suggested: boolean;
+}
+
+/** The one tool for the whole proof of concept, as the panel holds it (the server's ToolChoice). */
+export interface ToolView {
+  tool: string;
+  pathway?: string;
+  by: 'ai' | 'operator';
+  reason: string;
+  pros: string[];
+  cons: string[];
+  context: string[];
+  flags: string[];
+  fit: { feature: string; fit: 'yes' | 'partly' | 'no'; note: string }[];
+  evaluatedFor: string[];
+  needsAi?: boolean;
+  at?: string;
+  provider?: string;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -72,51 +84,67 @@ export function flagsFor(tool: string, flags: string[]): string[] {
   return tool === CUSTOM_APP ? ['custom-app', ...rest] : rest;
 }
 
-/**
- * Rows from either shape: a saved DesignFeature ({id, name, what?, tool?, reason?, pathway?, flags}) or an AI
- * ToolPickFeature ({name, what, tool, reason, flags}). `suggested` marks the rows the AI added (no saved id).
- */
 const lines = (v: unknown, max: number): string[] => (Array.isArray(v) ? v.filter((x: unknown): x is string => typeof x === 'string' && x.trim() !== '').slice(0, max) : []);
+const FEATURE_FLAGS = ['needs-live-system', 'personal-data', 'reuse-existing'];
 
-export function featureRows(raw: unknown, opts: { fromAi?: boolean; tools?: readonly string[] } = {}): FeatureRow[] {
+/**
+ * Rows from a saved feature ({id, name, what?, flags}) or an AI suggestion ({name, what, flags}). Only feature flags
+ * are kept (the tool's own flags belong to the tool). `suggested` marks the rows the AI added (no saved id).
+ */
+export function featureRows(raw: unknown, opts: { fromAi?: boolean } = {}): FeatureRow[] {
   if (!Array.isArray(raw)) return [];
-  const known: readonly string[] = opts.tools ?? APPROVED_TOOLS;
-  return raw.filter((f) => f && typeof f === 'object' && str((f as any).name).trim()).map((f: any) => {
-    const tool = known.includes(f.tool) ? f.tool : '';
-    const flags = Array.isArray(f.flags) ? f.flags.filter((x: unknown): x is string => typeof x === 'string') : [];
-    return {
-      key: str(f.id) || newKey(),
-      name: str(f.name), what: str(f.what), tool, reason: str(f.reason),
-      flags: flagsFor(tool, flags),
-      context: lines(f.context, 6), pros: lines(f.pros, 5), cons: lines(f.cons, 5),
-      suggested: Boolean(opts.fromAi) && !str(f.id),
-    };
-  });
+  return raw.filter((f) => f && typeof f === 'object' && str((f as any).name).trim()).map((f: any) => ({
+    key: str(f.id) || newKey(),
+    name: str(f.name), what: str(f.what),
+    flags: lines(f.flags, 5).filter((x) => FEATURE_FLAGS.includes(x)),
+    suggested: Boolean(opts.fromAi) && !str(f.id),
+  }));
 }
 
-export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', tool: '', reason: '', flags: [], context: [], pros: [], cons: [], suggested: false });
+export const emptyRow = (): FeatureRow => ({ key: newKey(), name: '', what: '', flags: [], suggested: false });
 
-/** The body for POST …/tools: name, what, tool, reason, flags and the context lines; rows with no name and nothing else are dropped. */
-export function picksBody(rows: FeatureRow[]): { features: { name: string; what?: string; tool?: string; reason?: string; flags: string[]; context?: string[]; pros?: string[]; cons?: string[] }[] } {
+/** The tool from the server (saved or suggested), or null when it names no approved tool. */
+export function toolView(raw: any, tools: readonly string[] = APPROVED_TOOLS): ToolView | null {
+  if (!raw || typeof raw !== 'object' || !tools.includes(raw.tool)) return null;
+  const fit = (Array.isArray(raw.fit) ? raw.fit : [])
+    .filter((x: any) => x && str(x.feature) && ['yes', 'partly', 'no'].includes(x.fit))
+    .map((x: any) => ({ feature: str(x.feature), fit: x.fit, note: str(x.note) }));
   return {
-    features: rows
-      .filter((r) => r.name.trim() || r.what.trim() || r.tool)
-      .map((r) => ({
-        name: r.name.trim(),
-        ...(r.what.trim() ? { what: r.what.trim() } : {}),
-        ...(r.tool ? { tool: r.tool } : {}),
-        ...(r.reason.trim() ? { reason: r.reason.trim() } : {}),
-        flags: flagsFor(r.tool, r.flags),
-        ...(r.context.length ? { context: r.context } : {}),
-        ...(r.pros.length ? { pros: r.pros } : {}),
-        ...(r.cons.length ? { cons: r.cons } : {}),
-      })),
+    tool: raw.tool, ...(str(raw.pathway) ? { pathway: raw.pathway } : {}), by: raw.by === 'ai' ? 'ai' : 'operator', reason: str(raw.reason),
+    pros: lines(raw.pros, 5), cons: lines(raw.cons, 5), context: lines(raw.context, 6), flags: flagsFor(raw.tool, lines(raw.flags, 5)),
+    fit, evaluatedFor: lines(raw.evaluatedFor, 12), ...(raw.needsAi ? { needsAi: true } : {}),
+    ...(str(raw.at) ? { at: raw.at } : {}), ...(str(raw.provider) ? { provider: raw.provider } : {}),
   };
+}
+
+/** The operator's own tool with no AI to evaluate it: kept, with pros, cons and fit cleared until it is evaluated. */
+export function overrideTool(tool: string, rows: FeatureRow[]): ToolView {
+  return {
+    tool, by: 'operator', reason: '', pros: [], cons: [], context: [], flags: flagsFor(tool, []), fit: [],
+    evaluatedFor: featuresBody(rows).map((f) => f.name), needsAi: true,
+  };
+}
+
+export const NEEDS_AI_NOTE = 'Pros, cons and fit need the AI: connect one and Re-evaluate.';
+export const STALE_NOTE = 'The features changed since the tool was evaluated.';
+export const FIT_MARK: Record<string, string> = { yes: '✓', partly: 'partly', no: '✗' };
+export const FIT_WORD: Record<string, string> = { yes: 'Does it', partly: 'Partly', no: "Can't do it" };
+
+/** The features to send: name, what and flags, trimmed; rows with no name and nothing else are dropped. */
+export function featuresBody(rows: FeatureRow[]): { name: string; what?: string; flags: string[] }[] {
+  return rows
+    .filter((r) => r.name.trim() || r.what.trim())
+    .map((r) => ({ name: r.name.trim(), ...(r.what.trim() ? { what: r.what.trim() } : {}), flags: r.flags }));
+}
+
+/** The body for POST …/tools: the features, and the one tool when there is one. */
+export function picksBody(rows: FeatureRow[], tool: ToolView | null = null): { features: ReturnType<typeof featuresBody>; tool?: ToolView } {
+  return { features: featuresBody(rows), ...(tool ? { tool } : {}) };
 }
 
 /** What stops a save, in plain words, or null. */
 export function picksProblem(rows: FeatureRow[]): string | null {
-  const body = picksBody(rows).features;
+  const body = featuresBody(rows);
   if (body.some((f) => !f.name)) return 'Every feature needs a name.';
   const seen = new Set<string>();
   for (const f of body) {
@@ -184,7 +212,7 @@ export function buildInstruction(ideaId: string, slug?: string, folder?: string)
   ].join('\n');
 }
 
-/** After "Suggest with AI": the operator's rows stay as they are; only features with a new name are added. */
+/** After "Suggest features with AI": the operator's rows stay as they are; only features with a new name are added. */
 export function mergeRows(local: FeatureRow[], incoming: FeatureRow[]): FeatureRow[] {
   const names = new Set(local.map((r) => r.name.trim().toLowerCase()).filter(Boolean));
   return [...local, ...incoming.filter((r) => !names.has(r.name.trim().toLowerCase()))];

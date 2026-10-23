@@ -398,15 +398,17 @@ async function designPass() {
   const dir = path.join(workspace, 'data', 'ideas', (await fs.readdir(path.join(workspace, 'data', 'ideas'))).find((x) => x.startsWith(ID)));
   const u = (r) => `/api/ideas/${ID}/${r}`;
 
-  // Tool picker: the AI suggests, the operator saves the picks.
-  const sug = await api('POST', u('tools/suggest'));
-  const saved = await api('POST', u('tools'), { features: sug.features.map(({ name, what, tool, reason, flags, context }) => ({ name, what, tool, reason, flags, context })) });
+  // Features and tool: the AI suggests the features, then one tool for them; the operator saves both.
+  const feats = await api('POST', u('tools/features/suggest'), { features: [] });
+  const sug = await api('POST', u('tools/suggest'), { features: feats.features });
+  const saved = await api('POST', u('tools'), { features: feats.features, tool: sug.tool });
   const built = (await graph()).edges.filter((e) => e.rel === 'BUILT_WITH' && String(e.source ?? '').includes(`${ID}:approach.md`));
   const approach = await exists(path.join(dir, 'approach.md'));
-  check('(design) tool picks', '1 suggested with context, saved; approach.md; BUILT_WITH links',
-    `${sug.features.length} suggested, ${saved.state.features.length} saved, context ${saved.state.features[0]?.context?.length ?? 0}, approach.md ${approach}, ${built.length} BUILT_WITH`,
-    sug.features.length === 1 && saved.state.features.length === 1 && saved.state.features.some((f) => f.tool === 'custom app') && (saved.state.features[0].context?.length ?? 0) > 0
-      && approach && built.length >= 1 && (await ideaOf(ID)).checklist?.s3e?.done);
+  check('(design) features and tool', 'features suggested; one tool with context and a fit per feature, saved; approach.md; BUILT_WITH links',
+    `${feats.features.length} features, tool ${sug.tool?.tool ?? '-'}, fit ${sug.tool?.fit?.length ?? 0}, context ${saved.state.tool?.context?.length ?? 0}, approach.md ${approach}, ${built.length} BUILT_WITH`,
+    feats.features.length >= 1 && saved.state.features.length === feats.features.length && saved.state.tool?.tool === 'custom app'
+      && (saved.state.tool.context?.length ?? 0) > 0 && saved.state.tool.fit.length === feats.features.length
+      && approach && built.length === feats.features.length && (await ideaOf(ID)).checklist?.s3e?.done);
 
   // Brainstorm: three questions, one at a time; the second is "I don't know", which goes into an E2 draft.
   const s1 = await api('POST', u('design/step'), {});

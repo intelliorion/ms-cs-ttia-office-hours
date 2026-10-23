@@ -4,6 +4,7 @@ import { ideaGet, post } from '../api';
 import { Modal } from './Modal';
 import { CafeCheckCard } from '../panels/DesignSection';
 import { fileNote, packFiles, SETTLES } from './designPack';
+import { FIT_MARK } from '../panels/designHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
@@ -25,7 +26,8 @@ export function DesignPackPopout({ id }: { id: string }) {
   const s = design?.state;
   const steps: any[] = s?.steps ?? [];
   const features: any[] = s?.features ?? [];
-  const files = packFiles(plan?.files ?? [], features.length > 0);
+  const tool: any = s?.tool;
+  const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool));
   const view = async (f: string) => {
     if (open[f] !== undefined) { setOpen((o) => ({ ...o, [f]: undefined })); return; }
     try { const r = await post(`/api/ideas/${encodeURIComponent(id)}/design-file`, { path: f }); setOpen((o) => ({ ...o, [f]: r.text })); }
@@ -52,21 +54,33 @@ export function DesignPackPopout({ id }: { id: string }) {
               })}
             </dl>
           </section>
-          {features.length > 0 && (
+          {(features.length > 0 || tool) && (
             <section className="sec dp-sec">
               <h3>The tool</h3>
-              {features.map((f) => (
-                <div key={f.id} className="dp-tool">
-                  <div className="dp-tool-h"><b>{f.tool ?? 'No tool yet'}</b> · {f.name}{f.pathway && <span className="sec-n"> {f.pathway}</span>}</div>
-                  {f.reason && <div className="dp-why">{f.reason}</div>}
-                  {(f.pros?.length > 0 || f.cons?.length > 0) && (
-                    <div className="tp-pc">
-                      {f.pros?.length > 0 && <div className="tp-pros"><div className="tp-pc-h">Pros</div><ul>{f.pros.map((c: string, i: number) => <li key={i}>{c}</li>)}</ul></div>}
-                      {f.cons?.length > 0 && <div className="tp-cons"><div className="tp-pc-h">Cons: what it can't do</div><ul>{f.cons.map((c: string, i: number) => <li key={i}>{c}</li>)}</ul></div>}
-                    </div>
-                  )}
-                </div>
-              ))}
+              <div className="dp-tool">
+                <div className="dp-tool-h"><b>{tool?.tool ?? 'No tool yet'}</b>{tool?.pathway && <span className="sec-n"> {tool.pathway}</span>}</div>
+                {tool?.reason && <div className="dp-why">{tool.reason}</div>}
+                {(tool?.pros?.length > 0 || tool?.cons?.length > 0) && (
+                  <div className="tp-pc">
+                    {tool.pros?.length > 0 && <div className="tp-pros"><div className="tp-pc-h">Pros</div><ul>{tool.pros.map((c: string, i: number) => <li key={i}>{c}</li>)}</ul></div>}
+                    {tool.cons?.length > 0 && <div className="tp-cons"><div className="tp-pc-h">Cons: what it can't do</div><ul>{tool.cons.map((c: string, i: number) => <li key={i}>{c}</li>)}</ul></div>}
+                  </div>
+                )}
+                {features.length > 0 && (
+                  <ul className="tp-fit" data-testid="pack-fit" aria-label="The features and how the tool fits each">
+                    {features.map((f) => {
+                      const x = (tool?.fit ?? []).find((y: any) => y.feature?.toLowerCase() === String(f.name).toLowerCase());
+                      return (
+                        <li key={f.id ?? f.name} data-fit={x?.fit ?? 'unknown'}>
+                          <span className={`tp-fit-m ${x?.fit ?? 'unknown'}`}>{x ? FIT_MARK[x.fit] : '–'}</span>
+                          <span className="tp-fit-f">{f.name}</span>
+                          <span className="tp-fit-n">{x?.note || f.what || ''}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             </section>
           )}
           <section className="sec dp-sec">

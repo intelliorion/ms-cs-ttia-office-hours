@@ -5,25 +5,19 @@ import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
 import { cafeCheck, type CafeCheck } from './cafecheck';
+import { legacyChoice, toolFeatures, type Pathway, type ToolChoice } from './choice';
 
-export type Pathway = 'Citizen-Led' | 'Assisted Citizen' | 'TTIA-Led';
+export type { Pathway, ToolChoice };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
 export type StepSource = 'operator' | 'e2' | 'ai-suggested';
 
+/** One feature of the proof of concept. It has no tool of its own: the one tool is DesignState.tool (see toolFeatures). */
 export interface DesignFeature {
   id: string;
   name: string;
   /** One line on what the feature does. */
   what?: string;
-  tool?: string;
-  reason?: string;
-  /** The facts and the rule the suggestion rested on ("why this tool"), 1 to 6 lines; the operator can edit or drop them. */
-  context?: string[];
-  /** What this tool does well for the idea. */
-  pros?: string[];
-  /** What it cannot do, or does poorly, for the idea: the part named, and how to cover it when there is a way. */
-  cons?: string[];
-  pathway?: Pathway;
+  /** Feature flags (needs-live-system, personal-data, reuse-existing). */
   flags: string[];
 }
 
@@ -49,6 +43,8 @@ export interface DesignState {
   version: 1;
   status: DesignStatus;
   features: DesignFeature[];
+  /** The one tool for the whole proof of concept, with its pros, cons and how it fits each feature. */
+  tool?: ToolChoice;
   steps: DesignStep[];
   summary?: string;
   cafeCheck?: CafeCheck;
@@ -77,14 +73,35 @@ function toolPrepOf(raw: Partial<DesignState>): Pick<DesignState, 'toolPrep'> {
   return { toolPrep: { at: q.at, needs: q.questions.map((x, i) => ({ id: `n${i + 1}`, need: x, ask: x, met: false, askedAt: q.at })) } };
 }
 
+/** A stored choice with its lists made safe; null when it names no tool. */
+function choiceOf(raw: unknown): ToolChoice | undefined {
+  const t = raw as Partial<ToolChoice> | undefined;
+  if (!t || typeof t !== 'object' || typeof t.tool !== 'string' || !t.tool) return undefined;
+  return {
+    ...t, tool: t.tool, pathway: t.pathway ?? 'Assisted Citizen', by: t.by === 'ai' ? 'ai' : 'operator', reason: String(t.reason ?? ''),
+    pros: arr<string>(t.pros), cons: arr<string>(t.cons), context: arr<string>(t.context), flags: arr<string>(t.flags),
+    fit: arr<ToolChoice['fit'][number]>(t.fit), evaluatedFor: arr<string>(t.evaluatedFor), at: String(t.at ?? ''),
+  };
+}
+
 function normalize(raw: Partial<DesignState>): DesignState {
   // The old questions live on as the to-do list.
-  const { toolQuestions: _old, ...rest } = raw;
+  const { toolQuestions: _old, tool: _tool, ...rest } = raw;
+  // Older records had a tool on each feature: they become one tool for the whole proof of concept.
+  const rawFeatures = arr<Record<string, unknown>>(raw.features);
+  const legacy = !raw.tool && rawFeatures.some((f) => typeof f?.tool === 'string' && f.tool)
+    ? legacyChoice(rawFeatures, raw.approvedAt ?? raw.toolPrep?.at ?? '') : undefined;
+  const tool = legacy?.tool ?? choiceOf(raw.tool);
+  const features: DesignFeature[] = rawFeatures.map((f) => ({
+    id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
+    flags: arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build')),
+  }));
   return {
     ...rest,
     version: 1,
     status: STATUSES.includes(raw.status as DesignStatus) ? (raw.status as DesignStatus) : 'not-started',
-    features: arr<DesignFeature>(raw.features).map((f) => ({ ...f, flags: arr<string>(f.flags), ...(f.context ? { context: arr<string>(f.context) } : {}) })),
+    features,
+    ...(tool ? { tool } : {}),
     ...toolPrepOf(raw),
     steps: arr<DesignStep>(raw.steps).map((s) => ({ ...s, suggested: arr<string>(s.suggested) })),
   };
@@ -122,10 +139,14 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || '(not yet answered)', '');
   out.push('## Smallest input', '', mdLine(tagged(state, 'smallest-input')) || '(not yet answered)', '');
   out.push('## Features and tools', '');
-  if (state.features.length === 0) out.push('(not yet answered)');
-  for (const f of state.features) {
-    const bits = [f.tool ?? 'no tool picked', f.pathway].filter(Boolean).join(', ');
-    out.push(`- **${f.name}** (${bits})${f.reason ? `: ${f.reason}` : ''}${f.flags.length ? ` [${f.flags.join('; ')}]` : ''}`);
+  const t = state.tool;
+  if (t) out.push(`One tool for the whole proof of concept: **${t.tool}** (${t.pathway})${t.reason ? `: ${mdLine(t.reason)}` : ''}`, '');
+  if (state.features.length === 0) out.push(t ? '(no features listed yet)' : '(not yet answered)');
+  const fits = new Map((t?.fit ?? []).map((x) => [x.feature.toLowerCase(), x]));
+  for (const f of toolFeatures(state)) {
+    const fit = fits.get(f.name.toLowerCase());
+    const how = fit && fit.fit !== 'yes' ? ` (${fit.fit === 'no' ? 'the tool cannot do this' : 'partly'}${fit.note ? `: ${mdLine(fit.note)}` : ''})` : '';
+    out.push(`- **${mdLine(f.name).replace(/\*/g, '')}** (${f.tool ?? 'no tool picked'})${f.what ? `: ${mdLine(f.what)}` : ''}${how}${f.flags.length ? ` [${f.flags.join('; ')}]` : ''}`);
   }
   out.push('', '## Decisions so far', '');
   if (state.steps.length === 0) out.push('(not yet answered)');

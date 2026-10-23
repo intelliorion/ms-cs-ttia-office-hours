@@ -35,7 +35,7 @@ export const inboxPost = (id: string, what: 'apply' | 'undo' | 'choose' | 'dismi
 
 /** The design series: GET an idea's design (state + live design.md) or its plan (plan.md + kit files). */
 export const ideaGet = (id: string, what: 'design' | 'plan') => fetch(`/api/ideas/${encodeURIComponent(id)}/${what}`).then((r) => handle<any>(r));
-export type DesignRoute = 'tools/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan' | 'tools/prep/answer' | 'tools/prep/email';
+export type DesignRoute = 'tools/suggest' | 'tools/features/suggest' | 'tools' | 'design/step' | 'design/answer' | 'design/finish' | 'design/approve' | 'plan' | 'tools/prep/answer' | 'tools/prep/email';
 export const designPost = (id: string, what: DesignRoute, body: unknown = {}) => post(`/api/ideas/${encodeURIComponent(id)}/${what}`, body);
 
 /** The Café assistant: conversations, one conversation's messages, and a message sent with live progress. */

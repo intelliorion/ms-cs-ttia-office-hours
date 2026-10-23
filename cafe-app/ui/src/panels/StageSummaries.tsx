@@ -38,15 +38,21 @@ export function ReviewCard({ idea, state, onEdit }: { idea: any; state: any; onE
 
 export function ToolsCard({ design, onEdit }: { design: DesignView | null; onEdit?: () => void }) {
   const feats: any[] = design?.state?.features ?? [];
+  const tool = design?.state?.tool;
+  const note = [feats.length ? `${feats.length} feature${feats.length === 1 ? '' : 's'}` : '', tool?.tool ?? ''].filter(Boolean).join(' · ') || undefined;
   return (
-    <Card title="Tools" note={feats.length ? `${feats.length} feature${feats.length === 1 ? '' : 's'}` : undefined} testId="tools-card" onEdit={onEdit}>
-      {!design ? <div className="hint">Reading the design files…</div> : feats.length ? (
-        <ul className="card-list">
-          {feats.map((f) => (
-            <li key={f.id ?? f.name}><span className="card-k">{f.name}</span><span className="card-v">{f.tool ?? 'no tool picked'}{f.pathway ? ` · ${f.pathway}` : ''}</span></li>
-          ))}
-        </ul>
-      ) : <div className="hint warn">No tools picked. Use Edit to pick a tool for each feature.</div>}
+    <Card title="Features and tool" note={note} testId="tools-card" onEdit={onEdit}>
+      {!design ? <div className="hint">Reading the design files…</div> : feats.length || tool ? (
+        <>
+          <div className="card-main">{tool ? `${tool.tool}${tool.pathway ? ` · ${tool.pathway}` : ''}` : 'No tool picked'}</div>
+          <ul className="card-list">
+            {feats.map((f) => {
+              const fit = (tool?.fit ?? []).find((x: any) => x.feature?.toLowerCase() === String(f.name).toLowerCase());
+              return <li key={f.id ?? f.name}><span className="card-k">{f.name}</span><span className="card-v">{fit ? (fit.fit === 'yes' ? '✓' : fit.fit === 'no' ? `✗ ${fit.note}` : `partly: ${fit.note}`) : f.what ?? ''}</span></li>;
+            })}
+          </ul>
+        </>
+      ) : <div className="hint warn">No features or tool yet. Use Edit to list the features and pick the tool.</div>}
     </Card>
   );
 }

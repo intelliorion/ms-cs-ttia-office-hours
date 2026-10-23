@@ -390,6 +390,7 @@ export const UNDERSTAND_SCHEMA: JsonSchema = {
 };
 
 const cap = (v: unknown, max: number) => String(v ?? '').slice(0, max);
+const oneLine = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : v);
 
 /** Only what the triage needs, every string capped. */
 function triageData(input: TriageInput) {
@@ -459,7 +460,88 @@ export const TOOL_GUIDE: Record<string, string> = {
   'custom app': 'Only when nothing above can do it: a vibe-coded custom app is TTIA-Led and belongs to the CSIC Repository, not a Café build.',
 };
 
-export interface ToolPickFeature { name: string; what: string; tool: string; reason: string; flags: FeatureFlag[]; context: string[]; pros: string[]; cons: string[] }
+/** Flags a feature can carry; the tool's own flags (custom-app, no-build) belong to the tool. */
+export const FEATURE_ONLY_FLAGS = ['needs-live-system', 'personal-data', 'reuse-existing'] as const;
+export const FIT_VALUES = ['yes', 'partly', 'no'] as const;
+export const FEATURES_MAX = 12;
+export const FEATURES_SUGGEST_MAX = 8;
+
+/** What the team's answers added, as the "Learned since the form" brief holds it (names coded). */
+export interface LearnedBrief { topic: string; text: string }
+
+/* ---- Step 1: the feature list ---- */
+
+export interface FeatureListInput {
+  idea: IdeaText;
+  support: string[];
+  teamAnswers?: { question: string; answer: string }[];
+  learned?: LearnedBrief[];
+  /** The operator's rows: kept as they are; only new features are wanted. */
+  existingFeatures?: { name: string; what?: string }[];
+  guidance?: string;
+}
+export interface FeatureSuggestion { name: string; what: string; flags: (typeof FEATURE_ONLY_FLAGS)[number][] }
+export interface FeatureListOutput { features: FeatureSuggestion[] }
+
+export const FEATURE_LIST_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['features'],
+  properties: {
+    features: {
+      type: 'array', minItems: 1, maxItems: FEATURES_SUGGEST_MAX,
+      items: {
+        type: 'object', additionalProperties: false, required: ['name', 'what', 'flags'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 60 },
+          what: { type: 'string', maxLength: 160 },
+          flags: { type: 'array', maxItems: FEATURE_ONLY_FLAGS.length, items: { type: 'string', enum: FEATURE_ONLY_FLAGS } },
+        },
+      },
+    },
+  },
+};
+
+const learnedData = (l: LearnedBrief[] | undefined) =>
+  (l?.length ? { learned: l.slice(0, 8).map((p) => ({ topic: cap(p.topic, 30), text: cap(p.text, 280) })) } : {});
+const answersData = (a: { question: string; answer: string }[] | undefined) =>
+  (a?.length ? { teamAnswers: a.slice(0, 12).map((x) => ({ question: cap(x.question, 200), answer: cap(x.answer, 500) })) } : {});
+
+export const featureListTask: Task<FeatureListOutput> = {
+  name: 'feature-list',
+  schema: FEATURE_LIST_SCHEMA,
+  prompt(input) {
+    const inp = input as FeatureListInput;
+    const data = {
+      idea: ideaData(inp.idea),
+      support: (Array.isArray(inp.support) ? inp.support : []).slice(0, 20).map((s) => cap(s, 200)),
+      ...answersData(inp.teamAnswers), ...learnedData(inp.learned),
+      ...(inp.existingFeatures?.length ? { existingFeatures: inp.existingFeatures.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}) })) } : {}),
+    };
+    return build('feature-list', [
+      "List the features a proof of concept of this Creators' Café idea needs: what it must do, as the operator and the team would name the parts. The operator decides; they add, change and remove features.",
+      'A feature is a thing the proof of concept does (for example "Request intake", "Weekly summary"), never a tool or product: the tool is picked afterwards, once, for the whole list. Never name a tool.',
+      `Give 1 to ${FEATURES_SUGGEST_MAX} features, the smallest set that shows the idea works. name: a short noun phrase, at most 60 characters. what: what it does, in one line, at most 160 characters.`,
+      'Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty; work from what is there.',
+      ...(data.teamAnswers ? ['"teamAnswers" are the team\'s replies to our questions: part of the form now, and later than it.'] : []),
+      ...(data.learned ? ['"learned" is the brief of what the team\'s answers added since the form (Learned since the form). It outranks the form where they differ.'] : []),
+      ...(data.existingFeatures ? ['"existingFeatures" are the operator\'s features. Keep them out of your list (the app keeps them); add only features that are missing, under new names.'] : []),
+      'Flags: "needs-live-system" when the feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "reuse-existing" when something that already exists could do it.',
+      "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data. Never name people.",
+      ...(inp.guidance ? ['Guidance from the brainstorming skill (guidance, not data):', cap(inp.guidance, 6000)] : []),
+    ], FEATURE_LIST_SCHEMA, data, "a Café idea, the team's answers and the operator's features");
+  },
+  parse: (raw) => parseChecked<FeatureListOutput>(raw, FEATURE_LIST_SCHEMA, (v) => {
+    const o = asObj(v);
+    if (o && Array.isArray(o.features)) for (const f of o.features) { const x = asObj(f); if (x) { x.name = trimStrings(oneLine(x.name), 60); x.what = trimStrings(oneLine(x.what), 160); } }
+  }),
+};
+
+/* ---- Step 2: the one tool, suggested or evaluated ---- */
+
+/** The one tool for the whole feature list: why, its pros and cons, and how it covers each feature. */
+export interface ToolPickChoice {
+  tool: string; reason: string; flags: FeatureFlag[]; context: string[]; pros: string[]; cons: string[];
+  fit: { feature: string; fit: (typeof FIT_VALUES)[number]; note: string }[];
+}
 export interface ToolPickInput {
   idea: IdeaText;
   support: string[];
@@ -467,7 +549,10 @@ export interface ToolPickInput {
   builderNamed?: boolean;
   /** The team's replies to questions sent earlier (Import answers and answered design steps): part of the form now. */
   teamAnswers?: { question: string; answer: string }[];
-  existingFeatures?: { name: string; what?: string; tool?: string; reason?: string }[];
+  /** The feature list the tool is for (the operator's, saved or not). */
+  features?: { name: string; what?: string }[];
+  /** The operator's own tool: evaluate THIS tool for the features, never change it. Absent: suggest one. */
+  evaluate?: string;
   /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
   guidance?: string;
   /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
@@ -477,8 +562,8 @@ export interface ToolPickInput {
   flags?: string[];
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
 }
-/** The pick when enough is known, what is still needed to be sure, and what the answers change (as the decision's). */
-export interface ToolPickOutput { pick?: ToolPickFeature; needs: ReviewNeed[]; updates?: ReviewUpdates; learned?: LearnedPoint[] }
+/** The tool when enough is known, what is still needed to be sure, and what the answers change (as the decision's). */
+export interface ToolPickOutput { pick?: ToolPickChoice; needs: ReviewNeed[]; updates?: ReviewUpdates; learned?: LearnedPoint[] }
 
 export const TOOL_PICK_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false, required: ['needs', 'updates', 'learned'],
@@ -486,16 +571,25 @@ export const TOOL_PICK_SCHEMA: JsonSchema = {
     updates: UPDATES_SCHEMA,
     learned: LEARNED_SCHEMA,
     pick: {
-      type: 'object', additionalProperties: false, required: ['name', 'what', 'tool', 'reason', 'flags', 'context', 'pros', 'cons'],
+      type: 'object', additionalProperties: false, required: ['tool', 'reason', 'flags', 'context', 'pros', 'cons', 'fit'],
       properties: {
-        name: { type: 'string', minLength: 1, maxLength: 60 },
-        what: { type: 'string', maxLength: 160 },
         tool: { type: 'string', enum: APPROVED_TOOLS },
         reason: { type: 'string', maxLength: 160 },
         flags: { type: 'array', maxItems: FEATURE_FLAGS.length, items: { type: 'string', enum: FEATURE_FLAGS } },
         context: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'string', minLength: 1, maxLength: 160 } },
         pros: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
         cons: { type: 'array', maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
+        fit: {
+          type: 'array', maxItems: FEATURES_MAX,
+          items: {
+            type: 'object', additionalProperties: false, required: ['feature', 'fit', 'note'],
+            properties: {
+              feature: { type: 'string', minLength: 1, maxLength: 60 },
+              fit: { type: 'string', enum: FIT_VALUES },
+              note: { type: 'string', maxLength: 200 },
+            },
+          },
+        },
       },
     },
     needs: {
@@ -518,9 +612,10 @@ function trimToolPick(v: unknown): void {
   if (!o) return;
   const x = asObj(o.pick);
   if (x) {
-    x.name = trimStrings(x.name, 60); x.what = trimStrings(x.what, 160); x.reason = trimStrings(x.reason, 160);
+    x.reason = trimStrings(x.reason, 160);
     if (Array.isArray(x.context)) x.context = x.context.map((c) => trimStrings(c, 160));
     for (const k of ['pros', 'cons']) if (Array.isArray(x[k])) x[k] = (x[k] as unknown[]).map((c) => trimStrings(c, 200));
+    if (Array.isArray(x.fit)) for (const f of x.fit) { const y = asObj(f); if (y) { y.feature = trimStrings(oneLine(y.feature), 60); y.note = trimStrings(oneLine(y.note), 200); } }
   }
   if (Array.isArray(o.needs)) for (const n of o.needs) {
     const y = asObj(n); if (!y) continue;
@@ -538,17 +633,13 @@ function toolPickData(input: ToolPickInput) {
     idea: ideaData(input.idea),
     support: (Array.isArray(input.support) ? input.support : []).slice(0, 20).map((s) => cap(s, 200)),
     builderNamed: Boolean(input.builderNamed),
-    ...(input.teamAnswers?.length ? { teamAnswers: input.teamAnswers.slice(0, 12).map((a) => ({ question: cap(a.question, 200), answer: cap(a.answer, 500) })) } : {}),
+    ...answersData(input.teamAnswers),
     ...(input.todo?.length ? { todo: input.todo.slice(0, 8).map((t) => ({ need: cap(t.need, NEED_MAX), ask: cap(t.ask, ASK_MAX) })) } : {}),
     ...(input.form?.participation ? { form: { participation: cap(input.form.participation, 40) } } : {}),
     ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
     ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
-    ...(input.existingFeatures?.length ? {
-      existingFeatures: input.existingFeatures.slice(0, 6).map((f) => ({
-        name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}),
-        ...(f.tool ? { tool: cap(f.tool, 40) } : {}), ...(f.reason ? { reason: cap(f.reason, 160) } : {}),
-      })),
-    } : {}),
+    ...(input.features?.length ? { features: input.features.slice(0, FEATURES_MAX).map((f) => ({ name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}) })) } : {}),
+    ...(input.evaluate ? { evaluate: cap(input.evaluate, 40) } : {}),
   };
 }
 
@@ -558,13 +649,17 @@ export const toolPickTask: Task<ToolPickOutput> = {
   prompt(input) {
     const inp = input as ToolPickInput;
     const data = toolPickData(inp);
+    const mode = data.evaluate
+      ? [`The operator has chosen the tool: DATA.evaluate. Evaluate THAT tool for this idea and its features. "pick.tool" must be exactly "${data.evaluate}": never change it and never suggest another tool instead; say honestly in cons and fit what it cannot do.`]
+      : ["Pick the one approved tool to build a proof of concept of this Creators' Café idea, or say what you need to know first. The operator decides; you only suggest, and the operator can change the tool."];
     return build('tool-pick', [
-      "Pick the one approved tool to build a proof of concept of this Creators' Café idea, or say what you need to know first. The operator decides; you only suggest, and the operator can change the tool.",
-      'First judge whether the form says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes and the support requested. Some may be empty.',
-      'If enough is known, return "pick": ONE tool for the whole proof of concept, as one feature that is the whole idea. Never split the idea into features with a tool each.',
+      ...mode,
+      'First judge whether DATA says enough: what the idea must do, what input it works on, whether a live system or personal data is involved, and who would build it. Use the idea title, challenge, current process, outcomes, the support requested and the features. Some may be empty.',
+      'If enough is known, return "pick": ONE tool for the whole proof of concept and every feature in DATA.features. Never give a tool per feature.',
       'pros: 1 to 5 short lines on what this tool does well for this idea. cons: 0 to 5 short lines, each a part of the idea this tool cannot do or does',
       'poorly, named, and how to cover it when there is a way (for example "Cannot send the reminder emails on its own: add Power Automate"). Be honest:',
       'a con is how the operator sees the limits before choosing.',
+      'fit: one item per feature in DATA.features, with "feature" exactly its name, "fit" "yes" (the tool does it), "partly" or "no" (it cannot), and "note": for partly or no, what is missing and how to cover it; for yes, a few words or "".',
       'needs: what you still need to know to be sure of the tool, as a to-do list. Each item: need (what is needed, a few words,',
       `at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters),`,
       'met (true only if DATA now covers it), and, when met, answer (what covered it in a few words). Keep every item in DATA.todo, in the same',
@@ -573,16 +668,15 @@ export const toolPickTask: Task<ToolPickOutput> = {
       'cannot pick at all, give no pick and the open needs. When everything is known, every item is met (or there are none) and there is a pick.',
       ...(data.teamAnswers ? ['"teamAnswers" are the team\'s replies to questions sent earlier. Treat them as part of the form. Never ask again anything answered there, even in other words; if what you would have asked is answered, pick.'] : []),
       ...(inp.guidance ? ['Guidance from the brainstorming skill on telling a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
-      ...(data.existingFeatures ? ['"existingFeatures" are features the operator already has. If one has a tool, keep it unless clearly wrong, and return it as the pick.'] : []),
       'Approved tools (use exactly one of these labels for "tool"; anything else is not on the approved list):',
       ...APPROVED_TOOLS.map((t) => `- ${t}: ${TOOL_GUIDE[t]}`),
       'Capability goes up, autonomy goes down: prefer the simplest tool that can show the idea works.',
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data.",
       'Flags: "needs-live-system" when it needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "custom-app" when the tool is custom app; "reuse-existing" when something that already exists could do it; "no-build" when Microsoft Copilot can do it with no build. A live non-Microsoft system, personal data or a custom app is a CSIC flag, not a Café build.',
-      '"context": 1 to 6 short lines listing the facts from the form you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
-      'name: a short noun phrase, at most 60 characters. what: what it does, at most 160 characters. reason: why this tool, at most 160 characters. In the pick, never name people.',
+      '"context": 1 to 6 short lines listing the facts from DATA you relied on and the rule that led to the tool, for example "Input is a form-shaped request; builderNamed is true; no live non-Microsoft system → Power Apps, Citizen-Led". The operator reads these to check your reasoning.',
+      'reason: why this tool, at most 160 characters. In the pick, never name people.',
       ...answerRules('teamAnswers'),
-    ], TOOL_PICK_SCHEMA, data, "a Café idea and the operator's current features");
+    ], TOOL_PICK_SCHEMA, data, "a Café idea, its features and the team's answers");
   },
   parse: (raw) => parseChecked<ToolPickOutput>(raw, TOOL_PICK_SCHEMA, trimToolPick),
 };
@@ -595,6 +689,12 @@ export type DesignStepTag = (typeof DESIGN_TAGS)[number];
 export interface DesignStepInput {
   idea: IdeaText;
   features: { name: string; what?: string; tool?: string }[];
+  /** The one tool chosen in the Tool picker: its cons and the features it fits partly or not at all are what to design around. */
+  tool?: { tool: string; pathway?: string; cons: string[]; gaps: { feature: string; fit: string; note: string }[] };
+  /** "Learned since the form": what the team's answers added (names coded). Settled; never asked again. */
+  learned?: LearnedBrief[];
+  /** The team's answers so far (names coded). Settled; never asked again. */
+  teamAnswers?: { question: string; answer: string }[];
   stepsSoFar: { question: string; answer: string }[];
   /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
   guidance: string;
@@ -620,7 +720,6 @@ export const DESIGN_STEP_SCHEMA: JsonSchema = {
   },
 };
 
-const oneLine = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : v);
 
 function trimDesignStep(v: unknown): void {
   const o = asObj(v);
@@ -653,6 +752,14 @@ function designStepData(input: DesignStepInput) {
     features: (Array.isArray(input.features) ? input.features : []).slice(0, 12).map((f) => ({
       name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.tool ? { tool: cap(f.tool, 40) } : {}),
     })),
+    ...(input.tool?.tool ? {
+      tool: {
+        tool: cap(input.tool.tool, 40), ...(input.tool.pathway ? { pathway: cap(input.tool.pathway, 60) } : {}),
+        cons: (input.tool.cons ?? []).slice(0, 5).map((c) => cap(c, 200)),
+        gaps: (input.tool.gaps ?? []).slice(0, FEATURES_MAX).map((g) => ({ feature: cap(g.feature, 60), fit: cap(g.fit, 10), note: cap(g.note, 200) })),
+      },
+    } : {}),
+    ...learnedData(input.learned), ...answersData(input.teamAnswers),
     stepsSoFar: (Array.isArray(input.stepsSoFar) ? input.stepsSoFar : []).slice(0, 20).map((s) => ({
       question: cap(s.question, 200), answer: cap(s.answer, 1000),
     })),
@@ -664,6 +771,7 @@ export const designStepTask: Task<DesignStepOutput> = {
   schema: DESIGN_STEP_SCHEMA,
   prompt(input) {
     const i = input as DesignStepInput;
+    const data = designStepData(i);
     return build('design-step', [
       "You run a short design conversation with the operator of the Creators' Café to design a proof of concept for one idea. Each call, reply with the NEXT single question for the operator (in the JSON \"question\" field), or say the design is done.",
       'Follow this guidance from the brainstorming skill. You produce one question per reply; the operator answers between replies. Prefer multiple choice: give 2 to 4 short "suggested" answers the operator can pick.',
@@ -673,10 +781,17 @@ export const designStepTask: Task<DesignStepOutput> = {
       "Café rules: never ask about value, return on investment, savings, costs, benefits or KPIs. Never ask for personal, client or third-party data, or for anyone's name. A proof of concept uses synthetic, aggregated or sample data.",
       'Aim to settle, in whatever order fits: the one thing the proof of concept must show (tag "must-show"); the smallest synthetic or aggregated input it needs (tag "smallest-input"); who uses it (tag "users"); what it replaces (tag "replaces"); who builds it, as a role, never a name (tag "builder"). Use tag null for any other question.',
       '"stepsSoFar" are the questions already asked and the answers. Never ask one of them again. An answer of "(not known yet; asked the team)" means move on.',
+      '"features" are the operator\'s feature list for the proof of concept: design for those features, not others.',
+      ...(data.tool ? [
+        `"tool" is the one tool already chosen for the whole proof of concept (${data.tool.tool}). Do not ask which tool to use. Aim your questions at what it means for this build:`,
+        'how to cover each feature in "tool.gaps" (the tool does it only partly, or not at all; the note says what is missing) and each of "tool.cons". Ask how the team wants to cover a gap (a second step, a manual stand-in, leaving it out of the proof of concept) before smaller points.',
+      ] : ['No tool is chosen yet: never pick or ask for one; design what the features must do.']),
+      ...(data.learned || data.teamAnswers ? ['"learned" (the brief of what the team told us since the form) and "teamAnswers" are settled. Never ask anything they already answer, even in other words; build on them.'] : []),
+      'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
       'When the five points are settled, or the answers so far are enough to build a small proof of concept, reply {"done": true, "summary": "..."}: what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
       'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "tag": ...}: question at most 200 characters, why (one line on why it matters) at most 160, each suggested answer at most 120.',
       'The idea title may be the only thing there; work from what is there.',
-    ], DESIGN_STEP_SCHEMA, designStepData(i), "a Café idea, its features and the design answers so far");
+    ], DESIGN_STEP_SCHEMA, data, "a Café idea, its features, the chosen tool and the design answers so far");
   },
   parse: parseDesignStep,
 };

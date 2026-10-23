@@ -425,8 +425,8 @@ Each action section has a home stage. Before it, the section is hidden; at it, t
 | Stage | Editable | Cards |
 |---|---|---|
 | 1 Review and Select | Decision (the choice first, the five checks fold away under it); the acknowledgement (E1) is sent from Emails | |
-| 2 Design series | Tool picker, then Design, then Plan and kits | Decision |
-| 3 Launch and Learn | nothing new | Decision, Tools, Design, Plan |
+| 2 Design series | Features and tool, then Design, then Plan and kits | Decision |
+| 3 Launch and Learn | nothing new | Decision, Features and tool, Design, Plan |
 
 There is no Submit Idea stage: an imported idea starts in Review and Select, and the checks that used to sit in
 Submit Idea (own words, no personal data, duplicates, acknowledgement) are Review and Select steps. In the files the
@@ -436,56 +436,71 @@ with stage 1 is read as Review and Select.
 ## Design series: tool picker, brainstorm, plan and kits
 
 An idea's details (the left panel) carry three more sections, after Review and before Stage. They are meant
-for an idea in Café Work. They take the idea from "which tool for which part" to a plan a builder can start from. The AI suggests;
+for an idea in Café Work. They take the idea from "what must it do, and with which tool" to a plan a builder can start from. The AI suggests;
 nothing is saved until you press a button, and you can do everything except plan.md by hand.
 
 **What you see**
 
-1. **Tool picker.** One row per feature: a name, one line on what it does, and a tool from the approved list
-   (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or custom app). **Suggest with AI** asks for
-   ONE tool for the whole proof of concept: one suggested row with its **Pros** (what the tool does well for this
-   idea) and **Cons** (each part of the idea it cannot do, or does poorly, and how to cover it, such as "add Power
-   Automate"), and a folded "Why this tool" list (the facts it relied on). The tool drop-down stays yours to change. Like the
-   decision, it also keeps a **What you need** to-do list: what it still needs to be sure of the tool, each with the
-   question for the team and a box for the answer. **✉ Draft email** opens the open questions (E2) in Outlook;
-   **Re-evaluate** reads your answers (and any the Import recorded) and updates the list and the pick. When the form
-   says too little to pick at all, it gives only the list. As with the decision, the answers also propose updates to
-   the record under **From your answers** (one list for both) and rewrite the Submission's **Learned since the form**. **Add feature** adds an
-   empty row. Each row shows
-   its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any other tool is
-   Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the picks and links each
-   feature to its tool in the universe. A tool that is not on the approved list is refused.
+1. **Features and tool** (the tool picker), in two steps.
+   - **Features.** A list of what the proof of concept must do: one row per feature, a name and one line on what
+     it does. A feature has no tool of its own. **Add feature** adds an empty row and **×** removes one. **Suggest
+     features with AI** fills the list from the idea, the team's answers and the Submission's **Learned since the
+     form** brief (people's names are coded before the AI sees them). It never drops or changes a row you have; it
+     only adds features with new names.
+   - **Tool.** ONE tool from the approved list (Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, UiPath or
+     custom app) for the whole list. **Suggest a tool** asks the AI for it, with a reason, its **Pros** (what the tool
+     does well for this idea), its **Cons** (each part it cannot do, or does poorly, and how to cover it, such as "add
+     Power Automate"), how it fits **each feature** (✓, partly or ✗, with a note on what is missing), and a folded "Why
+     this tool" list (the facts it relied on). The drop-down is yours: pick another tool and the AI evaluates THAT tool
+     against the features (it may not change it; a reply about another tool is refused), and the choice shows as
+     "Your choice". With no AI connected the tool still changes, with its pros, cons and fit cleared and a note that
+     they need the AI. If you change the features after a tool is chosen, the panel says the evaluation is out of date
+     and offers **Re-evaluate the tool for the new features**.
+   - Like the decision, the tool step keeps a **What you need** to-do list: what the AI still needs to be sure of
+     the tool, each with the question for the team and a box for the answer. **✉ Draft email** opens the open
+     questions (E2) in Outlook; **Re-evaluate** reads your answers (and any the Import recorded) and updates the list
+     and the tool (your own tool is evaluated again, not replaced). When the form says too little to pick at all, it
+     gives only the list. The answers also propose updates to the record under **From your answers** (one list for
+     both) and rewrite the Submission's **Learned since the form**.
+   - The tool shows its pathway: custom app is TTIA-Led, Microsoft Copilot is Citizen-Led with no build, and any
+     other tool is Citizen-Led with a named builder or Assisted Citizen without one. **Save** writes the features and
+     the tool, approach.md and design.md, ticks "Tool picked", and links every feature to the one tool in the
+     universe. A tool that is not on the approved list is refused. Older records that had a tool on each feature open
+     with one tool: the most common one, with its pros and cons, as your choice.
 2. **Design.** A short brainstorm, one question at a time: what the proof of concept must show, the smallest
-   input it needs, who builds it, and so on. Each question comes with a reason and suggested answers. Pick
+   input it needs, who builds it, and so on. The questions build on the features and the tool: the AI gets the
+   feature list, the tool, its cons and the features it covers only partly or not at all, and asks first how to
+   cover those. It never asks again what the team's answers or the Learned since the form brief already settle
+   (names are coded before it sees them). Each question comes with a reason and suggested answers. Pick
    one, type your own, or press **I don't know → ask the team**: the question goes into the idea's questions
    email (E2), sent from ✉ Emails, and when the team's reply comes in through the Import, it fills the answer. The live
    design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
    flags, each "Clean" or listed.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
    example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
-   It never closes the idea on its own. Changing the picks or the design afterwards un-approves it, and it
+   It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it
    needs approving again.
-4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks grouped by tool, risks, the same
-   Café check) and a starter kit for each picked tool. For a custom app, **Copy build instruction** copies a
+4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, the same
+   Café check) and a starter kit for the picked tool, covering every feature. For a custom app, **Copy build instruction** copies a
    ready-made instruction for Claude Code or GitHub Copilot. Running it again rewrites only the files the app
    made and keeps any you added.
 
 **The files it writes** (under `ideas/<id>/`):
 
 ```
-approach.md            the features and the tool picked for each, with its pathway
-design.yaml            the design's state: features, questions and answers, summary, approval date
+approach.md            the features, then the one tool: pathway, reason, pros, cons, a fit table per feature, why
+design.yaml            the design's state: features, the tool, questions and answers, summary, approval date
 design.md              the design, readable, ending with the Café check
-plan.md                the plan: the one thing to show, tasks by tool, risks, the Café check
-kit/<tool>/...         a starter kit per picked tool, all Markdown: topics, screens, a flow, a process,
+plan.md                the plan: the one thing to show, tasks for the tool, risks, the Café check
+kit/<tool>/...         the starter kit for the picked tool, all Markdown: topics, screens, a flow, a process,
                        prompts, or for a custom app README.md and BUILD-WITH-AGENT.md
 ```
 
-A plan task whose tool no feature picked is listed under "Not picked" in plan.md, with no kit. If the plan's
+A plan task on a tool other than the one picked is listed under "Not picked" in plan.md, with no kit. If the plan's
 own words mention value (ROI, savings, costs and so on), plan.md lists them under the Café check as "Value
 words in the plan".
 
-**With no AI.** Add the features and pick their tools by hand, write questions and their suggested answers
+**With no AI.** Add the features and pick the tool by hand, write questions and their suggested answers
 by hand (**Add a question by hand**), answer them, then **Finish by hand** with a short summary, and
 approve. plan.md and the kits need an AI.
 
@@ -502,7 +517,7 @@ text inside the brainstorm and plan prompts. It never executes them.
   third-party data.
 - The app writes no application code. The kits are outlines, checklists and, for a custom app, an
   instruction for a coding agent that works only inside the kit folder.
-- The stage never moves on its own. Saving the picks, answering the must-show and smallest-input questions
+- The stage never moves on its own. Saving the features and tool, answering the must-show and smallest-input questions
   and approving the design tick their steps in the background (s3e, s3c, s3d, s3f).
 
 ## Tests

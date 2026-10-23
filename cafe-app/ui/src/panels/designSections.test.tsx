@@ -31,7 +31,9 @@ const STATE = {
 const CHECK = { valueWords: [], dataFlags: [], csicFlags: ['custom app'], ok: false };
 const designState = (extra: any = {}) => ({
   version: 1, status: 'designing', cafeCheck: CHECK,
-  features: [{ id: 'request-form', name: 'Request form', what: 'Collects requests', tool: 'Power Apps', reason: 'A simple form', pathway: 'Assisted Citizen', flags: [] }],
+  features: [{ id: 'request-form', name: 'Request form', what: 'Collects requests', flags: [] }],
+  tool: { tool: 'Power Apps', pathway: 'Assisted Citizen', by: 'ai', reason: 'A simple form', pros: ['Quick to build'], cons: [], context: [], flags: [],
+    fit: [{ feature: 'Request form', fit: 'yes', note: '' }], evaluatedFor: ['Request form'], at: '2026-10-20' },
   steps: [
     { n: 1, question: 'What must it show?', suggested: ['Sorting', 'Drafting'], source: 'ai-suggested', why: 'One thing well.' },
     { n: 2, question: 'Smallest input?', suggested: [], source: 'operator', askedTeam: { emailKey: 'k1' } },
@@ -61,33 +63,108 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); el.remove(); });
 
+/** Types into a controlled input the way React sees it. */
+const type = async (input: HTMLInputElement, value: string) => {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+};
+/** Picks an option in the tool drop-down. */
+const choose = async (value: string) => {
+  const sel = el.querySelector('[data-action="tool"]') as HTMLSelectElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(sel, value);
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await flush();
+};
+const SUGGESTED = { tool: 'Power Apps', by: 'ai', reason: 'Form-shaped', pros: ['Quick to build'], cons: ["Can't send reminders on its own: add Power Automate"],
+  context: ['Form-shaped input', 'No live system → Power Apps'], flags: [],
+  fit: [{ feature: 'Request form', fit: 'yes', note: '' }, { feature: 'Reminders', fit: 'no', note: 'Add Power Automate' }], evaluatedFor: ['Request form', 'Reminders'] };
+
 describe('ToolPickerSection', () => {
-  it('Save posts only name, what, tool, reason and flags (no id or pathway)', async () => {
-    api.designPost.mockImplementation(async (_id: string, what: string) => {
-      if (what === 'tools/suggest') {
-        return { provider: 'fake', features: [
-          designState().features[0],
-          { name: 'Scheduler', what: 'Picks a slot', tool: 'custom app', reason: 'No low-code tool', flags: [] },
-        ] };
-      }
-      return { state: designState(), designMd: '' };
-    });
+  const mount = async (opts: { noAi?: boolean; state?: any } = {}) => {
     const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
     await act(async () => root.render(
-      <ToolPickerSection idea={IDEA} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} aiName={() => 'Fake'} call={call} />,
+      <ToolPickerSection idea={IDEA} design={{ state: opts.state ?? designState(), designMd: '' }} busy={false} aiWorking={false} noAi={Boolean(opts.noAi)} aiName={() => 'Fake'} call={call} />,
     ));
-    await click('[data-action="tools-suggest"]');
+  };
+  const names = () => [...el.querySelectorAll('.tp-row .tp-name')].map((i) => (i as HTMLInputElement).value);
+
+  it('features first, then the tool: two steps in that order', async () => {
+    await mount();
+    const steps = [...el.querySelectorAll('[data-testid="tool-picker"] .tp-step')].map((x) => x.getAttribute('data-testid'));
+    expect(steps).toEqual(['tp-features', 'tp-tool']);
+    expect(el.querySelector('[data-testid="tp-features"] [data-action="tool"]')).toBeNull();
+    expect(el.querySelector('[data-testid="tp-tool"] [data-testid="tool-choice"]')!.getAttribute('data-tool')).toBe('Power Apps');
+  });
+
+  it('Suggest features with AI keeps the operator rows and adds only new names; add and remove work by hand', async () => {
+    api.designPost.mockImplementation(async (_id: string, what: string) => (what === 'tools/features/suggest'
+      ? { provider: 'fake', features: [{ id: 'request-form', name: 'Request form', what: 'Collects requests', flags: [] }, { name: 'request FORM', what: 'dup', flags: [] }, { name: 'Reminders', what: 'Sends reminders', flags: [] }] }
+      : {}));
+    await mount();
+    await click('[data-action="features-suggest"]');
     await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/features/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }] }]);
+    expect(names()).toEqual(['Request form', 'Reminders']);
     expect(el.querySelectorAll('.tp-row.suggested')).toHaveLength(1);
+    await click('[data-action="tools-add"]');
+    await type([...el.querySelectorAll('.tp-row .tp-name')].pop() as HTMLInputElement, 'Summary');
+    expect(names()).toEqual(['Request form', 'Reminders', 'Summary']);
+    await click('.tp-row[data-feature="Request form"] [data-action="feature-remove"]');
+    expect(names()).toEqual(['Reminders', 'Summary']);
+  });
+
+  it('changing the features after a tool is chosen marks it out of date; Re-evaluate sends the tool fixed with the new list', async () => {
+    api.designPost.mockImplementation(async () => ({ provider: 'fake', tool: { ...SUGGESTED, by: 'operator', evaluatedFor: ['Request form', 'Reminders'] }, state: designState() }));
+    await mount();
+    expect(el.querySelector('[data-testid="tool-stale"]')).toBeNull();
+    await click('[data-action="tools-add"]');
+    await type([...el.querySelectorAll('.tp-row .tp-name')].pop() as HTMLInputElement, 'Reminders');
+    expect(el.querySelector('[data-testid="tool-stale"]')!.textContent).toContain('Re-evaluate the tool for the new features');
+    await click('[data-action="tools-evaluate-features"]');
+    await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }, { name: 'Reminders', flags: [] }], tool: 'Power Apps' }]);
+    expect(el.querySelector('[data-testid="tool-stale"]')).toBeNull();
+  });
+
+  it('overriding the tool asks the AI to evaluate THAT tool, and shows its pros, cons and fit as the operator\'s choice', async () => {
+    let finish!: (v: unknown) => void;
+    api.designPost.mockImplementation(() => new Promise((r) => { finish = r; }));
+    await mount();
+    await choose('UiPath');
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }], tool: 'UiPath' }]);
+    // While the AI works the drop-down shows the tool picked.
+    expect((el.querySelector('[data-action="tool"]') as HTMLSelectElement).value).toBe('UiPath');
+    await act(async () => { finish({ provider: 'fake', tool: { tool: 'UiPath', by: 'operator', reason: 'Clicks', pros: ['Copies the clicks'], cons: ['Cannot read a form'], context: ['c'], flags: [],
+      fit: [{ feature: 'Request form', fit: 'partly', note: 'Needs a sample form' }], evaluatedFor: ['Request form'] }, state: designState() }); });
+    await flush();
+    const c = el.querySelector('[data-testid="tool-choice"]')!;
+    expect(c.getAttribute('data-tool')).toBe('UiPath');
+    expect(c.getAttribute('data-by')).toBe('operator');
+    expect(c.textContent).toContain('Your choice');
+    expect(c.querySelector('.tp-cons li')!.textContent).toBe('Cannot read a form');
+    expect([...c.querySelectorAll('[data-testid="tool-fit"] li')].map((li) => [li.getAttribute('data-fit'), li.textContent])).toEqual([['partly', 'partlyRequest formNeeds a sample form']]);
+  });
+
+  it('with no AI the override still applies, with pros and cons cleared and a note that they need the AI; Save posts it', async () => {
+    api.designPost.mockImplementation(async () => ({ state: designState(), designMd: '' }));
+    await mount({ noAi: true });
+    await choose('Dataiku');
+    expect(api.designPost.mock.calls.filter((c: any[]) => c[1] === 'tools/suggest')).toEqual([]);
+    const c = el.querySelector('[data-testid="tool-choice"]')!;
+    expect(c.getAttribute('data-tool')).toBe('Dataiku');
+    expect(c.querySelector('[data-testid="tool-pros-cons"]')).toBeNull();
+    expect(c.querySelector('[data-testid="tool-needs-ai"]')!.textContent).toContain('need the AI');
     await click('[data-action="tools-save"]');
     await flush();
-    const saved = api.designPost.mock.calls.find((c) => c[1] === 'tools');
-    expect(saved).toBeTruthy();
-    expect(saved![0]).toBe(ID);
-    expect(saved![2]).toEqual({ features: [
-      { name: 'Request form', what: 'Collects requests', tool: 'Power Apps', reason: 'A simple form', flags: [] },
-      { name: 'Scheduler', what: 'Picks a slot', tool: 'custom app', reason: 'No low-code tool', flags: ['custom-app'] },
-    ] });
+    const saved = api.designPost.mock.calls.find((x: any[]) => x[1] === 'tools')!;
+    expect(saved[2]).toEqual({
+      features: [{ name: 'Request form', what: 'Collects requests', flags: [] }],
+      tool: { tool: 'Dataiku', by: 'operator', reason: '', pros: [], cons: [], context: [], flags: [], fit: [], evaluatedFor: ['Request form'], needsAi: true },
+    });
   });
 });
 
@@ -251,7 +328,9 @@ describe('IdeaDetails design sections', () => {
     useStore.setState({ state: { ...STATE, ideas: [{ ...IDEA, stage: 4 }] } } as any);
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
-    expect(el.querySelector('[data-testid="tools-card"]')!.textContent).toContain('Power Apps');
+    const card = el.querySelector('[data-testid="tools-card"]')!;
+    expect(card.textContent).toContain('Power Apps · Assisted Citizen');
+    expect(card.textContent).toContain('Request form');
     expect(el.querySelector('[data-testid="design-card"]')!.textContent).toContain('Shows sorted requests.');
     expect(el.querySelector('[data-testid="plan-card"]')!.textContent).toContain('plan.md');
     expect(el.querySelector('[data-testid="tool-picker"]')).toBeNull();
@@ -279,26 +358,33 @@ describe('IdeaDetails design sections', () => {
     expect(plan.textContent).toContain('approve it again');
   });
 
-  it('the one suggested tool shows its pros and cons (why this tool folded), and Save posts them with the row', async () => {
+  it('the one suggested tool shows its pros, cons and fit per feature (why this tool folded), and Save posts it with the features', async () => {
     api.designPost.mockImplementation(async (_id: string, route: string, body: any) => (route === 'tools/suggest'
-      ? { features: [{ name: 'Intake', what: 'Takes requests', tool: 'Power Apps', reason: 'Form-shaped', flags: [], context: ['Form-shaped input', 'No live system → Power Apps'], pros: ['Quick to build'], cons: ["Can't send reminders on its own: add Power Automate"] }], provider: 'fake' }
-      : { state: designState({ features: body.features.map((f: any, i: number) => ({ id: `f${i}`, ...f })) }), designMd: '# Design' }));
-    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [] }), designMd: '# Design' } : { files: [] }));
+      ? { tool: SUGGESTED, provider: 'fake', state: designState({ features: [] }) }
+      : { state: designState({ features: body.features.map((f: any, i: number) => ({ id: `f${i}`, ...f })), tool: body.tool }), designMd: '# Design' }));
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: designState({ features: [], tool: undefined }), designMd: '# Design' } : { files: [] }));
     await act(async () => root.render(<IdeaDetails id={ID} />));
     await flush();
+    await click('[data-action="tools-add"]');
+    await type(el.querySelector('.tp-row .tp-name') as HTMLInputElement, 'Request form');
+    await click('[data-action="tools-add"]');
+    await type([...el.querySelectorAll('.tp-row .tp-name')].pop() as HTMLInputElement, 'Reminders');
     await click('[data-action="tools-suggest"]');
     await flush();
+    expect(api.designPost.mock.calls[0][2]).toEqual({ features: [{ name: 'Request form', flags: [] }, { name: 'Reminders', flags: [] }] });
     const pc = el.querySelector('[data-testid="tool-pros-cons"]')!;
     expect(pc.querySelector('.tp-pros li')!.textContent).toBe('Quick to build');
     expect(pc.querySelector('.tp-cons li')!.textContent).toBe("Can't send reminders on its own: add Power Automate");
+    expect([...el.querySelectorAll('[data-testid="tool-fit"] li')].map((li) => li.getAttribute('data-fit'))).toEqual(['yes', 'no']);
+    expect(el.querySelector('[data-testid="tool-fit"] li[data-fit="no"]')!.textContent).toContain('Add Power Automate');
     const ctx = el.querySelector('[data-testid="tool-context"]') as HTMLDetailsElement;
     expect(ctx.open).toBe(false);
     expect(ctx.textContent).toContain('No live system → Power Apps');
-    expect(el.querySelectorAll('.tp-row')).toHaveLength(1);
     await click('[data-action="tools-save"]');
     await flush();
     const saveCall = api.designPost.mock.calls.find((c: any[]) => c[1] === 'tools')!;
-    expect(saveCall[2].features[0]).toMatchObject({ context: ['Form-shaped input', 'No live system → Power Apps'], pros: ['Quick to build'], cons: ["Can't send reminders on its own: add Power Automate"] });
+    expect(saveCall[2].features.map((f: any) => f.name)).toEqual(['Request form', 'Reminders']);
+    expect(saveCall[2].tool).toMatchObject({ tool: 'Power Apps', by: 'ai', pros: ['Quick to build'], context: ['Form-shaped input', 'No live system → Power Apps'], fit: SUGGESTED.fit });
   });
 
   const toolPrep = (needs: any[]) => ({ at: '2026-10-21', provider: 'fake', needs });

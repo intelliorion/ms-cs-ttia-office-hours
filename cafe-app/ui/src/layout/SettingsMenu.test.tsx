@@ -17,7 +17,7 @@ describe('Settings', () => {
     await act(async () => (el.querySelector('[data-action="settings"]') as HTMLButtonElement).click());
     expect([...el.querySelectorAll('.set-h')].map((h) => h.textContent)).toEqual(['AI connector', 'Project', 'Theme']);
     expect(el.querySelector('[data-action="ai"]')?.textContent).toContain('Claude Code');
-    expect([...el.querySelectorAll('.theme-row b')].map((b) => b.textContent)).toEqual(['Default', 'Frost']);
+    expect([...el.querySelectorAll('.theme-row b')].map((b) => b.textContent)).toEqual(['Default', 'Frost', 'Blueprint']);
     await act(async () => (el.querySelector('[data-theme-id="frost"]') as HTMLButtonElement).click());
     expect(useStore.getState().theme).toBe('frost');
     expect(localStorage.getItem('cafe-theme')).toBe('frost');

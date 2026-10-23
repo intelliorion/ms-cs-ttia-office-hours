@@ -40,6 +40,8 @@ export function ringColour(node: GNode, ring: Record<string, string> = STAGE_RIN
 /** The scene's colours for a theme: Default is the night sky; Frost is baubles on a light winter morning. */
 export interface ScenePalette {
   frost: boolean;
+  /** Blueprint: wireframe stars on drafting blue, no glow. */
+  blueprint?: boolean;
   bg: string;
   link: string;
   /** Links in view (a selection's, or between lit stars). */
@@ -54,7 +56,13 @@ export const FROST: ScenePalette = {
   frost: true, bg: '#eef3f8', link: '#8a9bb0', linkHot: '#1f6f5c', unconfirmed: '#b8862b', linkBoost: 2.4,
   ring: { 2: '#b8862b', 3: '#1f6f5c', 4: '#7a5aa8', closed: '#a3b0bd' },
 };
-export const paletteFor = (theme?: string): ScenePalette => (theme === 'frost' ? FROST : NIGHT);
+export const BLUEPRINT: ScenePalette = {
+  frost: false, blueprint: true, bg: '#123e6b', link: '#d6e6ff', linkHot: '#ffd166', unconfirmed: '#ffd166', linkBoost: 1.7,
+  ring: { 2: '#ffd166', 3: '#8fdcff', 4: '#ffffff', closed: '#6f8db3' },
+};
+/** Blueprint draws each kind's colour lightened toward the white of the drawing, so every star reads on blue. */
+export const BLUEPRINT_TINT = 0.35;
+export const paletteFor = (theme?: string): ScenePalette => (theme === 'frost' ? FROST : theme === 'blueprint' ? BLUEPRINT : NIGHT);
 
 /** The node itself plus its direct neighbours. */
 export function neighbourhood(graph: Pick<Graph, 'edges'>, id: string): Set<string> {

@@ -47,8 +47,9 @@ panels, large white titles and pill buttons at the bottom.
 - **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
   Rounds, Review pack (this writes the file), and ⚙ Settings: the AI connector (a dot shows whether an
   AI is answering), Project configuration (your name for the signature, the form, CSIC and Teams links, the
-  distribution list, capacity; kept in rules/settings.yaml) and the theme: Default (the night sky) or Frost (a
-  light winter morning: the stars become glossy baubles with gold caps on silver threads, with snow falling).
+  distribution list, capacity; kept in rules/settings.yaml) and the theme: Default (the night sky), Frost (a
+  light winter morning: the stars become glossy baubles with gold caps on silver threads, with snow falling) or
+  Blueprint (a drafting table: wireframe stars and drafted circles on blue, white pencil links, chalk-yellow highlights).
   The theme is remembered in this browser only.
 
 ## Run it

@@ -116,3 +116,13 @@ describe('edge styles for what is in view', () => {
     expect(edgeStyle({ from: 'a', to: 'c', confirmed: true }, 'c', lit)).toMatchObject({ opacity: LINK_IN_VIEW, pulse: true });
   });
 });
+
+describe('theme palettes', () => {
+  it('each theme has its own scene: night glows, Frost and Blueprint do not', async () => {
+    const { paletteFor } = await import('./graphView');
+    expect(paletteFor('default').frost).toBe(false);
+    expect(paletteFor('frost').frost).toBe(true);
+    expect(paletteFor('blueprint')).toMatchObject({ frost: false, blueprint: true, bg: '#123e6b' });
+    expect(paletteFor('unknown')).toBe(paletteFor('default'));
+  });
+});

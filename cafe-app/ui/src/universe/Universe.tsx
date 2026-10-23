@@ -12,6 +12,7 @@ import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
 import { DIM, bounds, degrees, dimFromHide, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
 import { Snowfall } from './Snowfall';
+import { DraftingTable } from './DraftingTable';
 
 export interface UniverseProps {
   graph: Graph;
@@ -179,7 +180,9 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
 
   return (
     <>
-      {palette.frost
+      {palette.blueprint
+        ? <DraftingTable floorY={-radius * 1.3} reach={radius * 4.5} />
+        : palette.frost
         ? <Snowfall floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
         : <><Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} /><ambientLight intensity={0.2} /></>}
       <group ref={spin}>
@@ -196,7 +199,7 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
       />
       {/* Lite draws straight to the screen: no bloom passes, no multisampled buffers. */}
       {/* Bloom makes light glow, which only works on dark: Frost has none. */}
-      {!lite && !palette.frost && (
+      {!lite && !palette.frost && !palette.blueprint && (
         <EffectComposer multisampling={4}>
           <Bloom intensity={1.1} luminanceThreshold={0.2} luminanceSmoothing={0.25} mipmapBlur />
         </EffectComposer>

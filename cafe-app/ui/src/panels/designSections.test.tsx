@@ -137,6 +137,20 @@ describe('ToolPickerSection', () => {
     expect(el.querySelector('[data-testid="tool-stale"]')).toBeNull();
   });
 
+  it('a fit the design made out of date says so, and offers Re-evaluate the tool (the tool fixed)', async () => {
+    const st = designState();
+    st.tool.fit = [{ feature: 'Request form', fit: 'yes', note: '', stale: true } as any];
+    api.designPost.mockImplementation(async () => ({ provider: 'fake', tool: { ...SUGGESTED, by: 'operator', evaluatedFor: ['Request form'], fit: [{ feature: 'Request form', fit: 'yes', note: '' }] }, state: designState() }));
+    await mount({ state: st });
+    expect(el.querySelector('[data-testid="tool-stale"]')).toBeNull();
+    expect(el.querySelector('[data-testid="tool-fit"] li.stale')!.textContent).toContain('Out of date.');
+    expect(el.querySelector('[data-testid="tool-fit-stale"]')!.textContent).toMatch(/The design changed what some features do.*Re-evaluate the tool/);
+    await click('[data-action="tools-reevaluate-fit"]');
+    await flush();
+    expect(api.designPost.mock.calls[0]).toEqual([ID, 'tools/suggest', { features: [{ name: 'Request form', what: 'Collects requests', flags: [] }], tool: 'Power Apps' }]);
+    expect(el.querySelector('[data-testid="tool-fit-stale"]')).toBeNull();
+  });
+
   it('overriding the tool asks the AI to evaluate THAT tool, and shows its pros, cons and fit as the operator\'s choice', async () => {
     let finish!: (v: unknown) => void;
     api.designPost.mockImplementation(() => new Promise((r) => { finish = r; }));

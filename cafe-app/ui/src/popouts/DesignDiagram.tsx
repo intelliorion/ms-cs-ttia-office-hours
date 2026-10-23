@@ -9,7 +9,7 @@ const LABEL_TAB = 120;
 
 export interface DiagramContext {
   features: { name: string; what?: string; scope?: { status: 'out' | 'outside'; by?: string; why?: string } }[];
-  fit: { feature: string; fit: string; note?: string }[];
+  fit: { feature: string; fit: string; note?: string; stale?: boolean }[];
   steps: { n: number; question: string; answer?: string }[];
   tool?: string;
 }
@@ -19,7 +19,10 @@ export function gapOf(n: Pick<PlacedNode, 'kind' | 'feature'>, ctx: DiagramConte
   const f = n.feature ? ctx.features.find((x) => x.name.toLowerCase() === n.feature!.toLowerCase()) : undefined;
   if (f?.scope) return { scope: f.scope.status === 'out' ? `Out of scope${f.scope.why ? `: ${f.scope.why}` : ''}` : `Done with ${f.scope.by}, outside the ${ctx.tool ?? 'main'} build` };
   const x = n.feature ? ctx.fit.find((y) => y.feature.toLowerCase() === n.feature!.toLowerCase()) : undefined;
-  if (x && x.fit !== 'yes') return { fit: x.fit, ...(x.note ? { note: x.note } : {}) };
+  // A fit the design made out of date still shows, said to be out of date until the tool is evaluated again.
+  const old = x?.stale ? 'out of date: re-evaluate the tool' : '';
+  if (x && x.fit !== 'yes') return { fit: x.fit, note: [x.note, old].filter(Boolean).join('; ') };
+  if (old) return { note: old };
   if (n.kind === 'gap') return { fit: 'no' };
   return null;
 }
@@ -152,8 +155,8 @@ export function DesignDiagram({ spec, ctx }: { spec: DiagramSpec; ctx: DiagramCo
               if (!gap) return node.feature ? <div className="dd-card-s ok"><div className="dd-card-l">Fit</div><div>{FIT_WORD.yes}</div></div> : null;
               return (
                 <div className="dd-card-s warn" data-testid="diagram-gap">
-                  <div className="dd-card-l">{gap.scope ? 'Moved by the design' : 'Gap'}</div>
-                  <div>{gap.scope ?? FIT_WORD[gap.fit!] ?? gap.fit}{gap.note ? `: ${gap.note}` : ''}</div>
+                  <div className="dd-card-l">{gap.scope ? 'Moved by the design' : gap.fit ? 'Gap' : 'Fit'}</div>
+                  <div>{gap.scope ?? (gap.fit ? FIT_WORD[gap.fit] ?? gap.fit : FIT_WORD.yes)}{gap.note ? `: ${gap.note}` : ''}</div>
                 </div>
               );
             })()}

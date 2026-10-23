@@ -143,6 +143,7 @@ cafe-app/tests/data-tasks.test.ts
 cafe-app/tests/dataFixtures.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
+cafe-app/tests/design-kit-cleanup.test.ts
 cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-old-flags.test.ts

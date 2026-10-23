@@ -86,7 +86,7 @@ export interface ToolView {
   cons: string[];
   context: string[];
   flags: string[];
-  fit: { feature: string; fit: 'yes' | 'partly' | 'no'; note: string }[];
+  fit: { feature: string; fit: 'yes' | 'partly' | 'no'; note: string; stale?: boolean }[];
   evaluatedFor: string[];
   needsAi?: boolean;
   at?: string;
@@ -128,7 +128,7 @@ export function toolView(raw: any, tools: readonly string[] = APPROVED_TOOLS): T
   if (!raw || typeof raw !== 'object' || !tools.includes(raw.tool)) return null;
   const fit = (Array.isArray(raw.fit) ? raw.fit : [])
     .filter((x: any) => x && str(x.feature) && ['yes', 'partly', 'no'].includes(x.fit))
-    .map((x: any) => ({ feature: str(x.feature), fit: x.fit, note: str(x.note) }));
+    .map((x: any) => ({ feature: str(x.feature), fit: x.fit, note: str(x.note), ...(x.stale === true ? { stale: true } : {}) }));
   return {
     tool: raw.tool, ...(str(raw.pathway) ? { pathway: raw.pathway } : {}), by: raw.by === 'ai' ? 'ai' : 'operator', reason: str(raw.reason),
     pros: lines(raw.pros, 5), cons: lines(raw.cons, 5), context: lines(raw.context, 6), flags: flagsFor(raw.tool, lines(raw.flags, 5)),
@@ -147,6 +147,8 @@ export function overrideTool(tool: string, rows: FeatureRow[]): ToolView {
 
 export const NEEDS_AI_NOTE = 'Pros, cons and fit need the AI: connect one and Re-evaluate.';
 export const STALE_NOTE = 'The features changed since the tool was evaluated.';
+/** A design answer changed what these features do after the tool was evaluated. */
+export const FIT_STALE_NOTE = 'The design changed what some features do since the tool was evaluated: their fit may no longer hold.';
 export const FIT_MARK: Record<string, string> = { yes: '✓', partly: 'partly', no: '✗' };
 export const FIT_WORD: Record<string, string> = { yes: 'Does it', partly: 'Partly', no: "Can't do it" };
 

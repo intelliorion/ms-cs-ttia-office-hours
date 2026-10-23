@@ -7,8 +7,14 @@ export type Pathway = 'Citizen-Led' | 'Assisted Citizen' | 'TTIA-Led';
 export type FitLevel = 'yes' | 'partly' | 'no';
 export const FIT_LEVELS: readonly FitLevel[] = ['yes', 'partly', 'no'];
 
-/** How the tool covers one feature: "no" says what it can't do and, in the note, how to cover it. */
-export interface ToolFit { feature: string; fit: FitLevel; note: string }
+/**
+ * How the tool covers one feature: "no" says what it can't do and, in the note, how to cover it. `stale`: a design
+ * answer changed what the feature does after the tool was evaluated, so this fit may no longer hold (Re-evaluate).
+ */
+export interface ToolFit { feature: string; fit: FitLevel; note: string; stale?: boolean }
+
+/** Said wherever a fit is out of date. */
+export const FIT_STALE = 'out of date: the design changed this feature; re-evaluate the tool';
 
 /** The one tool: suggested by the AI, or the operator's own choice (then evaluated by the AI for that tool). */
 export interface ToolChoice {

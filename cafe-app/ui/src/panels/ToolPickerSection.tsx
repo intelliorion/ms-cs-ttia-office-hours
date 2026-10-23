@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, approvedTools, CUSTOM_APP, CUSTOM_APP_NOTE, emptyRow, featureRows, features, featuresBody, FIT_MARK, FIT_WORD, flagWord,
-  mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, retiredNote, STALE_NOTE, toolView,
+  mergeRows, NEEDS_AI_NOTE, outOfDate, overrideTool, pathwayText, picksBody, picksProblem, retiredNote, STALE_NOTE, FIT_STALE_NOTE, toolView,
   scopeLabel, type FeatureRow, type ToolView,
 } from './designHelpers';
 import { TodoList, Updates, updatesFrom } from './ReviewSelect';
@@ -197,6 +197,13 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                   onClick={() => void askTool(choice.tool)}>Re-evaluate the tool for the new features</button>
               </div>
             )}
+            {!stale && !choice.needsAi && choice.fit.some((x) => x.stale) && (
+              <div className="hint warn tp-stale" data-testid="tool-fit-stale">
+                {FIT_STALE_NOTE}{' '}
+                <button className="link-btn" data-action="tools-reevaluate-fit" disabled={noAi || off} title={noAi ? NO_AI_TIP : undefined}
+                  onClick={() => void askTool(choice.tool)}>Re-evaluate the tool</button>
+              </div>
+            )}
             {choice.needsAi && <div className="hint warn" data-testid="tool-needs-ai">{NEEDS_AI_NOTE}</div>}
             {choice.reason && <div className="tp-why">{choice.reason}</div>}
             {(choice.pros.length > 0 || choice.cons.length > 0) && (
@@ -219,10 +226,10 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
                     );
                   }
                   return (
-                    <li key={f.name} data-fit={x?.fit ?? 'unknown'} title={x ? FIT_WORD[x.fit] : 'Not evaluated'}>
+                    <li key={f.name} data-fit={x?.fit ?? 'unknown'} className={x?.stale ? 'stale' : undefined} title={x ? `${FIT_WORD[x.fit]}${x.stale ? ' (out of date)' : ''}` : 'Not evaluated'}>
                       <span className={`tp-fit-m ${x?.fit ?? 'unknown'}`}>{x ? FIT_MARK[x.fit] : '–'}</span>
                       <span className="tp-fit-f">{f.name}</span>
-                      {x?.note && <span className="tp-fit-n">{x.note}</span>}
+                      {(x?.note || x?.stale) && <span className="tp-fit-n">{x?.stale && <em className="tp-fit-stale">Out of date. </em>}{x?.note}</span>}
                     </li>
                   );
                 })}

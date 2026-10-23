@@ -21,7 +21,7 @@ import {
 } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, mdLine, type DesignFeature, type DesignState, skillGuidance } from './store';
 
-import { FIT_LEVELS, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
+import { FIT_LEVELS, FIT_STALE, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
 
 /** Where each approved tool lands on the pathway ladder (Café skill, Part 3). */
 export const PATHWAYS: Record<string, string> = {
@@ -94,7 +94,7 @@ function fitFor(raw: unknown, features: { name: string }[]): ToolFit[] {
   for (const r of Array.isArray(raw) ? raw : []) {
     const k = nameKey(r?.feature);
     const fit = String(r?.fit ?? '') as FitLevel;
-    if (k && FIT_LEVELS.includes(fit) && !given.has(k)) given.set(k, { feature: '', fit, note: str(r?.note, 200) });
+    if (k && FIT_LEVELS.includes(fit) && !given.has(k)) given.set(k, { feature: '', fit, note: str(r?.note, 200), ...(r?.stale === true ? { stale: true } : {}) });
   }
   return features.flatMap((f) => { const g = given.get(nameKey(f.name)); return g ? [{ ...g, feature: f.name }] : []; });
 }
@@ -180,8 +180,9 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
     out.push('| Feature | Fit | Note |', '| --- | --- | --- |');
     for (const f of state.features) {
       const x = fits.get(nameKey(f.name));
-      const moved = f.scope ? (f.scope.status === 'out' ? 'Out of scope' : `Outside the build (${f.scope.by})`) : '';
-      out.push(`| ${cell(f.name)} | ${moved ? cell(moved) : x ? FIT_WORD[x.fit] : 'Not evaluated'} | ${cell(x?.note)} |`);
+      const moved = f.scope ? (f.scope.status === 'out' ? 'Out of scope' : `Covered by ${f.scope.by}, outside the build`) : '';
+      const fit = x ? `${FIT_WORD[x.fit]}${x.stale ? ` (${FIT_STALE})` : ''}` : 'Not evaluated';
+      out.push(`| ${cell(f.name)} | ${moved ? cell(moved) : fit} | ${moved ? '' : cell(x?.note)} |`);
     }
   }
   if (t.context.length) { out.push('', '## Why this tool', ''); for (const c of t.context) out.push(`- ${mdLine(c)}`); }

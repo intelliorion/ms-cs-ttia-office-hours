@@ -95,7 +95,23 @@ describe('the AI proposes feature changes; the code checks them', () => {
     expect(md).not.toMatch(/Claimant query drafting\*\* \(Dataiku\)/);
     const ap = renderApproachMd(sampleIdea(), s);
     expect(ap).toContain('- ~~**Flagged claims review list**~~ — out of scope (Leave marking out)');
-    expect(ap).toContain('| Claimant query drafting | Outside the build (Microsoft Copilot + SharePoint) |');
+    expect(ap).toContain('| Claimant query drafting | Covered by Microsoft Copilot + SharePoint, outside the build |  |');
+    expect(ap).toContain('| Flagged claims review list | Out of scope |  |');
+  });
+
+  it('the tool\'s fit follows the changes: none for a feature out of scope or done with another tool; out of date for one reworded', () => {
+    const { tool } = planFeatureChanges(state(), [
+      { name: 'Flagged claims review list', change: 'drop', why: 'Leave marking out' },
+      { name: 'Claimant query drafting', change: 'outside-tool', by: 'Microsoft Copilot + SharePoint' },
+      { name: 'Weekend spend check', change: 'reword', what: 'Flags weekend spend on weekday policies' },
+    ], '2026-10-20', 4);
+    expect(tool!.fit).toEqual([{ feature: 'Weekend spend check', fit: 'yes', note: '', stale: true }]);
+    expect(tool!.evaluatedFor).toEqual(TOOL.evaluatedFor);
+    // approach.md says the reworded feature's fit is out of date.
+    const ap = renderApproachMd(sampleIdea(), state({ tool: tool! }));
+    expect(ap).toContain('| Weekend spend check | Yes (out of date: the design changed this feature; re-evaluate the tool) |');
+    // No tool, nothing to follow.
+    expect(planFeatureChanges(state({ tool: undefined }), [{ name: 'Weekend spend check', change: 'drop' }], 'x').tool).toBeUndefined();
   });
 
   it('a save from the tool picker keeps the scope; a bad one is dropped', () => {
@@ -147,9 +163,12 @@ describe('the feature list follows the design (fake AI)', () => {
     expect(edges).not.toContain('capability:claimant-query-drafting BUILT_WITH tool:dataiku');
     expect(edges).toContain('capability:weekend-spend-check BUILT_WITH tool:dataiku');
 
+    // The tool's fit follows: no fit for the two moved features; the one built keeps its own.
+    expect(st.tool!.fit.map((x) => x.feature)).toEqual(['Weekend spend check']);
     const dir = await ideaDir(s.root, ID);
     const approach = await readFile(path.join(dir, 'approach.md'), 'utf8');
     expect(approach).toContain('~~**Flagged claims review list**~~');
+    expect(approach).toContain('| Claimant query drafting | Covered by Microsoft Copilot, outside the build |');
     const hist = (await readHistory(dir)).filter((h) => h.action === 'design-feature').map((h) => h.detail);
     expect(hist).toHaveLength(2);
     expect(idea.stage).toBe(3);

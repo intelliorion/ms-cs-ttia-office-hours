@@ -553,6 +553,11 @@ nothing is saved until you press a button, and you can do everything except plan
    feature is no longer needed by the idea, and an outside one is not built with the main tool (it is built with
    the other tool only when that is one approved tool). In the tool picker, **Put it back** (then Save) returns a
    feature to the build.
+   The tool's fit follows too: a feature out of scope or done with another tool has no fit with the main tool any
+   more (approach.md says "Out of scope" or "Covered by Microsoft Copilot, outside the build"; the diagram and the
+   kits show the move); a feature whose job changed keeps its fit marked **out of date** (approach.md, the tool
+   picker, the diagram's card, the kits), and the tool picker offers **Re-evaluate the tool**, which evaluates the
+   same tool again.
    **See the design** opens the design pack with the design **drawn as an interactive diagram**, not a file: swim
    lanes for the data, the tool's build, any work done outside it and the people; rounded parts coloured by kind
    (input, store, step, output, person, gap) in the theme's colours; arrows with labels. Hover a part to light its

@@ -11,7 +11,7 @@ import { isApprovedTool } from '../graph/ontology';
 import { CSIC_NOTE, mdLine, type DesignFeature, type DesignState } from './store';
 import { builderOf, pathwayLabel } from './tools';
 import { rolesText } from '../ideas/people';
-import { csicFlags } from './choice';
+import { csicFlags, FIT_STALE } from './choice';
 import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
 import { checkFlow, FLOW_DIAGRAM_FILE, FLOW_FILE, FLOW_KIND_WORD, renderFlowHtml, type RecipeFlow } from './recipeFlow';
@@ -54,7 +54,7 @@ export interface KitContext {
   state: DesignState;
   tool: string;
   /** In the tool's build, with how the tool fits each. */
-  built: (DesignFeature & { fit?: string; note?: string })[];
+  built: (DesignFeature & { fit?: string; note?: string; stale?: boolean })[];
   /** Done with another tool, outside the build. */
   outside: DesignFeature[];
   out: DesignFeature[];
@@ -77,7 +77,9 @@ const join = (...parts: string[][]) => `${parts.flat().join('\n').replace(/\n{3,
 const same = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 const forFeature = <T extends { feature?: string }>(items: T[] | undefined, f: { name: string }) => (items ?? []).filter((x) => same(x.feature, f.name));
 const unmatched = <T extends { feature?: string }>(items: T[] | undefined, features: { name: string }[]) => (items ?? []).filter((x) => !features.some((f) => same(x.feature, f.name)));
-const fitWords = (f: { fit?: string; note?: string }) => (f.fit && f.fit !== 'yes' ? ` (${f.fit === 'no' ? 'the tool cannot do this' : 'the tool does this only partly'}${f.note ? `: ${mdLine(f.note)}` : ''})` : '');
+const fitWords = (f: { fit?: string; note?: string; stale?: boolean }) => (f.fit && f.fit !== 'yes'
+  ? ` (${f.fit === 'no' ? 'the tool cannot do this' : 'the tool does this only partly'}${f.note ? `: ${mdLine(f.note)}` : ''}${f.stale ? `; ${FIT_STALE}` : ''})`
+  : f.stale ? ` (the tool's fit is ${FIT_STALE})` : '');
 
 export function taskLines(tasks: DesignPlanTask[]): string[] {
   const out: string[] = [];

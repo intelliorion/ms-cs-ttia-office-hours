@@ -99,7 +99,7 @@ export function kitFiles(idea: Idea, state: DesignState, plan: DesignPlanOutput,
     const fits = new Map((state.tool?.fit ?? []).map((x) => [x.feature.toLowerCase(), x]));
     const built = features.filter((f) => !f.scope).map((f) => {
       const x = fits.get(f.name.toLowerCase());
-      return { ...f, ...(x ? { fit: x.fit, ...(x.note ? { note: x.note } : {}) } : {}) };
+      return { ...f, ...(x ? { fit: x.fit, ...(x.note ? { note: x.note } : {}), ...(x.stale ? { stale: true } : {}) } : {}) };
     });
     const folders = renderKit({
       idea, state, tool, built,

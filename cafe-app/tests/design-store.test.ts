@@ -96,8 +96,21 @@ describe('cafeCheck', () => {
 
   it('flags value words once each, in order', () => {
     const state = { ...emptyDesign(), summary: 'It saves 3 FTE and a 20% cost cut; ROI is great. Another FTE.' };
-    expect(cafeCheck(idea, state).valueWords).toEqual(['fte', '20%', 'cost', 'roi']);
-    expect(cafeCheck(idea, { ...emptyDesign(), summary: 'Annual savings of $5000' }).valueWords).toEqual(['savings', '$5000']);
+    expect(cafeCheck(idea, state).valueWords).toEqual(['fte', '20% cost', 'roi']);
+    expect(cafeCheck(idea, { ...emptyDesign(), summary: 'Annual savings of $5000' }).valueWords).toEqual(['savings of $5000']);
+  });
+
+  it('flags a percentage or money amount only next to value language, as the phrase', () => {
+    const words = (summary: string) => cafeCheck(idea, { ...emptyDesign(), summary }).valueWords;
+    for (const [text, phrase] of [
+      ['It saves 20% of the time.', 'saves 20%'], ['Replies go out 40% faster.', '40% faster'], ['About £250k a year.', '£250k a year'],
+      ['It would cut costs by 15%.', 'cut costs by 15%'], ['Worth $2m to the team.', 'worth $2m'],
+    ]) expect(words(text)).toEqual([phrase]);
+    for (const text of ['We review about 5% of claims.', 'Reviews 100% of claims instead of 5%.', 'Runs on a 5% sample.', 'It covers 300 people.']) {
+      expect(words(text)).toEqual([]);
+    }
+    // A cue on one line and a number on the next are not one phrase.
+    expect(words('It saves time.\n20% of claims are checked.')).toEqual([]);
   });
 
   it('does not flag bare symbols or word fragments', () => {

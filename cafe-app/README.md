@@ -479,7 +479,9 @@ nothing is saved until you press a button, and you can do everything except plan
    Design section (the same one list, each waiting for your Yes), and the Submission's **Learned since the form** is
    rewritten with what they add. Names are coded on the way out. A question added by hand changes neither. The live
    design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
-   flags, each "Clean" or listed.
+   flags, each "Clean" or listed. Value words (ROI, savings, benefits, KPI, hours saved, FTE, costs) flag on their
+   own; a percentage or money amount flags only next to value language, as the phrase ("saves 20%", "40% faster",
+   "£250k a year"), so "we review about 5% of claims" stays clean.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
    example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it

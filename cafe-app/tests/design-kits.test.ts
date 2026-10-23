@@ -336,19 +336,20 @@ describe('Task 6 carry-overs', () => {
     expect(Object.keys(kitFiles(idea, base, plan))).toEqual(['kit/power-apps/screens.md']);
   });
 
-  it("plan.md: the Café check's value-word scan also runs over the plan's titles, details, done-when lines and risks", () => {
+  it("plan.md: the Café check's value-word scan (words and value phrases) also runs over the plan's titles, details, done-when lines and risks", () => {
     const idea = sampleIdea({ stage: 3 });
-    expect(valueWordsIn('Saves 20% and cuts costs; ROI next')).toEqual(['20%', 'costs', 'roi']);
+    expect(valueWordsIn('Saves 20% and cuts costs; ROI next')).toEqual(['saves 20%', 'costs', 'roi']);
+    expect(valueWordsIn('We review about 5% of claims')).toEqual([]);
     const plan: DesignPlanOutput = {
       tasks: [t('Measure the ROI', 'Power Apps'), t('Build', 'Power Apps', { detail: 'Show the savings' }), t('Hand over', 'custom app', { done_when: 'Saves 20%' })],
       risks: ['KPI not agreed'],
     };
     const md = renderPlanMd(idea, base, plan);
-    expect(md).toContain('Value words in the plan: roi, savings, 20%, kpi');
+    expect(md).toContain('Value words in the plan: roi, savings, saves 20%, kpi');
     // The design's own check stays exactly as design.md has it.
     expect(cafeCheck(idea, base).valueWords).toEqual([]);
     expect(cafeSection(md).startsWith(cafeSection(renderDesignMd(idea, base)))).toBe(true);
-    expect(md.trimEnd().endsWith('Value words in the plan: roi, savings, 20%, kpi')).toBe(true);
+    expect(md.trimEnd().endsWith('Value words in the plan: roi, savings, saves 20%, kpi')).toBe(true);
     // A clean plan adds no line.
     expect(renderPlanMd(idea, base, { tasks: [t('A', 'Power Apps'), t('B', 'Power Apps'), t('C', 'custom app')], risks: [] })).not.toContain('Value words in the plan');
   });

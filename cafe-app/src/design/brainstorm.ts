@@ -6,8 +6,9 @@ import { loadSteps } from '../rules/stages';
 import { suggestion, type Suggest } from '../ideas/suggest';
 import { draftEmail, updateDraft } from '../comms/outbox';
 import { sameQuestion } from '../inbox/question';
-import { DESIGN_TAGS, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
-import { isDesignTag, POINT_MAX } from './points';
+import { DESIGN_TAGS, type DesignDiagramInput, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
+import { isDesignTag, pointOf, POINT_MAX } from './points';
+import { basisOf, checkDiagram, type DiagramSpec } from './diagram';
 import { scopeWords } from './choice';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
@@ -223,6 +224,64 @@ export function decodeStep(out: DesignStepOutput, codes: Map<string, Coded>): De
     ...(out.settled ? { settled: Object.fromEntries(Object.entries(out.settled).map(([k, v]) => [k, showNames(String(v), codes)])) } : {}),
     ...(out.features ? { features: out.features.map((f) => ({ ...f, ...(f.what ? { what: n(f.what) } : {}), ...(f.by ? { by: n(f.by) } : {}), ...(f.why ? { why: n(f.why) } : {}) })) } : {}),
   };
+}
+
+/**
+ * The diagram AI's input: the design with the people coded the way the design questions code them (the summary, each
+ * question and answer and each settled point ride in as extra answers, so their names get codes, then come back out).
+ */
+export async function codedDiagramInput(root: string, idea: Idea, state: DesignState): Promise<{ input: DesignDiagramInput; codes: Map<string, Coded> }> {
+  const points = DESIGN_TAGS.map((t) => [t, pointOf(state, t) ?? ''] as const);
+  const texts = [state.summary ?? '', ...state.steps.flatMap((s) => [s.question, s.answer?.trim() || ASKED_TEAM_ANSWER]), ...points.map(([, v]) => v)];
+  const { input: seen, codes } = await reviewInput(root, idea.id, texts.map((answer) => ({ question: 'T', answer })), { skipSource: DESIGN_SOURCE });
+  const all = (seen.answers ?? []).map((a) => a.answer);
+  const tail = all.slice(all.length - texts.length);
+  const t = state.tool;
+  const fits = new Map((t?.fit ?? []).map((x) => [x.feature.toLowerCase(), x]));
+  const outsideTools = [...new Set(state.features.filter((f) => f.scope?.status === 'outside').map((f) => f.scope!.by!))];
+  return {
+    codes,
+    input: {
+      idea: { id: idea.id, title: idea.title, challenge: seen.idea.challenge, current_process: seen.idea.current_process, outcomes: idea.outcomes },
+      ...(tail[0] ? { summary: tail[0] } : {}),
+      ...(t ? { tool: { tool: t.tool, pathway: t.pathway } } : {}),
+      features: state.features.map((f) => {
+        const x = fits.get(f.name.toLowerCase());
+        return {
+          name: f.name, ...(f.what ? { what: f.what } : {}), ...(x ? { fit: x.fit, ...(x.note ? { note: x.note } : {}) } : {}),
+          ...(f.scope ? { scope: scopeWords(f.scope, t?.tool) } : {}),
+        };
+      }),
+      steps: state.steps.map((s, i) => ({ n: s.n, question: tail[1 + 2 * i], answer: tail[2 + 2 * i], ...(s.tag ? { tag: s.tag } : {}) })),
+      points: Object.fromEntries(points.map(([k], i) => [k, tail[1 + 2 * state.steps.length + i]]).filter(([, v]) => v)),
+      outsideTools,
+    },
+  };
+}
+
+/**
+ * Draws the design diagram with the AI: names coded on the way out and restored on the way back, the reply checked
+ * against the design (checkDiagram), stored with the design it was drawn from. Throws when the AI fails; nothing changes.
+ */
+export async function drawDiagram(
+  root: string, id: string, run: (input: DesignDiagramInput) => Promise<{ provider: string; output: DiagramSpec }>, clock: Clock,
+): Promise<DesignState> {
+  const idea = await loadIdea(root, id);
+  const state = await readDesign(root, id);
+  const { input, codes } = await codedDiagramInput(root, idea, state);
+  const { provider, output } = await run(input);
+  const n = (s: string | undefined) => (s === undefined ? s : showNames(s, codes));
+  const decoded = {
+    lanes: output.lanes.map((l) => ({ ...l, label: n(l.label) })),
+    nodes: output.nodes.map((x) => ({ ...x, label: n(x.label), ...(x.detail ? { detail: n(x.detail) } : {}) })),
+    edges: output.edges.map((e) => ({ ...e, ...(e.label ? { label: n(e.label) } : {}) })),
+  };
+  const spec = checkDiagram(decoded, state);
+  // Read again: the design may have moved while the AI drew.
+  const now = await readDesign(root, id);
+  now.diagram = { spec, by: 'ai', at: clock(), provider, basis: basisOf(state) };
+  await writeDesign(root, id, now);
+  return now;
 }
 
 /** Refuses a new question while the last one is still open (one question at a time). */

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
-import { ideaGet, post } from '../api';
+import { designPost, ideaGet, post } from '../api';
+import { NO_AI_TIP } from './aiUi';
+import { DesignDiagram } from './DesignDiagram';
+import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
 import { CafeCheckCard } from '../panels/DesignSection';
 import { fileNote, packFiles, pointRows } from './designPack';
@@ -11,7 +14,9 @@ import { FIT_MARK, scopeLabel } from '../panels/designHelpers';
  * cons, the Café check, and each file it wrote with what it is and how to use it (open any one to read it here).
  */
 export function DesignPackPopout({ id }: { id: string }) {
-  const { state, closePopout } = useStore();
+  const { state, closePopout, ai } = useStore();
+  const noAi = !ai?.provider;
+  const [drawing, setDrawing] = useState(false);
   const idea = (state?.ideas ?? []).find((i: any) => i.id === id);
   const [design, setDesign] = useState<any>(null);
   const [plan, setPlan] = useState<{ files: string[] } | null>(null);
@@ -28,6 +33,16 @@ export function DesignPackPopout({ id }: { id: string }) {
   const features: any[] = s?.features ?? [];
   const tool: any = s?.tool;
   const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool));
+  // The AI's diagram when there is one, else a plain one drawn here from the design, so the pack never shows nothing.
+  const stored = s?.diagram;
+  const spec = stored?.spec ?? (s ? plainDiagram(s) : null);
+  const stale = Boolean(s && stored && isStale(stored, s));
+  const redraw = async () => {
+    setDrawing(true); setMsg(null);
+    try { const r = await designPost(id, 'design/diagram'); setDesign((d: any) => ({ ...d, state: r.state })); setMsg('Diagram redrawn.'); }
+    catch (e) { setMsg((e as Error).message); }
+    finally { setDrawing(false); }
+  };
   const view = async (f: string) => {
     if (open[f] !== undefined) { setOpen((o) => ({ ...o, [f]: undefined })); return; }
     try { const r = await post(`/api/ideas/${encodeURIComponent(id)}/design-file`, { path: f }); setOpen((o) => ({ ...o, [f]: r.text })); }
@@ -39,7 +54,7 @@ export function DesignPackPopout({ id }: { id: string }) {
   };
   const title = <><div className="pop-id">{id}</div><h2>{idea?.title ?? 'The design'}</h2></>;
   return (
-    <Modal title={title} label="The design" onClose={closePopout} width={1000} height={860}
+    <Modal title={title} label="The design" onClose={closePopout} width={1180} height={880}
       actions={<button className="btn" data-action="open-idea-folder" onClick={() => void openFolder()}>Open the folder</button>}>
       {msg && <div className="pop-strip"><div className="pop-notice ok" role="status">{msg}</div></div>}
       {!s ? <div className="hint" style={{ padding: 24 }}>Loading…</div> : (
@@ -62,6 +77,22 @@ export function DesignPackPopout({ id }: { id: string }) {
               ))}
             </dl>
           </section>
+          {spec && (
+            <section className="sec dp-sec" data-testid="pack-diagram">
+              <h3>The design, drawn <span className="sec-n">{stored ? `drawn by the AI${stored.at ? ` on ${stored.at}` : ''}` : 'a plain diagram from the design'}</span></h3>
+              {(stale || !stored) && (
+                <div className={`hint dd-note${stale ? ' warn' : ''}`} data-testid={stale ? 'diagram-stale' : 'diagram-plain'}>
+                  {stale ? 'The design changed since this was drawn.' : 'Drawn from the features and the answers. The AI can draw it in more detail.'}{' '}
+                  <button className="link-btn" data-action="diagram-redraw" disabled={noAi || drawing || !s.summary} title={noAi ? NO_AI_TIP : !s.summary ? 'Finish the design first' : undefined}
+                    onClick={() => void redraw()}>{drawing ? 'Drawing…' : stored ? 'Redraw' : 'Draw it with AI'}</button>
+                </div>
+              )}
+              {stored && !stale && (
+                <div className="dd-redraw"><button className="link-btn" data-action="diagram-redraw" disabled={noAi || drawing} title={noAi ? NO_AI_TIP : undefined} onClick={() => void redraw()}>{drawing ? 'Drawing…' : 'Redraw'}</button></div>
+              )}
+              <DesignDiagram spec={spec} ctx={{ features, fit: tool?.fit ?? [], steps, tool: tool?.tool }} />
+            </section>
+          )}
           {(features.length > 0 || tool) && (
             <section className="sec dp-sec">
               <h3>The tool</h3>

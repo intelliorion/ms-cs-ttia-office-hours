@@ -7,8 +7,9 @@ import type { Idea, PrepNeed } from '../ideas/idea';
 import { cafeCheck, type CafeCheck } from './cafecheck';
 import { legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
+import { diagramOf, type StoredDiagram } from './diagram';
 
-export type { Pathway, ToolChoice, DesignTag, FeatureScope };
+export type { Pathway, ToolChoice, DesignTag, StoredDiagram, FeatureScope };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
 export type StepSource = 'operator' | 'e2' | 'ai-suggested';
 
@@ -51,7 +52,8 @@ export interface DesignState {
   summary?: string;
   /** What the done reply said the earlier answers already settle, for points no question was tagged with (tag → one line). */
   settled?: Partial<Record<DesignTag, string>>;
-
+  /** The design diagram (the AI's, or the app's plain one), with the design it was drawn from (`basis`). */
+  diagram?: StoredDiagram;
   cafeCheck?: CafeCheck;
   approvedAt?: string;
   /** Older records: the picker's questions as sent. Read into toolPrep. */
@@ -116,11 +118,13 @@ function normalize(raw: Partial<DesignState>): DesignState {
       ...(scope ? { scope } : {}),
     };
   });
-  const { settled: rawSettled, ...others } = rest;
+  const { settled: rawSettled, diagram: rawDiagram, ...others } = rest;
   const settled = settledOf(rawSettled);
+  const diagram = diagramOf(rawDiagram);
   return {
     ...others,
     ...(settled ? { settled } : {}),
+    ...(diagram ? { diagram } : {}),
     version: 1,
     status: STATUSES.includes(raw.status as DesignStatus) ? (raw.status as DesignStatus) : 'not-started',
     features,

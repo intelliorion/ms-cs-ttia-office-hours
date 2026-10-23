@@ -22,12 +22,12 @@ import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../gra
 import { appendEdit, nextEditId } from '../graph/operator';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
-import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask } from '../ai/tasks';
+import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd } from '../design/store';
 import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
-  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, isDone, stepEvent, DesignError, SUMMARY_MAX,
+  applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, codedDesignInput, decodeStep, drawDiagram, isDone, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
 import { designPlanInput, writePlan, readPlan, NOT_APPROVED, PLAN_NEEDS_AI } from '../design/kits';
 import { extractInput, planAiLinks } from '../ai/apply';
@@ -291,7 +291,18 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const changed = await applyFeatureChanges(root, idea.id, output.features, clock);
     const out = await applyDesignEvent(root, await loadIdea(root, idea.id), stepEvent(output), clock);
     const said = changed.length ? { featureChanges: changed } : {};
-    return output.done ? { ...out, ...said } : { ...out, ...said, step: out.state.steps[out.state.steps.length - 1] };
+    if (!output.done) return { ...out, ...said, step: out.state.steps[out.state.steps.length - 1] };
+    // A finished design is drawn at once. If the AI cannot draw it, the pack draws a plain one and offers Redraw.
+    try {
+      const state = await drawDiagram(root, idea.id, (input) => ai.runWith(designDiagramTask, input), clock);
+      return { ...out, ...said, state };
+    } catch { return { ...out, ...said }; }
+  });
+  // Redraw the design diagram with the AI (on demand, or when the design changed since it was drawn).
+  add('POST', '/api/ideas/:id/design/diagram', async ({ params }) => {
+    const state = await readDesign(root, params.id);
+    if (!isDone(state)) throw new DesignError('Finish the design first');
+    return { state: await byHand(() => drawDiagram(root, params.id, (input) => ai.runWith(designDiagramTask, input), clock))() };
   });
   add('POST', '/api/ideas/:id/design/answer', async ({ params, body }) => {
     const idea = await loadIdea(root, params.id);

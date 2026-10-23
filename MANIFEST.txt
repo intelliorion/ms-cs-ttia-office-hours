@@ -37,6 +37,7 @@ cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
 cafe-app/src/design/cafecheck.ts
 cafe-app/src/design/choice.ts
+cafe-app/src/design/diagram.ts
 cafe-app/src/design/kits.ts
 cafe-app/src/design/points.ts
 cafe-app/src/design/scope.ts
@@ -108,6 +109,7 @@ cafe-app/tests/command-query.test.ts
 cafe-app/tests/command.test.ts
 cafe-app/tests/copilot-live.test.ts
 cafe-app/tests/design-brainstorm.test.ts
+cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-scope.test.ts
@@ -208,6 +210,7 @@ cafe-app/ui/src/panels/starProfile.ts
 cafe-app/ui/src/popouts/AiPopout.tsx
 cafe-app/ui/src/popouts/ConfigPopout.test.tsx
 cafe-app/ui/src/popouts/ConfigPopout.tsx
+cafe-app/ui/src/popouts/DesignDiagram.tsx
 cafe-app/ui/src/popouts/DesignPackPopout.tsx
 cafe-app/ui/src/popouts/Details.test.tsx
 cafe-app/ui/src/popouts/IdeaSections.test.tsx
@@ -223,7 +226,9 @@ cafe-app/ui/src/popouts/Modal.tsx
 cafe-app/ui/src/popouts/RoundPopout.tsx
 cafe-app/ui/src/popouts/aiUi.test.ts
 cafe-app/ui/src/popouts/aiUi.ts
+cafe-app/ui/src/popouts/designDiagram.test.tsx
 cafe-app/ui/src/popouts/designPack.ts
+cafe-app/ui/src/popouts/diagramLayout.ts
 cafe-app/ui/src/popouts/ideaHelpers.ts
 cafe-app/ui/src/popouts/ideaPopout.test.ts
 cafe-app/ui/src/popouts/inboxHelpers.test.ts

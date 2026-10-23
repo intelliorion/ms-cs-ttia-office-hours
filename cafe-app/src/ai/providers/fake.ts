@@ -246,6 +246,26 @@ function featureChangesFor(prompt: string) {
   return [];
 }
 
+/** A diagram for any finished design: the data lane, the tool lane with each feature, the output and who reads it. */
+function diagramFor(prompt: string) {
+  const data = dataOf(prompt) as { tool?: { tool: string }; features?: { name: string; scope?: string }[] };
+  const built = (data.features ?? []).filter((f) => !f.scope).slice(0, 6);
+  const nodes = [
+    { id: 'input', lane: 'data', label: 'Sample requests', kind: 'input', detail: 'Twenty made-up requests in one sheet.' },
+    ...built.map((f, i) => ({ id: `s${i + 1}`, lane: 'tool', label: f.name.slice(0, 40), kind: 'step', detail: `Builds ${f.name}.`, feature: f.name })),
+    { id: 'out', lane: 'tool', label: 'Sorted list', kind: 'output', detail: 'The list with a type on every request.' },
+    { id: 'team', lane: 'people', label: 'The team', kind: 'person', detail: 'Reads the sorted list.' },
+  ];
+  return {
+    lanes: [{ id: 'data', label: 'Data', kind: 'data' }, { id: 'tool', label: data.tool?.tool ?? 'The tool', kind: 'tool' }, { id: 'people', label: 'People', kind: 'person' }],
+    nodes,
+    edges: [
+      ...built.map((_, i) => ({ from: 'input', to: `s${i + 1}` })), ...built.map((_, i) => ({ from: `s${i + 1}`, to: 'out' })),
+      { from: 'out', to: 'team', label: 'reads' },
+    ],
+  };
+}
+
 /** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */
 const DESIGN_PLAN = {
   tasks: [
@@ -295,7 +315,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: feature-list')) return JSON.stringify(featuresFor(prompt));
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : toolPickFor(prompt));
       if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS, features: featureChangesFor(prompt) });
-
+      if (prompt.startsWith('TASK: design-diagram')) return JSON.stringify(diagramFor(prompt));
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';

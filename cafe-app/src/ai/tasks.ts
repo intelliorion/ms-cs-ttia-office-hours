@@ -4,7 +4,9 @@ import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
 import { QUERY_GUIDE, QUERY_SCHEMA } from '../command/query';
 import { BUILD_HINTS, BUILD_TAGS, DESIGN_TAGS, POINT_MAX } from '../design/points';
-
+import {
+  DETAIL_MAX, EDGE_LABEL_MAX, EDGES_MAX, LABEL_MAX, LANE_KINDS, LANES_MAX, NODE_KINDS, NODES_MAX, type DiagramSpec,
+} from '../design/diagram';
 
 export interface Task<T> {
   name: string;
@@ -874,6 +876,96 @@ export const designStepTask: Task<DesignStepOutput> = {
     ], DESIGN_STEP_SCHEMA, data, "a Café idea, its features, the chosen tool and the design answers so far");
   },
   parse: parseDesignStep,
+};
+
+/* ---------- Design diagram: the finished design as lanes, parts and arrows ---------- */
+
+export interface DesignDiagramInput {
+  idea: IdeaText;
+  summary?: string;
+  /** The one tool and its pathway. */
+  tool?: { tool: string; pathway?: string };
+  /** The features with how the tool fits each, and where the design moved one ("out of scope", "<tool>, outside the build"). */
+  features: { name: string; what?: string; fit?: string; note?: string; scope?: string }[];
+  /** The design questions with their numbers, answers and what they settle (names coded). */
+  steps: { n: number; question: string; answer: string; tag?: string }[];
+  /** Each settled point by its tag (must-show … environment), from the answers or the done reply (names coded). */
+  points: Record<string, string>;
+  /** Other tools the answers name for work outside the main build. */
+  outsideTools: string[];
+}
+
+const LANE_ITEM: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['id', 'label', 'kind'],
+  properties: { id: { type: 'string', minLength: 1, maxLength: 24 }, label: { type: 'string', minLength: 1, maxLength: LABEL_MAX }, kind: { type: 'string', enum: LANE_KINDS } },
+};
+const NODE_ITEM: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['id', 'lane', 'label', 'kind'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 24 }, lane: { type: 'string', minLength: 1, maxLength: 24 },
+    label: { type: 'string', minLength: 1, maxLength: LABEL_MAX }, kind: { type: 'string', enum: NODE_KINDS },
+    detail: { type: 'string', maxLength: DETAIL_MAX }, feature: { type: 'string', maxLength: 60 }, step: { type: 'integer', minimum: 1, maximum: 40 },
+  },
+};
+const EDGE_ITEM: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['from', 'to'],
+  properties: { from: { type: 'string', minLength: 1, maxLength: 24 }, to: { type: 'string', minLength: 1, maxLength: 24 }, label: { type: 'string', maxLength: EDGE_LABEL_MAX } },
+};
+export const DESIGN_DIAGRAM_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['lanes', 'nodes', 'edges'],
+  properties: {
+    lanes: { type: 'array', minItems: 1, maxItems: LANES_MAX, items: LANE_ITEM },
+    nodes: { type: 'array', minItems: 1, maxItems: NODES_MAX, items: NODE_ITEM },
+    edges: { type: 'array', maxItems: EDGES_MAX, items: EDGE_ITEM },
+  },
+};
+
+function trimDiagram(v: unknown): void {
+  const o = asObj(v);
+  if (!o) return;
+  const each = (list: unknown, caps: [string, number][]) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      const x = asObj(item);
+      if (x) for (const [k, max] of caps) if (Object.hasOwn(x, k)) x[k] = trimStrings(oneLine(x[k]), max);
+    }
+  };
+  each(o.lanes, [['label', LABEL_MAX]]);
+  each(o.nodes, [['label', LABEL_MAX], ['detail', DETAIL_MAX], ['feature', 60]]);
+  each(o.edges, [['label', EDGE_LABEL_MAX]]);
+}
+
+function designDiagramData(i: DesignDiagramInput) {
+  return {
+    idea: ideaData(i.idea),
+    ...(i.summary ? { summary: cap(i.summary, 600) } : {}),
+    ...(i.tool?.tool ? { tool: { tool: cap(i.tool.tool, 40), ...(i.tool.pathway ? { pathway: cap(i.tool.pathway, 40) } : {}) } } : {}),
+    features: (Array.isArray(i.features) ? i.features : []).slice(0, FEATURES_MAX).map((f) => ({
+      name: cap(f.name, 60), ...(f.what ? { what: cap(f.what, 160) } : {}), ...(f.fit ? { fit: cap(f.fit, 10) } : {}),
+      ...(f.note ? { note: cap(f.note, 200) } : {}), ...(f.scope ? { scope: cap(f.scope, 120) } : {}),
+    })),
+    steps: (Array.isArray(i.steps) ? i.steps : []).slice(0, 20).map((s) => ({ n: s.n, question: cap(s.question, 200), answer: cap(s.answer, 600), ...(s.tag ? { tag: cap(s.tag, 20) } : {}) })),
+    points: Object.fromEntries(Object.entries(i.points ?? {}).slice(0, 10).map(([k, v]) => [cap(k, 20), cap(v, POINT_MAX)])),
+    outsideTools: (i.outsideTools ?? []).slice(0, 5).map((t) => cap(t, 60)),
+  };
+}
+
+export const designDiagramTask: Task<DiagramSpec> = {
+  name: 'design-diagram',
+  schema: DESIGN_DIAGRAM_SCHEMA,
+  prompt(input) {
+    const i = input as DesignDiagramInput;
+    return build('design-diagram', [
+      "Draw the finished design of a Creators' Café proof of concept as a diagram a builder reads at a glance: swim lanes, the parts in them and arrows for how the work flows, left to right.",
+      `Lanes (at most ${LANES_MAX}): kind "data" for the sample input and any rules sheet or store; kind "tool" for the one tool's build (label it with the tool's name); kind "outside" for work done with another tool outside the build (one lane per tool in "outsideTools", labelled with it); kind "person" for the people who use the output or step in by hand. Leave out a lane nothing stands in.`,
+      `Nodes (at most ${NODES_MAX}): kind "input" for what goes in (the sample file), "store" for a sheet, list or dataset kept along the way, "step" for something the build or an outside tool does, "output" for what comes out, "person" for a role (never a name), "gap" for something the design left out or the tool cannot do, so the builder sees it.`,
+      'Every node: a short label (a few words, at most 40 characters), "detail" (one or two plain sentences a builder can act on: fields, the rule, the columns, where it lands, drawn from the answers and points), "feature" when it builds one of "features" (its exact name), and "step" when one question in "steps" set it (that question\'s n).',
+      'A feature whose "scope" is "out of scope" is not built: draw it as a "gap" node only if a builder needs to know it is left out. A feature done "outside the build" goes in that outside tool\'s lane.',
+      'Edges: from and to are node ids, in the order the work flows; a short label (at most 30 characters) when the arrow carries something worth naming ("flagged claims", "monthly"). No arrow from a node to itself. Ids are short letters and digits (n1, input, rules).',
+      'Use only what DATA says. Never invent a system, a field or a person. People appear as role words or codes such as [P1]; never write a name. No value words (savings, return on investment, benefits, costs, KPIs).',
+    ], DESIGN_DIAGRAM_SCHEMA, designDiagramData(i), "a finished Café design: the idea, its summary, the tool, the features and the design answers");
+  },
+  parse: (raw) => parseChecked<DiagramSpec>(raw, DESIGN_DIAGRAM_SCHEMA, trimDiagram),
 };
 
 /* ---------- Design plan: the tasks to build an approved design ---------- */

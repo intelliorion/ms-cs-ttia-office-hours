@@ -500,6 +500,17 @@ nothing is saved until you press a button, and you can do everything except plan
    feature is no longer needed by the idea, and an outside one is not built with the main tool (it is built with
    the other tool only when that is one approved tool). In the tool picker, **Put it back** (then Save) returns a
    feature to the build.
+   **See the design** opens the design pack with the design **drawn as an interactive diagram**, not a file: swim
+   lanes for the data, the tool's build, any work done outside it and the people; rounded parts coloured by kind
+   (input, store, step, output, person, gap) in the theme's colours; arrows with labels. Hover a part to light its
+   whole path; click it for a card with what it does, the feature it belongs to, how the tool fits it (a gap, or a
+   feature the design moved, is marked) and the question whose answer set it. Zoom in and out, **Fit**, and drag or
+   scroll inside the box (it scrolls at phone width). The diagram is drawn by the AI (task `design-diagram`, a
+   checked structure of lanes, parts and arrows, at most 16 parts, names coded before the AI sees them) when the
+   design is finished, and stored in design.yaml with what it was drawn from: when the design changes it says it is
+   out of date and offers **Redraw**. With no AI, or before it has drawn one, the pack draws a plain diagram from the
+   design itself (the input, the features the tool builds, the output, who uses it, any outside tool), so it never
+   shows nothing.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
    example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it
@@ -513,7 +524,8 @@ nothing is saved until you press a button, and you can do everything except plan
 
 ```
 approach.md            the features, then the one tool: pathway, reason, pros, cons, a fit table per feature, why
-design.yaml            the design's state: features, the tool, questions and answers, summary, approval date
+design.yaml            the design's state: features (and where the design moved them), the tool, questions and
+                       answers, the settled build points, summary, the diagram, approval date
 design.md              the design, readable, ending with the Café check
 plan.md                the plan: the one thing to show, tasks for the tool, risks, the Café check
 kit/<tool>/...         the starter kit for the picked tool, all Markdown: topics, screens, a flow, a process,

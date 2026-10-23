@@ -42,7 +42,9 @@ function spawnIn(cwd: string, cmd: string, args: string[], { stdin, timeoutMs }:
     child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8'); if (out.length > MAX_OUT) { child.kill('SIGKILL'); finish(() => reject(new AiError(`${cmd} replied with too much text`))); } });
     child.stderr.on('data', (c: Buffer) => { if (err.length < 4000) err += c.toString('utf8'); });
     child.on('error', (e) => finish(() => reject(new AiError(`${cmd} could not start: ${e.message}`))));
-    child.on('close', (code) => finish(() => (code === 0 ? resolve(out) : reject(new AiError(`${cmd} stopped (exit ${code}): ${err.trim().slice(0, 200)}`)))));
+    // A CLI that says why it stopped on stdout only (Claude Code's "You've hit your session limit · resets 4:40pm")
+    // gets that line in the error, so the notice says why instead of ending at "exit 1:".
+    child.on('close', (code) => finish(() => (code === 0 ? resolve(out) : reject(new AiError(`${cmd} stopped (exit ${code}): ${(err.trim() || out.trim().split('\n')[0] || '').slice(0, 200)}`)))));
     child.stdin.on('error', () => undefined);
     child.stdin.end(stdin ?? '');
   });

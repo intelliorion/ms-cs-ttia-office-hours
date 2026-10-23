@@ -9,6 +9,7 @@ import { extractTask, reviewSuggestTask } from '../src/ai/tasks';
 import { validate, parseChecked, firstJsonObject } from '../src/ai/schema';
 import { vscodeProvider } from '../src/ai/providers/vscode';
 import { copilotProvider, COPILOT_ARGS } from '../src/ai/providers/copilot';
+import { runCli } from '../src/ai/providers/cli';
 import { DEFAULT_SETTINGS, type Settings } from '../src/round/round';
 import { saveIdea } from '../src/ideas/store';
 import { startServer, sampleIdea } from './helpers';
@@ -147,6 +148,14 @@ describe('AI connector', () => {
     const c = connector([fake(() => { calls++; return '{}'; })], DEFAULT_SETTINGS, 5_000);
     await expect(c.run(extractTask, INPUT)).rejects.toThrow(/invalid output/);
     expect(calls).toBe(1);
+  });
+
+  it('a CLI that stops with its reason on stdout only says that reason (a usage limit, say), not an empty "exit 1:"', async () => {
+    const node = process.execPath;
+    await expect(runCli(node, ['-e', "console.log('You have hit your session limit'); process.exit(1)"], { timeoutMs: 10_000 }))
+      .rejects.toThrow(/stopped \(exit 1\): You have hit your session limit$/);
+    await expect(runCli(node, ['-e', "console.log('ignored'); console.error('bad flag'); process.exit(2)"], { timeoutMs: 10_000 }))
+      .rejects.toThrow(/stopped \(exit 2\): bad flag$/);
   });
 
   it('rejects text with no JSON object', async () => {

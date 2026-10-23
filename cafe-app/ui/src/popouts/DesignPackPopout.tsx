@@ -9,6 +9,7 @@ import { fileNote, FLOW_HTML, FLOW_JSON, kitSlug, packFiles, pointRows, opensInT
 import { RecipeFlowDiagram } from './RecipeFlowDiagram';
 import { checkFlow, type RecipeFlow } from '../../../src/design/recipeFlow';
 import { approvedTools, FIT_MARK, retiredNote, scopeLabel } from '../panels/designHelpers';
+import { columnRows, dataPhase, KIND_LABELS, sizeWords, whatOf } from '../panels/dataHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
@@ -34,6 +35,7 @@ export function DesignPackPopout({ id }: { id: string }) {
   const steps: any[] = s?.steps ?? [];
   const features: any[] = s?.features ?? [];
   const tool: any = s?.tool;
+  const data: any = s?.data;
   const main = kitSlug(tool?.tool);
   // The design's files only: the roadshow has its own section in Launch and Learn, with Present, the script and the exports.
   const files = packFiles(plan?.files ?? [], features.length > 0 || Boolean(tool), main, Boolean(s?.diagram));
@@ -93,6 +95,33 @@ export function DesignPackPopout({ id }: { id: string }) {
               ))}
             </dl>
           </section>
+          {data && (data.files?.length > 0 || data.steps?.length > 0) && (
+            <section className="sec dp-sec" data-testid="pack-data">
+              <h3>The data <span className="sec-n">{dataPhase(data).word}</span></h3>
+              {!data.confirmedAt && <div className="hint warn">Not confirmed yet: the features, the tool, the design and the kits do not use it until it is confirmed in the Data step.</div>}
+              {data.summary?.text && <p className="dp-summary">{data.summary.text}</p>}
+              <ul className="dp-data">
+                {data.files.map((f: any) => {
+                  const cols = columnRows(f);
+                  const issues = [...(f.tables ?? []).flatMap((t: any) => t.issues), ...(f.understanding?.issues ?? [])];
+                  return (
+                    <li key={f.id} data-file={f.id}>
+                      <div className="dp-file-h"><span className="dp-file-t">{f.name}</span><span className="sec-n">{KIND_LABELS[f.kind as keyof typeof KIND_LABELS]}{sizeWords(f) ? ` · ${sizeWords(f)}` : ''}</span></div>
+                      {f.check?.status === 'held' ? <div className="hint warn">Held: it may hold personal data, so nothing in it is used.</div> : (
+                        <>
+                          {whatOf(f) && <div className="dp-file-u">{whatOf(f)}</div>}
+                          {cols.length > 0 && <dl className="dp-settles dp-cols">{cols.map((c) => <div key={c.name}><dt><code>{c.name}</code> {c.type}</dt><dd>{c.meaning || '(meaning not said)'}{c.codes ? ` Codes: ${c.codes}` : ''}</dd></div>)}</dl>}
+                          {f.understanding?.rules?.length > 0 && <div className="dp-file-u">Rules: {f.understanding.rules.map((r: any) => String(r.rule).replace(/[.;\s]+$/, '')).join('; ')}</div>}
+                          {f.understanding?.derivations?.length > 0 && <div className="dp-file-u">How the output is worked out: {f.understanding.derivations.map((x: any) => `${x.output}: ${String(x.how).replace(/[.;\s]+$/, '')}`).join('; ')}</div>}
+                          {issues.length > 0 && <div className="hint warn">Issues: {issues.slice(0, 6).map((x: string) => x.replace(/[.;\s]+$/, '')).join('; ')}</div>}
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
           {spec && (
             <section className="sec dp-sec" data-testid="pack-diagram">
               <h3>The design, drawn <span className="sec-n">{stored ? `drawn by the AI${stored.at ? ` on ${stored.at}` : ''}` : 'a plain diagram from the design'}</span></h3>
@@ -167,7 +196,7 @@ export function DesignPackPopout({ id }: { id: string }) {
             </ol>
           </section>
           <section className="sec dp-sec">
-            <h3>Files <span className="sec-n">{files.length} in the idea's folder</span></h3>
+            <h3>Files <span className="sec-n">{files.length + (data?.files?.length ?? 0)} in the idea's folder</span></h3>
             <ul className="dp-files">
               {files.map((f) => {
                 const n = fileNote(f, main);
@@ -185,6 +214,12 @@ export function DesignPackPopout({ id }: { id: string }) {
                   </li>
                 );
               })}
+              {(data?.files ?? []).map((f: any) => (
+                <li key={f.id} data-file={`data-files/${f.file}`}>
+                  <div className="dp-file-h"><span className="dp-file-t">The team's data: {KIND_LABELS[f.kind as keyof typeof KIND_LABELS]}</span><code>data-files/{f.file}</code></div>
+                  <div className="dp-file-u">{whatOf(f) ?? f.name}. A copy of what the team gave, checked for personal data; its summary is in design.md's Data section. Open the folder to see it.</div>
+                </li>
+              ))}
             </ul>
           </section>
         </div>

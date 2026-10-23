@@ -61,8 +61,9 @@ export const BUILD_POINTS: [DesignTag, string][] = BUILD_TAGS.map((t) => [t, POI
 
 /** One row of the pack's points: what settles it (the tagged answer, or what the done reply said), or "(not yet answered)". */
 export interface PointRow { tag: DesignTag; label: string; text: string; open: boolean; hint?: string }
-export function pointRows(state: { steps?: any[]; settled?: Record<string, string> } | null | undefined, which: 'base' | 'build'): PointRow[] {
-  const src = { steps: state?.steps ?? [], settled: state?.settled };
+export function pointRows(state: { steps?: any[]; settled?: Record<string, string>; data?: any } | null | undefined, which: 'base' | 'build'): PointRow[] {
+  // The confirmed data settles the input, output and logic after the answers (src/data).
+  const src = { steps: state?.steps ?? [], settled: state?.settled, data: state?.data };
   return (which === 'base' ? SETTLES : BUILD_POINTS).map(([tag, label]) => {
     const text = pointOf(src, tag);
     return { tag, label, text: text ?? NOT_ANSWERED, open: !text, ...(which === 'build' ? { hint: BUILD_HINTS[tag as keyof typeof BUILD_HINTS] } : {}) };

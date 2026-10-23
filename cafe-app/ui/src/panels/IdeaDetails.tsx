@@ -9,14 +9,15 @@ import { EmailMenu } from './EmailMenu';
 import { openedText } from './outlook';
 import { ToolPickerSection } from './ToolPickerSection';
 import { DesignSection, PlanSection, type DesignCall, type DesignView, type PlanView } from './DesignSection';
-import { roadshowGate, sectionsFor, type SectionKey } from './stageGate';
+import { dataGate, roadshowGate, sectionsFor, type SectionKey } from './stageGate';
+import { DataCard, DataSection } from './DataSection';
 import { RoadshowCard, RoadshowSection } from './RoadshowSection';
 import type { RoadshowViewLike } from './roadshowHelpers';
 import { DesignCard, PlanCard, ReviewCard, ToolsCard } from './StageSummaries';
 
 /**
  * One idea, in the left panel in place of the list: what to do now. Back, its ID, round and stage, then the suggestion
- * strip, the action sections the stage calls for (Decision at stage 2; Tool picker, Design, Plan and kits at stage 3;
+ * strip, the action sections the stage calls for (Decision at stage 2; the Data, Tool picker, Design, Plan and kits at stage 3;
  * the Roadshow at stage 4; cards for the earlier ones after that). Emails open in Outlook from the head's Email menu and the sections' own
  * buttons; one unsent email per stage at most. What was submitted, its links and its history are on the right
  * (ContextPanels); the universe beside it stays focused on its star.
@@ -36,7 +37,7 @@ export function IdeaDetails({ id }: { id: string }) {
   const [plan, setPlan] = useState<PlanView | null>(null);
   /** Launch and Learn: the roadshow's to-do list, photos and deck, read with the design. */
   const [roadshow, setRoadshow] = useState<RoadshowViewLike | null>(null);
-  /** Which section is waiting on the AI ('tools', 'design', 'plan', 'roadshow'); null for the Review and Graph AI calls. */
+  /** Which section is waiting on the AI ('data', 'tools', 'design', 'plan', 'roadshow'); null for the Review and Graph AI calls. */
   const [aiFor, setAiFor] = useState<string | null>(null);
   /** Cards the operator reopened with Edit; cleared when another idea opens. */
   const [editing, setEditing] = useState<SectionKey[]>([]);
@@ -218,6 +219,12 @@ export function IdeaDetails({ id }: { id: string }) {
             ].filter(Boolean).join(' '))} />
         )}
         {gates.review === 'summary' && <ReviewCard idea={idea} state={state} onEdit={edit('review')} />}
+        {/* The Design series starts with the data: what goes in, what comes out, the rules; confirmed once, it feeds the rest. */}
+        {dataGate(idea, design?.state?.data) === 'active' && (
+          <DataSection key={`data-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'data')} aiWorking={aiFor === 'data'}
+            noAi={noAi} call={designCall} onSendQuestions={() => openTemplate('E2')} />
+        )}
+        {dataGate(idea, design?.state?.data) === 'summary' && <DataCard design={design} />}
         {gates.tools === 'active' && (
           <ToolPickerSection key={`tools-${id}`} idea={idea} design={design} busy={busy || (aiBusy && aiFor !== 'tools')} aiWorking={aiFor === 'tools'}
             noAi={noAi} aiName={(p) => providerName(p, ai)} call={designCall} />

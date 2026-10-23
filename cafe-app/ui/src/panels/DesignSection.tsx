@@ -12,8 +12,10 @@ export interface PlanView { planMd?: string; files: string[] }
 /** Runs one design call: busy state, notice, and a refresh after. `ai` names the section waiting on the AI. Null on failure. */
 export type DesignCall = <T = any>(fn: () => Promise<T>, o: { ai?: string; ok: (r: T) => string | undefined }) => Promise<T | null>;
 
-function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
+export function StepItem({ step, off, onAnswer, onIdk, onSendQuestions, prefix = 'Q' }: {
   step: any; off: boolean; onAnswer: (body: any) => Promise<unknown>; onIdk: () => void; onSendQuestions: () => void;
+  /** Before the number: Q for a design question, D for a data question. */
+  prefix?: string;
 }) {
   const [text, setText] = useState('');
   /** Changing a saved answer: the box reopens with the answer in it. */
@@ -22,7 +24,7 @@ function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
   return (
     <li className={`ds-step ${st.kind}`} data-step={step.n}>
       <div className="ds-h">
-        <span className="ds-n">Q{step.n}</span>
+        <span className="ds-n">{prefix}{step.n}</span>
         <span className="ds-q">{step.question}</span>
       </div>
       {step.why && <div className="ds-why">{step.why}</div>}
@@ -91,14 +93,14 @@ export function SeeDesign({ id }: { id: string }) {
  * The design questions side by side, one in view: ‹ › move between them, the dots jump. It opens on the question
  * waiting for an answer (else the newest), and moves to a new one when it is added.
  */
-export function StepCarousel({ steps, render }: { steps: any[]; render: (step: any) => React.ReactNode }) {
+export function StepCarousel({ steps, render, testId = 'design-carousel' }: { steps: any[]; render: (step: any) => React.ReactNode; testId?: string }) {
   const start = () => { const k = steps.findIndex((st) => !st.answer?.trim() && !st.askedTeam); return k >= 0 ? k : steps.length - 1; };
   const [at, setAt] = useState(start);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setAt(start()); }, [steps.length]);
   const i = Math.min(Math.max(at, 0), steps.length - 1);
   return (
-    <div className="ds-carousel" data-testid="design-carousel">
+    <div className="ds-carousel" data-testid={testId}>
       <div className="ds-nav">
         <button className="ds-arrow" data-action="prev-question" aria-label="Previous question" disabled={i <= 0} onClick={() => setAt(i - 1)}>‹</button>
         <span className="ds-pos" data-testid="design-pos">Question {i + 1} of {steps.length}</span>

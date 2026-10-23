@@ -38,6 +38,19 @@ export function sectionsFor(idea: IdeaLike, design: DesignLike | null | undefine
 }
 
 /**
+ * Understand the data: the first step of the Design series (3), before the features. Active there (the drop well shows
+ * even with no data yet); after it, or once the idea is closed, a read-only card when there is data; hidden otherwise.
+ * Never editable in Launch and Learn.
+ */
+export const DATA_STAGE = 3;
+export function dataGate(idea: IdeaLike, data?: { files?: unknown[]; steps?: unknown[] } | null): Gate {
+  const has = Boolean(data?.files?.length || data?.steps?.length);
+  if (idea.closed) return has ? 'summary' : 'hidden';
+  if (idea.stage === DATA_STAGE) return 'active';
+  return has ? 'summary' : 'hidden';
+}
+
+/**
  * The roadshow belongs to Launch and Learn (4) only: the section there, a card there once the idea is closed with a deck.
  * In the Design series (or anywhere else) it is hidden, even when a to-do list or a deck was made earlier.
  */

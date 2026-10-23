@@ -427,8 +427,8 @@ Each action section has a home stage. Before it, the section is hidden; at it, t
 | Stage | Editable | Cards |
 |---|---|---|
 | 1 Review and Select | Decision (the choice first, the five checks fold away under it); the acknowledgement (E1) is sent from Emails | |
-| 2 Design series | Features and tool, then Design, then Plan and kits | Decision |
-| 3 Launch and Learn | Roadshow (photos, what the story needs, the deck) | Decision, Features and tool, Design (no Edit); Plan |
+| 2 Design series | Understand the data, then Features and tool, then Design, then Plan and kits | Decision |
+| 3 Launch and Learn | Roadshow (photos, what the story needs, the deck) | Decision, The data, Features and tool, Design (no Edit); Plan |
 
 There is no Submit Idea stage: an imported idea starts in Review and Select, and the checks that used to sit in
 Submit Idea (own words, no personal data, duplicates, acknowledgement) are Review and Select steps. In the files the
@@ -442,6 +442,45 @@ for an idea in Café Work. They take the idea from "what must it do, and with wh
 nothing is saved until you press a button, and you can do everything except plan.md by hand.
 
 **What you see**
+
+0. **Understand the data**, first. Drop the team's files on the section (or pick them): CSV, Excel, PDF, Word, text,
+   an email (.eml, .msg) or a picture of a report, up to 10 MB each and 12 per idea. Each waits with a drop-down
+   saying what it is (guessed from the name; you decide): **Sample input**, **Sample output** (what it should
+   produce), **Today's output or report**, **Rules or reference**, **Process document**, **Example email** or
+   **Other**. **Read and understand** sends them up one by one and shows each file's five step cards as they run
+   (the Import's dots):
+   - **Read**: the name, size and first bytes are checked before anything else; the file is copied into the idea
+     folder's `data-files/` (never anywhere else) and read with the Import's readers; a spreadsheet or CSV as tables
+     (every sheet).
+   - **Check**: the Café data rule in code. Email addresses, phone, card and bank numbers, employee or account
+     numbers, a column of people's names, the Café's own people and sensitive details hold the file: **It is masked /
+     synthetic — continue** goes on (the flagged columns stay masked in everything the AI sees), **Remove** deletes
+     it. Nothing in a held file reaches the AI. Made-up stand-ins ("Person 3", EMP-****1, hashes) are noted, not held.
+   - **Profile**: by code: each column's type, how full, distinct values, ranges, the commonest values, shapes, a few
+     example rows (masked), and the issues the code sees; a document's words, headings and tables.
+   - **Understand**: the AI, names coded, with the Café data guide (`skills/cafe-data.md`). It may first ask to look
+     closer at up to three unclear columns (twice at most), then says what the file is, what every column means
+     (and its codes), the rules it implies, how an output derives from the input, the features it serves, its issues
+     and what is missing. The code keeps only real columns and features, and says what it dropped.
+   - **Saved**: into the design (`design.yaml`'s data section, and a Data section in design.md).
+
+   **Edit understanding** corrects the one line and any column's meaning; your words win and survive **Understand
+   again**. Changing a file's kind asks for Understand again. No step card is undone; a file can be removed.
+
+   Then **Check the understanding**: the AI asks about the data one question at a time, like the design questions (why
+   it matters, 2–4 suggested answers, your own, or **I don't know → ask the team** into the questions email), aimed
+   at what the code sees open: no sample input, no sample of the output, no rules, unexplained columns or codes, the
+   volumes. Answers save themselves on the idea ("data questions"); the Import fills the ones asked of the team. What
+   the answers and files imply for the record and the universe (a system the data comes from, a builder, a fact) is
+   checked and **applied by itself**, listed read-only under **Updated from your answers** and logged in history (no
+   Yes/No). When the AI says the understanding is complete it shows a summary (input, output, knowledge, rules, the
+   gaps it closed, what is still open) and you confirm once: **Looks right**. Only a confirmed understanding is
+   final: it settles the design's input, output and logic points, adds a **Data** point to "Learned since the
+   form", and feeds Suggest features, Suggest a tool, the design questions, the diagram, the kits (sample-data.csv
+   gets the sample input's real columns, values made up; the Dataiku datasets and Copilot Studio's knowledge.md name
+   the real files) and the roadshow ("The data" slide). Dropping, removing or editing a file afterwards asks for a
+   new confirmation. With no AI the files are read, checked and profiled; write their meaning by hand, add questions
+   by hand and **Finish by hand**.
 
 1. **Features and tool** (the tool picker), in two steps.
    - **Features.** A list of what the proof of concept must do: one row per feature, a name and one line on what
@@ -547,9 +586,12 @@ nothing is saved until you press a button, and you can do everything except plan
 
 ```
 approach.md            the features, then the one tool: pathway, reason, pros, cons, a fit table per feature, why
-design.yaml            the design's state: features (and where the design moved them), the tool, questions and
+design.yaml            the design's state: the data section (each dropped file's kind, step cards, check, profile,
+                       understanding and your corrections; the data questions; the summary and the confirmation),
+                       features (and where the design moved them), the tool, questions and
                        answers, the settled build points, summary, the diagram, approval date, and (after a
                        Redesign) the date the plan went out of date
+data-files/            the copies of the files dropped in Understand the data (f1-<name>, f2-<name> …)
 design.md              the design, readable: the points, the build points, the features and tool, the decisions
 plan.md                the plan: the one thing to show, tasks for the tool, risks
 kit/<tool>/...         the starter kit for the picked tool (below)
@@ -589,8 +631,10 @@ A plan task on a tool other than the one picked is listed under "Not picked" in 
 by hand (**Add a question by hand**), answer them, then **Finish by hand** with a short summary, and
 approve. plan.md and the kits need an AI.
 
-**The embedded guidance.** `skills/` holds two texts the app sends as guidance inside prompts; it never
-executes them. `cafe-design.md` is the Café design guide, written for the app: one question per reply,
+**The embedded guidance.** `skills/` holds three texts the app sends as guidance inside prompts; it never
+executes them. `cafe-data.md` is the Café data guide: understand each file completely, then ask about the data one
+question at a time until the input, output, rules, knowledge and volumes are known; Understand and the data
+questions send it. `cafe-design.md` is the Café design guide, written for the app: one question per reply,
 multiple choice where it can, aimed at the tool's gaps first, never re-asking what is settled, the smallest
 proof of concept, the Café rules, and when to stop; plus how to tell a clear request from an unclear one. The
 design questions, Suggest features and the tool picker send it. `writing-plans.md` is the "writing-plans" skill
@@ -631,11 +675,13 @@ script to talk, in three steps.
    yes to, and the reply rewrites **Learned since the form**. The list is kept in `roadshow.yaml`.
 3. **The deck.** **Build the deck** has the AI (task `roadshow-deck`) write the slides and the speaker script as a
    checked structure (10 to 14 slides, about ten minutes: title, the problem, how it works today, the team, what was
-   built, the design, the tool, the demo, what was hard, what was learned, reuse, next steps, one question, thanks;
+   built, the data, the design, the tool, the demo, what was hard, what was learned, reuse, next steps, one question, thanks;
    each with points, an optional quote, a visual and the script in the presenter's voice, with cues such as "[switch
    to the demo]"). The code then checks it: a value claim (ROI, savings, KPIs…) or a figure the record does not hold
    is taken out (a point, or a sentence of the script), a visual must be one the app can draw, the deck opens with a
-   title slide and has the team slide, and the timings add up to about ten minutes; what it changed is listed under
+   title slide and has the team slide (and, once the team's data is confirmed, **The data** slide: what goes in, the
+   rules, what comes out, drawn by the app from the files; the before-after then opens with today's report and the
+   sample output), and the timings add up to about ten minutes; what it changed is listed under
    the deck. The app then draws, in code, into the idea folder's `roadshow/`:
 
    ```

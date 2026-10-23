@@ -53,6 +53,24 @@ export interface PrepNeed {
   askedAt?: string;
 }
 /** The last decision suggestion and its to-do list. Saved on the idea so answers survive a reload; the decision itself is saved only by Save decision. */
+/**
+ * One change the answers justify, proposed after a suggestion or a re-evaluation: nothing changes until the operator
+ * says Yes. `key` names the change, so one said no to is not proposed again; `undo` is how an applied one goes back.
+ */
+export interface PrepUpdate {
+  id: string;
+  key: string;
+  kind: 'builder' | 'participation' | 'flag' | 'facts' | 'link';
+  label: string;
+  status: 'proposed' | 'applied' | 'dismissed';
+  builder?: { name: string; canAttend: boolean };
+  participation?: string;
+  flag?: string;
+  facts?: { question: string; answer: string }[];
+  link?: { from: string; to: string; rel: string; description: string; confidence: number; source: string; newNodes?: { id: string; type: string; label: string }[] };
+  undo?: { team?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string };
+}
+
 export interface ReviewPrep {
   at: string;
   decision: Decision;
@@ -61,6 +79,8 @@ export interface ReviewPrep {
   needs: PrepNeed[];
   basis: string;
   provider?: string;
+  /** What the answers would change in the record, each waiting for the operator's Yes (or applied, or said no to). */
+  updates?: PrepUpdate[];
 }
 
 export interface Idea {

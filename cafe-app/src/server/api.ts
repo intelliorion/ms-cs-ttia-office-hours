@@ -14,6 +14,7 @@ import { writeFileAtomic, readHistory } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
+import { decideUpdate } from '../review/updates';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -201,6 +202,8 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   // operator pasted, a builder, flags, its graph links) is read; names are coded on the way out and restored on the way back.
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(() =>
     suggestPrep(root, String(body.id), (input) => ai.runWith(reviewSuggestTask, input), clock))());
+  // What the answers would change (a builder, participation, a flag, the answers, graph links): Yes, No or Undo, one at a time.
+  add('POST', '/api/ideas/:id/prep/update', async ({ params, body }) => decideUpdate(root, params.id, String(body.update ?? ''), body.do, clock));
   add('POST', '/api/ideas/:id/prep/answer', async ({ params, body }) => answerNeed(root, params.id, String(body.need ?? ''), body.answer));
   // Draft email: the open to-dos become the questions email (E2), opened in Outlook and counted as sent.
   add('POST', '/api/ideas/:id/prep/email', async ({ params }) => {

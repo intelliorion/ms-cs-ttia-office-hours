@@ -41,7 +41,19 @@ export interface ReviewSuggestInput {
 }
 /** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
 export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
-export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string; needs: ReviewNeed[] }
+/**
+ * What the answers change in the idea's record, proposed for the operator's Yes: a builder, participation, flags the
+ * answers settle, the answers as facts, and stars and links for the graph. Empty values when nothing changes.
+ */
+export interface ReviewUpdates {
+  builder: string;
+  builderCanAttend: boolean;
+  participation: '' | 'Individual' | 'Team';
+  resolvedFlags: string[];
+  facts: { question: string; answer: string }[];
+  graph: ExtractOutput;
+}
+export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decision: Decision; reason: string; needs: ReviewNeed[]; updates?: ReviewUpdates }
 export const NEED_MAX = 120;
 export const ASK_MAX = 220;
 export const NEED_ANSWER_MAX = 200;
@@ -80,9 +92,28 @@ export const EXTRACT_SCHEMA: JsonSchema = {
   },
 };
 
-export const REVIEW_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs'],
+export const UPDATES_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['builder', 'builderCanAttend', 'participation', 'resolvedFlags', 'facts', 'graph'],
   properties: {
+    builder: { type: 'string', maxLength: 80 },
+    builderCanAttend: { type: 'boolean' },
+    participation: { type: 'string', enum: ['', 'Individual', 'Team'] },
+    resolvedFlags: { type: 'array', maxItems: 5, items: { type: 'string', minLength: 1, maxLength: 200 } },
+    facts: {
+      type: 'array', maxItems: 8,
+      items: {
+        type: 'object', additionalProperties: false, required: ['question', 'answer'],
+        properties: { question: { type: 'string', minLength: 1, maxLength: 220 }, answer: { type: 'string', minLength: 1, maxLength: 300 } },
+      },
+    },
+    graph: EXTRACT_SCHEMA,
+  },
+};
+
+export const REVIEW_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false, required: ['criteria', 'decision', 'reason', 'needs', 'updates'],
+  properties: {
+    updates: UPDATES_SCHEMA,
     criteria: {
       type: 'object', additionalProperties: false, required: CRITERIA.map((c) => c.id),
       properties: Object.fromEntries(CRITERIA.map((c) => [c.id, { type: 'boolean' } as JsonSchema])),
@@ -169,11 +200,26 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'Keep every item in DATA.todo, in the same words, in the same order, marking each met or not; then add new open items only for real gaps,',
       'at most 5 open items in all. Only ask what changes the decision: never ask for personal, client or third-party data.',
       'If the decision can be made from DATA as it is, every item is met (or there are none).',
+      'updates: what DATA.answers change in the idea\'s record, for the operator to say yes to; leave a field empty when nothing changes.',
+      'builder: the person an answer names to build it, exactly as written in DATA (keep any [P1]-style code), else "".',
+      'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
+      'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',
+      'settles, word for word. facts: each answer that tells us something, as the question it answers and the fact in one plain sentence',
+      '(names as written in DATA). graph: what the answers add to the knowledge graph. Every system or data source an answer names is a',
+      'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
+      'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
+      'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
     ], REVIEW_SCHEMA, { ...(input as ReviewSuggestInput), idea: ideaData(idea) });
   },
   parse: (raw) => parseChecked<ReviewSuggestOutput>(raw, REVIEW_SCHEMA, (v) => {
     const o = asObj(v); if (!o) return;
     o.reason = trimStrings(o.reason, 300);
+    const u = asObj(o.updates);
+    if (u) {
+      u.builder = trimStrings(u.builder, 80);
+      if (Array.isArray(u.facts)) for (const f of u.facts) { const x = asObj(f); if (x) { x.question = trimStrings(x.question, 220); x.answer = trimStrings(x.answer, 300); } }
+      trimExtract(u.graph);
+    }
     if (Array.isArray(o.needs)) for (const n of o.needs) {
       const x = asObj(n); if (!x) continue;
       x.need = trimStrings(x.need, NEED_MAX); x.ask = trimStrings(x.ask, ASK_MAX);

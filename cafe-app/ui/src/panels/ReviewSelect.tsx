@@ -21,6 +21,8 @@ export interface ReviewSelectProps {
   onAnswer: (need: string, answer: string) => Promise<void>;
   onDraftEmail: () => void;
   onSave: (body: { criteria: Record<string, boolean>; decision: string; reason: string }) => void;
+  /** Yes, No or Undo on one change the answers would make to the record. */
+  onUpdate?: (update: string, act: 'yes' | 'no' | 'undo') => void;
 }
 
 type Status = 'open' | 'answered' | 'met';
@@ -29,7 +31,7 @@ export function needStatus(need: any, answers: any[] = []): Status {
   return awaitsReevaluation(need, answers) ? 'answered' : 'open';
 }
 
-export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName, onSuggest, onAnswer, onDraftEmail, onSave }: ReviewSelectProps) {
+export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName, onSuggest, onAnswer, onDraftEmail, onSave, onUpdate }: ReviewSelectProps) {
   const prep = idea.prep;
   const answers = idea.answers ?? [];
   const needs: any[] = prep?.needs ?? [];
@@ -65,6 +67,7 @@ export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName,
           </ol>
         </div>
       )}
+      {prep && <Updates updates={prep.updates ?? []} disabled={off} onUpdate={onUpdate} />}
       <div className="rs-acts">
         {!prep ? (
           <button className="btn primary" data-action="ai-suggest-review" disabled={noAi || off} title={noAi ? noAiTip : undefined} onClick={onSuggest}>
@@ -86,6 +89,43 @@ export function ReviewSelect({ idea, state, busy, aiBusy, noAi, noAiTip, aiName,
       )}
       {showForm && <DecisionForm idea={idea} state={state} prep={prep} disabled={off} onSave={onSave} />}
     </section>
+  );
+}
+
+const UPDATE_KIND: Record<string, string> = { builder: 'Team', participation: 'Form', flag: 'Flag', facts: 'Answers', link: 'Universe' };
+
+/**
+ * What the answers would change in the idea's record (a builder, participation, a flag, the answers themselves, links in
+ * the universe), proposed by the last suggestion. Nothing changes until Yes; an applied change can be undone.
+ */
+export function Updates({ updates, disabled, onUpdate }: { updates: any[]; disabled: boolean; onUpdate?: (update: string, act: 'yes' | 'no' | 'undo') => void }) {
+  const shown = updates.filter((u) => u.status !== 'dismissed');
+  if (!shown.length) return null;
+  const waiting = shown.filter((u) => u.status === 'proposed').length;
+  return (
+    <div className="rs-updates" data-testid="rs-updates">
+      <div className="rs-th">
+        <span>From your answers</span>
+        <span className="sec-n">{waiting ? `${waiting} to say yes or no to` : 'all applied'}</span>
+      </div>
+      <ul className="rs-ulist">
+        {shown.map((u) => (
+          <li key={u.id} className={`rs-u ${u.status}`} data-update={u.id} data-kind={u.kind}>
+            <span className="rs-uk">{UPDATE_KIND[u.kind] ?? u.kind}</span>
+            <span className="rs-ul">{u.label}</span>
+            <span className="rs-ua">
+              {u.status === 'proposed' ? <>
+                <button className="btn sm primary" data-action="update-yes" disabled={disabled} onClick={() => onUpdate?.(u.id, 'yes')}>Yes</button>
+                <button className="btn sm" data-action="update-no" disabled={disabled} onClick={() => onUpdate?.(u.id, 'no')}>No</button>
+              </> : <>
+                <span className="rs-done">Applied</span>
+                <button className="link-btn" data-action="update-undo" disabled={disabled} onClick={() => onUpdate?.(u.id, 'undo')}>Undo</button>
+              </>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

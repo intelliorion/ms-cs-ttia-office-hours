@@ -9,10 +9,11 @@ import { lookName } from '../tasks';
  * Claude Code in headless mode. Verified against Claude Code 2.1.301:
  * `--tools ""` disables every built-in tool (no shell, file or web access),
  * `--strict-mcp-config` with no --mcp-config loads no MCP servers,
- * `--no-session-persistence` keeps the submission text out of saved sessions.
+ * `--no-session-persistence` keeps the submission text out of saved sessions,
+ * `--setting-sources ""` loads none of the operator's own settings, so their plugins, hooks and skills stay out of the prompt.
  * The prompt goes on stdin, never on the command line. cwd is a fresh empty temp folder.
  */
-export const CLAUDE_ARGS = ['-p', '--output-format', 'text', '--tools', '', '--max-turns', '1', '--strict-mcp-config', '--no-session-persistence'];
+export const CLAUDE_ARGS = ['-p', '--output-format', 'text', '--tools', '', '--max-turns', '1', '--strict-mcp-config', '--no-session-persistence', '--setting-sources', ''];
 
 /**
  * Reading one picture (verified on Claude Code 2.1.304 with a PNG): only the Read tool, allowed on that one file,

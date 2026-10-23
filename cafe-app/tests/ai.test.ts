@@ -191,13 +191,19 @@ describe('AI connector', () => {
 
   it('review suggestion is schema checked', async () => {
     const good = { criteria: { feasible: true, builder: false, data: true, theme: true, reuse: false }, decision: 'ask', reason: 'Builder not named',
-      needs: [{ need: 'A builder', ask: 'Who would build it?', met: false }] };
+      needs: [{ need: 'A builder', ask: 'Who would build it?', met: false }],
+      updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } } };
     expect(await connector([fake(JSON.stringify(good))]).run(reviewSuggestTask, { idea: INPUT.idea })).toEqual(good);
     const bad = { ...good, decision: 'approve' };
     await expect(connector([fake(JSON.stringify(bad))]).run(reviewSuggestTask, { idea: INPUT.idea })).rejects.toThrow(/invalid output/);
     // The to-do list is required, even when empty.
     const { needs: _n, ...noNeeds } = good;
     await expect(connector([fake(JSON.stringify(noNeeds))]).run(reviewSuggestTask, { idea: INPUT.idea })).rejects.toThrow(/needs is missing/);
+    // So are the proposed updates (empty when the answers change nothing), and a participation outside the two is refused.
+    const { updates: _u, ...noUpdates } = good;
+    await expect(connector([fake(JSON.stringify(noUpdates))]).run(reviewSuggestTask, { idea: INPUT.idea })).rejects.toThrow(/updates is missing/);
+    const odd = { ...good, updates: { ...good.updates, participation: 'Group' } };
+    await expect(connector([fake(JSON.stringify(odd))]).run(reviewSuggestTask, { idea: INPUT.idea })).rejects.toThrow(/invalid output/);
   });
 });
 

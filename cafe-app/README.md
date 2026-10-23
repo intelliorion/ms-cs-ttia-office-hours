@@ -357,8 +357,12 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
 - **Grow the universe from this idea** (in the idea's details): reads the idea's title, challenge, current
   process and outcomes and proposes capabilities, systems and pain points, with links. It never proposes a tool: a Tool star
   appears only when you pick the tool in the tool picker.
-- **Suggest a review** (in the idea's details): fills in the five criteria, a decision and a reason for you to
-  edit. It is highlighted until you change it.
+- **Suggest a decision / Re-evaluate** (in the idea's details): a decision, its reason and a to-do list of what you
+  still need. It also proposes what the answers change in the record, under **From your answers**: a builder (the
+  builder role, and "Builder named, can attend" when they confirm), participation, flags the answers settle, the
+  answers themselves (saved on the idea for the design series and later suggestions, and "Answers received"), and
+  links in the universe (a system the answers name, say). Nothing changes until you say Yes to each; No keeps it from
+  coming back; Undo puts back only that change. Every Yes and Undo is in the idea's history.
 
 **Settings → AI connector** says who is answering ("Claude Code", "Copilot CLI", "Copilot (VS Code)" or
 "No AI: working by hand"). Click it to pick a provider (Auto, Claude Code, Copilot CLI, VS Code or None) and

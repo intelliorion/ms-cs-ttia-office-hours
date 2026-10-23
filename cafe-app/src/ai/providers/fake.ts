@@ -27,6 +27,7 @@ const REVIEW = {
   needs: [
     { need: 'A builder who can attend every session', ask: 'Who in your team would build the proof of concept, and can they attend every session?', met: false },
   ],
+  updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
 };
 
 /** Fits tests/fixtures/inbox/reply.eml: Person 2 answering the two E2 questions on CAFE-2026-001. */

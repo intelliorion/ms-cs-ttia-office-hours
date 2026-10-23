@@ -8,6 +8,7 @@ import { NEED_ANSWER_MAX, type ReviewSuggestInput, type ReviewSuggestOutput } fr
 import { addQuestion } from '../design/brainstorm';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
 import { reviewInput } from './suggestInput';
+import { planUpdates } from './updates';
 import { emailAnswerFor, isOpenNeed, type EmailAnswer } from './needs';
 
 type WithAnswers = Idea & { answers?: EmailAnswer[] };
@@ -40,9 +41,12 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
       ...(p?.askedAt ? { askedAt: p.askedAt } : {}),
     };
   });
+  // What the answers would change in the record: proposed only, each waiting for the operator's Yes.
+  const updates = await planUpdates(root, idea, output.updates, codes, provider, idea.prep?.updates);
   const prep: ReviewPrep = {
     at: clock(), decision: output.decision, reason: showNames(output.reason, codes), criteria: output.criteria,
     needs, basis: pasted.length ? `${basis}, with ${pasted.length} answer${pasted.length === 1 ? '' : 's'} you added` : basis, provider,
+    ...(updates.length ? { updates } : {}),
   };
   await saveIdea(root, { ...idea, prep });
   const open = needs.filter((x) => isOpenNeed(x, idea.answers)).length;

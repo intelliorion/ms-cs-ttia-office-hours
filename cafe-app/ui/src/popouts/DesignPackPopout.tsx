@@ -5,13 +5,12 @@ import { NO_AI_TIP } from './aiUi';
 import { DesignDiagram } from './DesignDiagram';
 import { isStale, plainDiagram } from '../../../src/design/diagram';
 import { Modal } from './Modal';
-import { CafeCheckCard } from '../panels/DesignSection';
 import { fileNote, packFiles, pointRows } from './designPack';
 import { FIT_MARK, scopeLabel } from '../panels/designHelpers';
 
 /**
  * Everything the design series made for one idea, laid out to read: the proof of concept, the tool with its pros and
- * cons, the Café check, and each file it wrote with what it is and how to use it (open any one to read it here).
+ * cons, and each file it wrote with what it is and how to use it (open any one to read it here).
  */
 export function DesignPackPopout({ id }: { id: string }) {
   const { state, closePopout, ai } = useStore();
@@ -161,7 +160,6 @@ export function DesignPackPopout({ id }: { id: string }) {
               })}
             </ul>
           </section>
-          <section className="sec dp-sec"><CafeCheckCard check={s.cafeCheck} /></section>
         </div>
       )}
     </Modal>

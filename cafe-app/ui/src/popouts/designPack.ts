@@ -12,7 +12,7 @@ const KIT_FILES: Record<string, string> = {
 
 /** What a file in the pack is and how to use it, by its path in the idea folder. */
 export function fileNote(path: string): { title: string; use: string } {
-  if (path === 'design.md') return { title: 'The design', use: 'The proof of concept on one page: what it shows, with what input, for whom, built by whom, and the Café check. Share it with the team before the first session.' };
+  if (path === 'design.md') return { title: 'The design', use: 'The proof of concept on one page: what it shows, with what input, for whom, built by whom, and how to build it. Share it with the team before the first session.' };
   if (path === 'approach.md') return { title: 'The tool and why', use: 'The tool picked, with its pros and cons and the facts it rests on. The builder starts here.' };
   if (path === 'plan.md') return { title: 'The build plan', use: 'The build tasks in order, each with its tool and when it is done, plus the risks. Work through it in the design sessions.' };
   const m = /^kit\/([^/]+)\/(.+)$/.exec(path);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  approvedTools, buildInstruction, cafeCheckRows, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
+  approvedTools, buildInstruction, designPhase, featureRows, flagsFor, hasAgentKit, ideaFolder, mergeRows, openStep, pathwayText,
   picksBody, picksProblem, stepStatus, suggestedLines, emptyRow, AGENT_FILE, APPROVED_TOOLS, toolView, overrideTool, outOfDate, featuresBody, scopeLabel,
 } from './designHelpers';
 
@@ -96,18 +96,6 @@ describe('pathwayText', () => {
     expect(pathwayText('Power Apps')).toBe('Citizen-Led (Assisted Citizen until a builder is named)');
     expect(pathwayText('Power Apps', 'Builder A')).toBe('Citizen-Led');
     expect(pathwayText('')).toBe('');
-  });
-});
-
-describe('cafeCheckRows', () => {
-  it('three rows, clean when empty', () => {
-    const rows = cafeCheckRows({ valueWords: [], dataFlags: ['client'], csicFlags: ['custom app', 'sap'] });
-    expect(rows.map((r) => r.label)).toEqual(['Value words', 'Data flags', 'CSIC flags']);
-    expect(rows.map((r) => r.clean)).toEqual([true, false, false]);
-    expect(rows[2].items).toEqual(['custom app', 'sap']);
-  });
-  it('no check yet reads as clean', () => {
-    expect(cafeCheckRows(undefined).every((r) => r.clean && r.items.length === 0)).toBe(true);
   });
 });
 

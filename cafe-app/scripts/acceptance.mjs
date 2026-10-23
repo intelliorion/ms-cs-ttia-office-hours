@@ -428,10 +428,10 @@ async function designPass() {
   let st = s3; let guard = 0;
   while (!st.state.summary && guard++ < 5) st = await api('POST', u('design/step'), {});
   const designMd = await fs.readFile(path.join(dir, 'design.md'), 'utf8').catch(() => '');
-  check('(design) done', 'summary set; design.yaml and design.md end with the Café check',
-    `summary ${st.state.summary ? 'set' : 'missing'}, design.yaml ${await exists(path.join(dir, 'design.yaml'))}, Café check last ${designMd.lastIndexOf('## ') === designMd.indexOf('## Café check')}`,
-    !!st.state.summary && await exists(path.join(dir, 'design.yaml')) && designMd.includes('## Café check')
-      && designMd.lastIndexOf('## ') === designMd.indexOf('## Café check'));
+  check('(design) done', 'summary set; design.yaml and design.md end with the decisions and carry the CSIC note',
+    `summary ${st.state.summary ? 'set' : 'missing'}, design.yaml ${await exists(path.join(dir, 'design.yaml'))}, decisions last ${designMd.lastIndexOf('## ') === designMd.indexOf('## Decisions so far')}`,
+    !!st.state.summary && await exists(path.join(dir, 'design.yaml')) && designMd.includes('CSIC Repository')
+      && designMd.lastIndexOf('## ') === designMd.indexOf('## Decisions so far'));
 
   // Approve: s3f ticked; the custom app is a CSIC flag, so it suggests closing as Routed to CSIC (never automatic).
   const ok = await api('POST', u('design/approve'));
@@ -448,7 +448,7 @@ async function designPass() {
   check('(design) plan and kits', 'plan.md, kit/custom-app/BUILD-WITH-AGENT.md; no Not picked',
     `${plan.files.length} files, plan.md ${!!planMd}, agent kit ${!!agent}, Not picked ${planMd.includes('### Not picked')}`,
     plan.files.includes('plan.md') && plan.files.includes('kit/custom-app/BUILD-WITH-AGENT.md') && !!planMd && /```text\n/.test(agent)
-      && planMd.includes('## Café check') && !planMd.includes('### Not picked'));
+      && planMd.includes('CSIC Repository') && !planMd.includes('### Not picked'));
 }
 
 /* ---------- agentic Inbox: eight steps, conflicts held, history (--fake) ---------- */

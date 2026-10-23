@@ -11,7 +11,7 @@ import { appendHistory, writeFileAtomic } from '../workspace/files';
 import { canonicalTool } from '../graph/ontology';
 import type { FeatureChange } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, type DesignFeature, type DesignState } from './store';
-import { cafeCheck } from './cafecheck';
+
 import { APPROACH_FILE, neededFeatures, renderApproachMd, toolsMap } from './tools';
 
 const one = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -68,7 +68,7 @@ export async function applyFeatureChanges(root: string, id: string, changes: Fea
   const next: DesignState = { ...state, features };
   const idea = await loadIdea(root, id);
   const withTools: Idea = { ...idea, tools: toolsMap(next), features: neededFeatures(next) };
-  next.cafeCheck = cafeCheck(withTools, next);
+
   await writeDesign(root, id, next);
   const dir = await ideaDir(root, id);
   await writeFileAtomic(path.join(dir, APPROACH_FILE), renderApproachMd(idea, next));

@@ -3,11 +3,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea, ideaDir } from '../src/ideas/store';
-import { cafeCheck } from '../src/design/cafecheck';
 import {
-  emptyDesign, readDesign, writeDesign, renderDesignMd, writeDesignMd, loadSkill, skillGuidance, type DesignState, type ToolChoice,
+  emptyDesign, readDesign, writeDesign, renderDesignMd, writeDesignMd, loadSkill, skillGuidance, CSIC_NOTE, type DesignState, type ToolChoice,
 } from '../src/design/store';
-import { legacyChoice, outOfDate, toolFeatures } from '../src/design/choice';
+import { csicFlags, legacyChoice, outOfDate, toolFeatures } from '../src/design/choice';
 
 const feat = (over = {}) => ({ id: 'f1', name: 'Intake form', flags: [], ...over });
 /** The one tool, as a saved choice. */
@@ -68,70 +67,42 @@ describe('design state', () => {
     expect((await readFile(path.join(dir, 'design.yaml'), 'utf8'))).toContain('version: 1');
   });
 
-  it('renders design.md ending with the Café check', async () => {
+  it('renders design.md ending with the decisions, with the CSIC note from the tool choice', async () => {
     const root = await tmpWorkspace();
     const idea = sampleIdea({ title: 'Email scheduler', outcomes: ['Fewer missed emails'] });
     await saveIdea(root, idea);
     const state: DesignState = { ...emptyDesign(), status: 'designing', features: [feat()], tool: choice('custom app'), steps: [{ n: 1, question: 'Q one?', suggested: [], source: 'operator' }] };
     const md = renderDesignMd(idea, state);
     expect(md.startsWith('# Email scheduler')).toBe(true);
-    const order = ['## What it must show', '## Smallest input', '## Features and tools', '## Decisions so far', '## Café check'].map((h) => md.indexOf(h));
+    const order = ['## What it must show', '## Smallest input', '## Features and tools', '## Decisions so far'].map((h) => md.indexOf(h));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(md).toContain('(not yet answered)');
-    expect(md).toContain('**CSIC flags**\n- custom app');
-    expect(md).toContain('**Value words**\n- Clean');
-    expect(md.trimEnd().split('\n').filter((l) => l.startsWith('## ')).pop()).toBe('## Café check');
+    expect(md).toContain(`${CSIC_NOTE} (custom app)`);
+    expect(md).not.toContain('Café check');
+    expect(md.trimEnd().split('\n').filter((l) => l.startsWith('## ')).pop()).toBe('## Decisions so far');
     const file = await writeDesignMd(root, idea, state);
     expect(await readFile(file, 'utf8')).toBe(md);
   });
 });
 
-describe('cafeCheck', () => {
-  const idea = sampleIdea({ challenge: 'Team spends time on intake.' });
-  it('is clean for a plain synthetic-data design', () => {
-    const r = cafeCheck(idea, { ...emptyDesign(), features: [feat()], tool: choice('Power Apps') });
-    expect(r).toEqual({ valueWords: [], dataFlags: [], csicFlags: [], ok: true });
+describe('CSIC flags come from the tool choice, not from words', () => {
+  it('a custom app, a tool or in-scope feature flagged live system or personal data; nothing from text', () => {
+    expect(csicFlags({ ...emptyDesign(), features: [feat()], tool: choice('Power Apps') })).toEqual([]);
+    expect(csicFlags({ ...emptyDesign(), features: [feat()], tool: choice('custom app') })).toEqual(['custom app']);
+    expect(csicFlags({
+      ...emptyDesign(), tool: choice('Power Apps', { flags: ['needs-live-system'] }),
+      features: [feat({ flags: ['personal-data'] }), feat({ id: 'f2', name: 'Dropped', flags: ['needs-live-system'], scope: { status: 'out' } })],
+    })).toEqual(['live system: Power Apps', 'personal data: Intake form']);
+    expect(csicFlags({ features: [feat({ what: 'A live integration with ServiceNow and customer PII' })], tool: choice('Power Apps') })).toEqual([]);
   });
 
-  it('flags value words once each, in order', () => {
-    const state = { ...emptyDesign(), summary: 'It saves 3 FTE and a 20% cost cut; ROI is great. Another FTE.' };
-    expect(cafeCheck(idea, state).valueWords).toEqual(['fte', '20% cost', 'roi']);
-    expect(cafeCheck(idea, { ...emptyDesign(), summary: 'Annual savings of $5000' }).valueWords).toEqual(['savings of $5000']);
-  });
-
-  it('flags a percentage or money amount only next to value language, as the phrase', () => {
-    const words = (summary: string) => cafeCheck(idea, { ...emptyDesign(), summary }).valueWords;
-    for (const [text, phrase] of [
-      ['It saves 20% of the time.', 'saves 20%'], ['Replies go out 40% faster.', '40% faster'], ['About £250k a year.', '£250k a year'],
-      ['It would cut costs by 15%.', 'cut costs by 15%'], ['Worth $2m to the team.', 'worth $2m'],
-    ]) expect(words(text)).toEqual([phrase]);
-    for (const text of ['We review about 5% of claims.', 'Reviews 100% of claims instead of 5%.', 'Runs on a 5% sample.', 'It covers 300 people.']) {
-      expect(words(text)).toEqual([]);
-    }
-    // A cue on one line and a number on the next are not one phrase.
-    expect(words('It saves time.\n20% of claims are checked.')).toEqual([]);
-  });
-
-  it('does not flag bare symbols or word fragments', () => {
-    expect(cafeCheck(idea, { ...emptyDesign(), summary: 'A $ sign, 100 percent, costume, benefit-free? no' }).valueWords).toEqual(['benefit']);
-  });
-
-  it('flags data and CSIC triggers', () => {
-    const state: DesignState = {
-      ...emptyDesign(),
-      features: [feat()], tool: choice('custom app'),
-      steps: [{ n: 1, question: 'q', suggested: [], source: 'operator', answer: 'Needs a live integration with ServiceNow and customer PII, third party feeds' }],
-    };
-    const r = cafeCheck(idea, state);
-    expect(r.csicFlags).toEqual(['custom app', 'live integration', 'servicenow']);
-    expect(r.dataFlags).toEqual(['customer', 'pii', 'third party']);
-    expect(r.ok).toBe(false);
-  });
-
-  it('flags the Technology squad and Salesforce but not "sap" inside words', () => {
-    const r = cafeCheck(idea, { ...emptyDesign(), summary: 'Hand to the Technology squad; pull from Salesforce; sapphire' });
-    expect(r.csicFlags).toEqual(['technology squad', 'salesforce']);
+  it('an older design.yaml with a Café check loads without it', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, sampleIdea());
+    const dir = await ideaDir(root, 'CAFE-2026-001');
+    await writeFile(path.join(dir, 'design.yaml'), 'version: 1\nstatus: designing\nfeatures: []\nsteps: []\ncafeCheck:\n  valueWords: []\n  dataFlags: []\n  csicFlags: []\n  ok: true\n');
+    expect(await readDesign(root, 'CAFE-2026-001')).not.toHaveProperty('cafeCheck');
   });
 });
 

@@ -19,7 +19,7 @@ import {
   type FeatureSuggestion, type ToolPickInput, type ToolPickOutput,
 } from '../ai/tasks';
 import { readDesign, writeDesign, writeDesignMd, mdLine, type DesignFeature, type DesignState, skillGuidance } from './store';
-import { cafeCheck } from './cafecheck';
+
 import { FIT_LEVELS, inScope, legacyChoice, outOfDate, pathwayOf, scopeOf, scopeWords, toolFeatures, type FitLevel, type ToolChoice, type ToolFit } from './choice';
 
 /** Where each approved tool lands on the pathway ladder (Café skill, Part 3). */
@@ -331,7 +331,7 @@ export async function saveToolPicks(
   if (reopen) delete state.approvedAt;
   // Every feature (idea NEEDS it) and the ones the tool covers (BUILT_WITH it), for the graph and the Submission.
   const withTools: Idea = { ...idea, tools: toolsMap(state), features: neededFeatures(state) };
-  state.cafeCheck = cafeCheck(withTools, state);
+
   await writeDesign(root, id, state);
   const dir = await ideaDir(root, id);
   const approachFile = path.join(dir, APPROACH_FILE);

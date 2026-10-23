@@ -97,3 +97,13 @@ describe('the design runs until it is build-ready (fake AI)', () => {
     expect(done.designMd).not.toMatch(/## (Input|Logic|Output|Done when|Environment)\n\n\(not yet answered\)/);
   });
 });
+
+describe('a long summary', () => {
+  it('ends on a whole word with an ellipsis, never mid-word', () => {
+    const long = `${'word '.repeat(119)}duplicates and splits`;
+    const s = reduceDesign(design(), { t: 'done', summary: long }, clock).state.summary!;
+    expect(s.length).toBeLessThanOrEqual(600);
+    expect(s.endsWith('word…')).toBe(true);
+    expect(reduceDesign(design(), { t: 'done', summary: 'Short one.' }, clock).state.summary).toBe('Short one.');
+  });
+});

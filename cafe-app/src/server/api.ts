@@ -264,7 +264,7 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     await appendEdit(root, { id, at: clock(), status: 'active', t: 'merge', from, into } as never);
     return { merged: true, from: a.label, into: b.label, edit: id };
   });
-  // Design series: the brainstorm. One question at a time; every change re-renders design.md and the Café check.
+  // Design series: the brainstorm. One question at a time; every change re-renders design.md.
   add('POST', '/api/ideas/:id/design/step', async ({ params, body }) => {
     const idea = await loadIdea(root, params.id);
     const state = await readDesign(root, idea.id);

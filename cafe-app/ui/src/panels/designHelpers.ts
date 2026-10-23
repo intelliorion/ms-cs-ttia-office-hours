@@ -168,18 +168,6 @@ export function picksProblem(rows: FeatureRow[]): string | null {
   return null;
 }
 
-/** The Café check card: three rows, each clean (green) or with what was found (amber). */
-export interface CheckRow { key: 'value' | 'data' | 'csic'; label: string; items: string[]; clean: boolean }
-export function cafeCheckRows(check: { valueWords?: string[]; dataFlags?: string[]; csicFlags?: string[] } | null | undefined): CheckRow[] {
-  const row = (key: CheckRow['key'], label: string, items: string[] | undefined): CheckRow =>
-    ({ key, label, items: items ?? [], clean: !(items ?? []).length });
-  return [
-    row('value', 'Value words', check?.valueWords),
-    row('data', 'Data flags', check?.dataFlags),
-    row('csic', 'CSIC flags', check?.csicFlags),
-  ];
-}
-
 export interface StepLike { n: number; question: string; answer?: string; source?: string; askedTeam?: { emailKey: string } }
 export type StepKind = 'answered' | 'asked' | 'open';
 /** Where a step stands, and the words for it. */

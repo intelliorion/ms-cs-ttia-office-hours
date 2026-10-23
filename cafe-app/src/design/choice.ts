@@ -57,6 +57,25 @@ export function scopeOf(raw: unknown): FeatureScope | undefined {
   return { status, ...(status === 'outside' ? { by } : {}), ...(why ? { why } : {}), ...(at ? { at } : {}), ...(step ? { step } : {}) };
 }
 
+/**
+ * What sends part of the idea to the CSIC Repository instead of a Café build, read straight from the tool picker's
+ * flags: a custom app, a tool flagged as needing a live system or personal data, and each in-scope feature flagged so.
+ */
+export function csicFlags(state: { features: FeatureLike[]; tool?: Pick<ToolChoice, 'tool' | 'flags'> }): string[] {
+  const out: string[] = [];
+  const t = state.tool;
+  if (t?.tool.toLowerCase() === 'custom app') out.push('custom app');
+  if (t?.flags.includes('needs-live-system')) out.push(`live system: ${t.tool}`);
+  if (t?.flags.includes('personal-data')) out.push(`personal data: ${t.tool}`);
+  for (const f of state.features) {
+    if (f.scope?.status === 'out') continue;
+    const name = f.name.replace(/\s+/g, ' ').trim();
+    if (f.flags?.includes('needs-live-system')) out.push(`live system: ${name}`);
+    if (f.flags?.includes('personal-data')) out.push(`personal data: ${name}`);
+  }
+  return [...new Set(out)];
+}
+
 /** In the main tool's build: not out of scope and not done with another tool. */
 export const inBuild = (f: { scope?: FeatureScope }) => !f.scope;
 /** In the proof of concept at all (an outside-tool feature still is). */
@@ -86,8 +105,8 @@ export function outOfDate(features: { name: string }[], choice: Pick<ToolChoice,
 }
 
 /**
- * THE helper for everything downstream that thinks per feature (kits, plan input, design.md, approach.md, graph links,
- * the Café check): every feature gets the one chosen tool and its pathway. With no tool chosen, no feature has one.
+ * THE helper for everything downstream that thinks per feature (kits, plan input, design.md, approach.md, graph
+ * links): every feature gets the one chosen tool and its pathway. With no tool chosen, no feature has one.
  */
 export function toolFeatures<F extends FeatureLike>(state: { features: F[]; tool?: Pick<ToolChoice, 'tool' | 'pathway'> }): (F & { tool?: string; pathway?: Pathway })[] {
   const t = state.tool;

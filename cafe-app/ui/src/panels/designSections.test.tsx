@@ -28,9 +28,8 @@ const STATE = {
   ideas: [IDEA], outbox: [], criteria: [], decisions: {}, steps: [],
   stageNames: { 1: 'Submit', 2: 'Review', 3: 'Design series' }, closures: { csic: 'Routed to CSIC' },
 };
-const CHECK = { valueWords: [], dataFlags: [], csicFlags: ['custom app'], ok: false };
 const designState = (extra: any = {}) => ({
-  version: 1, status: 'designing', cafeCheck: CHECK,
+  version: 1, status: 'designing',
   features: [{ id: 'request-form', name: 'Request form', what: 'Collects requests', flags: [] }],
   tool: { tool: 'Power Apps', pathway: 'Assisted Citizen', by: 'ai', reason: 'A simple form', pros: ['Quick to build'], cons: [], context: [], flags: [],
     fit: [{ feature: 'Request form', fit: 'yes', note: '' }], evaluatedFor: ['Request form'], at: '2026-10-20' },

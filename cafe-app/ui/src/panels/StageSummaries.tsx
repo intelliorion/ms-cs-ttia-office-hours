@@ -1,5 +1,5 @@
 import { shortDate } from './filterIdeas';
-import { CafeCheckCard, SeeDesign, type DesignView, type PlanView } from './DesignSection';
+import { SeeDesign, type DesignView, type PlanView } from './DesignSection';
 import { hasAgentKit } from './designHelpers';
 
 /**
@@ -68,7 +68,6 @@ export function DesignCard({ id, design, onEdit }: { id: string; design: DesignV
           {steps.map((st) => <li key={st.n}><span className="card-k">{st.question}</span><span className="card-v">{st.answer ?? (st.askedTeam ? 'asked the team' : 'not answered')}</span></li>)}
         </ol>
       )}
-      <CafeCheckCard check={s.cafeCheck} />
       {s.summary && <SeeDesign id={id} />}
     </Card>
   );

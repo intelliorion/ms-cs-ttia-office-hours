@@ -478,10 +478,7 @@ nothing is saved until you press a button, and you can do everything except plan
    (a builder named, a flag settled, a system the data comes from) is proposed under **From your answers** in the
    Design section (the same one list, each waiting for your Yes), and the Submission's **Learned since the form** is
    rewritten with what they add. Names are coded on the way out. A question added by hand changes neither. The live
-   design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
-   flags, each "Clean" or listed. Value words (ROI, savings, benefits, KPI, hours saved, FTE, costs) flag on their
-   own; a percentage or money amount flags only next to value language, as the phrase ("saves 20%", "40% faster",
-   "£250k a year"), so "we review about 5% of claims" stays clean.
+   design.md sits under the questions.
    The design runs until it is **build-ready**: after the five points (must show, smallest input, who uses it, what
    it replaces, who builds it) come the five build points a builder needs before the first session: **Input** (the
    sample's fields, format, rows, masking), **Logic** (the exact rule, its exceptions, the rules sheet's columns),
@@ -511,12 +508,12 @@ nothing is saved until you press a button, and you can do everything except plan
    out of date and offers **Redraw**. With no AI, or before it has drawn one, the pack draws a plain diagram from the
    design itself (the input, the features the tool builds, the output, who uses it, any outside tool), so it never
    shows nothing.
-3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
-   example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
+3. **Approve design.** Once the design is finished, approve it. If the tool choice has a CSIC flag (a
+   custom app, or the tool or a feature flagged as needing a live system or personal data), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it
    needs approving again.
-4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, the same
-   Café check) and a starter kit for the picked tool, covering every feature. For a custom app, **Copy build instruction** copies a
+4. **Plan and kits.** **Write the plan and kits** writes plan.md (tasks for the tool, risks, and the
+   CSIC note when the tool choice has a CSIC flag) and a starter kit for the picked tool, covering every feature. For a custom app, **Copy build instruction** copies a
    ready-made instruction for Claude Code or GitHub Copilot. Running it again rewrites only the files the app
    made and keeps any you added.
 
@@ -526,15 +523,13 @@ nothing is saved until you press a button, and you can do everything except plan
 approach.md            the features, then the one tool: pathway, reason, pros, cons, a fit table per feature, why
 design.yaml            the design's state: features (and where the design moved them), the tool, questions and
                        answers, the settled build points, summary, the diagram, approval date
-design.md              the design, readable, ending with the Café check
-plan.md                the plan: the one thing to show, tasks for the tool, risks, the Café check
+design.md              the design, readable: the points, the build points, the features and tool, the decisions
+plan.md                the plan: the one thing to show, tasks for the tool, risks
 kit/<tool>/...         the starter kit for the picked tool, all Markdown: topics, screens, a flow, a process,
                        prompts, or for a custom app README.md and BUILD-WITH-AGENT.md
 ```
 
-A plan task on a tool other than the one picked is listed under "Not picked" in plan.md, with no kit. If the plan's
-own words mention value (ROI, savings, costs and so on), plan.md lists them under the Café check as "Value
-words in the plan".
+A plan task on a tool other than the one picked is listed under "Not picked" in plan.md, with no kit.
 
 **With no AI.** Add the features and pick the tool by hand, write questions and their suggested answers
 by hand (**Add a question by hand**), answer them, then **Finish by hand** with a short summary, and
@@ -549,7 +544,7 @@ from the Superpowers project, copied under the MIT licence (`skills/LICENSE-supe
 
 **The rules**
 
-- No value is measured in the Café: no ROI, savings, costs or KPIs. The Café check flags them; a proof of
+- No value is measured in the Café: no ROI, savings, costs or KPIs. The AI is told so; a proof of
   concept shows one thing works, on synthetic, aggregated or sample data.
 - A custom app is TTIA-Led, so an idea with one needs the CSIC Repository before any build beyond a proof
   of concept. The same goes for a live connection to a non-Microsoft system or personal, client or

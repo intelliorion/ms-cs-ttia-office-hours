@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { copyText, designPost } from '../api';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
-  AI_WAIT, buildInstruction, cafeCheckRows, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
+  AI_WAIT, buildInstruction, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
 } from './designHelpers';
 
 /** GET …/design: the state, the live design.md and the idea folder relative to the workspace (newer servers). */
@@ -11,22 +11,6 @@ export interface DesignView { state: any; designMd: string; folder?: string }
 export interface PlanView { planMd?: string; files: string[] }
 /** Runs one design call: busy state, notice, and a refresh after. `ai` names the section waiting on the AI. Null on failure. */
 export type DesignCall = <T = any>(fn: () => Promise<T>, o: { ai?: string; ok: (r: T) => string | undefined }) => Promise<T | null>;
-
-export function CafeCheckCard({ check }: { check: any }) {
-  const rows = cafeCheckRows(check);
-  const clean = rows.every((r) => r.clean);
-  return (
-    <div className={`cc-card${clean ? ' clean' : ''}`} data-testid="cafe-check">
-      <div className="cc-h">Café check <span className={`cc-all ${clean ? 'ok' : 'warn'}`}>{clean ? 'Clean' : 'Look at the amber rows'}</span></div>
-      {rows.map((r) => (
-        <div key={r.key} className={`cc-row ${r.clean ? 'ok' : 'warn'}`} data-row={r.key}>
-          <span className="cc-l">{r.label}</span>
-          <span className="cc-v">{r.clean ? 'Clean' : r.items.join(', ')}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function StepItem({ step, off, onAnswer, onIdk, onSendQuestions }: {
   step: any; off: boolean; onAnswer: (body: any) => Promise<unknown>; onIdk: () => void; onSendQuestions: () => void;
@@ -126,7 +110,7 @@ export function StepCarousel({ steps, render }: { steps: any[]; render: (step: a
 
 /**
  * Design: the brainstorm as a conversation, one question at a time; every answer is saved on the idea at once (nothing
- * to say yes to); the Café check; Approve. Works by hand with no AI: the operator adds questions, answers them and
+ * to say yes to); Approve. Works by hand with no AI: the operator adds questions, answers them and
  * writes the summary.
  */
 export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSendQuestions }: {
@@ -219,7 +203,6 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
         {aiWorking && <span className="ai-busy" role="status">{AI_WAIT}</span>}
       </div>
       {phase === 'done' && <div className="hint">Adding a question by hand reopens the design.</div>}
-      <CafeCheckCard check={s.cafeCheck} />
       {(phase === 'done' || phase === 'approved') && <SeeDesign id={id} />}
     </section>
   );

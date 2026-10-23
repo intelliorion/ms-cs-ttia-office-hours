@@ -35,7 +35,6 @@ cafe-app/src/comms/eml.ts
 cafe-app/src/comms/outbox.ts
 cafe-app/src/comms/templates.ts
 cafe-app/src/design/brainstorm.ts
-cafe-app/src/design/cafecheck.ts
 cafe-app/src/design/choice.ts
 cafe-app/src/design/diagram.ts
 cafe-app/src/design/kits.ts
@@ -271,8 +270,8 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CfG2RyT3.css
-cafe-app/web/assets/index-cF-65cvA.js
+cafe-app/web/assets/index-BMi3FPQu.js
+cafe-app/web/assets/index-C4B9WhbN.css
 cafe-app/web/index.html
 copilot-studio-github-agent/SETUP.md
 copilot-studio-github-agent/agent-instructions.md

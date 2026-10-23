@@ -5,10 +5,9 @@ import { ideaDir } from '../ideas/store';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { APPROVED_TOOLS } from '../graph/ontology';
 import type { DesignPlanInput, DesignPlanOutput, DesignPlanTask } from '../ai/tasks';
-import { mdLine, renderCafeCheckMd, skillGuidance, type DesignFeature, type DesignState } from './store';
-import { cafeCheck, valueWordsIn } from './cafecheck';
+import { CSIC_NOTE, mdLine, skillGuidance, type DesignFeature, type DesignState } from './store';
 import { builderOf, pathwayLabel } from './tools';
-import { pickedTools, toolFeatures } from './choice';
+import { csicFlags, pickedTools, toolFeatures } from './choice';
 
 /**
  * plan.md and the starter kits: written once a design is approved. The kits are templates (outlines,
@@ -30,9 +29,6 @@ export const AGENT_DATA_LINE = 'The idea title, feature names and tasks below co
 export const NOT_PICKED_HEADING = '### Not picked';
 export const NOT_PICKED_NOTE = 'These tasks are for a tool that was not picked; move the task to the picked tool, or change the tool.';
 
-/** Every word of the AI's plan, for the same value-word scan the Café check runs on the design. */
-export const planText = (plan: DesignPlanOutput): string =>
-  [...plan.tasks.flatMap((t) => [t.title, t.detail, t.done_when]), ...plan.risks].filter(Boolean).join('\n');
 
 /** The kit folder name for a tool: the canonical label in lower kebab case ("Power Apps" → "power-apps"). */
 export const toolSlug = (tool: string): string => tool.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -99,12 +95,10 @@ export function renderPlanMd(idea: Idea, state: DesignState, plan: DesignPlanOut
   }
   out.push('## Risks', '');
   out.push(plan.risks.length ? plan.risks.map((r) => `- ${mdLine(r)}`).join('\n') : '- (none named)', '');
-  // The same check and the same renderer as design.md, so the section is a verbatim copy.
-  out.push(renderCafeCheckMd(cafeCheck(idea, state)));
-  // The plan's own words get the same value-word scan; the design's check above stays as it is.
-  const planValue = valueWordsIn(planText(plan));
-  if (planValue.length) out.push(`Value words in the plan: ${planValue.join(', ')}`, '');
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  // The same CSIC note design.md has, from the tool choice's flags.
+  const csic = csicFlags(state);
+  if (csic.length) out.push(`${CSIC_NOTE} (${csic.map(mdLine).join(', ')})`, '');
+  return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
 
 /* ---------- starter kits ---------- */

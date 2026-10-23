@@ -9,12 +9,12 @@ import { sameQuestion } from '../inbox/question';
 import { DESIGN_TAGS, type DesignDiagramInput, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
 import { isDesignTag, pointOf, POINT_MAX } from './points';
 import { basisOf, checkDiagram, type DiagramSpec } from './diagram';
-import { scopeWords } from './choice';
+import { csicFlags, scopeWords } from './choice';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
   type DesignState, type DesignStep, type DesignTag, type StepSource,
 } from './store';
-import { cafeCheck } from './cafecheck';
+
 import { toolFeatures } from './choice';
 import { reviewInput } from '../review/suggestInput';
 import { showNames, type Coded } from '../command/names';
@@ -81,7 +81,9 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
       break;
     }
     case 'done': {
-      const summary = line(e.summary, SUMMARY_MAX);
+      // A summary longer than the cap (names restored after the AI can make it so) ends on a whole word, with an ellipsis.
+      const full = line(e.summary, 4000);
+      const summary = full.length <= SUMMARY_MAX ? full : `${full.slice(0, SUMMARY_MAX - 1).replace(/\s+\S*$/, '')}…`;
       if (!summary) throw new DesignError('A finished design needs a summary');
       state.summary = summary;
       // What the earlier answers settle though no question was tagged with it: design tags only, one line each.
@@ -120,7 +122,7 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
 }
 
 /**
- * Applies events and keeps the three in step: design.yaml (with the Café check), design.md, and the
+ * Applies events and keeps the three in step: design.yaml, design.md, and the
  * background ticks (s3c/s3d/s3f, source design.md). Never changes the stage.
  */
 export async function applyDesignEvents(
@@ -133,7 +135,6 @@ export async function applyDesignEvents(
     state = r.state;
     ticks.push(...r.ticks);
   }
-  state.cafeCheck = cafeCheck(idea, state);
   await writeDesign(root, idea.id, state);
   await writeDesignMd(root, idea, state);
   await saveDesignAnswers(root, idea.id, state);
@@ -360,7 +361,8 @@ export async function approveDesign(
 ): Promise<{ state: DesignState; designMd: string; notice: string; suggest?: Suggest }> {
   const idea = await loadIdea(root, id);
   const out = await applyDesignEvent(root, idea, { t: 'approve' }, clock);
-  const flags = out.state.cafeCheck?.csicFlags ?? [];
+  // Straight from the tool choice's flags (a custom app, a live system, personal data).
+  const flags = csicFlags(out.state);
   const suggest = flags.length ? suggestion(await loadIdea(root, id), { closeAs: 'csic' }) : undefined;
   const notice = flags.length ? `Design approved. ${CSIC_NOTE} (${flags.join(', ')})` : 'Design approved.';
   return { ...out, notice, ...(suggest ? { suggest } : {}) };

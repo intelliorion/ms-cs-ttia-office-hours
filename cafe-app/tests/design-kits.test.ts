@@ -10,7 +10,6 @@ import {
   renderPlanMd, kitFiles, designPlanInput, oneThingToShow, toolSlug, CUSTOM_APP_CSIC, AGENT_FILE,
   NOT_PICKED_HEADING, NOT_PICKED_NOTE, PLAN_NEEDS_AI, AGENT_DATA_LINE,
 } from '../src/design/kits';
-import { cafeCheck, valueWordsIn } from '../src/design/cafecheck';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
@@ -60,7 +59,6 @@ async function approvedDesign(s: Awaited<ReturnType<typeof server>>) {
   expect((await s.post(`/api/ideas/${ID}/design/approve`)).status).toBe(200);
 }
 
-const cafeSection = (md: string) => md.slice(md.indexOf('## Café check'));
 const PLAN: DesignPlanOutput = {
   tasks: APPROVED_TOOLS.map((tool, i) => ({ title: `Task ${i} for ${tool}`, detail: `Detail ${i}`, tool, done_when: `Done ${i}` })),
   risks: ['One risk'],
@@ -102,7 +100,7 @@ describe('designPlanTask', () => {
 });
 
 describe('plan.md and kits (renderers)', () => {
-  it('plan.md: title, the one thing to show, tasks by tool in approved order, risks, then the Café check from design.md', () => {
+  it('plan.md: title, the one thing to show, tasks by tool in approved order, risks, then the CSIC note design.md has', () => {
     const idea = sampleIdea({ stage: 3 });
     const state: DesignState = {
       ...emptyDesign(), status: 'approved', approvedAt: '2026-10-20', summary: 'Shows slots. Then more.',
@@ -124,8 +122,10 @@ describe('plan.md and kits (renderers)', () => {
     }
     expect(md).toContain('## Risks\n\n- Risk one');
     const h2 = md.split('\n').filter((l) => l.startsWith('## '));
-    expect(h2).toEqual(['## The one thing to show', '## Tasks', '## Risks', '## Café check']);
-    expect(cafeSection(md)).toBe(cafeSection(renderDesignMd(idea, state)));
+    expect(h2).toEqual(['## The one thing to show', '## Tasks', '## Risks']);
+    expect(md).not.toContain('Café check');
+    expect(md.trimEnd().endsWith('This idea has a CSIC feature, so that part goes to the CSIC Repository, not a Café build. (custom app)')).toBe(true);
+    expect(renderDesignMd(idea, state)).toContain('not a Café build. (custom app)');
     // The must-show answer wins over the summary.
     expect(oneThingToShow({ ...state, steps: [{ n: 1, question: 'Q', suggested: [], answer: MUST_SHOW, tag: 'must-show', source: 'operator' }] })).toBe(MUST_SHOW);
   });
@@ -192,7 +192,7 @@ describe('plan routes', () => {
     expect(plan).toMatch(/Done when: The sample list has twenty rows/);
     expect(plan).toContain('## Risks');
     const design = await readFile(path.join(dir, 'design.md'), 'utf8');
-    expect(cafeSection(plan)).toBe(cafeSection(design));
+    expect(design).toContain('This idea has a CSIC feature');
     expect(plan).toContain('This idea has a CSIC feature');
 
     const agent = await readFile(path.join(dir, 'kit', 'custom-app', AGENT_FILE), 'utf8');
@@ -336,22 +336,12 @@ describe('Task 6 carry-overs', () => {
     expect(Object.keys(kitFiles(idea, base, plan))).toEqual(['kit/power-apps/screens.md']);
   });
 
-  it("plan.md: the Café check's value-word scan (words and value phrases) also runs over the plan's titles, details, done-when lines and risks", () => {
+  it('plan.md no longer scans for value words: it is the plan as written, with no check after the risks', () => {
     const idea = sampleIdea({ stage: 3 });
-    expect(valueWordsIn('Saves 20% and cuts costs; ROI next')).toEqual(['saves 20%', 'costs', 'roi']);
-    expect(valueWordsIn('We review about 5% of claims')).toEqual([]);
-    const plan: DesignPlanOutput = {
-      tasks: [t('Measure the ROI', 'Power Apps'), t('Build', 'Power Apps', { detail: 'Show the savings' }), t('Hand over', 'custom app', { done_when: 'Saves 20%' })],
-      risks: ['KPI not agreed'],
-    };
+    const plan: DesignPlanOutput = { tasks: [t('Measure the ROI', 'Power Apps'), t('B', 'Power Apps'), t('C', 'Power Apps')], risks: ['KPI not agreed'] };
     const md = renderPlanMd(idea, base, plan);
-    expect(md).toContain('Value words in the plan: roi, savings, saves 20%, kpi');
-    // The design's own check stays exactly as design.md has it.
-    expect(cafeCheck(idea, base).valueWords).toEqual([]);
-    expect(cafeSection(md).startsWith(cafeSection(renderDesignMd(idea, base)))).toBe(true);
-    expect(md.trimEnd().endsWith('Value words in the plan: roi, savings, saves 20%, kpi')).toBe(true);
-    // A clean plan adds no line.
-    expect(renderPlanMd(idea, base, { tasks: [t('A', 'Power Apps'), t('B', 'Power Apps'), t('C', 'custom app')], risks: [] })).not.toContain('Value words in the plan');
+    expect(md).not.toContain('Value words');
+    expect(md.trimEnd().endsWith('- KPI not agreed')).toBe(true);
   });
 
   it('a done event on an approved design (AI or /design/finish) clears approvedAt and sets it back to designing', async () => {

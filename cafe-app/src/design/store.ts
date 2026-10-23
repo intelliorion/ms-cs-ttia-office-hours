@@ -4,8 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { readYaml, writeYaml, writeFileAtomic } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
-import { cafeCheck, type CafeCheck } from './cafecheck';
-import { legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
+import { csicFlags, legacyChoice, scopeOf, toolFeatures, type FeatureScope, type Pathway, type ToolChoice } from './choice';
 import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 import { diagramOf, type StoredDiagram } from './diagram';
 
@@ -54,7 +53,7 @@ export interface DesignState {
   settled?: Partial<Record<DesignTag, string>>;
   /** The design diagram (the AI's, or the app's plain one), with the design it was drawn from (`basis`). */
   diagram?: StoredDiagram;
-  cafeCheck?: CafeCheck;
+
   approvedAt?: string;
   /** Older records: the picker's questions as sent. Read into toolPrep. */
   toolQuestions?: ToolQuestions;
@@ -62,7 +61,7 @@ export interface DesignState {
   toolPrep?: { at: string; provider?: string; needs: PrepNeed[] };
 }
 
-/** Said in design.md and on approval when the Café check has a CSIC flag. */
+/** Said in design.md and on approval when the tool choice has a CSIC flag (csicFlags). */
 export const CSIC_NOTE = 'This idea has a CSIC feature, so that part goes to the CSIC Repository, not a Café build.';
 
 export function emptyDesign(): DesignState {
@@ -103,8 +102,8 @@ function settledOf(raw: unknown): DesignState['settled'] {
 }
 
 function normalize(raw: Partial<DesignState>): DesignState {
-  // The old questions live on as the to-do list.
-  const { toolQuestions: _old, tool: _tool, ...rest } = raw;
+  // The old questions live on as the to-do list. Older records' Café check is dropped (it is no longer worked out).
+  const { toolQuestions: _old, tool: _tool, cafeCheck: _check, ...rest } = raw as Partial<DesignState> & { cafeCheck?: unknown };
   // Older records had a tool on each feature: they become one tool for the whole proof of concept.
   const rawFeatures = arr<Record<string, unknown>>(raw.features);
   const legacy = !raw.tool && rawFeatures.some((f) => typeof f?.tool === 'string' && f.tool)
@@ -145,7 +144,6 @@ export async function writeDesign(root: string, id: string, state: DesignState):
   await writeYaml(path.join(dir, 'design.yaml'), state);
 }
 
-const bullets = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).join('\n') : '- (none yet)');
 
 /** Free text as one Markdown line: whitespace runs collapse and a leading # or - is escaped, so it can never add a heading or a field. */
 export const mdLine = (text: string | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim().replace(/^([#>*+-]|\d+[.)])/, '\\$1');
@@ -163,7 +161,6 @@ export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<
 }
 
 export function renderDesignMd(idea: Idea, state: DesignState): string {
-  const check = cafeCheck(idea, state);
   const out: string[] = [`# ${idea.title}`, ''];
   if (state.status === 'approved' && state.approvedAt) out.push(`Approved on ${state.approvedAt}.`, '');
   const mustShow = mdLine(state.summary) || mdLine(pointOf(state, 'must-show'));
@@ -179,24 +176,16 @@ export function renderDesignMd(idea: Idea, state: DesignState): string {
   if (t) out.push(`One tool for the whole proof of concept: **${t.tool}** (${t.pathway})${t.reason ? `: ${mdLine(t.reason)}` : ''}`, '');
   if (state.features.length === 0) out.push(t ? '(no features listed yet)' : NOT_ANSWERED);
   for (const f of toolFeatures(state)) out.push(featureMdLine(f, state));
+  // A custom app, or a live system or personal data the tool picker flagged, goes to the CSIC Repository.
+  const csic = csicFlags(state);
+  if (csic.length) out.push('', `${CSIC_NOTE} (${csic.map(mdLine).join(', ')})`);
   out.push('', '## Decisions so far', '');
   if (state.steps.length === 0) out.push('(not yet answered)');
   for (const s of state.steps) {
     const open = s.askedTeam ? '(asked the team in an E2; waiting for the reply)' : '(not yet answered)';
     out.push(`**Q${s.n}. ${mdLine(s.question).replace(/\*/g, '')}**`, '', mdLine(s.answer) || open, '');
   }
-  out.push(renderCafeCheckMd(check));
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
-}
-
-/** The "## Café check" section, as design.md and plan.md both end with it (one renderer, so the copy is verbatim). */
-export function renderCafeCheckMd(check: CafeCheck): string {
-  const out: string[] = ['## Café check', ''];
-  out.push('**Value words**', check.valueWords.length ? bullets(check.valueWords) : '- Clean', '');
-  out.push('**Data flags**', check.dataFlags.length ? bullets(check.dataFlags) : '- Clean', '');
-  out.push('**CSIC flags**', check.csicFlags.length ? bullets(check.csicFlags) : '- Clean', '');
-  if (check.csicFlags.length) out.push(CSIC_NOTE, '');
-  return out.join('\n');
+  return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
 }
 
 export async function writeDesignMd(root: string, idea: Idea, state: DesignState): Promise<string> {

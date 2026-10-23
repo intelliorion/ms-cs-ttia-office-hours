@@ -339,7 +339,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .idea-detail .history li{grid-template-columns:48px 1fr auto;gap:8px;font-size:13.5px}
 .idea-detail .copy-fallback textarea{width:100%}
 
-/* Design series in the idea details: Tool picker, Design (a conversation), Café check, Plan and kits. */
+/* Design series in the idea details: Tool picker, Design (a conversation), Plan and kits. */
 .idea-detail input[type=text]{background:rgba(var(--rgb-s2),.6);border:1px solid var(--panel-border);border-radius:4px;color:var(--text);font:inherit;font-size:14px;padding:6px 9px;outline:none;min-width:0;box-sizing:border-box}
 .idea-detail input[type=text]:focus{border-color:var(--teal)}
 .idea-detail input:disabled,.idea-detail textarea:disabled,.idea-detail select:disabled{opacity:.6}
@@ -386,15 +386,6 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ds-form-acts{display:flex;gap:6px;justify-content:flex-end;align-items:center}
 .ds-form-acts .hint{margin-right:auto}
 .ds-acts{margin:0 0 8px}
-.cc-card{margin:10px 0 8px;padding:8px 12px;border-radius:4px;border:1px solid rgba(var(--rgb-warm),.5);background:rgba(var(--rgb-warm),.06)}
-.cc-card.clean{border-color:rgba(var(--rgb-ok),.5);background:rgba(var(--rgb-ok),.06)}
-.cc-h{display:flex;align-items:baseline;justify-content:space-between;font-size:13px;font-weight:700;color:var(--strong);margin-bottom:4px}
-.cc-all{font-size:12px;font-weight:400}
-.cc-all.ok,.cc-row.ok .cc-v{color:var(--hx-86d699)}
-.cc-all.warn,.cc-row.warn .cc-v{color:var(--amber)}
-.cc-row{display:grid;grid-template-columns:96px 1fr;gap:8px;font-size:13px;padding:2px 0;line-height:1.35}
-.cc-l{color:var(--muted)}
-.cc-v{overflow-wrap:anywhere}
 .md-toggle{margin-top:6px}
 .md-toggle .link-btn{color:var(--teal);text-align:left}
 .md-pre{margin:6px 0 0;padding:10px 12px;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--mono);font-size:12px;line-height:1.45;color:var(--text);background:rgba(var(--rgb-s2),.55);border:1px solid rgba(var(--rgb-line),.2);border-radius:4px}

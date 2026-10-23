@@ -33,7 +33,7 @@ async function server(provider?: Provider) {
 }
 
 const headings = (md: string) => md.split('\n').filter((l) => l.startsWith('#'));
-const endsWithCafeCheck = (md: string) => md.trimEnd().split('\n').filter((l) => l.startsWith('## ')).pop() === '## Café check';
+const endsWithDecisions = (md: string) => md.trimEnd().split('\n').filter((l) => l.startsWith('## ')).pop() === '## Decisions so far';
 
 describe('designStepTask', () => {
   it('a finished design needs a summary and asks nothing; an open one needs a question; tags are a fixed list', () => {
@@ -91,7 +91,8 @@ describe('design brainstorm routes', () => {
     const a1 = await json(await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, suggestedIndex: 0 }));
     expect(a1.state.steps[0]).toMatchObject({ answer: r1.step.suggested[0], source: 'ai-suggested' });
     expect(a1.designMd).toContain(r1.step.suggested[0]);
-    expect(endsWithCafeCheck(a1.designMd)).toBe(true);
+    expect(endsWithDecisions(a1.designMd)).toBe(true);
+    expect(a1.designMd).not.toContain('Café check');
     let idea = await loadIdea(s.root, ID);
     expect(idea.checklist.s3c).toMatchObject({ done: true, by: 'app', source: 'design.md' });
     expect(idea.checklist.s3d).toBeUndefined();
@@ -112,8 +113,8 @@ describe('design brainstorm routes', () => {
     expect(done.state.summary).toMatch(/proof of concept/);
     expect(done.state.steps).toHaveLength(3);
     expect(done.designMd).toContain(done.state.summary);
-    expect(endsWithCafeCheck(done.designMd)).toBe(true);
-    expect((await readDesign(s.root, ID)).cafeCheck).toMatchObject({ ok: true });
+    expect(endsWithDecisions(done.designMd)).toBe(true);
+    expect((await readDesign(s.root, ID))).not.toHaveProperty('cafeCheck');
 
     idea = await loadIdea(s.root, ID);
     expect(idea.stage).toBe(3);
@@ -174,7 +175,7 @@ describe('design brainstorm routes', () => {
     expect(body.state).toMatchObject({ status: 'approved', approvedAt: '2026-10-20' });
     expect(body.designMd).toContain('Approved on 2026-10-20.');
     expect(body.designMd).toContain(CSIC_NOTE);
-    expect(endsWithCafeCheck(body.designMd)).toBe(true);
+    expect(endsWithDecisions(body.designMd)).toBe(true);
     const idea = await loadIdea(s.root, ID);
     expect(idea.checklist.s3f).toMatchObject({ done: true, by: 'app', source: 'design.md' });
     expect(idea.stage).toBe(3);
@@ -189,24 +190,24 @@ describe('design brainstorm routes', () => {
     ], tool: { tool: 'Power Apps' } });
     const idea = await loadIdea(s.root, ID);
     await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows slots from sample data.' }, clock);
-    const st = await readDesign(s.root, ID);
-    expect(st.cafeCheck!.csicFlags.length).toBeGreaterThan(0);
-    expect(st.cafeCheck!.csicFlags).toEqual(['live system: Slot lookup', 'personal data: Requester list']);
-    expect(st.cafeCheck!.dataFlags).toContain('personal data: Requester list');
     const body = await json(await s.post(`/api/ideas/${ID}/design/approve`));
     expect(body.suggest).toMatchObject({ closeAs: 'csic' });
     expect(body.notice).toContain(CSIC_NOTE);
+    expect(body.notice).toContain('live system: Slot lookup, personal data: Requester list');
+    expect(body.designMd).toContain(`${CSIC_NOTE} (live system: Slot lookup, personal data: Requester list)`);
   });
 
-  it('the Café check reads a feature\'s "what" line', async () => {
+  it('words alone are no CSIC flag any more: only the tool choice\'s flags count', async () => {
     const s = await server();
     await s.post(`/api/ideas/${ID}/tools`, { features: [{ name: 'Sync', what: 'Keeps an API to Workday in step' }], tool: { tool: 'Power Apps' } });
     const idea = await loadIdea(s.root, ID);
     await applyDesignEvent(s.root, idea, { t: 'done', summary: 'Shows a sync.' }, clock);
-    expect((await readDesign(s.root, ID)).cafeCheck!.csicFlags).toEqual(expect.arrayContaining(['api to', 'workday']));
+    const body = await json(await s.post(`/api/ideas/${ID}/design/approve`));
+    expect(body.suggest).toBeUndefined();
+    expect(body.notice).toBe('Design approved.');
   });
 
-  it('approve with a clean Café check gives no suggestion', async () => {
+  it('approve with no CSIC flag gives no suggestion', async () => {
     const s = await server();
     await s.post(`/api/ideas/${ID}/design/step`, { question: 'What must it show?' });
     await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Sorted requests' });
@@ -260,7 +261,7 @@ describe('design brainstorm routes', () => {
     expect(r.state.steps[0].answer).not.toContain('\n');
     expect(headings(r.designMd)).toEqual([
       '# Email scheduler', '## What it must show', '## Smallest input', '## Who and what', '## Input', '## Logic', '## Output', '## Done when', '## Environment',
-      '## Features and tools', '## Decisions so far', '## Café check',
+      '## Features and tools', '## Decisions so far',
     ]);
   });
 });

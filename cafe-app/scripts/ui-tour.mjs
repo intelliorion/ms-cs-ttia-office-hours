@@ -453,7 +453,7 @@ async function agenticShots(p, restart) {
 }
 
 // The design series on CAFE-2026-002 with the fake AI: Tool picker (suggest, save), the brainstorm one question at a time
-// (a suggested answer, "I don't know" to the E2, a typed answer), done, the Café check, Approve with the CSIC
+// (a suggested answer, "I don't know" to the E2, a typed answer), done, Approve with the CSIC
 // suggestion, then plan.md and the kits. Needs CAFE_AI_FAKE=1.
 async function designShots(p) {
   const assert = (ok, msg) => { if (!ok) throw new Error(`design: ${msg}`); };
@@ -521,7 +521,7 @@ async function designShots(p) {
   await p.waitForSelector(`${D} [data-testid="suggest"]`);
   assert((await p.textContent(`${D} [data-testid="suggest"]`)).includes('CSIC'), 'no CSIC suggestion after approve');
   await into(`${D} [data-testid="design-complete"]`);
-  await shot(p, '43-cafe-check.png');
+  await shot(p, '43-design-approved.png');
   await p.click(`${D} [data-action="suggest-no"]`);
   // Plan and kits.
   await p.click(`${D} [data-action="write-plan"]`);

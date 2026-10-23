@@ -140,7 +140,8 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
 
   const answer = (n: number, body: any) => call(() => designPost(id, 'design/answer', { n, ...body }), { ok: () => `Answer to question ${n} saved.` });
   const next = () => call(() => designPost(id, 'design/step', {}), {
-    ai: 'design', ok: (r: any) => (r.step ? `Question ${r.step.n} added.` : r.state?.summary ? 'Design complete. Check the summary, then approve it.' : undefined),
+    ai: 'design', ok: (r: any) => (r.step ? `Question ${r.step.n} added.` : r.state?.summary
+      ? `Design complete. Check the summary, then approve it.${r.diagramError ? ' The diagram could not be drawn this time: open See the design and press Redraw.' : ''}` : undefined),
   });
   const addHand = async () => {
     if (!handQ) return;

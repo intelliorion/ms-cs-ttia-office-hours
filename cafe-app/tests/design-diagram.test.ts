@@ -127,9 +127,23 @@ describe('drawn when the design completes, and on Redraw', () => {
     const done = await finish(s);
     expect(done.state.summary).toBeTruthy();
     expect(done.state.diagram).toBeUndefined();
+    // It says so, rather than failing quietly: in the reply and in the idea's history.
+    expect(done.diagramError).toBeTruthy();
+    const history = await (await fetch(`${s.base}/api/ideas/${ID}/history`)).json();
+    expect(history.some((h: any) => /Diagram not drawn/.test(h.detail ?? ''))).toBe(true);
     const r = await s.post(`/api/ideas/${ID}/design/diagram`);
     expect(r.status).toBe(400);
     expect((await json(r)).error).toMatch(/Working by hand/);
+  });
+
+  it('a drawing that fails once is tried again at once', async () => {
+    const fake = fakeProvider();
+    let tries = 0;
+    const flaky: Provider = { ...fake, complete: async (p, o) => (p.startsWith('TASK: design-diagram') && tries++ === 0 ? 'no json here' : fake.complete(p, o)) };
+    const s = await server(flaky);
+    const done = await finish(s);
+    expect(done.state.diagram?.by).toBe('ai');
+    expect(done.diagramError).toBeUndefined();
   });
 
   it('Redraw needs a finished design', async () => {

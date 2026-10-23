@@ -10,7 +10,7 @@ import { listIdeas, ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
 import { setStage } from '../ideas/stage';
-import { writeFileAtomic, readHistory, readText } from '../workspace/files';
+import { writeFileAtomic, readHistory, readText, appendHistory } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
@@ -298,11 +298,18 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     const out = await applyDesignEvent(root, await loadIdea(root, idea.id), stepEvent(output), clock);
     const said = changed.length ? { featureChanges: changed } : {};
     if (!output.done) return { ...out, ...said, step: out.state.steps[out.state.steps.length - 1] };
-    // A finished design is drawn at once. If the AI cannot draw it, the pack draws a plain one and offers Redraw.
-    try {
-      const state = await drawDiagram(root, idea.id, (input) => ai.runWith(designDiagramTask, input), clock);
-      return { ...out, ...said, state };
-    } catch { return { ...out, ...said }; }
+    // A finished design is drawn at once: tried twice, as one AI reply can miss. If it still cannot, say why (the
+    // pack draws a plain one meanwhile and offers Redraw); never fail the finished design for it.
+    let why = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const state = await drawDiagram(root, idea.id, (input) => ai.runWith(designDiagramTask, input), clock);
+        return { ...out, ...said, state };
+      } catch (e) { why = (e as Error).message; }
+    }
+    console.error(`Design diagram for ${idea.id} not drawn: ${why}`);
+    await appendHistory(await ideaDir(root, idea.id), { at: clock(), action: 'design', by: 'app', detail: `Diagram not drawn: ${why.slice(0, 200)}` });
+    return { ...out, ...said, diagramError: why };
   });
   // Redraw the design diagram with the AI (on demand, or when the design changed since it was drawn).
   add('POST', '/api/ideas/:id/design/diagram', async ({ params }) => {

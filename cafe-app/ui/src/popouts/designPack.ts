@@ -1,4 +1,5 @@
 /** The design pack's words: what each file is, and how to use it. A leaf module, so it can be tested on its own. */
+import { BASE_TAGS, BUILD_HINTS, BUILD_TAGS, NOT_ANSWERED, pointOf, POINT_LABELS, type DesignTag } from '../../../src/design/points';
 
 const KIT_FILES: Record<string, string> = {
   'README.md': 'Start here: what the starter kit holds and the order to use it in.',
@@ -23,9 +24,19 @@ export function fileNote(path: string): { title: string; use: string } {
 }
 
 /** The design questions the summary rests on, by what they settle. */
-export const SETTLES: [string, string][] = [
-  ['must-show', 'Must show'], ['smallest-input', 'Smallest input'], ['users', 'Who uses it'], ['replaces', 'What it replaces'], ['builder', 'Who builds it'],
-];
+export const SETTLES: [DesignTag, string][] = BASE_TAGS.map((t) => [t, POINT_LABELS[t]]);
+/** The build points, each its own row in the pack. */
+export const BUILD_POINTS: [DesignTag, string][] = BUILD_TAGS.map((t) => [t, POINT_LABELS[t]]);
+
+/** One row of the pack's points: what settles it (the tagged answer, or what the done reply said), or "(not yet answered)". */
+export interface PointRow { tag: DesignTag; label: string; text: string; open: boolean; hint?: string }
+export function pointRows(state: { steps?: any[]; settled?: Record<string, string> } | null | undefined, which: 'base' | 'build'): PointRow[] {
+  const src = { steps: state?.steps ?? [], settled: state?.settled };
+  return (which === 'base' ? SETTLES : BUILD_POINTS).map(([tag, label]) => {
+    const text = pointOf(src, tag);
+    return { tag, label, text: text ?? NOT_ANSWERED, open: !text, ...(which === 'build' ? { hint: BUILD_HINTS[tag as keyof typeof BUILD_HINTS] } : {}) };
+  });
+}
 
 /** The pack's files in reading order: the design, the tool, the plan, then the kit. */
 export function packFiles(planFiles: string[], hasApproach: boolean): string[] {

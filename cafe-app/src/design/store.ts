@@ -6,8 +6,9 @@ import { ideaDir } from '../ideas/store';
 import type { Idea, PrepNeed } from '../ideas/idea';
 import { cafeCheck, type CafeCheck } from './cafecheck';
 import { legacyChoice, toolFeatures, type Pathway, type ToolChoice } from './choice';
+import { BASE_TAGS, BUILD_TAGS, isDesignTag, pointOf, POINT_LABELS, NOT_ANSWERED, type DesignTag } from './points';
 
-export type { Pathway, ToolChoice };
+export type { Pathway, ToolChoice, DesignTag };
 export type DesignStatus = 'not-started' | 'picking' | 'designing' | 'approved';
 export type StepSource = 'operator' | 'e2' | 'ai-suggested';
 
@@ -21,11 +22,10 @@ export interface DesignFeature {
   flags: string[];
 }
 
+
 /** Questions the tool picker sent to the team in one E2 because the form said too little to pick. */
 export interface ToolQuestions { questions: string[]; emailKey: string; at: string }
 
-/** What a brainstorm question settles (the AI says; a hand-written question has none). */
-export type DesignTag = 'must-show' | 'smallest-input' | 'users' | 'replaces' | 'builder';
 
 export interface DesignStep {
   n: number;
@@ -47,6 +47,8 @@ export interface DesignState {
   tool?: ToolChoice;
   steps: DesignStep[];
   summary?: string;
+  /** What the done reply said the earlier answers already settle, for points no question was tagged with (tag → one line). */
+  settled?: Partial<Record<DesignTag, string>>;
   cafeCheck?: CafeCheck;
   approvedAt?: string;
   /** Older records: the picker's questions as sent. Read into toolPrep. */
@@ -84,6 +86,17 @@ function choiceOf(raw: unknown): ToolChoice | undefined {
   };
 }
 
+/** The done reply's settled points, design tags only, one line each. */
+function settledOf(raw: unknown): DesignState['settled'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: Partial<Record<DesignTag, string>> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const text = String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (isDesignTag(k) && text) out[k] = text;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function normalize(raw: Partial<DesignState>): DesignState {
   // The old questions live on as the to-do list.
   const { toolQuestions: _old, tool: _tool, ...rest } = raw;
@@ -96,8 +109,11 @@ function normalize(raw: Partial<DesignState>): DesignState {
     id: String(f.id ?? ''), name: String(f.name ?? ''), ...(typeof f.what === 'string' && f.what ? { what: f.what } : {}),
     flags: arr<string>(f.flags).filter((x) => !legacy || (x !== 'custom-app' && x !== 'no-build')),
   }));
+  const { settled: rawSettled, ...others } = rest;
+  const settled = settledOf(rawSettled);
   return {
-    ...rest,
+    ...others,
+    ...(settled ? { settled } : {}),
     version: 1,
     status: STATUSES.includes(raw.status as DesignStatus) ? (raw.status as DesignStatus) : 'not-started',
     features,
@@ -123,31 +139,32 @@ const bullets = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).
 /** Free text as one Markdown line: whitespace runs collapse and a leading # or - is escaped, so it can never add a heading or a field. */
 export const mdLine = (text: string | undefined): string => (text ?? '').replace(/\s+/g, ' ').trim().replace(/^([#>*+-]|\d+[.)])/, '\\$1');
 
-/** The answer to the step tagged `tag`; with no tags at all (hand-written steps), the first step stands for the smallest input. */
-function tagged(state: DesignState, tag: DesignTag): string | undefined {
-  const hit = state.steps.find((s) => s.tag === tag && s.answer?.trim());
-  if (hit) return hit.answer;
-  if (tag === 'smallest-input' && !state.steps.some((s) => s.tag)) return state.steps[0]?.answer;
-  return undefined;
+/** One feature as a design.md line: its tool and its fit. */
+export function featureMdLine(f: DesignFeature & { tool?: string }, state: Pick<DesignState, 'tool'>): string {
+  const name = mdLine(f.name).replace(/\*/g, '');
+  const flags = f.flags.length ? ` [${f.flags.join('; ')}]` : '';
+  const fit = (state.tool?.fit ?? []).find((x) => x.feature.toLowerCase() === f.name.toLowerCase());
+  const how = fit && fit.fit !== 'yes' ? ` (${fit.fit === 'no' ? 'the tool cannot do this' : 'partly'}${fit.note ? `: ${mdLine(fit.note)}` : ''})` : '';
+  return `- **${name}** (${f.tool ?? 'no tool picked'})${f.what ? `: ${mdLine(f.what)}` : ''}${how}${flags}`;
 }
 
 export function renderDesignMd(idea: Idea, state: DesignState): string {
   const check = cafeCheck(idea, state);
   const out: string[] = [`# ${idea.title}`, ''];
   if (state.status === 'approved' && state.approvedAt) out.push(`Approved on ${state.approvedAt}.`, '');
-  const mustShow = mdLine(state.summary) || mdLine(tagged(state, 'must-show'));
-  out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || '(not yet answered)', '');
-  out.push('## Smallest input', '', mdLine(tagged(state, 'smallest-input')) || '(not yet answered)', '');
+  const mustShow = mdLine(state.summary) || mdLine(pointOf(state, 'must-show'));
+  out.push('## What it must show', '', mustShow || idea.outcomes.map((o) => `- ${mdLine(o)}`).join('\n') || NOT_ANSWERED, '');
+  out.push('## Smallest input', '', mdLine(pointOf(state, 'smallest-input')) || NOT_ANSWERED, '');
+  // Who uses it, what it replaces, who builds it: one line each (the summary covers them in prose too).
+  const who = BASE_TAGS.filter((t) => t !== 'must-show' && t !== 'smallest-input');
+  out.push('## Who and what', '', ...who.map((t) => `- **${POINT_LABELS[t]}**: ${mdLine(pointOf(state, t)) || NOT_ANSWERED}`), '');
+  // The build points: what a builder needs before the first session.
+  for (const t of BUILD_TAGS) out.push(`## ${POINT_LABELS[t]}`, '', mdLine(pointOf(state, t)) || NOT_ANSWERED, '');
   out.push('## Features and tools', '');
   const t = state.tool;
   if (t) out.push(`One tool for the whole proof of concept: **${t.tool}** (${t.pathway})${t.reason ? `: ${mdLine(t.reason)}` : ''}`, '');
-  if (state.features.length === 0) out.push(t ? '(no features listed yet)' : '(not yet answered)');
-  const fits = new Map((t?.fit ?? []).map((x) => [x.feature.toLowerCase(), x]));
-  for (const f of toolFeatures(state)) {
-    const fit = fits.get(f.name.toLowerCase());
-    const how = fit && fit.fit !== 'yes' ? ` (${fit.fit === 'no' ? 'the tool cannot do this' : 'partly'}${fit.note ? `: ${mdLine(fit.note)}` : ''})` : '';
-    out.push(`- **${mdLine(f.name).replace(/\*/g, '')}** (${f.tool ?? 'no tool picked'})${f.what ? `: ${mdLine(f.what)}` : ''}${how}${f.flags.length ? ` [${f.flags.join('; ')}]` : ''}`);
-  }
+  if (state.features.length === 0) out.push(t ? '(no features listed yet)' : NOT_ANSWERED);
+  for (const f of toolFeatures(state)) out.push(featureMdLine(f, state));
   out.push('', '## Decisions so far', '');
   if (state.steps.length === 0) out.push('(not yet answered)');
   for (const s of state.steps) {

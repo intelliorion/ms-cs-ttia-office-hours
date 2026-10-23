@@ -258,7 +258,10 @@ describe('design brainstorm routes', () => {
     expect(Object.keys(after.checklist).filter((k) => after.checklist[k]?.done)).toEqual(['s3c']);
     expect(r.state.status).toBe('designing');
     expect(r.state.steps[0].answer).not.toContain('\n');
-    expect(headings(r.designMd)).toEqual(['# Email scheduler', '## What it must show', '## Smallest input', '## Features and tools', '## Decisions so far', '## Café check']);
+    expect(headings(r.designMd)).toEqual([
+      '# Email scheduler', '## What it must show', '## Smallest input', '## Who and what', '## Input', '## Logic', '## Output', '## Done when', '## Environment',
+      '## Features and tools', '## Decisions so far', '## Café check',
+    ]);
   });
 });
 

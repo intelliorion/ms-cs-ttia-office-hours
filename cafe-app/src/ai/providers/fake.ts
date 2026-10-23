@@ -222,6 +222,14 @@ const DESIGN_STEPS = [
 const DESIGN_DONE = {
   done: true,
   summary: 'A proof of concept that shows the one thing agreed above, using a small synthetic sample, built by the team with the one tool picked for the features.',
+  // The build points the scripted answers settle though no question asked about them.
+  settled: {
+    'input-shape': 'Twenty made-up requests in one sheet: date, type, requester role and text; no real names.',
+    logic: 'Sort each request by its type column against the team\'s list of types.',
+    output: 'A sorted list with the type added, in the same sheet, refreshed on demand.',
+    'done-when': 'Five planted requests of each type all land in the right group.',
+    environment: 'The team\'s own workspace, sample data only, the builder already has access.',
+  },
 };
 
 /** A plan for any approved design: four tasks across two tools (one a custom-app hand-off) and two risks. */

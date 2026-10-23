@@ -7,6 +7,7 @@ import { suggestion, type Suggest } from '../ideas/suggest';
 import { draftEmail, updateDraft } from '../comms/outbox';
 import { sameQuestion } from '../inbox/question';
 import { DESIGN_TAGS, type DesignStepInput, type DesignStepOutput } from '../ai/tasks';
+import { isDesignTag, POINT_MAX } from './points';
 import {
   readDesign, writeDesign, renderDesignMd, writeDesignMd, skillGuidance, CSIC_NOTE,
   type DesignState, type DesignStep, type DesignTag, type StepSource,
@@ -30,7 +31,7 @@ export const SUMMARY_MAX = 600;
 
 export type DesignEvent =
   | { t: 'step'; question: string; suggested: string[]; why?: string; tag?: DesignTag | null; source: StepSource }
-  | { t: 'done'; summary: string }
+  | { t: 'done'; summary: string; settled?: Partial<Record<string, string>> }
   | { t: 'answer'; n: number; answer: string; source: StepSource }
   | { t: 'asked-team'; n: number; emailKey: string }
   | { t: 'approve' };
@@ -71,8 +72,9 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
         n, question, suggested: e.suggested.map((s) => line(s, SUGGESTED_MAX)).filter(Boolean).slice(0, 4), source: e.source,
         ...(why ? { why } : {}), ...(tag ? { tag } : {}),
       });
-      // A new question reopens a finished design: the summary no longer covers everything.
+      // A new question reopens a finished design: the summary (and what it said was settled) no longer covers everything.
       delete state.summary;
+      delete state.settled;
       reopen();
       break;
     }
@@ -80,6 +82,10 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
       const summary = line(e.summary, SUMMARY_MAX);
       if (!summary) throw new DesignError('A finished design needs a summary');
       state.summary = summary;
+      // What the earlier answers settle though no question was tagged with it: design tags only, one line each.
+      const settled = Object.fromEntries(Object.entries(e.settled ?? {})
+        .filter(([k]) => isDesignTag(k)).map(([k, v]) => [k, line(v, POINT_MAX)]).filter(([, v]) => v));
+      if (Object.keys(settled).length) state.settled = settled; else delete state.settled;
       reopen();
       break;
     }
@@ -211,8 +217,10 @@ export function decodeStep(out: DesignStepOutput, codes: Map<string, Coded>): De
   return {
     ...out, ...(out.question !== undefined ? { question: n(out.question) } : {}), ...(out.why !== undefined ? { why: n(out.why) } : {}),
     ...(out.summary !== undefined ? { summary: n(out.summary) } : {}), ...(out.suggested ? { suggested: out.suggested.map((x) => showNames(x, codes)) } : {}),
+    ...(out.settled ? { settled: Object.fromEntries(Object.entries(out.settled).map(([k, v]) => [k, showNames(String(v), codes)])) } : {}),
   };
 }
+
 
 /** Refuses a new question while the last one is still open (one question at a time). */
 export function assertNoOpenStep(state: DesignState): void {
@@ -222,7 +230,7 @@ export function assertNoOpenStep(state: DesignState): void {
 
 /** The AI's reply as an event. */
 export const stepEvent = (out: DesignStepOutput): DesignEvent => (out.done
-  ? { t: 'done', summary: out.summary ?? '' }
+  ? { t: 'done', summary: out.summary ?? '', ...(out.settled ? { settled: out.settled } : {}) }
   : { t: 'step', question: out.question ?? '', suggested: out.suggested ?? [], why: out.why, tag: out.tag ?? null, source: 'ai-suggested' });
 
 const NUMBERED = /^\s*\d{1,2}[.)]\s+/;

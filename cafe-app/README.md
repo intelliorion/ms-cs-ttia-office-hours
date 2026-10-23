@@ -482,6 +482,15 @@ nothing is saved until you press a button, and you can do everything except plan
    flags, each "Clean" or listed. Value words (ROI, savings, benefits, KPI, hours saved, FTE, costs) flag on their
    own; a percentage or money amount flags only next to value language, as the phrase ("saves 20%", "40% faster",
    "£250k a year"), so "we review about 5% of claims" stays clean.
+   The design runs until it is **build-ready**: after the five points (must show, smallest input, who uses it, what
+   it replaces, who builds it) come the five build points a builder needs before the first session: **Input** (the
+   sample's fields, format, rows, masking), **Logic** (the exact rule, its exceptions, the rules sheet's columns),
+   **Output** (its columns, its form, where it lands, how often), **Done when** (a seeded sample and what must come
+   out of it) and **Environment** (the instance or project, the data approval, builder access). The AI aims for
+   about 8 questions, merges points one question can settle, and never asks what is already settled. When it is
+   done, its reply also says in one line each what the earlier answers settled for any point no question asked
+   about, so design.md and the pack show it instead of "(not yet answered)". design.md has a section for each build
+   point; the design pack shows them under **To build it**.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for
    example a custom app), the notice says so and the app offers "Close it as Routed to CSIC?" as a Yes/No.
    It never closes the idea on its own. Changing the features, the tool or the design afterwards un-approves it, and it

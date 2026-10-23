@@ -41,7 +41,7 @@ describe('embedded skills', () => {
   it('the Café design guide is short, whole in every prompt, and carries the Café rules', () => {
     const t = loadSkill('cafe-design');
     expect(t.length).toBeGreaterThanOrEqual(1200);
-    expect(t.length).toBeLessThanOrEqual(2000);
+    expect(t.length).toBeLessThanOrEqual(2800);
     expect(skillGuidance('cafe-design')).toBe(t);
     expect(t).toMatch(/One question per reply/);
     expect(t).toMatch(/2 to 4 short suggested answers/);

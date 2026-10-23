@@ -3,7 +3,7 @@ import { useStore } from '../state/store';
 import { ideaGet, post } from '../api';
 import { Modal } from './Modal';
 import { CafeCheckCard } from '../panels/DesignSection';
-import { fileNote, packFiles, SETTLES } from './designPack';
+import { fileNote, packFiles, pointRows } from './designPack';
 import { FIT_MARK } from '../panels/designHelpers';
 
 /**
@@ -48,10 +48,18 @@ export function DesignPackPopout({ id }: { id: string }) {
             <h3>The proof of concept <span className="sec-n">{s.approvedAt ? `approved ${s.approvedAt}` : 'complete, not approved yet'}</span></h3>
             {s.summary && <p className="dp-summary">{s.summary}</p>}
             <dl className="dp-settles">
-              {SETTLES.map(([tag, label]) => {
-                const st = steps.find((x) => x.tag === tag && x.answer?.trim());
-                return st ? <div key={tag}><dt>{label}</dt><dd>{st.answer}</dd></div> : null;
-              })}
+              {pointRows(s, 'base').filter((r) => !r.open).map((r) => <div key={r.tag} data-point={r.tag}><dt>{r.label}</dt><dd>{r.text}</dd></div>)}
+            </dl>
+          </section>
+          <section className="sec dp-sec" data-testid="pack-build">
+            <h3>To build it <span className="sec-n">what the builder needs before the first session</span></h3>
+            <dl className="dp-settles">
+              {pointRows(s, 'build').map((r) => (
+                <div key={r.tag} data-point={r.tag} className={r.open ? 'open' : undefined}>
+                  <dt>{r.label}</dt>
+                  <dd>{r.text}{r.open && r.hint && <span className="dp-hint"> {r.hint}</span>}</dd>
+                </div>
+              ))}
             </dl>
           </section>
           {(features.length > 0 || tool) && (

@@ -3,6 +3,7 @@ import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
 import { QUERY_GUIDE, QUERY_SCHEMA } from '../command/query';
+import { BUILD_HINTS, BUILD_TAGS, DESIGN_TAGS, POINT_MAX } from '../design/points';
 
 export interface Task<T> {
   name: string;
@@ -685,8 +686,9 @@ export const toolPickTask: Task<ToolPickOutput> = {
 
 /* ---------- Design brainstorm: one question at a time ---------- */
 
-export const DESIGN_TAGS = ['must-show', 'smallest-input', 'users', 'replaces', 'builder'] as const;
+export { DESIGN_TAGS };
 export type DesignStepTag = (typeof DESIGN_TAGS)[number];
+
 
 export interface DesignStepInput {
   idea: IdeaText;
@@ -713,9 +715,17 @@ export interface DesignStepOutput {
   suggested?: string[];
   summary?: string;
   tag?: DesignStepTag | null;
+  /** Done only: the points the answers settled though no question was tagged with them (tag → one line). */
+  settled?: Partial<Record<DesignStepTag, string>>;
   updates?: ReviewUpdates;
   learned?: LearnedPoint[];
 }
+
+const SETTLED_SCHEMA: JsonSchema = {
+  type: 'object', additionalProperties: false,
+  properties: Object.fromEntries(DESIGN_TAGS.map((t) => [t, { type: 'string', maxLength: POINT_MAX }])),
+};
+
 
 export const DESIGN_STEP_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false, required: ['done', 'updates', 'learned'],
@@ -728,6 +738,7 @@ export const DESIGN_STEP_SCHEMA: JsonSchema = {
     suggested: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', minLength: 1, maxLength: 120 } },
     summary: { type: 'string', maxLength: 600 },
     tag: { enum: [...DESIGN_TAGS, null] },
+    settled: SETTLED_SCHEMA,
   },
 };
 
@@ -739,6 +750,11 @@ function trimDesignStep(v: unknown): void {
     if (Object.hasOwn(o, k)) o[k] = trimStrings(oneLine(o[k]), max);
   }
   if (Array.isArray(o.suggested)) o.suggested = o.suggested.map((s) => trimStrings(oneLine(s), 120));
+  const settled = asObj(o.settled);
+  // A point that is not a design tag is dropped, not a reason to refuse the whole reply.
+  if (settled) for (const k of Object.keys(settled)) {
+    if ((DESIGN_TAGS as readonly string[]).includes(k)) settled[k] = trimStrings(oneLine(settled[k]), POINT_MAX); else delete settled[k];
+  }
   trimAnswerParts(o);
 }
 
@@ -748,7 +764,8 @@ function parseDesignStep(raw: string): DesignStepOutput {
   const answers = { updates: t.updates, learned: t.learned };
   if (t.done) {
     if (!t.summary?.trim()) throw new AiError('invalid output: a finished design needs a summary');
-    return { done: true, summary: t.summary.trim(), ...answers };
+    const settled = Object.fromEntries(Object.entries(t.settled ?? {}).map(([k, v]) => [k, String(v).trim()]).filter(([, v]) => v));
+    return { done: true, summary: t.summary.trim(), ...(Object.keys(settled).length ? { settled } : {}), ...answers };
   }
   if (!t.question?.trim()) throw new AiError('invalid output: the next question is missing');
   return {
@@ -796,7 +813,9 @@ export const designStepTask: Task<DesignStepOutput> = {
       String(i.guidance ?? ''),
       'GUIDANCE>>>',
       "Café rules: never ask about value, return on investment, savings, costs, benefits or KPIs. Never ask for personal, client or third-party data, or for anyone's name. A proof of concept uses synthetic, aggregated or sample data.",
-      'Aim to settle, in whatever order fits: the one thing the proof of concept must show (tag "must-show"); the smallest synthetic or aggregated input it needs (tag "smallest-input"); who uses it (tag "users"); what it replaces (tag "replaces"); who builds it, as a role, never a name (tag "builder"). Use tag null for any other question.',
+      'Aim to settle, in whatever order fits: the one thing the proof of concept must show (tag "must-show"); the smallest synthetic or aggregated input it needs (tag "smallest-input"); who uses it (tag "users"); what it replaces (tag "replaces"); who builds it, as a role, never a name (tag "builder").',
+      `Then the build points, so a builder can start without coming back to ask: ${BUILD_TAGS.map((t) => `${BUILD_HINTS[t]} (tag "${t}")`).join('; ')}. Ask these concretely, with suggested answers drawn from the idea (field names, the rule, the columns), never generic ones.`,
+      'Keep it short: aim for about 8 questions in all on a typical idea. When one question can settle two points, ask it once and tag it with the one it settles most; never ask what the answers, the brief or the team already settle. Use tag null for any other question.',
       '"stepsSoFar" are the questions already asked and the answers. Never ask one of them again. An answer of "(not known yet; asked the team)" means move on.',
       '"features" are the operator\'s feature list for the proof of concept: design for those features, not others.',
       ...(data.tool ? [
@@ -805,7 +824,9 @@ export const designStepTask: Task<DesignStepOutput> = {
       ] : ['No tool is chosen yet: never pick or ask for one; design what the features must do.']),
       ...(data.learned || data.teamAnswers ? ['"learned" (the brief of what the team told us since the form) and "teamAnswers" are settled. Never ask anything they already answer, even in other words; build on them.'] : []),
       'People appear as codes such as [P1]: never ask for a name, and never write a code in a question.',
-      'When the five points are settled, or the answers so far are enough to build a small proof of concept, reply {"done": true, "summary": "..."}: what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
+      'When the five points AND the five build points are settled (by a question, or already by the answers, the brief or the team), reply {"done": true, "summary": "...", "settled": {...}}: summary is what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
+      `settled: for each point no question in "stepsSoFar" settles directly but the answers, the brief or the team do, one plain line saying what it is (at most ${POINT_MAX} characters), keyed by its tag. Leave out a point no answer settles; never invent one.`,
+
       'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "tag": ...}: question at most 200 characters, why (one line on why it matters) at most 160, each suggested answer at most 120.',
       'The idea title may be the only thing there; work from what is there.',
       'Every reply, done or not, also carries "updates" and "learned": what the answers so far change in the idea\'s record. The answers are the design answers in "stepsSoFar" (skip any "(not known yet; asked the team)") and "teamAnswers".',

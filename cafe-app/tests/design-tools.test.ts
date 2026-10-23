@@ -189,6 +189,8 @@ describe('features, the one tool and approach.md', () => {
 });
 
 /** A provider that records every prompt it is sent and answers with the fake (or `answer`, when it returns one). */
+const NO_UPDATES = { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } };
+
 function spy(answer?: (p: string) => string | undefined) {
   const prompts: string[] = [];
   const fake = fakeProvider();
@@ -476,7 +478,7 @@ describe('the design questions build on the features and the tool', () => {
   it('the brief and the answers go in with names coded; the route sends them and decodes the question', async () => {
     const sp = spy((p) => (p.startsWith('TASK: design-step') ? JSON.stringify({
       done: false, question: `Can ${/\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"learned"')))?.[1] ? `[${/\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"learned"')))![1]}]` : 'someone'} draft the replies by hand?`,
-      suggested: ['Yes', 'No'], why: 'The tool cannot draft.', tag: null,
+      suggested: ['Yes', 'No'], why: 'The tool cannot draft.', tag: null, updates: NO_UPDATES, learned: [],
     }) : undefined));
     const s = await server(sp.provider);
     await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), people: { submitter: 'Person 1', team: [{ name: 'Person 2', roles: ['member'] }] },
@@ -492,6 +494,41 @@ describe('the design questions build on the features and the tool', () => {
     expect(d.features.map((f: any) => f.name)).toEqual(['Request intake form', 'Draft replies']);
     expect(sp.prompts.at(-1)).not.toContain('Person 2');
     expect(r.step.question).toBe('Can Person 2 draft the replies by hand?');
+  });
+});
+
+describe('design answers, taken in like the decision\'s', () => {
+  it('a builder named in a design answer becomes a proposal on the idea\'s one list; names coded on the way out; the brief goes on the idea', async () => {
+    const sp = spy((p) => {
+      if (!p.startsWith('TASK: design-step')) return undefined;
+      const code = /\[(P\d+)\]/.exec(p.slice(p.lastIndexOf('"stepsSoFar"')))?.[1];
+      return JSON.stringify({
+        done: false, question: 'What is the smallest input?', suggested: ['A sample', 'A count'], tag: 'smallest-input',
+        updates: { ...NO_UPDATES, builder: `[${code}]` },
+        learned: [{ topic: 'Builder', text: `[${code}] builds it in Power Apps.` }],
+      });
+    });
+    const s = await server(sp.provider);
+    await saveIdea(s.root, { ...(await loadIdea(s.root, ID)), people: { submitter: 'Person 1', team: [{ name: 'Person 1', roles: ['lead'] }, { name: 'Person 2', roles: ['member'] }] } } as any);
+    await s.post(`/api/ideas/${ID}/tools`, PICKS);
+    await s.post(`/api/ideas/${ID}/design/step`, { question: 'Who builds it?', suggested: [] });
+    await s.post(`/api/ideas/${ID}/design/answer`, { n: 1, answer: 'Person 2 will build it in Power Apps.' });
+    // A hand-written question asks no AI and proposes nothing.
+    expect((await loadIdea(s.root, ID) as any).updates ?? []).toEqual([]);
+    const r = await json(await s.post(`/api/ideas/${ID}/design/step`));
+    expect(r.step.question).toBe('What is the smallest input?');
+    const d = sp.data('design-step');
+    expect(d.stepsSoFar[0].answer).toMatch(/^\[P\d+\] will build it in Power Apps\.$/);
+    expect(sp.prompts.at(-1)).not.toContain('Person 2');
+    expect(sp.prompts.at(-1)).toMatch(/updates: what DATA.stepsSoFar and DATA.teamAnswers change/);
+    const idea = await loadIdea(s.root, ID) as any;
+    expect(idea.updates.map((u: any) => [u.kind, u.label, u.status])).toEqual([['builder', 'Make Person 2 the builder', 'proposed']]);
+    expect(idea.learned.points).toEqual([{ topic: 'Builder', text: 'Person 2 builds it in Power Apps.' }]);
+    expect(idea.learned.from).toBe(1);
+    // The same answer again proposes nothing new: the list keeps one of each.
+    await s.post(`/api/ideas/${ID}/design/answer`, { n: 2, answer: 'A sample' });
+    await s.post(`/api/ideas/${ID}/design/step`);
+    expect((await loadIdea(s.root, ID) as any).updates).toHaveLength(1);
   });
 });
 

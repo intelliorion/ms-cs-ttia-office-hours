@@ -8,7 +8,7 @@ import { applyDesignEvent, askTeam, addQuestion } from '../src/design/brainstorm
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { DEFAULT_SETTINGS } from '../src/round/round';
-import { designStepTask, type Understanding } from '../src/ai/tasks';
+import { designStepTask, DESIGN_STEP_SCHEMA, type Understanding } from '../src/ai/tasks';
 import { processDrop } from '../src/inbox/flow';
 import { fixedClock } from '../src/clock';
 
@@ -16,6 +16,7 @@ const json = (r: Response) => r.json() as Promise<any>;
 const ID = 'CAFE-2026-001';
 const clock = fixedClock('2026-10-20');
 const Q1 = 'What is the one thing this proof of concept must show?';
+const NO_UPDATES = { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } };
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; vi.unstubAllEnvs(); });
@@ -36,13 +37,32 @@ const endsWithCafeCheck = (md: string) => md.trimEnd().split('\n').filter((l) =>
 
 describe('designStepTask', () => {
   it('a finished design needs a summary and asks nothing; an open one needs a question; tags are a fixed list', () => {
-    expect(() => designStepTask.parse('{"done":true}')).toThrow(/summary/);
-    expect(designStepTask.parse('{"done":true,"summary":"Shows X","question":"ignored?"}')).toEqual({ done: true, summary: 'Shows X' });
-    expect(() => designStepTask.parse('{"done":false}')).toThrow(/question/);
-    expect(() => designStepTask.parse('{"done":false,"question":"Q?","tag":"budget"}')).toThrow(/invalid output/);
-    expect(() => designStepTask.parse('{"done":false,"question":"Q?","suggested":["only one"]}')).toThrow(/invalid output/);
-    const ok = designStepTask.parse('{"done":false,"question":"Who\\nuses it?","suggested":["A","B"],"tag":"users"}');
+    const parse = (o: object) => designStepTask.parse(JSON.stringify({ updates: NO_UPDATES, learned: [], ...o }));
+    expect(() => parse({ done: true })).toThrow(/summary/);
+    expect(parse({ done: true, summary: 'Shows X', question: 'ignored?' })).toEqual({ done: true, summary: 'Shows X', updates: NO_UPDATES, learned: [] });
+    expect(() => parse({ done: false })).toThrow(/question/);
+    expect(() => parse({ done: false, question: 'Q?', tag: 'budget' })).toThrow(/invalid output/);
+    expect(() => parse({ done: false, question: 'Q?', suggested: ['only one'] })).toThrow(/invalid output/);
+    const ok = parse({ done: false, question: 'Who\nuses it?', suggested: ['A', 'B'], tag: 'users' });
     expect(ok).toMatchObject({ done: false, question: 'Who uses it?', suggested: ['A', 'B'], tag: 'users' });
+  });
+  it('every reply carries what the answers change: updates and learned are required, and may be empty', () => {
+    expect(DESIGN_STEP_SCHEMA.required).toEqual(expect.arrayContaining(['done', 'updates', 'learned']));
+    expect(() => designStepTask.parse('{"done":true,"summary":"Shows X","learned":[]}')).toThrow(/updates is missing/);
+    expect(() => designStepTask.parse(JSON.stringify({ done: true, summary: 'Shows X', updates: NO_UPDATES }))).toThrow(/learned is missing/);
+    const out = designStepTask.parse(JSON.stringify({
+      done: false, question: 'Who uses it?', suggested: ['A', 'B'], tag: 'users',
+      updates: { ...NO_UPDATES, builder: '[P1]' }, learned: [{ topic: 'Builder', text: '[P1] builds it.' }],
+    }));
+    expect(out.updates!.builder).toBe('[P1]');
+    expect(out.learned).toEqual([{ topic: 'Builder', text: '[P1] builds it.' }]);
+    const p = designStepTask.prompt({ idea: { id: ID, title: 'x' }, features: [], stepsSoFar: [{ question: 'Who builds it?', answer: 'A citizen builder' }], guidance: '' });
+    expect(p).toMatch(/updates: what DATA.stepsSoFar and DATA.teamAnswers change/);
+    expect(p).toMatch(/learned: what DATA.stepsSoFar and DATA.teamAnswers add/);
+    expect(p).toMatch(/skip any "\(not known yet; asked the team\)"/);
+    expect(p).not.toMatch(/keep each point of DATA.learned/);
+    const q = designStepTask.prompt({ idea: { id: ID, title: 'x' }, features: [], stepsSoFar: [], guidance: '', learned: [{ topic: 'Data', text: 'A weekly extract.' }] });
+    expect(q).toMatch(/keep each point of DATA.learned/);
   });
   it('prompt carries the guidance, the Café rules and the DATA markers, and works with only a title', () => {
     const p = designStepTask.prompt({ idea: { id: ID, title: 'Email scheduler' }, features: [], stepsSoFar: [], guidance: 'One question at a time.' });

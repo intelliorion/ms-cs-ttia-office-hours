@@ -13,6 +13,7 @@ cafe-app/scripts/make-test-data.mjs
 cafe-app/scripts/ui-tour.mjs
 cafe-app/skills/LICENSE-superpowers.md
 cafe-app/skills/README.md
+cafe-app/skills/cafe-design.md
 cafe-app/skills/writing-plans.md
 cafe-app/src/ai/apply.ts
 cafe-app/src/ai/connector.ts

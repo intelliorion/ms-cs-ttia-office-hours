@@ -16,7 +16,7 @@ vi.mock('../api', () => api);
 import { useStore } from '../state/store';
 import { IdeaDetails } from './IdeaDetails';
 import { ToolPickerSection } from './ToolPickerSection';
-import type { DesignCall } from './DesignSection';
+import { DesignSection, type DesignCall } from './DesignSection';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom has no scrolling.
@@ -165,6 +165,31 @@ describe('ToolPickerSection', () => {
       features: [{ name: 'Request form', what: 'Collects requests', flags: [] }],
       tool: { tool: 'Dataiku', by: 'operator', reason: '', pros: [], cons: [], context: [], flags: [], fit: [], evaluatedFor: ['Request form'], needsAi: true },
     });
+  });
+});
+
+describe('DesignSection', () => {
+  it('shows "From your answers" from the design answers; Yes goes to the idea\'s one list of updates', async () => {
+    const calls: string[] = [];
+    const call: DesignCall = async (fn, o) => { try { const r = await fn(); calls.push(o.ok(r as any) ?? ''); return r; } catch { return null; } };
+    api.post.mockImplementation(async () => ({ id: 'u1', label: 'Make Person 2 the builder' }) as any);
+    const idea = { ...IDEA, updates: [
+      { id: 'u1', kind: 'builder', label: 'Make Person 2 the builder', status: 'proposed' },
+      { id: 'u2', kind: 'flag', label: 'Clear the flag: x', status: 'dismissed' },
+    ] };
+    await act(async () => root.render(<DesignSection idea={idea} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    const list = el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')!;
+    expect(list.textContent).toContain('From your answers');
+    expect([...list.querySelectorAll('[data-update]')].map((x) => x.getAttribute('data-update'))).toEqual(['u1']);
+    await click('[data-testid="design"] [data-update="u1"] [data-action="update-yes"]');
+    await flush();
+    expect(api.post).toHaveBeenCalledWith(`/api/ideas/${ID}/prep/update`, { update: 'u1', do: 'yes' });
+    expect(calls).toEqual(['Done: Make Person 2 the builder']);
+  });
+  it('with nothing proposed there is no list', async () => {
+    const call: DesignCall = async (fn) => { try { return await fn(); } catch { return null; } };
+    await act(async () => root.render(<DesignSection idea={IDEA} design={{ state: designState(), designMd: '' }} busy={false} aiWorking={false} noAi={false} call={call} onSendQuestions={() => {}} />));
+    expect(el.querySelector('[data-testid="design"] [data-testid="rs-updates"]')).toBeNull();
   });
 });
 

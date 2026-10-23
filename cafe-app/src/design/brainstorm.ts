@@ -160,16 +160,31 @@ export function designStepInput(
 
 /**
  * designStepInput with the people coded the way the decision codes them (reviewInput): the idea text, the team's
- * answers and the "Learned since the form" brief. The codes come back so the AI's reply can be decoded.
+ * answers, the "Learned since the form" brief and the design questions and answers so far. It also carries what the
+ * updates are checked against (the form's participation, the flags, the graph). The codes come back so the AI's reply
+ * can be decoded, and its proposed updates read (takeInAnswers).
  */
-export async function codedDesignInput(root: string, idea: Idea, state: DesignState): Promise<{ input: DesignStepInput; codes: Map<string, Coded> }> {
+export async function codedDesignInput(root: string, idea: Idea, state: DesignState): Promise<{ input: DesignStepInput; codes: Map<string, Coded>; read: number }> {
   const brief = idea.learned?.points ?? [];
-  const { input: seen, codes } = await reviewInput(root, idea.id, brief.map((p) => ({ question: p.topic, answer: p.text })));
+  const base = designStepInput(idea, state);
+  // The brief and each step (its question, then its answer) ride in as extra answers, so their names get the same codes
+  // as everything else; they come back out in the same order.
+  const steps = base.stepsSoFar.flatMap((s) => [{ question: 'Q', answer: s.question }, { question: 'A', answer: s.answer }]);
+  const { input: seen, codes } = await reviewInput(root, idea.id, [...brief.map((p) => ({ question: p.topic, answer: p.text })), ...steps]);
   const all = seen.answers ?? [];
-  const teamAnswers = all.slice(0, all.length - brief.length);
-  const learned = all.slice(all.length - brief.length).map((a) => ({ topic: a.question, text: a.answer }));
-  const base = designStepInput(idea, state, { learned, teamAnswers });
-  return { input: { ...base, idea: { ...base.idea, challenge: seen.idea.challenge, current_process: seen.idea.current_process } }, codes };
+  const nTeam = all.length - brief.length - steps.length;
+  const teamAnswers = all.slice(0, nTeam);
+  const learned = all.slice(nTeam, nTeam + brief.length).map((a) => ({ topic: a.question, text: a.answer }));
+  const coded = all.slice(nTeam + brief.length);
+  const stepsSoFar = base.stepsSoFar.map((_, i) => ({ question: coded[2 * i].answer, answer: coded[2 * i + 1].answer }));
+  const input: DesignStepInput = {
+    ...base, idea: { ...base.idea, challenge: seen.idea.challenge, current_process: seen.idea.current_process },
+    ...(learned.length ? { learned } : {}), ...(teamAnswers.length ? { teamAnswers } : {}), stepsSoFar,
+    ...(seen.form?.participation ? { form: { participation: seen.form.participation } } : {}),
+    ...(seen.flags ? { flags: seen.flags } : {}), ...(seen.graph ? { graph: seen.graph } : {}),
+  };
+  const read = teamAnswers.length + state.steps.filter((s) => s.answer?.trim()).length;
+  return { input, codes, read };
 }
 
 /** The AI's reply with any person code turned back into the name. */

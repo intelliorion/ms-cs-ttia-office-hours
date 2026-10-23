@@ -195,6 +195,12 @@ const TOOL_QUESTIONS = {
   learned: [],
 };
 
+/** What the design answers change: nothing, in the script (the design-step reply always carries both). */
+const NO_ANSWER_PARTS = {
+  updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } },
+  learned: [],
+};
+
 /** A scripted brainstorm: must-show, smallest input, builder, then done. Which one depends on how many Q/A pairs the prompt carries. */
 const DESIGN_STEPS = [
   {
@@ -266,7 +272,7 @@ export function fakeProvider(): Provider {
       if (prompt.startsWith('TASK: understand') || prompt.startsWith('TASK: triage')) return JSON.stringify(understandFor(prompt));
       if (prompt.startsWith('TASK: feature-list')) return JSON.stringify(featuresFor(prompt));
       if (prompt.startsWith('TASK: tool-pick')) return JSON.stringify(/"challenge"\s*:\s*""/.test(prompt) && !/"teamAnswers"\s*:\s*\[\s*\{/.test(prompt) ? TOOL_QUESTIONS : toolPickFor(prompt));
-      if (prompt.startsWith('TASK: design-step')) return JSON.stringify(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE);
+      if (prompt.startsWith('TASK: design-step')) return JSON.stringify({ ...(DESIGN_STEPS[stepsSoFar(prompt)] ?? DESIGN_DONE), ...NO_ANSWER_PARTS });
       if (prompt.startsWith('TASK: design-plan')) return JSON.stringify(planForPicks(prompt));
       if (prompt.startsWith('TASK: agent')) return JSON.stringify(agentFor(prompt));
       if (prompt.startsWith('TASK: ping')) return '{"ok":true}';

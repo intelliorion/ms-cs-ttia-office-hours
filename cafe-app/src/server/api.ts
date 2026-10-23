@@ -6,7 +6,7 @@ import { dataKey, paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
 import { listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
-import { listIdeas, ideaDir, loadIdea } from '../ideas/store';
+import { listIdeas, ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
 import { setStage } from '../ideas/stage';
@@ -14,7 +14,7 @@ import { writeFileAtomic, readHistory, readText } from '../workspace/files';
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
-import { decideUpdate, removeAnswer } from '../review/updates';
+import { decideUpdate, removeAnswer, takeInAnswers } from '../review/updates';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -265,9 +265,15 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
     }
     if (isDone(state)) return { state, designMd: renderDesignMd(idea, state) };
     assertNoOpenStep(state);
-    // The features, the one tool (its cons and gaps) and the brief go in, names coded; the reply comes back decoded.
-    const { input, codes } = await codedDesignInput(root, idea, state);
-    const output = decodeStep((await byHand(() => ai.runWith(designStepTask, input))()).output, codes);
+    // The features, the one tool (its cons and gaps), the brief and the answers so far go in, names coded; the reply
+    // comes back decoded.
+    const { input, codes, read } = await codedDesignInput(root, idea, state);
+    const { provider, output: raw } = await byHand(() => ai.runWith(designStepTask, input))();
+    const output = decodeStep(raw, codes);
+    // What the answers change (proposed, each waiting for Yes) and the brief of what they add, as after the decision.
+    // The record is read again: nothing between the AI call and here may be lost.
+    const now = await loadIdea(root, idea.id);
+    await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, raw, codes, provider, clock(), read)) });
     const out = await applyDesignEvent(root, idea, stepEvent(output), clock);
     return output.done ? out : { ...out, step: out.state.steps[out.state.steps.length - 1] };
   });

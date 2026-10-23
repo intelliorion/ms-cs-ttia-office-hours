@@ -1,6 +1,7 @@
 import { useStore } from '../state/store';
 import { useEffect, useRef, useState } from 'react';
-import { copyText, designPost } from '../api';
+import { copyText, designPost, post } from '../api';
+import { Updates } from './ReviewSelect';
 import { NO_AI_TIP } from '../popouts/aiUi';
 import {
   AI_WAIT, buildInstruction, cafeCheckRows, designPhase, hasAgentKit, openStep, stepStatus, suggestedLines, SUMMARY_MAX,
@@ -125,8 +126,9 @@ export function StepCarousel({ steps, render }: { steps: any[]; render: (step: a
 }
 
 /**
- * Design: the brainstorm as a conversation, one question at a time; the Café check; Approve. Works by hand with no AI:
- * the operator adds questions, answers them and writes the summary.
+ * Design: the brainstorm as a conversation, one question at a time; what the answers change ("From your answers", each
+ * waiting for Yes); the Café check; Approve. Works by hand with no AI: the operator adds questions, answers them and
+ * writes the summary.
  */
 export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSendQuestions }: {
   idea: any; design: DesignView | null; busy: boolean; aiWorking: boolean; noAi: boolean; call: DesignCall; onSendQuestions: () => void;
@@ -177,6 +179,10 @@ export function DesignSection({ idea, design, busy, aiWorking, noAi, call, onSen
           <div className="ds-sum">{s.summary}</div>
         </div>
       )}
+      {/* What the design answers change in the record: the same list as the decision's and the tool picker's, each waiting for Yes. */}
+      <Updates updates={idea.updates ?? []} disabled={off} onUpdate={(update, what) => void call(
+        () => post(`/api/ideas/${encodeURIComponent(id)}/prep/update`, { update, do: what }),
+        { ok: (u: any) => (what === 'yes' ? `Done: ${u.label}` : what === 'no' ? 'Left as it is.' : `Undone: ${u.label}`) })} />
       {handQ && (
         <div className="ds-form" data-testid="hand-question">
           <input ref={qRef} type="text" value={handQ.question} maxLength={200} placeholder="The question" aria-label="Question" disabled={off}

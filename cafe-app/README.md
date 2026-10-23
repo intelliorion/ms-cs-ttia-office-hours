@@ -473,7 +473,11 @@ nothing is saved until you press a button, and you can do everything except plan
    cover those. It never asks again what the team's answers or the Learned since the form brief already settle
    (names are coded before it sees them). Each question comes with a reason and suggested answers. Pick
    one, type your own, or press **I don't know → ask the team**: the question goes into the idea's questions
-   email (E2), sent from ✉ Emails, and when the team's reply comes in through the Import, it fills the answer. The live
+   email (E2), sent from ✉ Emails, and when the team's reply comes in through the Import, it fills the answer. Each
+   AI question also reads the answers so far, like the decision and the tool picker: what they change in the record
+   (a builder named, a flag settled, a system the data comes from) is proposed under **From your answers** in the
+   Design section (the same one list, each waiting for your Yes), and the Submission's **Learned since the form** is
+   rewritten with what they add. Names are coded on the way out. A question added by hand changes neither. The live
    design.md sits under the questions and ends with the **Café check**: value words, data flags and CSIC
    flags, each "Clean" or listed.
 3. **Approve design.** Once the design is finished, approve it. If the Café check has a CSIC flag (for

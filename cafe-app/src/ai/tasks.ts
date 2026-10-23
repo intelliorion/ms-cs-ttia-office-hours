@@ -113,12 +113,14 @@ export const UPDATES_SCHEMA: JsonSchema = {
 };
 
 /**
- * What a suggestion does with the team's answers, the same for the decision and the tool picker: the updates they
- * justify (for the operator's Yes) and a short brief of what they add. `key` is where DATA holds the answers.
+ * What a suggestion does with the team's answers, the same for the decision, the tool picker and the design questions:
+ * the updates they justify (for the operator's Yes) and a short brief of what they add. `key` is where DATA holds the
+ * answers (one key, or several read together).
  */
-function answerRules(key: string): string[] {
+function answerRules(key: string | string[]): string[] {
+  const at = (Array.isArray(key) ? key : [key]).map((k) => `DATA.${k}`).join(' and ');
   return [
-    `updates: what DATA.${key} change in the idea's record, for the operator to say yes to; leave a field empty when nothing changes.`,
+    `updates: what ${at} change in the idea's record, for the operator to say yes to; leave a field empty when nothing changes.`,
     'builder: the person an answer names to build it, as their code alone when they have one (a code followed by a stray surname is that person), else the name as written; "" when none.',
     'builderCanAttend: true only if an answer says they can attend every design session. participation: "Team" or "Individual"',
     'only if an answer settles it and it differs from form.participation, else "". resolvedFlags: each item of DATA.flags an answer',
@@ -127,7 +129,7 @@ function answerRules(key: string): string[] {
     'System node (even when it says no live link is needed: the data still comes from it), linked by USES_DATA from the Capability that',
     'reads it; use a Capability label from DATA.graph when one fits, else add one and link "idea" NEEDS it. A problem the answers name is a',
     'PainPoint linked "idea" REPLACES it. Give each link a short description and how sure you are; no tools, no people; nothing already in DATA.graph.',
-    `learned: what DATA.${key} add to the submission, written as a short brief for someone reading the idea, not the answers as given.`,
+    `learned: what ${at} add to the submission, written as a short brief for someone reading the idea, not the answers as given.`,
     'One point per topic (such as Builder, Team, Data, Systems, Scope, What was tried, Existing tools), each a topic of one or two words',
     'and one or two clear sentences. Merge answers on the same topic, drop repeats, and when answers disagree the later one wins.',
     'Only what the form did not already say; no guesses, no figures that are not in DATA. Empty when there are no answers.',
@@ -698,7 +700,12 @@ export interface DesignStepInput {
   stepsSoFar: { question: string; answer: string }[];
   /** The Café design guide's text (skillGuidance('cafe-design')). Guidance, not data. */
   guidance: string;
+  /** For the updates the answers justify, as the decision has them: the form's participation, the flags, the graph. */
+  form?: { participation?: string };
+  flags?: string[];
+  graph?: { type: string; label: string; alsoNeededBy?: number }[];
 }
+/** The next question (or done), and what the design answers change in the record, as the decision's and the tool picker's. */
 export interface DesignStepOutput {
   done: boolean;
   question?: string;
@@ -706,11 +713,15 @@ export interface DesignStepOutput {
   suggested?: string[];
   summary?: string;
   tag?: DesignStepTag | null;
+  updates?: ReviewUpdates;
+  learned?: LearnedPoint[];
 }
 
 export const DESIGN_STEP_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['done'],
+  type: 'object', additionalProperties: false, required: ['done', 'updates', 'learned'],
   properties: {
+    updates: UPDATES_SCHEMA,
+    learned: LEARNED_SCHEMA,
     done: { type: 'boolean' },
     question: { type: 'string', minLength: 1, maxLength: 200 },
     why: { type: 'string', maxLength: 160 },
@@ -728,14 +739,16 @@ function trimDesignStep(v: unknown): void {
     if (Object.hasOwn(o, k)) o[k] = trimStrings(oneLine(o[k]), max);
   }
   if (Array.isArray(o.suggested)) o.suggested = o.suggested.map((s) => trimStrings(oneLine(s), 120));
+  trimAnswerParts(o);
 }
 
 /** Schema-checked, then: a finished design needs a summary and asks nothing; an open one needs a question and has no summary. */
 function parseDesignStep(raw: string): DesignStepOutput {
   const t = parseChecked<DesignStepOutput>(raw, DESIGN_STEP_SCHEMA, trimDesignStep);
+  const answers = { updates: t.updates, learned: t.learned };
   if (t.done) {
     if (!t.summary?.trim()) throw new AiError('invalid output: a finished design needs a summary');
-    return { done: true, summary: t.summary.trim() };
+    return { done: true, summary: t.summary.trim(), ...answers };
   }
   if (!t.question?.trim()) throw new AiError('invalid output: the next question is missing');
   return {
@@ -743,6 +756,7 @@ function parseDesignStep(raw: string): DesignStepOutput {
     ...(t.why?.trim() ? { why: t.why.trim() } : {}),
     suggested: (t.suggested ?? []).map((s) => s.trim()).filter(Boolean),
     tag: t.tag ?? null,
+    ...answers,
   };
 }
 
@@ -763,6 +777,9 @@ function designStepData(input: DesignStepInput) {
     stepsSoFar: (Array.isArray(input.stepsSoFar) ? input.stepsSoFar : []).slice(0, 20).map((s) => ({
       question: cap(s.question, 200), answer: cap(s.answer, 1000),
     })),
+    ...(input.form?.participation ? { form: { participation: cap(input.form.participation, 40) } } : {}),
+    ...(input.flags?.length ? { flags: input.flags.slice(0, 10).map((f) => cap(f, 200)) } : {}),
+    ...(input.graph?.length ? { graph: input.graph.slice(0, 40).map((g) => ({ type: cap(g.type, 20), label: cap(g.label, 60), ...(g.alsoNeededBy ? { alsoNeededBy: g.alsoNeededBy } : {}) })) } : {}),
   };
 }
 
@@ -791,6 +808,10 @@ export const designStepTask: Task<DesignStepOutput> = {
       'When the five points are settled, or the answers so far are enough to build a small proof of concept, reply {"done": true, "summary": "..."}: what the proof of concept shows, with what input, for whom, built how, in at most 600 characters, with no value words. When done, ask nothing.',
       'Otherwise reply {"done": false, "question": "...", "why": "...", "suggested": [...], "tag": ...}: question at most 200 characters, why (one line on why it matters) at most 160, each suggested answer at most 120.',
       'The idea title may be the only thing there; work from what is there.',
+      'Every reply, done or not, also carries "updates" and "learned": what the answers so far change in the idea\'s record. The answers are the design answers in "stepsSoFar" (skip any "(not known yet; asked the team)") and "teamAnswers".',
+      'A design answer is kept in the design already: make it a fact only when it tells us something about the idea itself (its data, systems, people or scope), not a design choice.',
+      ...(data.learned ? ['learned: the whole brief again, not only what is new: keep each point of DATA.learned (change it where a later answer says otherwise) and add what the answers add.'] : []),
+      ...answerRules(['stepsSoFar', 'teamAnswers']),
     ], DESIGN_STEP_SCHEMA, data, "a Café idea, its features, the chosen tool and the design answers so far");
   },
   parse: parseDesignStep,

@@ -176,7 +176,8 @@ export async function writeDesignMd(root: string, idea: Idea, state: DesignState
 }
 
 // ---- embedded skills (guidance text for prompts, never executed) ----
-export type SkillName = 'brainstorming' | 'writing-plans';
+/** cafe-design is written for the app; writing-plans is the Superpowers skill, copied. */
+export type SkillName = 'cafe-design' | 'writing-plans';
 const SKILLS_DIR = fileURLToPath(new URL('../../skills/', import.meta.url));
 const skillCache = new Map<SkillName, string>();
 

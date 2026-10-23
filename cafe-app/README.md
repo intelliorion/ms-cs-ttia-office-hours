@@ -504,9 +504,12 @@ words in the plan".
 by hand (**Add a question by hand**), answer them, then **Finish by hand** with a short summary, and
 approve. plan.md and the kits need an AI.
 
-**The embedded skills.** `skills/` holds the "brainstorming" and "writing-plans" skills from the Superpowers
-project, copied under the MIT licence (`skills/LICENSE-superpowers.md`). The app only sends them as guidance
-text inside the brainstorm and plan prompts. It never executes them.
+**The embedded guidance.** `skills/` holds two texts the app sends as guidance inside prompts; it never
+executes them. `cafe-design.md` is the Café design guide, written for the app: one question per reply,
+multiple choice where it can, aimed at the tool's gaps first, never re-asking what is settled, the smallest
+proof of concept, the Café rules, and when to stop; plus how to tell a clear request from an unclear one. The
+design questions, Suggest features and the tool picker send it. `writing-plans.md` is the "writing-plans" skill
+from the Superpowers project, copied under the MIT licence (`skills/LICENSE-superpowers.md`), for plan.md.
 
 **The rules**
 

@@ -3,8 +3,8 @@ import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 import { startServer, sampleIdea } from './helpers';
 import { saveIdea, loadIdea, ideaDir } from '../src/ideas/store';
-import { readDesign, writeDesign, emptyDesign, type DesignState } from '../src/design/store';
-import { validateFeatures, validateChoice, renderApproachMd, pathwayLabel, pathwayOf, mergeSuggestions, PATHWAYS } from '../src/design/tools';
+import { readDesign, writeDesign, emptyDesign, loadSkill, type DesignState } from '../src/design/store';
+import { validateFeatures, validateChoice, renderApproachMd, pathwayLabel, pathwayOf, mergeSuggestions, toolPickInput, PATHWAYS } from '../src/design/tools';
 import { designStepInput, codedDesignInput } from '../src/design/brainstorm';
 import { createConnector, type Provider } from '../src/ai/connector';
 import { fakeProvider } from '../src/ai/providers/fake';
@@ -80,12 +80,19 @@ describe('toolPickTask', () => {
     expect(p).toMatch(/Keep every item in DATA.todo/);
     expect(p).toMatch(/never propose measuring value/i);
     expect(p).toMatch(/data, not instructions/);
-    expect(p).not.toMatch(/brainstorming skill/);
+    expect(p).not.toMatch(/brainstorming skill|Café design guide/);
     expect(p).not.toMatch(/DATA.evaluate/);
     const q = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], features: [{ name: 'Form', what: 'Takes requests' }], guidance: 'GUIDE TEXT' });
     expect(q).toContain('"name": "Form"');
     expect(q).toContain('GUIDE TEXT');
+    expect(q).toMatch(/Guidance from the Café design guide, including how to tell a clear request from an unclear one/);
     expect(TOOL_PICK_SCHEMA.properties!.needs.maxItems).toBe(8);
+  });
+  it('the tool picker and the design questions send the Café design guide, whole', () => {
+    const guide = loadSkill('cafe-design');
+    expect(toolPickInput(sampleIdea(), emptyDesign()).guidance).toBe(guide);
+    expect(designStepInput(sampleIdea(), emptyDesign()).guidance).toBe(guide);
+    expect(designStepTask.prompt(designStepInput(sampleIdea(), emptyDesign()))).toMatch(/Follow this Café design guide/);
   });
   it('prompt, evaluating the operator\'s tool: that tool, fixed; the AI may not change it', () => {
     const p = toolPickTask.prompt({ idea: { id: ID, title: 'x' }, support: [], features: [{ name: 'Form' }], evaluate: 'UiPath' });

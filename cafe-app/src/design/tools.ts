@@ -170,7 +170,7 @@ export function toolPickInput(idea: Idea, state: DesignState, features: { name: 
     support: idea.support,
     builderNamed: Boolean(builderOf(idea)),
     ...(teamAnswers(idea, state).length ? { teamAnswers: teamAnswers(idea, state) } : {}),
-    guidance: skillGuidance('brainstorming', 6000),
+    guidance: skillGuidance('cafe-design'),
     ...(features.length ? { features: features.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}) })) } : {}),
   };
 }
@@ -213,7 +213,7 @@ export async function suggestFeatures(
     idea: seen.idea, support: idea.support,
     ...(answers.length ? { teamAnswers: answers } : {}), ...(learned.length ? { learned } : {}),
     ...(have.length ? { existingFeatures: have.map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}) })) } : {}),
-    guidance: skillGuidance('brainstorming', 6000),
+    guidance: skillGuidance('cafe-design'),
   });
   const name = (t: string) => showNames(t, codes);
   const suggested = output.features.map((f) => ({

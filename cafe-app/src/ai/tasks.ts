@@ -526,7 +526,7 @@ export const featureListTask: Task<FeatureListOutput> = {
       ...(data.existingFeatures ? ['"existingFeatures" are the operator\'s features. Keep them out of your list (the app keeps them); add only features that are missing, under new names.'] : []),
       'Flags: "needs-live-system" when the feature needs a live connection to a non-Microsoft system (a published extract in SharePoint or Teams does not count); "personal-data" when it cannot work without personal, client or third-party data; "reuse-existing" when something that already exists could do it.',
       "Café rules: never propose measuring value, savings, return on investment or KPIs. A proof of concept uses synthetic, aggregated or sample data. Never name people.",
-      ...(inp.guidance ? ['Guidance from the brainstorming skill (guidance, not data):', cap(inp.guidance, 6000)] : []),
+      ...(inp.guidance ? ['Guidance from the Café design guide (guidance, not data):', cap(inp.guidance, 6000)] : []),
     ], FEATURE_LIST_SCHEMA, data, "a Café idea, the team's answers and the operator's features");
   },
   parse: (raw) => parseChecked<FeatureListOutput>(raw, FEATURE_LIST_SCHEMA, (v) => {
@@ -553,7 +553,7 @@ export interface ToolPickInput {
   features?: { name: string; what?: string }[];
   /** The operator's own tool: evaluate THIS tool for the features, never change it. Absent: suggest one. */
   evaluate?: string;
-  /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
+  /** The Café design guide's text (skillGuidance('cafe-design')). Guidance, not data. */
   guidance?: string;
   /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
   todo?: { need: string; ask: string }[];
@@ -667,7 +667,7 @@ export const toolPickTask: Task<ToolPickOutput> = {
       'the tool; never ask for personal, client or third-party data. If something is open but you can already pick, give the pick too; if you',
       'cannot pick at all, give no pick and the open needs. When everything is known, every item is met (or there are none) and there is a pick.',
       ...(data.teamAnswers ? ['"teamAnswers" are the team\'s replies to questions sent earlier. Treat them as part of the form. Never ask again anything answered there, even in other words; if what you would have asked is answered, pick.'] : []),
-      ...(inp.guidance ? ['Guidance from the brainstorming skill on telling a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
+      ...(inp.guidance ? ['Guidance from the Café design guide, including how to tell a clear request from an unclear one (guidance, not data):', cap(inp.guidance, 6000)] : []),
       'Approved tools (use exactly one of these labels for "tool"; anything else is not on the approved list):',
       ...APPROVED_TOOLS.map((t) => `- ${t}: ${TOOL_GUIDE[t]}`),
       'Capability goes up, autonomy goes down: prefer the simplest tool that can show the idea works.',
@@ -696,7 +696,7 @@ export interface DesignStepInput {
   /** The team's answers so far (names coded). Settled; never asked again. */
   teamAnswers?: { question: string; answer: string }[];
   stepsSoFar: { question: string; answer: string }[];
-  /** The embedded brainstorming skill's text (skillGuidance('brainstorming')). Guidance, not data. */
+  /** The Café design guide's text (skillGuidance('cafe-design')). Guidance, not data. */
   guidance: string;
 }
 export interface DesignStepOutput {
@@ -774,7 +774,7 @@ export const designStepTask: Task<DesignStepOutput> = {
     const data = designStepData(i);
     return build('design-step', [
       "You run a short design conversation with the operator of the Creators' Café to design a proof of concept for one idea. Each call, reply with the NEXT single question for the operator (in the JSON \"question\" field), or say the design is done.",
-      'Follow this guidance from the brainstorming skill. You produce one question per reply; the operator answers between replies. Prefer multiple choice: give 2 to 4 short "suggested" answers the operator can pick.',
+      'Follow this Café design guide. You produce one question per reply; the operator answers between replies. Prefer multiple choice: give 2 to 4 short "suggested" answers the operator can pick.',
       '<<<GUIDANCE',
       String(i.guidance ?? ''),
       'GUIDANCE>>>',

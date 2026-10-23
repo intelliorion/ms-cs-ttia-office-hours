@@ -154,7 +154,7 @@ export function designStepInput(
     ...(extra.learned?.length ? { learned: extra.learned } : {}),
     ...(extra.teamAnswers?.length ? { teamAnswers: extra.teamAnswers } : {}),
     stepsSoFar: state.steps.map((s) => ({ question: s.question, answer: s.answer?.trim() || ASKED_TEAM_ANSWER })),
-    guidance: skillGuidance('brainstorming'),
+    guidance: skillGuidance('cafe-design'),
   };
 }
 

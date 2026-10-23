@@ -18,7 +18,7 @@ const choice = (tool: string, over = {}): ToolChoice => ({
 
 describe('embedded skills', () => {
   it('load without front matter and ship with the MIT notice', async () => {
-    for (const n of ['brainstorming', 'writing-plans'] as const) {
+    for (const n of ['cafe-design', 'writing-plans'] as const) {
       const t = loadSkill(n);
       expect(t.length).toBeGreaterThan(500);
       expect(t.trimStart().startsWith('---')).toBe(false);
@@ -30,12 +30,25 @@ describe('embedded skills', () => {
   });
 
   it('trims guidance at the budget on a line break', () => {
-    const full = loadSkill('brainstorming');
-    const g = skillGuidance('brainstorming', 2000);
+    const full = loadSkill('writing-plans');
+    const g = skillGuidance('writing-plans', 2000);
     expect(g.length).toBeLessThanOrEqual(2000);
     expect(full.startsWith(g)).toBe(true);
     expect(full[g.length]).toBe('\n');
     expect(skillGuidance('writing-plans').length).toBeLessThanOrEqual(12000);
+  });
+
+  it('the Café design guide is short, whole in every prompt, and carries the Café rules', () => {
+    const t = loadSkill('cafe-design');
+    expect(t.length).toBeGreaterThanOrEqual(1200);
+    expect(t.length).toBeLessThanOrEqual(2000);
+    expect(skillGuidance('cafe-design')).toBe(t);
+    expect(t).toMatch(/One question per reply/);
+    expect(t).toMatch(/2 to 4 short suggested answers/);
+    expect(t).toMatch(/Synthetic, sample or aggregated data only/);
+    expect(t).toMatch(/Never ask for a name/);
+    expect(t).toMatch(/Telling a clear request from an unclear one/);
+    expect(t).not.toMatch(/git|commit|spec|visual companion/i);
   });
 });
 

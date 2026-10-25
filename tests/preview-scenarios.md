@@ -1,7 +1,7 @@
-# Preview tab test script
+# Scenario test script
 
-Run each scenario in the Copilot Studio **Preview** tab (GitHub Copilot
-harness) after uploading the package. Each lists what must happen; any "fails if" is a release blocker.
+Run each scenario in a chat with the three skills installed
+(`bash scripts/install-local.sh`). Each lists what must happen; any "fails if" is a release blocker.
 
 ## 0a. Routing — an idea goes to the Café
 > I've got an idea: something to help with facilities questions from new joiners. Not sure what tool or how we'd build it.

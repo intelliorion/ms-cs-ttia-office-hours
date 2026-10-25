@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-25 (Copilot Studio agent removed)
+
+- The Copilot Studio agent package is gone: `COPILOT-STUDIO-AGENT.md`,
+  `copilot-studio-github-agent/`, `scripts/build-github-agent.sh` and
+  `scripts/build.sh`. The skills install for Claude Code and GitHub Copilot with
+  `scripts/install-local.sh`; the scenarios run in any chat with them installed.
+
 ## 2026-10-14 (Café link)
 
 - The Creators' Café page link, http://cscreatorscafe/ (firm network), is now

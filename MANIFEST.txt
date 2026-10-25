@@ -1,6 +1,5 @@
 .gitignore
 CHANGELOG.md
-COPILOT-STUDIO-AGENT.md
 README.md
 cafe-app/.gitignore
 cafe-app/README.md
@@ -332,9 +331,6 @@ cafe-app/vscode-helper/test/extension.test.js
 cafe-app/web/assets/index-CHxbu6N0.js
 cafe-app/web/assets/index-Xf2ciSH1.css
 cafe-app/web/index.html
-copilot-studio-github-agent/SETUP.md
-copilot-studio-github-agent/agent-instructions.md
-copilot-studio-github-agent/upload/README.md
 docs/superpowers/plans/2026-10-19-cafe-app-core.md
 docs/superpowers/plans/2026-10-19-cafe-inbox.md
 docs/superpowers/plans/2026-10-19-cafe-universe-ui.md
@@ -345,8 +341,6 @@ docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 docs/superpowers/specs/2026-10-21-cafe-agentic-inbox-design.md
 docs/superpowers/specs/2026-10-22-cafe-rounds-pictures-design.md
-scripts/build-github-agent.sh
-scripts/build.sh
 scripts/fetch-without-zip.ps1
 scripts/fetch-without-zip.sh
 scripts/install-local.sh

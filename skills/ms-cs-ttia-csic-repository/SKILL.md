@@ -116,10 +116,10 @@ tense: expected, not achieved.
 
 ---
 
-## How to run this in chat (Copilot Studio)
+## How to run this in chat
 
-This skill runs inside a Copilot Studio agent, usually in Microsoft Teams or
-Microsoft 365 Copilot Chat. People read it on a laptop between meetings.
+This skill runs in a chat, usually in Microsoft Teams or Microsoft 365
+Copilot Chat. People read it on a laptop between meetings.
 
 - **One question per message.** End the message with that single question. Do
   not send the six questions as a list — a list gets a list of one-line answers,

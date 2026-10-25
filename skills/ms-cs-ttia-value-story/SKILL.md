@@ -42,7 +42,7 @@ both handled here and closed with an assignment, not a handoff:
   owns this now" rather than "what did it deliver", the closing assignment is
   to take it to the CSIC Repository as a pilot.
 
-## How to run this in chat (Copilot Studio)
+## How to run this in chat
 
 - **One question per message** while gathering evidence. Short turns.
 - **Evidence comes from files the user uploads, text or figures the user

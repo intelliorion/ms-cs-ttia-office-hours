@@ -62,7 +62,7 @@ with a question. A route can be revised if the user brings new facts.
 
 ---
 
-## How to run this in chat (Copilot Studio)
+## How to run this in chat
 
 - **One question per message.** Short turns, two to six sentences, then the
   question. Tables only for the Café-vs-Repository comparison or the pathways.

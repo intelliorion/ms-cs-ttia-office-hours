@@ -63,7 +63,11 @@ export function sampleTable(sample: KitSample): SampleTable {
   });
   const pick = (row: string[]) => keep.map((i) => row[i] ?? '');
   const examples = sample.rows.map(pick).filter((r) => r.some((x) => one(x, 80)));
-  const groups = sample.seeded.map((g, i) => ({ ...g, code: `T${i + 1}`, row: pick(g.row) }));
+  // A group with its own rows (a duplicate pair, a split) is those rows, as they are; else its one row, `count` times.
+  const groups = sample.seeded.map((g, i) => {
+    const own = (g.rows ?? []).map(pick).filter((r) => r.some((x) => one(x, 80)));
+    return { ...g, code: `T${i + 1}`, row: pick(g.row), own, count: own.length || g.count };
+  });
   const seededRows = Math.min(groups.reduce((s, g) => s + g.count, 0), SAMPLE_ROWS_MAX - (examples.length ? 1 : 0));
   const idCols = columns.map((c, i) => (c.kind === 'id' ? i : -1)).filter((i) => i >= 0);
   const dateCols = columns.map((c, i) => (c.kind === 'date' ? i : -1)).filter((i) => i >= 0);
@@ -86,7 +90,8 @@ export function sampleTable(sample: KitSample): SampleTable {
     const room = SAMPLE_ROWS_MAX - rows.length;
     const count = Math.min(g.count, room);
     if (count <= 0) break;
-    for (let k = 0; k < count; k++) add(g.row, k, g.code);
+    // Copies of one row move by whole weeks (ten weekend claims on ten Saturdays); a group's own rows keep their dates.
+    for (let k = 0; k < count; k++) { if (g.own.length) add(g.own[k], 0, g.code); else add(g.row, k, g.code); }
     seeded.push({ code: g.code, label: one(g.label, 100), count, expect: one(g.expect, 240) });
   }
   return { columns: [...columns, { name: TEST_COLUMN, kind: 'category', about: 'Empty on an ordinary row; T1, T2 … on a seeded test row (see test-checklist.md).' }], rows, seeded };

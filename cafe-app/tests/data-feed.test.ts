@@ -128,8 +128,9 @@ describe('the diagram, the kits and design.md use the real data', () => {
     const studio = kitFiles(sampleIdea(), { ...state, tool: { ...state.tool!, tool: 'Copilot Studio' } }, { tasks: [], risks: [] });
     const knowledge = studio['kit/copilot-studio/knowledge.md'];
     expect(knowledge).toContain("## The team's own files");
-    expect(knowledge).toContain('- **policy caps.csv** (Rules or reference)');
-    expect(knowledge).toContain('- **policy.pdf** (Process document): The expense policy');
+    // Each with where it is kept, beside design.md.
+    expect(knowledge).toContain('- **policy caps.csv** ([../../data-files/f2-x](../../data-files/f2-x), Rules or reference)');
+    expect(knowledge).toContain('- **policy.pdf** ([../../data-files/f4-x](../../data-files/f4-x), Process document): The expense policy');
   });
   it('design.md says whether the data is confirmed, and shows each file', () => {
     const md = renderDesignMd(sampleIdea(), { ...emptyDesign(), data: { files: [input, { ...rules, check: { status: 'held', findings: [], masked: [], notes: [] } }], steps: [] } });

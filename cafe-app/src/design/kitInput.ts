@@ -140,7 +140,7 @@ export function decodeKit(out: DesignKitOutput, codes: Map<string, Coded>): Desi
     sample: {
       ...decoded.sample,
       rows: out.sample.rows.map((r) => r.map(cell)),
-      seeded: out.sample.seeded.map((g, i) => ({ ...decoded.sample.seeded[i], row: g.row.map(cell) })),
+      seeded: out.sample.seeded.map((g, i) => ({ ...decoded.sample.seeded[i], row: g.row.map(cell), ...(g.rows ? { rows: g.rows.map((r) => r.map(cell)) } : {}) })),
     },
     ...(out.dataiku?.rules && decoded.dataiku ? { dataiku: { ...decoded.dataiku, rules: { columns: decoded.dataiku.rules!.columns, rows: out.dataiku.rules.rows.map((r) => r.map(cell)) } } } : {}),
   };

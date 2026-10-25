@@ -72,7 +72,8 @@ export function fitSampleToData(sample: KitSample, data: DataState | undefined):
       name: sample.name || `Made-up rows shaped like ${file.name}`,
       columns: cols.map((c) => ({ name: c.name, kind: kind(c), about: about(c) })),
       rows: (sample.rows.length ? sample.rows : [[]]).map((r, k) => cols.map((c) => cell(r, c, k + 1))),
-      seeded: sample.seeded.map((g, k) => ({ ...g, row: cols.map((c) => cell(g.row, c, 900 + k)) })),
+      // A group's own rows share one made-up value where the AI's were the same (a duplicate pair stays a pair).
+      seeded: sample.seeded.map((g, k) => ({ ...g, row: cols.map((c) => cell(g.row, c, 900 + k)), ...(g.rows ? { rows: g.rows.map((r) => cols.map((c) => cell(r, c, 900 + k))) } : {}) })),
     },
   };
 }

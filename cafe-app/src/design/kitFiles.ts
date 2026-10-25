@@ -10,12 +10,14 @@ import { PA_COLUMN_TYPES } from '../ai/tasks';
 import { isApprovedTool } from '../graph/ontology';
 import { CSIC_NOTE, mdLine, type DesignFeature, type DesignState } from './store';
 import { builderOf, pathwayLabel } from './tools';
-import { rolesText } from '../ideas/people';
-import { csicFlags, FIT_STALE } from './choice';
+import { peopleByRole } from '../ideas/people';
+
+export { peopleByRole };
+import { csicFlags } from './choice';
 import { BUILD_TAGS, pointOf, POINT_LABELS, type DesignTag } from './points';
 import { sampleCsv, sampleTable, SAMPLE_FILE, TEST_COLUMN, type SampleTable } from './sampleData';
 import { checkFlow, FLOW_DIAGRAM_FILE, FLOW_FILE, FLOW_KIND_WORD, renderFlowHtml, type RecipeFlow } from './recipeFlow';
-import { columnsOf, isUsable, KIND_LABELS, whatOf, type ColumnProfile, type DataFile } from '../data/model';
+import { columnsOf, DATA_DIR, isUsable, KIND_LABELS, whatOf, type ColumnProfile, type DataFile } from '../data/model';
 import { renderScaffold, scaffoldOf, SCAFFOLD_DIR, SCAFFOLD_FILES } from './scaffold';
 
 export const NOT_SETTLED = '(not settled in the design)';
@@ -32,21 +34,6 @@ export const KIT_NO_AI = 'The AI could not fill in this kit when it was written,
 
 /** The kit folder name for a tool: the canonical label in lower kebab case ("Power Apps" → "power-apps"). */
 export const toolSlug = (tool: string): string => tool.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tool';
-
-/**
- * People appear by role in anything shared: every name the idea holds (the submitter and the team) becomes its role
- * ("the builder", "the lead and builder", "the submitter"), wherever the design's own words or the AI's put it.
- */
-export function peopleByRole(idea: Idea): (text: string) => string {
-  const people = [
-    ...idea.people.team.map((p) => ({ name: p.name.trim(), role: `the ${rolesText(p.roles)}` })),
-    ...(idea.people.submitter?.trim() && !idea.people.team.some((p) => p.name.trim().toLowerCase() === idea.people.submitter!.trim().toLowerCase())
-      ? [{ name: idea.people.submitter.trim(), role: 'the submitter' }] : []),
-  ].filter((p) => p.name.length > 1).sort((a, b) => b.name.length - a.name.length);
-  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const rules = people.map((p) => ({ re: new RegExp(`(?<![\\p{L}\\p{N}])${esc(p.name)}(?![\\p{L}\\p{N}])`, 'giu'), role: p.role }));
-  return (text: string) => rules.reduce((t, r) => t.replace(r.re, r.role), text);
-}
 
 /** Everything a kit is written from. */
 export interface KitContext {
@@ -77,9 +64,18 @@ const join = (...parts: string[][]) => `${parts.flat().join('\n').replace(/\n{3,
 const same = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 const forFeature = <T extends { feature?: string }>(items: T[] | undefined, f: { name: string }) => (items ?? []).filter((x) => same(x.feature, f.name));
 const unmatched = <T extends { feature?: string }>(items: T[] | undefined, features: { name: string }[]) => (items ?? []).filter((x) => !features.some((f) => same(x.feature, f.name)));
+/** A line that goes on after it: its own full stop taken off, so the sentence after it does not make two. */
+const noStop = (text: string) => text.replace(/[.!?…]+$/, '');
+/**
+ * A fit judged before the design changed the feature, as the builder reads it: the operator's "re-evaluate the tool"
+ * (approach.md) is not theirs to do.
+ */
+export const KIT_FIT_STALE = 'the fit was judged before the design changed this feature: check it as you build';
+/** "1 row", "3 rows". */
+export const rowsWord = (n: number) => `${n} ${n === 1 ? 'row' : 'rows'}`;
 const fitWords = (f: { fit?: string; note?: string; stale?: boolean }) => (f.fit && f.fit !== 'yes'
-  ? ` (${f.fit === 'no' ? 'the tool cannot do this' : 'the tool does this only partly'}${f.note ? `: ${mdLine(f.note)}` : ''}${f.stale ? `; ${FIT_STALE}` : ''})`
-  : f.stale ? ` (the tool's fit is ${FIT_STALE})` : '');
+  ? ` (${f.fit === 'no' ? 'the tool cannot do this' : 'the tool does this only partly'}${f.note ? `: ${mdLine(f.note)}` : ''}${f.stale ? `; ${KIT_FIT_STALE}` : ''})`
+  : f.stale ? ` (${KIT_FIT_STALE})` : '');
 
 export function taskLines(tasks: DesignPlanTask[]): string[] {
   const out: string[] = [];
@@ -137,7 +133,7 @@ function sampleSection(c: KitContext): string[] {
     ...s.columns.map((x) => `| \`${x.name}\` | ${x.kind} | ${cell(x.about)} |`), '',
     ...(s.seeded.length ? [
       `The seeded test rows, marked in \`${TEST_COLUMN}\` (each is a test in [${TEST_FILE}](${TEST_FILE})):`, '',
-      ...s.seeded.map((g) => `- **${g.code}** (${g.count} rows): ${mdLine(g.label)}. Expected: ${mdLine(g.expect)}`), '',
+      ...s.seeded.map((g) => `- **${g.code}** (${rowsWord(g.count)}): ${mdLine(g.label)}. Expected: ${mdLine(g.expect)}`), '',
       `Leave \`${TEST_COLUMN}\` out of what the tool reads if it should find these rows by itself.`, '',
     ] : []),
   ];
@@ -170,8 +166,8 @@ function readme(c: KitContext, extra: string[] = []): string {
     '## The order of work', '',
     ...(c.tasks.length ? taskLines(c.tasks) : ['- (no plan task for this tool)']), '',
     '## Who does what', '',
-    `- **Builder**: ${mdLine(pointOf(c.state, 'builder')) || (builder ? 'the builder named on the idea' : NOT_SETTLED)}${!builder && c.tool !== 'custom app' && c.tool !== 'Microsoft Copilot' ? ' (Assisted Citizen until a builder is named)' : ''}. Builds it from this kit, task by task, on the sample only.`,
-    `- **Who uses it**: ${point(c, 'users')}. Tries it on the sample in the last session and says whether it shows the one thing.`,
+    `- **Builder**: ${noStop(mdLine(pointOf(c.state, 'builder'))) || (builder ? 'the builder named on the idea' : NOT_SETTLED)}${!builder && c.tool !== 'custom app' && c.tool !== 'Microsoft Copilot' ? ' (Assisted Citizen until a builder is named)' : ''}. Builds it from this kit, task by task, on the sample only.`,
+    `- **Who uses it**: ${noStop(point(c, 'users'))}. Tries it on the sample in the last session and says whether it shows the one thing.`,
     '- **The Café team**: runs the design sessions, keeps the data rule, and ticks the test checklist with the builder.', '',
     ...sampleSection(c),
     '## Risks', '', ...(c.risks.length ? c.risks.map((r) => `- ${mdLine(r)}`) : ['- (none named)']), '',
@@ -189,7 +185,7 @@ function testChecklist(c: KitContext): string {
   return join(head('Test checklist', c), [
     `Run each test on [${SAMPLE_FILE}](${SAMPLE_FILE}) in ${c.tool}. Tick it when the result is the one expected.`, '',
     '## Done when', '', point(c, 'done-when'), '',
-    ...(s?.seeded.length ? ['## Seeded tests', '', ...s.seeded.map((g) => `- [ ] **${g.code}: ${mdLine(g.label).replace(/\*/g, '')}** (the ${g.count} rows with \`${TEST_COLUMN}\` = ${g.code}). Expected: ${mdLine(g.expect)}`), ''] : []),
+    ...(s?.seeded.length ? ['## Seeded tests', '', ...s.seeded.map((g) => `- [ ] **${g.code}: ${mdLine(g.label).replace(/\*/g, '')}** (${g.count === 1 ? 'the row' : `the ${g.count} rows`} with \`${TEST_COLUMN}\` = ${g.code}). Expected: ${mdLine(g.expect)}`), ''] : []),
     ...(general.length ? ['## Checks', '', ...general.map((x) => `- [ ] ${mdLine(x.check)} Expected: ${mdLine(x.expected)}`), ''] : []),
     '## Features', '',
     ...(c.built.length ? c.built.flatMap((f) => {
@@ -286,17 +282,28 @@ function studioFiles(c: KitContext): Record<string, string> {
     'One topic per feature. In Copilot Studio: **Topics → Add a topic → From blank**, add the trigger phrases, then the steps. Where a step needs an action, add it first under **Tools** (a Power Automate flow or a connector), on the sample only.', '',
   ], ...skillBlocks,
   c.outside.length ? ['## Not in this agent', '', ...c.outside.map((f) => `- ${bold(f.name)}: done with ${mdLine(f.scope?.by)}, outside the agent: see [../${toolSlug(f.scope?.by ?? '')}/README.md](../${toolSlug(f.scope?.by ?? '')}/README.md).`), ''] : []);
+  // The team's own files are named by their copy in the idea folder's data-files/, so the builder knows where each one is.
+  const team = dataFilesOf(c, ['input', 'output', 'rules', 'process', 'email', 'today', 'other']);
+  const teamFile = (src: string) => team.find((f) => same(f.name, src) || src.toLowerCase().includes(f.name.toLowerCase()));
+  const source = (src: string) => { const f = teamFile(src); return f ? `${bold(f.name)} ([../../${DATA_DIR}/${f.file}](../../${DATA_DIR}/${encodeURI(f.file)}))` : bold(src); };
   const isSample = (src: string) => /sample/i.test(src);
-  const add = s.knowledge.filter((x) => x.add && !isSample(x.source));
+  // The sample is knowledge only when the AI did not say to keep it (or the input it is made like) out: a sample of
+  // the questions people ask is what the agent is tested with, not what it answers from.
+  const inputs = dataFilesOf(c, ['input']);
+  const sampleOut = s.knowledge.some((x) => !x.add && (x.source.toLowerCase().includes(SAMPLE_FILE) || inputs.some((f) => x.source.toLowerCase().includes(f.name.toLowerCase()))));
+  const add = s.knowledge.filter((x) => x.add && !(isSample(x.source) && !teamFile(x.source)));
   const not = s.knowledge.filter((x) => !x.add);
+  const sampleLine = `**${SAMPLE_FILE}** (this folder): ${mdLine(c.kit?.sample.name) || 'the synthetic sample'}${c.sample ? `, ${c.sample.rows.length} made-up rows; columns ${columnsLine(c)}` : ` (${NOT_SETTLED})`}`;
+  const adds = [...(sampleOut ? [] : [`${sampleLine}.`]), ...add.map((x) => `${source(x.source)}: ${mdLine(x.holds)}`)];
+  const listed = (f: DataFile) => s.knowledge.some((x) => teamFile(x.source) === f);
   const knowledge = join(head('Knowledge', c), [
     'Add these under **Knowledge** in Copilot Studio, in this order. The agent answers only from what is added here.', '',
     '## Add', '',
-    `1. **${SAMPLE_FILE}** (this folder): ${mdLine(c.kit?.sample.name) || 'the synthetic sample'}${c.sample ? `, ${c.sample.rows.length} made-up rows; columns ${columnsLine(c)}` : ` (${NOT_SETTLED})`}.`,
-    ...add.map((x, i) => `${i + 2}. ${bold(x.source)}: ${mdLine(x.holds)}`), '',
-    ...teamFiles(c),
+    ...(adds.length ? adds.map((x, i) => `${i + 1}. ${x}`) : [NOT_SETTLED]), '',
+    ...teamFiles(c, listed),
     '## Do not add', '',
-    ...not.map((x) => `- ${bold(x.source)}: ${mdLine(x.why) || mdLine(x.holds)}`),
+    ...(sampleOut ? [`- ${sampleLine}: the test input. Type its questions in the test pane (see Test questions below); the agent must not answer from it.`] : []),
+    ...not.map((x) => `- ${source(x.source)}: ${mdLine(x.why) || mdLine(x.holds)}`),
     '- Any file or page with real names, client data or personal data.',
     '- A live connection to another system: the proof of concept runs on the sample only.', '',
     '## Test questions', '',
@@ -353,7 +360,7 @@ function powerAppsFiles(c: KitContext): Record<string, string> {
     ], ...p.flows.map((x, i) => [
       `## Flow ${i + 1}: ${mdLine(x.name)}${x.feature ? ` (feature: ${mdLine(x.feature)})` : ''}`, '', `Trigger: ${mdLine(x.trigger)}`, '',
       ...x.steps.map((st, k) => `${k + 1}. ${mdLine(st).replace(/^\\/, '')}`), '',
-    ]), automate.length ? ['See also the Power Automate kit for the features done outside the app: [../power-automate/README.md](../power-automate/README.md).', ''] : []);
+    ]), automate.length ? ['See also the kit for the features done outside the app:', '', ...[...new Set(automate.map((f) => f.scope?.by ?? ''))].map((by) => `- ${mdLine(by)}: [../${toolSlug(by)}/README.md](../${toolSlug(by)}/README.md)`), ''] : []);
   }
   return files;
 }
@@ -362,23 +369,35 @@ function powerAppsFiles(c: KitContext): Record<string, string> {
 export const dataFilesOf = (c: Pick<KitContext, 'state'>, kinds: string[]): DataFile[] =>
   (c.state.data?.confirmedAt ? c.state.data.files.filter((f) => isUsable(f) && kinds.includes(f.kind)) : []);
 
-/** knowledge.md: the rules, reference, process documents and example emails the team gave, to add as knowledge. */
-function teamFiles(c: KitContext): string[] {
-  const files = dataFilesOf(c, ['rules', 'process', 'email', 'today', 'other']);
+/**
+ * knowledge.md: the rules, reference, process documents and example emails the team gave that the AI's list does not
+ * already say to add or to leave out, each with its place in data-files/.
+ */
+function teamFiles(c: KitContext, listed: (f: DataFile) => boolean = () => false): string[] {
+  const files = dataFilesOf(c, ['rules', 'process', 'email', 'today', 'other']).filter((f) => !listed(f));
   if (!files.length) return [];
   return [
     '## The team\'s own files', '',
-    'The team gave these with the idea; they passed the Café data check and are in the idea folder\'s data-files/. Add the ones the agent must answer from.', '',
-    ...files.map((f) => `- ${bold(f.name)} (${KIND_LABELS[f.kind]}): ${mdLine(whatOf(f)) || 'what it holds was not said'}`), '',
+    `The team gave these with the idea; they passed the Café data check and are in the idea folder's ${DATA_DIR}/. Add the ones the agent must answer from.`, '',
+    ...files.map((f) => `- ${bold(f.name)} ([../../${DATA_DIR}/${f.file}](../../${DATA_DIR}/${encodeURI(f.file)}), ${KIND_LABELS[f.kind]}): ${mdLine(whatOf(f)) || 'what it holds was not said'}`), '',
   ];
 }
 
 const DSS_TYPE = (c: ColumnProfile) => (c.type === 'number' ? (c.max && /\./.test(c.max) ? 'double' : 'int') : c.type === 'money' ? 'double' : c.type === 'date' || c.type === 'datetime' ? 'date' : c.type === 'yes-no' ? 'boolean' : 'string');
 const datasetName = (name: string) => name.replace(/\.[a-z0-9]+$/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'dataset';
 
+/**
+ * The Dataiku project, from the environment point: its first clause ("Café Dataiku sandbox project; analyst uploads
+ * the CSV by hand…" → "Café Dataiku sandbox project"), at most 80 characters and ending on a whole word.
+ */
+export function projectName(environment: string): string {
+  const first = mdLine(environment).split(/;|\.\s/)[0].replace(/[.,:]+$/, '').trim();
+  return first.length <= 80 ? first : `${first.slice(0, 79).replace(/\s+\S*$/, '')}…`;
+}
+
 /** The flow the AI gave, checked; else a plain one from the features: the sample, one recipe per feature, the result. */
 export function flowOf(c: KitContext): RecipeFlow {
-  const project = point(c, 'environment') === NOT_SETTLED ? mdLine(c.idea.title) : mdLine(pointOf(c.state, 'environment')).slice(0, 80);
+  const project = point(c, 'environment') === NOT_SETTLED ? mdLine(c.idea.title) : projectName(pointOf(c.state, 'environment') ?? '');
   const checked = c.kit?.dataiku ? checkFlow(c.kit.dataiku, project, c.built.map((f) => f.name)) : undefined;
   if (checked) return checked;
   const cols = (c.sample?.columns ?? []).filter((x) => x.name !== TEST_COLUMN).map((x) => ({ name: x.name, type: x.kind === 'number' || x.kind === 'money' ? 'double' : x.kind === 'date' ? 'date' : 'string' }));
@@ -408,13 +427,33 @@ export function flowOf(c: KitContext): RecipeFlow {
 function dataikuFiles(c: KitContext, flow: RecipeFlow): Record<string, string> {
   const files: Record<string, string> = {};
   const name = (id: string) => flow.datasets.find((d) => d.id === id)?.name ?? id;
-  const input = flow.datasets.find((d) => d.kind === 'input');
-  const rulesSet = flow.datasets.find((d) => d.kind === 'rules');
   const rules = c.kit?.dataiku?.rules;
+  // Every dataset no recipe makes is uploaded, each from the file it comes from: the sample, the team's rules sheet
+  // (else rules.csv, when there is one), the team's expected output to compare with.
+  const made = new Set(flow.recipes.flatMap((r) => r.outputs));
+  const sources = flow.datasets.filter((d) => !made.has(d.id));
+  const teamLink = (f: DataFile) => `the team's [${mdLine(f.name)}](../../${DATA_DIR}/${encodeURI(f.file)})`;
+  const [teamRules] = dataFilesOf(c, ['rules']);
+  const [teamOut] = dataFilesOf(c, ['output']);
+  const rulesCsv = rules?.columns.length ? '[rules.csv](rules.csv), filled in' : '';
+  const allTeam = dataFilesOf(c, ['input', 'output', 'rules', 'process', 'email', 'today', 'other']);
+  const fromOf = (d: RecipeFlow['datasets'][number]): string => {
+    // A dataset named after one of the team's files (not the input: the sample stands in for it) comes from that file.
+    const named = allTeam.find((f) => f.kind !== 'input' && datasetName(f.name) === d.name);
+    if (named) return `${teamLink(named)}${named.kind === 'output' ? ', to compare the result with' : ''}`;
+    if (d.kind === 'input') return `[${SAMPLE_FILE}](${SAMPLE_FILE})`;
+    if (d.kind === 'rules' && teamRules) return `${teamLink(teamRules)}${/\.xlsx?$/i.test(teamRules.name) ? ' (the sheet with the columns in [datasets.md](datasets.md))' : ''}${rulesCsv ? `, or ${rulesCsv}` : ''}`;
+    if (d.kind === 'rules') return rulesCsv || NOT_SETTLED;
+    if (d.kind === 'output' && teamOut) return `${teamLink(teamOut)}, to compare the result with`;
+    return mdLine(d.about) || NOT_SETTLED;
+  };
+  const input = sources.find((d) => d.kind === 'input');
   files['flow.md'] = join(head('Recipe flow', c), [
     `Project: ${mdLine(flow.project) || NOT_SETTLED}. Open [${FLOW_DIAGRAM_FILE}](${FLOW_DIAGRAM_FILE}) in a browser to see the flow as Dataiku draws it. Build the recipes in this order.`, '',
     '## 1. Upload the data', '',
-    `Upload [${SAMPLE_FILE}](${SAMPLE_FILE}) as the dataset **${mdLine(input?.name ?? 'sample_data')}** (**+ Dataset → Upload your files**).${rulesSet ? ` Upload [rules.csv](rules.csv) as **${mdLine(rulesSet.name)}**.` : ''} ${DATA_RULE}`, '',
+    'Upload each of these as the dataset named (**+ Dataset → Upload your files**), with the column types in [datasets.md](datasets.md):', '',
+    ...(sources.length ? sources : [{ id: 'sample', name: input?.name ?? 'sample_data', kind: 'input' as const, about: '', columns: [] }]).map((d) => `- **${mdLine(d.name)}**: from ${fromOf(d)}.`), '',
+    DATA_RULE, '',
   ], ...flow.recipes.map((r, i) => [
     `## ${i + 2}. ${mdLine(r.name)} (${(FLOW_KIND_WORD[r.kind] ?? `${r.kind} recipe`).toLowerCase()})${r.feature ? `, feature: ${mdLine(r.feature)}` : ''}`, '',
     `Reads ${r.inputs.map((x) => `**${mdLine(name(x))}**`).join(', ')}; makes ${r.outputs.map((x) => `**${mdLine(name(x))}**`).join(', ')}.`, '',

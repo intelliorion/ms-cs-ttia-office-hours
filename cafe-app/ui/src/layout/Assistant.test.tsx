@@ -167,3 +167,86 @@ describe('the Café assistant', () => {
     act(() => root.unmount()); el.remove();
   });
 });
+
+describe('the universe waits for the answer', () => {
+  /** What the operator sees in the universe: every store field the picture reads. */
+  const MAP = ['selectedId', 'selectedIds', 'highlight', 'hiddenTypes', 'leftView', 'viewNonce', 'focus', 'hideUnlit', 'graph'] as const;
+  let changes: string[][];
+  let stopWatching: () => void;
+  beforeEach(() => {
+    vi.mocked(chatStream).mockReset();
+    useStore.setState({ graph, refresh: vi.fn(async () => {}), leftView: { kind: 'list' } as any, selectedId: 'team:gss', selectedIds: [], highlight: ['team:gss'], inbox: null, ai: { provider: 'claude' } as any });
+    useChat.setState({ open: true, thread: null, entries: [], threads: [], running: null, busy: false, error: null });
+    changes = [];
+    stopWatching = useStore.subscribe((now, before) => {
+      const moved = MAP.filter((k) => now[k] !== before[k]);
+      if (moved.length) changes.push([...moved]);
+    });
+  });
+  const ask = async (box: () => HTMLTextAreaElement, text: string) => {
+    await act(async () => { box().focus(); type(box(), text); });
+    await act(async () => { key(box(), 'Enter'); });
+  };
+  const pending = () => {
+    let finish!: (v: unknown) => void; let fail!: (e: Error) => void;
+    vi.mocked(chatStream).mockImplementation(async (_b, onProgress, signal) => {
+      onProgress({ stage: 'thinking', step: 0 });
+      onProgress({ stage: 'step', step: { kind: 'search', text: 'Finding the leads of GSS ideas', found: 1 } });
+      onProgress({ stage: 'thinking', step: 1 });
+      return new Promise((ok, no) => {
+        finish = ok; fail = no;
+        signal?.addEventListener('abort', () => no(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      });
+    });
+    return { finish: (v: unknown) => finish(v), fail: (e: Error) => fail(e) };
+  };
+
+  it('nothing in the universe changes on send or while the AI works; the answer moves it once, to its stars', async () => {
+    const run = pending();
+    const { el, root, box } = await mount();
+    await ask(box, 'who leads @GSS ideas?');
+    expect(el.querySelector('[data-testid="command-thinking"]')).not.toBeNull();
+    expect(changes).toEqual([]);
+    expect(useStore.getState()).toMatchObject({ selectedId: 'team:gss', highlight: ['team:gss'] });
+    await act(async () => { run.finish(answer); });
+    expect(changes).toEqual([['highlight']]);
+    expect(useStore.getState()).toMatchObject({ selectedId: 'team:gss', highlight: ['team:gss', 'person:kwame-mensah'] });
+    stopWatching(); act(() => root.unmount()); el.remove();
+  });
+
+  it('an answer with no graph evidence leaves the universe as it was', async () => {
+    const run = pending();
+    const { el, root, box } = await mount();
+    await ask(box, 'what is the weather?');
+    await act(async () => { run.finish({ ...answer, id: 'c3', reply: 'The graph does not hold that.', highlight: [], trace: [] }); });
+    expect(el.querySelector('.cmd-reply')?.textContent).toBe('The graph does not hold that.');
+    expect(changes).toEqual([]);
+    expect(useStore.getState().highlight).toEqual(['team:gss']);
+    stopWatching(); act(() => root.unmount()); el.remove();
+  });
+
+  it('changes waiting for Do it light nothing, even after a search', async () => {
+    const run = pending();
+    const { el, root, box } = await mount();
+    await ask(box, 'merge the duplicates');
+    await act(async () => { run.finish({ ...answer, id: 'c4', kind: 'command', actions: [{ id: 'a1', label: 'Merge X into Y', status: 'proposed' }] }); });
+    expect(el.querySelector('[data-action="command-do"]')).not.toBeNull();
+    expect(changes).toEqual([]);
+    stopWatching(); act(() => root.unmount()); el.remove();
+  });
+
+  it('an error or Stop leaves the universe as it was', async () => {
+    let run = pending();
+    const { el, root, box } = await mount();
+    await ask(box, 'who leads @GSS ideas?');
+    await act(async () => { run.fail(new Error('The AI is not available')); });
+    expect(el.querySelector('.cmd-err')?.textContent).toBe('The AI is not available');
+    run = pending();
+    await ask(box, 'who leads @GSS ideas?');
+    await act(async () => { (el.querySelector('[data-action="assistant-stop"]') as HTMLButtonElement).click(); });
+    expect(el.querySelector('.cmd-err')?.textContent).toBe('Stopped. Nothing was changed.');
+    expect(changes).toEqual([]);
+    expect(useStore.getState()).toMatchObject({ selectedId: 'team:gss', highlight: ['team:gss'] });
+    stopWatching(); act(() => root.unmount()); el.remove();
+  });
+});

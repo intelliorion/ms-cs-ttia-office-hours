@@ -5,7 +5,7 @@ import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
 import { inboxCount } from '../popouts/inboxHelpers';
 import {
-  KIND_WORD, STATUS_WORD, canUndo, chipSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,
+  KIND_WORD, STATUS_WORD, answerLight, canUndo, chipSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,
   type ChatEntryView, type SlashCmd, type StarHit,
 } from './commandHelpers';
 
@@ -56,10 +56,11 @@ export function Assistant() {
 
   const stars = useMemo(() => (graph?.nodes ?? []).map((n: any) => ({ id: n.id as string, label: n.label as string })), [graph]);
   const typeOf = useMemo(() => new Map<string, string>((graph?.nodes ?? []).map((n: any) => [n.id, n.type])), [graph]);
+  // The universe stays as the operator left it while the AI works; it moves once, to the answer's stars, when the answer is in.
   const send = async (m: { text: string; mentions?: string[]; noFocus?: boolean }) => {
-    setHighlight(null);
     const e = await chat.send({ text: m.text, focus: m.noFocus ? null : focus?.ids, about: m.noFocus ? undefined : focus?.label, mentions: m.mentions });
-    if (e?.highlight?.length) setHighlight(e.highlight);
+    const lit = answerLight(e);
+    if (lit) setHighlight(lit);
   };
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     const e = await chat.act(id, what, actionId);

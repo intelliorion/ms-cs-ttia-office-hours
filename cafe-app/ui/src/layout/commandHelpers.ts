@@ -15,6 +15,15 @@ export const KIND_WORD = { command: 'A change', question: 'A question', unclear:
 
 export const canUndo = (a: ChatActionView) => a.status === 'done' && !!a.inverse;
 export const waitingCount = (entries: ChatEntryView[]) => entries.reduce((n, e) => n + e.actions.filter((a) => a.status === 'proposed').length, 0);
+/**
+ * What the universe lights once a message is answered: the stars the answer rests on, or null to leave the picture as the
+ * operator left it (no answer, no graph evidence, an error, or changes waiting for Do it).
+ */
+export function answerLight(e: ChatEntryView | null | undefined): string[] | null {
+  if (!e || e.error || !e.highlight?.length) return null;
+  if (e.actions.some((a) => a.status === 'proposed')) return null;
+  return e.highlight;
+}
 
 /** Ideas for the empty panel: what the command bar can do today. */
 export const EXAMPLES = [

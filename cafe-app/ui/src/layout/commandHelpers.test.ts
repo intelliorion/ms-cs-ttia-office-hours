@@ -58,3 +58,17 @@ describe('＋ New person', () => {
     expect(newPersonHit(nodes, 'avery chen')).toBeNull();
   });
 });
+
+import { answerLight } from './commandHelpers';
+describe('what an answer lights', () => {
+  const base = { id: 'c1', at: '', text: 'q?', reply: 'r', actions: [], problems: [], kind: 'question' as const, highlight: ['team:gss'] };
+  it('the stars of a finished answer with graph evidence', () => expect(answerLight(base)).toEqual(['team:gss']));
+  it('nothing for no answer, no evidence, an error, or changes waiting for Do it', () => {
+    expect(answerLight(null)).toBeNull();
+    expect(answerLight({ ...base, highlight: [] })).toBeNull();
+    expect(answerLight({ ...base, highlight: undefined })).toBeNull();
+    expect(answerLight({ ...base, error: 'The AI could not finish that' })).toBeNull();
+    expect(answerLight({ ...base, kind: 'command', actions: [{ id: 'a1', label: 'Merge', status: 'proposed' }] as any })).toBeNull();
+    expect(answerLight({ ...base, kind: 'command', actions: [{ id: 'a1', label: 'Merge', status: 'done' }] as any })).toEqual(['team:gss']);
+  });
+});

@@ -20,7 +20,8 @@ const STOP = new Set(['with', 'from', 'that', 'this', 'your', 'have', 'into', 'a
 const norm = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const hasPhrase = (hay: string, phrase: string) => phrase.length > 0 && ` ${hay} `.includes(` ${phrase} `);
 
-function splitAddress(s: string): { name: string; addr: string } {
+/** "Name <addr>" → its name and address; a bare address has no name. */
+export function splitAddress(s: string): { name: string; addr: string } {
   const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(s);
   if (m) return { name: m[1].trim(), addr: m[2].trim() };
   return s.includes('@') ? { name: '', addr: s.trim() } : { name: s.trim(), addr: '' };

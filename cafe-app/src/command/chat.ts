@@ -9,6 +9,7 @@ import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
 import { nodeId, type GNode } from '../graph/ontology';
 import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
+import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
 import { validate } from '../ai/schema';
@@ -135,7 +136,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   let pre = message;
   mentioned.forEach((n, i) => { pre = pre.split(`@${n.label}`).join(`\u0000${i}\u0000`); });
   // The conversation's codes carry forward, so a star keeps its code from message to message.
-  const hidden = hideNames(pre, codable, { seed: new Map(thread.codes) });
+  // Email addresses go as <email> first, as in every other AI call (the data step's mask).
+  const hidden = hideNames(maskEmails(pre), codable, { seed: new Map(thread.codes) });
   const legendOf = (n: GNode): LegendEntry => {
     const code = codeFor(hidden.codes, n);
     return n.type === 'Person' ? { code, type: n.type } : { code, type: n.type, label: n.label };
@@ -154,7 +156,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const coded = (s: unknown) => {
     const t = String(s ?? '');
     if (!t) return t;
-    const h = hideNames(t, codable, { seed: hidden.codes });
+    const h = hideNames(maskEmails(t), codable, { seed: hidden.codes });
     for (const [c, v] of h.codes) if (!hidden.codes.has(c)) hidden.codes.set(c, v);
     return h.text;
   };

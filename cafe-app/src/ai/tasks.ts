@@ -235,6 +235,7 @@ export const extractTask: Task<ExtractOutput> = {
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
       'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System.',
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
+      'People appear as codes such as [P1] and email addresses as <email>: never make either a label, and write a person as their code alone.',
     ], EXTRACT_SCHEMA, { idea: ideaData(idea), existing });
   },
   parse: (raw) => parseChecked<ExtractOutput>(raw, EXTRACT_SCHEMA, trimExtract),
@@ -449,6 +450,7 @@ export const understandTask: Task<Understanding> = {
       'facts.replyReceived: true only if this is the reply we are waiting for. facts.builderNamed: the person the sender says will build it, or null. facts.attendanceConfirmed: true only if they confirm they can attend every session.',
       'facts.newFlags: at most 3 short concerns (at most 80 characters each), such as "Needs client data". facts.stageHint: only if the text clearly says so, else null.',
       '"peoplePresent" lists the people in the To or Cc lines or speaking in a meeting. They are context only, never graph nodes.',
+      'People appear as codes such as [P1] and email addresses as <email>. Write a person as their code alone (facts.builderNamed too); never guess a name.',
       '"what": one line on what this file is. "understood": 1 to 6 plain lines on what it says that matters for the idea. "uncertain": up to 4 lines on what you could not tell. Never name people in "what", "understood" or "uncertain"; say "the team" or a role.',
       ...(data.knownStars ? ['"knownStars" are stars already in the universe. Reuse a label from knownStars when the same thing is meant; a new label only for a new thing.'] : []),
       ...(data.teamAnswers ? ['"teamAnswers" were already recorded from earlier replies: do not extract them again.'] : []),

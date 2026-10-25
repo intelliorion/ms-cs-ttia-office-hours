@@ -314,6 +314,13 @@ a file by its name, its idea's ID or the idea's title. Click a row to open its c
 If the AI can't be reached, the item says "Working by hand", explains why, and nothing is applied on its
 own. You can still choose the idea and apply changes yourself.
 
+**Names are coded before the AI reads a file.** Everyone the app knows, and every name the file itself gives (the
+sender, the To and Cc lines, a meeting's speakers, the headers of an email quoted inside it, a first.last address),
+reaches the AI as a code such as [P1]; email addresses reach it as `<email>`. The codes in its reply are turned back
+into the names before anything is kept, so the card reads as usual. The same goes for **Grow** (`/grow`) and for
+reading new ideas from a form export. A name the app has never seen in any form, typed only in free text, is sent as
+typed. A picture or a scanned PDF is read by the AI as it is, so a name in it is not coded.
+
 **What the AI may propose and what code decides.** The AI can only report facts: what the file is, what it
 understood and what it is not sure about, which idea it looks like, answers to the Café questions, flags, names
 and links. It cannot run anything. The code decides what is safe, what needs your OK and what is held, and it

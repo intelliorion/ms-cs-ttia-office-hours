@@ -68,12 +68,15 @@ const ibansIn = (text: string) => (text.match(IBAN) ?? []).map((x) => x.replace(
 const personalEmails = (text: string) => [...new Set((text.match(EMAIL) ?? []).map((e) => e.toLowerCase()))]
   .filter((e) => !EXAMPLE_DOMAIN.test(e) && !ROLE_MAILBOX.test(e.split('@')[0]));
 
+/** Every email address as <email>: an address never reaches the AI, whoever it belongs to. */
+export const maskEmails = (text: string): string => text.replace(EMAIL, '<email>');
+
 /**
  * Masks what the check looks for in any text the AI or the page sees: email addresses, card and bank numbers, phone
  * numbers. (Columns the check flagged are masked whole, by maskTable.)
  */
 export function maskText(text: string): string {
-  let out = text.replace(EMAIL, '<email>');
+  let out = maskEmails(text);
   out = out.replace(CARD, (m) => (luhn(m.replace(/\D/g, '')) ? '<card>' : m));
   out = out.replace(IBAN, (m) => (ibanValid(m) ? '<bank>' : m));
   // Phones last, on what is left, never touching dates, times or amounts.

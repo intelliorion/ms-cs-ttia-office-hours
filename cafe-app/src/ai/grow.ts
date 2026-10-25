@@ -6,6 +6,30 @@ import { edgeId, type GEdge, type GNode } from '../graph/ontology';
 import { extractTask } from './tasks';
 import { extractInput, planAiLinks } from './apply';
 import type { Connector } from './connector';
+import type { ExtractInput, ExtractOutput } from './tasks';
+import type { Idea } from '../ideas/idea';
+import type { Coded } from '../command/names';
+import { coder, codeAll, decodeValue, peopleFor, withNames } from '../review/suggestInput';
+import { knownParticipants } from '../inbox/screen';
+
+/**
+ * The extract input with names coded before the AI sees it, as every other AI call codes them (reviewInput's coder):
+ * everyone the universe and the ideas know, everyone an import has named, and the names "first.last" addresses in
+ * the idea give away; addresses become <email>. `existing` holds pain points, capabilities and systems, not people.
+ */
+export async function codedExtractInput(root: string, idea: Idea, nodes: GNode[]): Promise<{ input: ExtractInput; codes: Map<string, Coded> }> {
+  const input = extractInput(idea, nodes);
+  const people = withNames(await peopleFor(root, { nodes }, idea), await knownParticipants(root));
+  const codes = new Map<string, Coded>();
+  return { input: { ...input, idea: codeAll(input.idea, coder(people, codes)) }, codes };
+}
+
+/** Asks the AI to extract, names coded on the way out and put back in its reply. */
+export async function extractCoded(root: string, ai: Connector, idea: Idea, nodes: GNode[]): Promise<{ provider: string; output: ExtractOutput }> {
+  const { input, codes } = await codedExtractInput(root, idea, nodes);
+  const out = await ai.runWith(extractTask, input);
+  return { provider: out.provider, output: decodeValue(out.output, codes) };
+}
 
 export interface GrowResult {
   added: number;
@@ -21,7 +45,7 @@ export interface GrowResult {
 export async function growIdea(root: string, ai: Connector, id: string): Promise<GrowResult> {
   const idea = await loadIdea(root, id);
   const before = await rebuildGraph(root);
-  const { provider, output } = await ai.runWith(extractTask, extractInput(idea, before.nodes));
+  const { provider, output } = await extractCoded(root, ai, idea, before.nodes);
   const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
   const { ideas } = await listIdeas(root);
   const ctx: ConflictContext = {

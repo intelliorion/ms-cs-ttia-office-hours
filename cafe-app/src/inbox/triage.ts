@@ -15,7 +15,10 @@ import { parseDrop, type ParsedDrop } from './parse';
 import { readPdfText } from './pdf';
 import { screenDrop, knownParticipants } from './screen';
 import { getItem, updateItem, holdItem, type InboxItem } from './store';
-import { matchIdea, displayName, ASK_BELOW, type MatchResult, type MatchHow } from './match';
+import { matchIdea, ASK_BELOW, type MatchResult, type MatchHow } from './match';
+import { namesInDrop, personOf } from './names';
+import { coder, codeAll, decodeValue, withNames } from '../review/suggestInput';
+import type { Coded } from '../command/names';
 
 /** What triage stores on the item (item.triage). Task 3 builds actions from it. */
 export interface TriageRecord {
@@ -249,12 +252,12 @@ export async function understandStep(
   const idea = match.ideaId ? byId.get(match.ideaId) : undefined;
   const meta = parsed.meta;
   // Display names only: addresses never go to the AI.
-  const peoplePresent = [...new Set([...(meta.to ?? []), ...(meta.cc ?? []), ...(meta.speakers ?? [])].map(displayName).filter(Boolean))];
+  const peoplePresent = [...new Set([...(meta.to ?? []), ...(meta.cc ?? []), ...(meta.speakers ?? [])].map(personOf).filter(Boolean))];
   const input: TriageInput = {
     item: {
       type: parsed.type, text: parsed.text,
       ...(meta.subject ? { subject: meta.subject } : {}),
-      ...(meta.from && displayName(meta.from) ? { from: displayName(meta.from) } : {}),
+      ...(meta.from && personOf(meta.from) ? { from: personOf(meta.from) } : {}),
       ...(meta.quoted ? { quoted: meta.quoted } : {}),
       ...(peoplePresent.length ? { peoplePresent } : {}),
     },
@@ -268,6 +271,8 @@ export async function understandStep(
     candidates: match.candidates.filter((c) => c !== idea?.id).map((c) => ({ id: c, title: byId.get(c)?.title ?? '' })),
   };
   // What the universe already holds (the matched idea's own stars first) and what the team already answered.
+  const codes = new Map<string, Coded>();
+  let coded = input;
   if (connector) {
     const g = await rebuildGraph(root).catch(() => ({ nodes: [], edges: [] }));
     const near = new Set<string>();
@@ -277,14 +282,23 @@ export async function understandStep(
     input.knownStars = [...stars.filter((n) => near.has(n.id)), ...stars.filter((n) => !near.has(n.id))]
       .slice(0, 60).map((n) => ({ type: n.type, label: n.label.slice(0, 60) }));
     input.teamAnswers = ((idea as (Idea & { answers?: { question: string; answer: string }[] }) | undefined)?.answers ?? []).slice(0, 12);
+    // Names are coded before anything reaches the AI, as in every other AI call (reviewInput's coder): everyone the
+    // universe and the ideas know, plus every name this file gives (sender, To, Cc, speakers, quoted headers,
+    // first.last addresses); addresses become <email>. The stars stay as they are: they are not people.
+    const known = withNames(g.nodes.filter((n) => n.type === 'Person'), await knownParticipants(root));
+    const people = withNames(known, namesInDrop(meta, parsed.text));
+    const code = coder(people, codes);
+    const { knownStars, ...rest } = input;
+    coded = { ...codeAll(rest, code), ...(knownStars ? { knownStars } : {}) };
   }
 
   let ai: Understanding | undefined; let provider: string | undefined; let aiError: string | undefined;
   const status = connector ? await connector.status().catch(() => ({ provider: null })) : { provider: null };
   if (connector && status.provider) {
     try {
-      const out = await connector.runWith(understandTask, input);
-      ai = out.output; provider = out.label;
+      const out = await connector.runWith(understandTask, coded);
+      // The codes back to names before anything is kept, so the stored triage reads as it always did.
+      ai = decodeValue(out.output, codes); provider = out.label;
     } catch (e) {
       aiError = (e as Error).message || 'The AI call failed';
     }

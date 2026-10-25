@@ -19,8 +19,8 @@ import { appendHistory, readHistory } from '../workspace/files';
 import { ideaDir } from '../ideas/store';
 import { readDesign } from '../design/store';
 import { rebuildGraph, readAiLinks } from '../graph/store';
-import { extractTask } from '../ai/tasks';
-import { extractInput, planAiLinks } from '../ai/apply';
+import { planAiLinks } from '../ai/apply';
+import { extractCoded } from '../ai/grow';
 import { loadIdea } from '../ideas/store';
 
 /** Route-level inbox operations. The server runs every one of these behind its POST lock. */
@@ -320,7 +320,7 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
     const entry: TrailEntry = { title: idea.title, found: [] };
     try {
       const before = await rebuildGraph(root);
-      const { provider, output } = await connector.runWith(extractTask, extractInput(idea, before.nodes));
+      const { provider, output } = await extractCoded(root, connector, idea, before.nodes);
       const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
       if (planned.links.length) {
         const item = await load(root, id);

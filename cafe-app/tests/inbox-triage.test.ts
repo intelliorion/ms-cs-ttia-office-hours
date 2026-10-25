@@ -323,7 +323,7 @@ describe('triageItem', () => {
     expect(t.notes.join(' ')).toMatch(/CAFE-2026-003, but you chose CAFE-2026-002/);
   });
 
-  it('people present and the sender go to the AI as display names, never addresses', async () => {
+  it('people present and the sender go to the AI coded, never as names or addresses', async () => {
     const root = await workspace();
     const { calls, connector } = recorder(JSON.stringify(GOOD));
     const eml = [
@@ -341,10 +341,10 @@ describe('triageItem', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).not.toContain('@');
     const data = calls[0].slice(calls[0].indexOf('<<<DATA'));
-    expect(data).toContain('"Person 3"');
-    expect(data).toContain('"team-box"');
-    expect(data).toContain('"Doe, Jane"');
-    expect(data).toContain('"from": "Person 2"');
+    // Names are coded before anything reaches the AI: the sender and the To and Cc people are codes such as [P1].
+    expect(data).not.toMatch(/Person [23]|Doe|Jane|team-box/);
+    expect(data).toMatch(/"from": "\[P\d+\]"/);
+    expect(data).toMatch(/"peoplePresent": \[\s*"\[P\d+\]",\s*"\[P\d+\]",\s*"\[P\d+\]"\s*\]/);
   });
 
   it('injection in the body has no out-of-schema effect; the idea is unchanged', async () => {

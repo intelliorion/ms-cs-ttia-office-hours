@@ -1,12 +1,14 @@
 import { loadIdea } from '../ideas/store';
 import { listItems } from '../inbox/store';
 import { rebuildGraph } from '../graph/store';
-import { hideNames, type Coded } from '../command/names';
+import { hideNames, showNames, type Coded } from '../command/names';
+import { maskEmails } from '../data/check';
 import { extractInput } from '../ai/apply';
 import { STAGE_NAMES } from '../rules/stages';
 import type { ReviewSuggestInput } from '../ai/tasks';
 import type { Idea } from '../ideas/idea';
 import { nodeId, type GNode } from '../graph/ontology';
+import { importedNames, namesInAddresses } from '../inbox/names';
 import { builderOf } from '../ideas/people';
 
 /** What review needs from the graph: the idea's pain points, capabilities and systems (systems through its capabilities). */
@@ -25,7 +27,7 @@ export async function reviewInput(
   // The design questions read their own answers as steps: their copies on the idea are left out for them.
   const idea = opts.skipSource ? { ...loaded, answers: (loaded.answers ?? []).filter((a) => a.source !== opts.skipSource) } : loaded;
   const graph = await rebuildGraph(root);
-  const people = peopleOf(graph, idea);
+  const people = await peopleFor(root, graph, idea);
   // One code list for the whole suggestion, so a person has the same code in every text, and the reply can be decoded.
   const codes = new Map<string, Coded>();
   const coded = coder(people, codes);
@@ -96,11 +98,22 @@ export function peopleOf(graph: { nodes: GNode[] }, idea: Pick<Idea, 'people'>):
   ];
 }
 
-/** A text with the people coded, adding to `codes` (one list for a whole call, so a person keeps one code). */
+/**
+ * Everyone to code for an idea: peopleOf, plus every person an import has named (a sender or a cc the universe
+ * never took in) and the names "first.last" addresses in the idea give away.
+ */
+export async function peopleFor(root: string, graph: { nodes: GNode[] }, idea: Pick<Idea, 'people'>): Promise<GNode[]> {
+  return withNames(peopleOf(graph, idea), [...await importedNames(root), ...namesInAddresses(JSON.stringify(idea))]);
+}
+
+/**
+ * A text with the people coded, adding to `codes` (one list for a whole call, so a person keeps one code). Email
+ * addresses go first, as <email> (the data step's mask), so an address never reaches the AI, a known person's or not.
+ */
 export function coder(people: GNode[], codes: Map<string, Coded>) {
   return <S extends string | undefined>(s: S): S => {
     if (!s) return s;
-    const h = hideNames(s, people, { seed: codes });
+    const h = hideNames(maskEmails(s), people, { seed: codes });
     for (const [c, v] of h.codes) if (!codes.has(c)) codes.set(c, v);
     return h.text as S;
   };
@@ -109,8 +122,32 @@ export function coder(people: GNode[], codes: Map<string, Coded>) {
 /** Every string in a value with the people coded (the idea's people, everyone in the graph), adding to `codes`. */
 export async function codeValue<T>(root: string, id: string, value: T, codes: Map<string, Coded>): Promise<T> {
   const idea = await loadIdea(root, id);
-  const code = coder(peopleOf(await rebuildGraph(root), idea), codes);
-  const walk = (v: unknown): unknown => (typeof v === 'string' ? code(v) : Array.isArray(v) ? v.map(walk)
-    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)])) : v);
-  return walk(value) as T;
+  return codeAll(value, coder(await peopleFor(root, await rebuildGraph(root), idea), codes));
+}
+
+/** People plus names the app has only seen (an email's sender, a cc, a speaker), as people stars for the coder. */
+export function withNames(people: GNode[], names: string[]): GNode[] {
+  const have = new Set(people.map((n) => n.label.trim().toLowerCase()));
+  const extra: GNode[] = [];
+  for (const raw of names) {
+    const label = raw.replace(/\s+/g, ' ').trim();
+    if (label.length < 3 || label.includes('@') || have.has(label.toLowerCase())) continue;
+    have.add(label.toLowerCase());
+    extra.push({ id: nodeId('Person', label), type: 'Person', label });
+  }
+  return [...people, ...extra];
+}
+
+/** Every string in the AI's reply with the codes turned back into names, so what is stored reads as before. */
+export function decodeValue<T>(v: T, codes: Map<string, Coded>): T {
+  const walk = (x: unknown): unknown => (typeof x === 'string' ? showNames(x, codes) : Array.isArray(x) ? x.map(walk)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, walk(y)])) : x);
+  return walk(v) as T;
+}
+
+/** Every string in a value coded with `code` (keys and other values as they are). */
+export function codeAll<T>(v: T, code: (s: string) => string): T {
+  const walk = (x: unknown): unknown => (typeof x === 'string' ? code(x) : Array.isArray(x) ? x.map(walk)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, walk(y)])) : x);
+  return walk(v) as T;
 }

@@ -17,8 +17,8 @@ import { dataUnderstandTask, type DataUnderstandInput, type DataUnderstandOutput
 import { appendHistory, writeFileAtomic } from '../workspace/files';
 import { ideaDir, loadIdea } from '../ideas/store';
 import { knownParticipants } from '../inbox/screen';
-import { reviewInput, codeValue } from '../review/suggestInput';
-import { showNames, type Coded } from '../command/names';
+import { reviewInput, codeValue, decodeValue } from '../review/suggestInput';
+import type { Coded } from '../command/names';
 import { readDesign, skillGuidance } from '../design/store';
 export { guessKind } from './model';
 import {
@@ -277,12 +277,6 @@ export async function editDataFile(root: string, id: string, fid: string, body: 
 
 /* ---------- the AI's part ---------- */
 
-const decodeAll = <T>(v: T, codes: Map<string, Coded>): T => {
-  const walk = (x: unknown): unknown => (typeof x === 'string' ? showNames(x, codes) : Array.isArray(x) ? x.map(walk)
-    : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x).map(([k, y]) => [k, walk(y)])) : x);
-  return walk(v) as T;
-};
-
 /** The AI's reply kept to what the file holds: real columns only, rules and derivations on real columns, real features. */
 export function checkUnderstanding(
   out: DataUnderstandOutput, f: Pick<DataFile, 'kind' | 'tables'>, otherColumns: string[], features: string[], at: string, provider: string, looked: string[],
@@ -381,7 +375,7 @@ async function understandWithAi(
       await onStep(`Looking closer at ${fresh.map((l) => l.column).join(', ')}…`);
       continue;
     }
-    const decoded = decodeAll(output, codes);
+    const decoded = decodeValue(output, codes);
     const otherColumns = others.flatMap((o) => columnsOf(o).map((c) => c.name));
     return checkUnderstanding(decoded, f, otherColumns, features.map((x) => x.name), clock(), provider, looked);
   }

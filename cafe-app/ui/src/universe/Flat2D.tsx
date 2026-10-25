@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { readFlat, saveFlat } from './viewMemory';
 import { useStageSize } from '../layout/Stage';
 import {
-  DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, labelSpotVisible, labelsMayOverlap, neighbourhood, ringColour,
+  DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, fitFlat, labelSpotVisible, litKey, labelsMayOverlap, neighbourhood, ringColour,
   paletteFor, spreadApart, starSize, wantsLabel, zoomAt, type Graph, type LabelMode, type Vec3,
 } from './graphView';
 import { GEAR_TEETH, gearPath } from './workshopShapes';
@@ -62,6 +62,24 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
   useEffect(() => { if (viewNonce !== firstNonce.current) setView({ k: 1, x: 0, y: 0 }); }, [viewNonce]);
   useEffect(() => { saveFlat(view); }, [view]);
   const centre: [number, number] = [BOX.x + BOX.w / 2, BOX.y + BOX.h / 2];
+  // A new highlight (an answer's evidence, or Light them): one smooth move that puts its dots in the middle, all in view.
+  const flownLit = useRef(litKey(highlight));
+  useEffect(() => {
+    const key = litKey(highlight);
+    if (key === flownLit.current) return;
+    flownLit.current = key;
+    const to = key ? fitFlat((highlight ?? []).map((id) => base.get(id)).filter((p): p is [number, number] => !!p), BOX, centre) : null;
+    if (!to) return;
+    let raf = 0; const t0 = performance.now(); let from: typeof view | null = null;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / 600); const e = 1 - (1 - t) ** 3;
+      setView((v) => { from ??= v; return { k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e }; });
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight]);
   const pts = useMemo(() => new Map([...base].map(([id, p]) => [id, [centre[0] + (p[0] - centre[0]) * view.k + view.x, centre[1] + (p[1] - centre[1]) * view.k + view.y] as [number, number]])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [base, view, centre[0], centre[1]]);

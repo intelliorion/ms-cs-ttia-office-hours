@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph, spreadApart, zoomAt, wantsLabel, nextLabelMode, labelModeText, SMART_LINKS } from './graphView';
+import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph, spreadApart, zoomAt, frameOf, fitFlat, litKey, wantsLabel, nextLabelMode, labelModeText, SMART_LINKS } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -142,5 +142,29 @@ describe('workshop shapes', () => {
     const { readTheme } = await import('../state/store');
     expect(readTheme()).toBe('workshop');
     localStorage.removeItem('cafe-theme');
+  });
+});
+
+describe('framing an answer', () => {
+  it('frameOf: the middle of the stars, far enough back to see them all (70 to 400)', () => {
+    expect(frameOf([])).toBeNull();
+    expect(frameOf([[10, 0, 0]])).toEqual({ centre: [10, 0, 0], distance: 70 });
+    const f = frameOf([[-50, 0, 0], [50, 0, 0]])!;
+    expect(f.centre).toEqual([0, 0, 0]); expect(f.distance).toBe(120);
+    expect(frameOf([[-900, 0, 0], [900, 0, 0]])!.distance).toBe(400);
+  });
+  it('fitFlat: the dots end up in the middle of the box, zoom 1 to 2.5', () => {
+    const box = { x: 500, y: 100, w: 760, h: 650 };
+    const centre: [number, number] = [box.x + box.w / 2, box.y + box.h / 2];
+    expect(fitFlat([], box, centre)).toBeNull();
+    const v = fitFlat([[600, 200], [700, 300]], box, centre)!;
+    const mid = [centre[0] + (650 - centre[0]) * v.k + v.x, centre[1] + (250 - centre[1]) * v.k + v.y];
+    expect(mid[0]).toBeCloseTo(centre[0]); expect(mid[1]).toBeCloseTo(centre[1]);
+    expect(v.k).toBe(2.5);
+    expect(fitFlat([[0, 0], [5000, 5000]], box, centre)!.k).toBe(1);
+  });
+  it('litKey: the same stars in any order are the same highlight', () => {
+    expect(litKey(['b', 'a'])).toBe(litKey(['a', 'b']));
+    expect(litKey(null)).toBe(''); expect(litKey([])).toBe('');
   });
 });

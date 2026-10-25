@@ -328,7 +328,7 @@ cafe-app/vscode-helper/lib.js
 cafe-app/vscode-helper/package-lock.json
 cafe-app/vscode-helper/package.json
 cafe-app/vscode-helper/test/extension.test.js
-cafe-app/web/assets/index-CHxbu6N0.js
+cafe-app/web/assets/index-CA7MFT-0.js
 cafe-app/web/assets/index-Xf2ciSH1.css
 cafe-app/web/index.html
 docs/superpowers/plans/2026-10-19-cafe-app-core.md

@@ -55,3 +55,40 @@ describe('Flat2D spacing, labels and zoom', () => {
     [full, none, smart].forEach((x) => x.remove());
   });
 });
+
+describe('Flat2D and a lit answer', () => {
+  const spread = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`capability:c${i}`, [(i % 4) * 40, Math.floor(i / 4) * 40, 0] as [number, number, number]]));
+  const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
+  it('moves once, smoothly, to put a new highlight in the middle; the same stars again, Clear or a new canvas do not move it', async () => {
+    try { localStorage.removeItem('cafe-view'); } catch { /* none */ }
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = createRoot(el);
+    const show = (highlight: string[] | null) => act(() => root.render(
+      <Flat2D graph={many(16)} layout={spread(16)} selectedId={null} hoverId={null} labels="none" highlight={highlight} onSelect={() => {}} onHover={() => {}} />,
+    ));
+    const at = (id: string) => { const c = el.querySelector(`g[data-id="${id}"]`)!.querySelectorAll('circle')[1]; return [Number(c.getAttribute('cx')), Number(c.getAttribute('cy'))]; };
+    show(null);
+    const zoom0 = el.querySelector('svg')!.getAttribute('data-zoom');
+    const corner = ['capability:c0', 'capability:c1'];
+    const before = at('capability:c0');
+    show(corner);
+    expect(at('capability:c0')).toEqual(before); // nothing jumps: the move is a short glide
+    await wait(800);
+    const moved = at('capability:c0');
+    expect(moved).not.toEqual(before);
+    expect(el.querySelector('svg')!.getAttribute('data-zoom')).not.toBe(zoom0);
+    show([...corner].reverse());
+    await wait(700);
+    expect(at('capability:c0')).toEqual(moved);
+    show(null);
+    await wait(700);
+    expect(at('capability:c0')).toEqual(moved);
+    act(() => root.unmount());
+    const again = createRoot(el);
+    act(() => again.render(<Flat2D graph={many(16)} layout={spread(16)} selectedId={null} hoverId={null} labels="none" highlight={corner} onSelect={() => {}} onHover={() => {}} />));
+    const fresh = at('capability:c0');
+    await wait(700);
+    expect(at('capability:c0')).toEqual(fresh);
+    act(() => again.unmount()); el.remove();
+  });
+});

@@ -11,7 +11,7 @@ import { useFlyTo } from './useFlyTo';
 import { readCamera, saveCamera } from './viewMemory';
 import { frameWatch, probeGl } from './quality';
 import type { Quality } from '../state/store';
-import { DIM, bounds, degrees, dimFromHide, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
+import { DIM, bounds, degrees, dimFromHide, frameOf, litKey, neighbourhood, paletteFor, type Graph, type LabelMode, type Vec3 } from './graphView';
 import { Snowfall } from './Snowfall';
 import { DraftingTable } from './DraftingTable';
 import { Workshop } from './Workshop';
@@ -176,6 +176,20 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
     flyTo(spin.current.localToWorld(new Vector3(...p)), Math.min(260, Math.max(70, reach * 2.1)));
   }, [selectedId, pos, flyTo, graph]);
 
+  // A new highlight (an answer's evidence, or Light them): one smooth move to frame its stars. A redraw, a new canvas
+  // (theme, quality) or Clear does not move the camera.
+  const flownLit = useRef(litKey(highlight));
+  useEffect(() => {
+    const key = litKey(highlight);
+    if (key === flownLit.current) return;
+    flownLit.current = key;
+    if (!key || !spin.current) return;
+    const frame = frameOf((highlight ?? []).map((id) => pos.get(id)).filter((p): p is Vec3 => !!p));
+    if (!frame) return;
+    spin.current.updateMatrixWorld();
+    flyTo(spin.current.localToWorld(new Vector3(...frame.centre)), frame.distance);
+  }, [highlight, pos, flyTo]);
+
   // Reset view.
   // Only when the button bumps the count: flyHome itself changes once the controls attach, and that is not a reset.
   const nonce = useRef(viewNonce);
@@ -198,7 +212,8 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
     });
   });
   useFrame((_, dt) => {
-    if (!spin.current || selectedId) return;
+    // Still while a star is selected or an answer is lit, so what is in view stays in view.
+    if (!spin.current || selectedId || lit) return;
     if (performance.now() - lastDown.current < IDLE_AFTER_MS) return;
     spin.current.rotation.y += SPIN * Math.min(dt, 0.1);
   });

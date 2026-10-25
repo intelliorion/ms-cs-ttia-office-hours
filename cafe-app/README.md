@@ -180,7 +180,10 @@ your last message. "This" and "it" mean the idea open on the left, or the star y
 which, and its ✕ asks in general instead.
 
 **In a reply:** star names are chips (hover one to light it, click to fly to it); an answer lights the stars it rests on,
-with **How I found it in the graph**, and offers up to three follow-ups you can send with a click. A change shows one
+with **How I found it in the graph**, and offers up to three follow-ups you can send with a click. **The universe waits
+for the answer:** while the AI works, the camera, the star you picked, what is lit and the Show filter stay exactly as you
+left them; when the answer is in, its stars light and the view glides once to frame them. An answer with nothing from
+the graph, a change waiting for Do it, an error or Stop leave the universe as it was. A change shows one
 card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and every done action has
 **Undo** (a team or round that changed since is kept, and the card says so).
 

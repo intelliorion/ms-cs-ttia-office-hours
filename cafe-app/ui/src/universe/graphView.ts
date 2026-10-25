@@ -232,6 +232,32 @@ export function zoomAt(view: { k: number; x: number; y: number }, at: [number, n
   return { k, x: at[0] - centre[0] - (at[0] - centre[0] - view.x) * f, y: at[1] - centre[1] - (at[1] - centre[1] - view.y) * f };
 }
 
+/**
+ * Where to look to see a set of stars (an answer's evidence): their middle, and how far back to stand so all of them
+ * fit, 70 to 400 units. Null for no stars.
+ */
+export function frameOf(points: ReadonlyArray<Vec3>): { centre: Vec3; distance: number } | null {
+  if (!points.length) return null;
+  const c: Vec3 = [0, 0, 0];
+  for (const p of points) { c[0] += p[0]; c[1] += p[1]; c[2] += p[2]; }
+  c[0] /= points.length; c[1] /= points.length; c[2] /= points.length;
+  const reach = Math.max(0, ...points.map((p) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2])));
+  return { centre: c, distance: Math.min(400, Math.max(70, reach * 2.4)) };
+}
+
+/** Flat view: the zoom and pan that put a set of dots in the middle of the box, all in view (zoom 1 to 2.5). Null for none. */
+export function fitFlat(points: ReadonlyArray<readonly [number, number]>, box: { x: number; y: number; w: number; h: number }, centre: [number, number]) {
+  const e = extent(points);
+  if (!e) return null;
+  const fit = Math.min(box.w * 0.8 / Math.max(1, e.x1 - e.x0), box.h * 0.8 / Math.max(1, e.y1 - e.y0));
+  const k = Math.min(2.5, Math.max(1, fit));
+  const mx = (e.x0 + e.x1) / 2, my = (e.y0 + e.y1) / 2;
+  return { k, x: (box.x + box.w / 2) - centre[0] - (mx - centre[0]) * k, y: (box.y + box.h / 2) - centre[1] - (my - centre[1]) * k };
+}
+
+/** The same stars in any order: a highlight's identity, so the picture moves once per new answer and not on a redraw. */
+export const litKey = (ids: ReadonlyArray<string> | null | undefined) => (ids?.length ? [...ids].sort().join('|') : '');
+
 /** The design frame is 1920 wide: the Ideas panel covers x < 480 and the Pipeline and Demand panels the last 480. */
 export const STAGE_W = 1920;
 export const CLEAR_LEFT = 480;

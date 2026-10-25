@@ -34,6 +34,8 @@ export function guessKind(name: string): DataKind {
   const ext = (/\.([a-z0-9]+)$/.exec(n)?.[1] ?? '');
   if (ext === 'eml' || ext === 'msg') return 'email';
   if (/rule|polic|lookup|mapping|reference|limits?|caps?\b|thresholds?/.test(n)) return 'rules';
+  // A written-down process says so in its name even when it also says "today" (process-how-it-works-today.txt).
+  if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n) && ['pdf', 'docx', 'txt', 'md'].includes(ext)) return 'process';
   if (/today|current|manual|as[-_ ]is|report/.test(n)) return 'today';
   if (/output|result|expected|flagged|target|to[-_ ]be/.test(n)) return 'output';
   if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n)) return 'process';

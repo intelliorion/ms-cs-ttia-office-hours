@@ -99,6 +99,9 @@ describe('the code checks the AI\'s understanding against the profile', () => {
     expect(guessKind('monthly report today.xlsx')).toBe('today');
     expect(guessKind('claims.csv')).toBe('input');
     expect(guessKind('how we do it.docx')).toBe('process');
+    // A process document named with "today" is still the process, not today's output; a report named "process" stays a report.
+    expect(guessKind('5-process-how-it-works-today.txt')).toBe('process');
+    expect(guessKind('today process report.csv')).toBe('today');
     expect(guessKind('ask.eml')).toBe('email');
     expect(readWords({ type: 'table', tables: [{ name: '', header: ['a', 'b'], rows: [], total: 1200 }], meta: {} })).toBe('Table: 1,200 rows, 2 columns');
   });

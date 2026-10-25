@@ -104,6 +104,23 @@ describe('the Café assistant', () => {
     act(() => root.unmount()); el.remove();
   });
 
+  it('/ shortcuts keep their names whole: a long hint takes the rest of the row, in plain case', async () => {
+    useChat.setState({ open: true, thread: null, entries: [] });
+    const { el, root, box } = await mount();
+    await act(async () => { box().focus(); type(box(), '/'); });
+    const rows = [...el.querySelectorAll('[data-testid="command-slash"] li')];
+    expect(rows.map((r) => r.querySelector('.cm-cmd b')?.textContent)).toEqual(['/new', '/grow', '/undo', '/import', '/rounds']);
+    // Before, the name cell shrank to nothing beside "Read the idea on screen again…" and the hints showed in capitals.
+    // The stylesheet as written (Vitest hands CSS imports back empty), read with Node's fs.
+    const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { readFileSync: (f: string, enc: 'utf8') => string };
+    const css = fs.readFileSync(`${(globalThis as any).process.cwd()}/src/theme.css`, 'utf8');
+    const rule = (sel: string) => css.split(`${sel}{`)[1]?.split('}')[0] ?? '';
+    expect(rule('.cmd-mentions .cm-cmd')).toContain('flex:none');
+    expect(rule('.cmd-mentions .cm-hint')).toMatch(/min-width:0/);
+    expect(rule('.cmd-mentions .cm-hint')).toMatch(/text-transform:none/);
+    act(() => root.unmount()); el.remove();
+  });
+
   it('@ picks a star by kind; / offers shortcuts; /new starts a fresh chat; Stop ends a running message', async () => {
     useChat.setState({ open: true, thread: { id: 't1', title: 'x' }, entries: [answer] as any });
     const { el, root, box } = await mount();

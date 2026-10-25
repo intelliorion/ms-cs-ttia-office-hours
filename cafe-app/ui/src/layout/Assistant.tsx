@@ -274,7 +274,7 @@ function Composer({ focus, onSend, onSlash }: {
           {slashes.map((s, i) => (
             <li key={s.cmd} role="option" aria-selected={i === hi} className={i === hi ? 'on' : ''}
               onMouseDown={(e) => { e.preventDefault(); setText(''); onSlash(s.cmd); }} onMouseEnter={() => setHi(i)}>
-              <span className="cm-l"><b>{s.cmd}</b></span><span className="cm-t cm-hint">{s.hint}</span>
+              <span className="cm-l cm-cmd"><b>{s.cmd}</b></span><span className="cm-t cm-hint">{s.hint}</span>
             </li>
           ))}
         </ul>

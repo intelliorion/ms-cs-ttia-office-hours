@@ -5,7 +5,7 @@ import { emptyDesign, type DesignState } from '../src/design/store';
 import { pathwayOf } from '../src/design/choice';
 import { kitFiles } from '../src/design/kits';
 import { fnName, renderScaffold, scaffoldOf, SCAFFOLD_FILES } from '../src/design/scaffold';
-import type { SampleTable } from '../src/design/sampleData';
+import { ORDINARY_ROWS, type SampleTable } from '../src/design/sampleData';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { designKitTask, type DesignKitInput, type DesignPlanOutput } from '../src/ai/tasks';
 
@@ -63,6 +63,8 @@ describe('the custom app starter scaffold', () => {
     expect(s.rules.map((r) => [r.fn, r.columns, r.feature])).toEqual([['weekendClaim', ['claim_date'], 'Weekend flag'], ['render2', [], undefined]]);
     const used = new Set<string>();
     expect([fnName('3 day rule', used), fnName('3 day rule', used), fnName('!!!', used)]).toEqual(['rule3DayRule', 'rule3DayRule2', 'rule']);
+    // A camel-case name keeps its humps (the builds audit found lookupRules written as lookuprules).
+    expect([fnName('lookupRules', used), fnName('possibleSplit', used)]).toEqual(['lookupRules', 'possibleSplit']);
   });
 
   it('the files are plain, escaped and run: index.html loads app.js; app.js reads a CSV and every stub flags nothing yet', () => {
@@ -90,6 +92,16 @@ describe('the custom app starter scaffold', () => {
     expect(Object.values(boxes)[0].innerHTML).toContain('Load the sample');
   });
 
+  it('a rule stub is given every row too, so a rule that compares rows (a duplicate) can be written in it', () => {
+    const s = scaffoldOf(state(), FEATURES, SAMPLE, { screens: [], rules: [{ name: 'Possible duplicate', logic: 'Same amount and day as another claim', columns: [] }] });
+    const app = renderScaffold('Claims', 'CAFE-2026-001', s, SAMPLE.columns.map((c) => c.name))['app/app.js'];
+    expect(app).toContain('function possibleDuplicate(row, all) {');
+    // What the coding agent writes in the stub, using all.
+    const written = app.replace("function possibleDuplicate(row, all) {", "function possibleDuplicate(row, all) {\n  if (all.some((o) => o !== row && o.amount === row.amount && o.claim_date === row.claim_date)) return { flagged: true, reason: 'Possible duplicate' };");
+    const { ctx } = runApp(`${written}\nrows = parseCsv('claim_id,claim_date,amount\\nC-1,2026-10-10,80\\nC-2,2026-10-10,80\\nC-3,2026-10-11,80\\n');\nthis.rows = rows;`);
+    expect(ctx.rows.map((r: any) => ctx.runRules(r).flagged)).toEqual([true, true, false]);
+  });
+
   it('the custom app kit carries the scaffold; the README says how to run it and the agent starts from it', async () => {
     vi.stubEnv('CAFE_AI_FAKE', '1');
     const input: DesignKitInput = {
@@ -98,6 +110,8 @@ describe('the custom app starter scaffold', () => {
     };
     const kit = designKitTask.parse(await fakeProvider().complete(designKitTask.prompt(input), { timeoutMs: 1000 }));
     expect(kit.customApp?.rules[0].name).toBe('Weekend request');
+    // The kit AI is told how many ordinary rows the file will have, so its counts match it.
+    expect(designKitTask.prompt(input)).toContain(`until there are ${ORDINARY_ROWS} ordinary rows`);
     const plan: DesignPlanOutput = { tasks: [{ title: 'Build it', detail: 'd', tool: 'custom app', done_when: 'w' }], risks: [] };
     const idea = sampleIdea({ id: 'CAFE-2026-001', title: 'Claims check' });
     const files = kitFiles(idea, state({ features: [FEATURES[0]] }), plan, kit);
@@ -108,7 +122,7 @@ describe('the custom app starter scaffold', () => {
     const agent = files['kit/custom-app/BUILD-WITH-AGENT.md'];
     expect(agent).toContain('Start from the scaffold in app/');
     expect(agent).toContain('- weekendRequest: Flag a request when received_on is a Saturday or Sunday');
-    expect(files['kit/custom-app/app/app.js']).toContain('function weekendRequest(row)');
+    expect(files['kit/custom-app/app/app.js']).toContain('function weekendRequest(row, all)');
     // The fake's screen columns are the sample's: kept.
     expect(files['kit/custom-app/app/app.js']).toMatch(/"columns":\["request_id","received_on","desk","amount"\]/);
   });

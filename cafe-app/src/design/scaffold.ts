@@ -23,7 +23,8 @@ const same = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() ==
 const one = (v: unknown, max: number) => mdLine(String(v ?? '')).slice(0, max);
 /** A JavaScript function name from words: "Check weekend claims" → checkWeekendClaims (ASCII letters and digits only). */
 export function fnName(words: string, used: Set<string>, prefix = 'rule'): string {
-  const parts = words.normalize('NFKD').replace(/[^A-Za-z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  // A name already in camel case ("lookupRules") keeps its humps: they are words too.
+  const parts = words.normalize('NFKD').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^A-Za-z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean).slice(0, 5);
   let base = parts.map((p, i) => (i ? p[0].toUpperCase() + p.slice(1).toLowerCase() : p.toLowerCase())).join('') || prefix;
   if (/^\d/.test(base)) base = `${prefix}${base}`;
   if (base.length < 3) base = `${prefix}${base[0].toUpperCase()}${base.slice(1)}`;
@@ -147,8 +148,9 @@ export function renderScaffold(title: string, id: string, s: Scaffold, columns: 
     `// ${comment(r.name)}${r.feature ? ` (feature: ${comment(r.feature)})` : ''}`,
     `// The design says: ${comment(r.logic)}`,
     ...(r.columns.length ? [`// Columns it reads: ${r.columns.map(comment).join(', ')}`] : []),
-    `function ${r.fn}(row) {`,
+    `function ${r.fn}(row, all) {`,
     `  // TODO: write this rule from the design. Return { flagged: true, reason: '…' } for a row it catches.`,
+    '  // all is every row loaded: a rule that compares rows (a duplicate, a group of claims on one day) looks there.',
     '  return { flagged: false, reason: \'\' };',
     '}',
     '',
@@ -190,7 +192,7 @@ export function renderScaffold(title: string, id: string, s: Scaffold, columns: 
     '',
     '/** Every rule on one row: flagged when any rule flags it, with the reasons. */',
     'function runRules(row) {',
-    '  const hits = RULES.map((rule) => rule(row)).filter((r) => r && r.flagged);',
+    '  const hits = RULES.map((rule) => rule(row, rows)).filter((r) => r && r.flagged);',
     '  return { flagged: hits.length > 0, reason: hits.map((r) => r.reason).filter(Boolean).join(\'; \') };',
     '}',
     '',

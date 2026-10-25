@@ -14,6 +14,14 @@ import { growIdea } from '../ai/grow';
 import { setAiLinkStatus } from '../graph/store';
 
 /** What the app will do for one step of a command, once the operator says "Do it". */
+
+/** "An idea and a system or data can't be linked that way.": the kinds in words, each with its article. */
+export function cantLink(a: NodeType, b: NodeType): string {
+  const kind = (t: NodeType) => { const w = NODE_LABELS[t].toLowerCase(); return `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`; };
+  const both = `${kind(a)} and ${kind(b)}`;
+  return `${both[0].toUpperCase()}${both.slice(1)} can't be linked that way.`;
+}
+
 export type CommandAction =
   | { t: 'link'; from: string; rel: Relation; to: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string; source: string }
@@ -135,7 +143,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const choices = (s.rel ? [s.rel] : (Object.keys(ALLOWED) as Relation[])).filter(fits);
       if (choices.includes('BUILT_WITH')) { problems.push('Tools are picked in the tool picker, so I left that link out.'); continue; }
       const rel = choices.filter((r) => r !== 'IN_ROUND')[0];
-      if (!rel) { problems.push(`A ${a.type} and a ${b.type} can't be linked that way.`); continue; }
+      if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
       const [ft] = ALLOWED[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
       if (ctx.graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) { problems.push(`${from.label} and ${to.label} are already linked.`); continue; }

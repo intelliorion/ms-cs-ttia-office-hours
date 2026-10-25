@@ -56,6 +56,14 @@ describe('the Café assistant: changes', () => {
     expect(await rels(root)).not.toContain('team:bsi HAS_MEMBER person:zainab-okafor');
   });
 
+  it('a link the ontology does not allow says so in words, with the right article ("An idea and a team…")', async () => {
+    const { root, ai } = await setup([(d) => ({ next: 'propose', thought: 'Linking', reply: 'You asked to link them.', actions: [{ op: 'link', a: code(d, 'Idea', 'Desk booking assistant'), b: code(d, 'Team', 'BSI') }] })]);
+    const entry = await runCommand(root, 'link the desk booking assistant to BSI', ai, clock);
+    expect(entry.actions).toEqual([]);
+    // It read "A Idea and a Team can't be linked that way." before.
+    expect(entry.problems).toEqual(["An idea and a team can't be linked that way."]);
+  });
+
   it('a role, a new round by name, and the app\'s own checks turning bad steps into reasons', async () => {
     const { root, ai } = await setup([(d) => ({
       next: 'propose', thought: 'Working it out', reply: 'You asked for several things.',

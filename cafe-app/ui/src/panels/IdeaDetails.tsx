@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore, useStageRing } from '../state/store';
 import { ideaGet, ideaPost, post } from '../api';
 import { NO_AI_TIP, providerName } from '../popouts/aiUi';
-import { DECISION_EMAIL, ideaCardModel } from '../popouts/ideaHelpers';
+import { DECISION_EMAIL, ideaCardModel, moveWaitText } from '../popouts/ideaHelpers';
 import { RoundChip, StageButton } from '../popouts/IdeaSections';
 import { ReviewSelect } from './ReviewSelect';
 import { EmailMenu } from './EmailMenu';
@@ -157,12 +157,20 @@ export function IdeaDetails({ id }: { id: string }) {
   const where = (t: { stage?: number; closeAs?: string }) =>
     t.closeAs ? `Closed: ${state.closures[t.closeAs]}` : `Moved to ${state.stageNames[t.stage!]}`;
   // The suggestion goes away only once the move is saved; on failure it stays so the operator can try again.
-  const setStage = (t: { stage?: number; closeAs?: string }) =>
+  // The server makes one change at a time, so a move picked while an AI step runs waits for it (a minute or two): say so
+  // at once when this idea's AI is working, or as soon as the move is slow for another reason.
+  const setStage = (t: { stage?: number; closeAs?: string }) => {
+    if (busy) return;
+    const waitText = moveWaitText(t, { stages: state.stageNames, closures: state.closures }, aiBusy ? (aiFor ?? '') : null);
+    const waiting = setTimeout(() => setNotice({ text: waitText, kind: 'ok' }), aiBusy ? 0 : 800);
     void act(async () => {
-      const r = await ideaPost(id, 'stage', t.closeAs ? { closeAs: t.closeAs } : { stage: t.stage });
-      setSuggest(null);
-      return r;
+      try {
+        const r = await ideaPost(id, 'stage', t.closeAs ? { closeAs: t.closeAs } : { stage: t.stage });
+        setSuggest(null);
+        return r;
+      } finally { clearTimeout(waiting); }
     }, () => `${where(t)}.`);
+  };
   const stageValue = idea.closed ? `close:${idea.closed.as}` : `stage:${idea.stage}`;
   const gates = sectionsFor(idea, design?.state, editing, plan);
   // In Launch and Learn the decision, the features and tool and the design are settled: shown, not edited (nor once closed).

@@ -623,3 +623,45 @@ describe('IdeaDetails design sections', () => {
     expect(el.querySelector('[data-action="tools-reevaluate"]')!.className).toContain('primary');
   });
 });
+
+describe('IdeaDetails stage move while the AI works', () => {
+  // Regression: picking Launch and Learn while the AI wrote the plan and kits greyed the stage button and said nothing
+  // for a minute or two (the server makes one change at a time), so the move looked as if it could not be made.
+  it('says at once that the move waits for the AI, then that it is saved', async () => {
+    useStore.setState({ state: { ...STATE, stageNames: { 2: 'Review and Select', 3: 'Design series', 4: 'Launch and Learn' } } });
+    const approved = designState({ summary: 'S', approvedAt: '2026-10-20', status: 'approved' });
+    api.ideaGet.mockImplementation(async (_id: string, what: string) => (what === 'design' ? { state: approved, designMd: '' } : { files: ['plan.md'] }));
+    let planDone!: (v: unknown) => void;
+    api.designPost.mockImplementation(() => new Promise((r) => { planDone = r; }));
+    let moved!: (v: unknown) => void;
+    api.ideaPost.mockImplementation(() => new Promise((r) => { moved = r; }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="write-plan"]');
+    await flush();
+    // The stage button stays usable while the AI works, and the move is sent at once (it queues on the server).
+    await click('[data-action="stage"]');
+    const pick = document.body.querySelector('[data-action="stage-pick"][data-value="stage:4"]') as HTMLButtonElement;
+    expect(pick.disabled).toBe(false);
+    await act(async () => { pick.click(); });
+    await flush();
+    expect(api.ideaPost).toHaveBeenCalledWith(ID, 'stage', { stage: 4 });
+    expect(el.querySelector('.pop-notice')?.textContent).toBe(
+      'Moving it to Launch and Learn as soon as the AI finishes writing the plan and kits. The app makes one change at a time; the move is saved then, with nothing more to do.');
+    await act(async () => { planDone({ files: ['plan.md'] }); });
+    await act(async () => { moved({ ...IDEA, stage: 4 }); });
+    await flush();
+    expect(el.querySelector('.pop-notice')?.textContent).toBe('Moved to Launch and Learn.');
+  });
+
+  it('a quick move says only that it moved', async () => {
+    useStore.setState({ state: { ...STATE, stageNames: { 2: 'Review and Select', 3: 'Design series', 4: 'Launch and Learn' } } });
+    api.ideaPost.mockImplementation(async () => ({ ...IDEA, stage: 4 }));
+    await act(async () => root.render(<IdeaDetails id={ID} />));
+    await flush();
+    await click('[data-action="stage"]');
+    await act(async () => { (document.body.querySelector('[data-action="stage-pick"][data-value="stage:4"]') as HTMLButtonElement).click(); });
+    await flush();
+    expect(el.querySelector('.pop-notice')?.textContent).toBe('Moved to Launch and Learn.');
+  });
+});

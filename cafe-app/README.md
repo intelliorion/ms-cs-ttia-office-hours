@@ -140,7 +140,9 @@ press **Create**. You can have as many rounds as you like; ids run `ROUND-001`, 
 2. **Import** (pop-out): drop the SharePoint or Forms export. Re-dropping it only adds new rows. New ideas
    appear as stars and in the left list; put them in the round from **Rounds**.
 3. **Idea** (click it in the list or the universe): read it, draft E1, and set the stage forward or back, or
-   close it. Every change is logged and nothing is ever blocked.
+   close it. Every change is logged and nothing is ever blocked. A move picked while the AI works (the plan and
+   kits, a design question) waits for it, since the app makes one change at a time: the panel says so at once
+   ("Moving it to Launch and Learn as soon as the AI finishes writing the plan and kits"), then "Moved to Launch and Learn."
 4. **Review** (in the idea's details, left panel): pick a decision and save it. Saving sends and drafts no email
    (the decision's email, E3 to E6, waits in the idea's ✉ Emails menu for when you want to send it) and suggests a move (for example "Close it as Routed to CSIC?"); nothing moves until
    you say Yes. Routing to CSIC writes `csic-handoff.md`; its follow-up date (four weeks out) is filled in
@@ -419,7 +421,8 @@ The VS Code helper is a small extension in `vscode-helper/`; see
   rest of the universe still shows, and `GET /api/graph` lists it under `problems`. A broken
   `graph/layout.json` is only a cache: the app lays the universe out afresh.
 - One AI call runs at a time, behind the server's lock, for up to 90 seconds (the roadshow deck, which writes every
-  slide and its script in one reply, up to 5 minutes).
+  slide and its script in one reply, up to 5 minutes). Any other change, a stage move included, waits for it and is
+  saved right after; the idea panel says the move is waiting.
 
 ### Test hook
 

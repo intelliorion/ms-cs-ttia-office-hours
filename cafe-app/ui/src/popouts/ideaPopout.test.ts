@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { historyLine, ideaLinks, nodeLinks, cafeIdOf, ideaCardModel } from './ideaHelpers';
+import { historyLine, ideaLinks, nodeLinks, cafeIdOf, ideaCardModel, moveWaitText } from './ideaHelpers';
 
 describe('historyLine', () => {
   it('shows an Import line for a filed email, by file name only', () => {
@@ -95,5 +95,14 @@ describe('ideaCardModel', () => {
   it('closed ideas are never late', () => {
     const m = ideaCardModel({ ...idea, closed: 'csic' }, graph);
     expect(m.late).toBeNull(); expect(m.stageLabel).toBe('Closed · csic'); expect(m.stageColour).toBe('#5c6b6a');
+  });
+});
+
+describe('moveWaitText', () => {
+  const names = { stages: { 2: 'Review and Select', 3: 'Design series', 4: 'Launch and Learn' }, closures: { reuse: 'Reuse' } };
+  it('names the AI work the move waits for, or says another change is finishing', () => {
+    expect(moveWaitText({ stage: 4 }, names, 'plan')).toMatch(/^Moving it to Launch and Learn as soon as the AI finishes writing the plan and kits\./);
+    expect(moveWaitText({ stage: 4 }, names, '')).toMatch(/as soon as the AI finishes its work\./);
+    expect(moveWaitText({ closeAs: 'reuse' }, names, null)).toMatch(/^Closing it as Reuse: the app is finishing another change first/);
   });
 });

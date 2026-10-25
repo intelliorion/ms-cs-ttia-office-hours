@@ -111,3 +111,20 @@ export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[]
     linkCount: (graph?.edges ?? []).filter((e) => e.from === nodeId || e.to === nodeId).length,
   };
 }
+
+/** What the idea's AI is busy with, by section, for the note when a stage move has to wait for it. */
+const AI_WORK: Record<string, string> = {
+  data: 'reading the data', tools: 'working on the features and tool', design: 'working on the design',
+  plan: 'writing the plan and kits', roadshow: 'working on the roadshow',
+};
+/**
+ * A stage move waits for whatever the server is doing first: it makes one change at a time, and an AI step can hold it
+ * for a minute or two. Said at once when this idea's AI is working (ai: its section, or '' for any other AI call), or
+ * once the move is slow for another reason (ai: null), so a move picked mid-AI never looks as if it did nothing.
+ */
+export function moveWaitText(target: { stage?: number; closeAs?: string }, names: { stages: Record<string, string>; closures: Record<string, string> }, ai: string | null): string {
+  const doing = target.closeAs ? `Closing it as ${names.closures[target.closeAs] ?? target.closeAs}` : `Moving it to ${names.stages[String(target.stage)] ?? `stage ${target.stage}`}`;
+  return ai !== null
+    ? `${doing} as soon as the AI finishes ${AI_WORK[ai] ?? 'its work'}. The app makes one change at a time; the move is saved then, with nothing more to do.`
+    : `${doing}: the app is finishing another change first (an AI step can take a minute or two). The move is saved then, with nothing more to do.`;
+}

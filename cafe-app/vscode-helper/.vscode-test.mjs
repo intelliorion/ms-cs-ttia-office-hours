@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const SCRATCH = '/private/tmp/claude-501/-Users-chongranhao-github-ms-cs-ttia-office-hours/1680bfb2-23df-4755-9725-40a75a4895cd/scratchpad/vscode-test';
-const base = process.env.CAFE_VSCODE_TEST_DIR || (fs.existsSync(path.dirname(SCRATCH)) ? SCRATCH : path.join(os.tmpdir(), 'cafe-vscode-test'));
+// The cache and helper folders: CAFE_VSCODE_TEST_DIR when set, else the system temp folder (never a path on one machine).
+const base = process.env.CAFE_VSCODE_TEST_DIR || path.join(os.tmpdir(), 'cafe-vscode-test');
 fs.mkdirSync(base, { recursive: true });
 
 // The test host gets its own helper folder, user-data and extensions dirs; the real ~/.cafe-ai and your VS Code are never touched.

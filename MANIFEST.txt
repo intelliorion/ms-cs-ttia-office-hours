@@ -179,6 +179,7 @@ cafe-app/tests/inbox-steps.test.ts
 cafe-app/tests/inbox-triage.test.ts
 cafe-app/tests/inbox-understand.test.ts
 cafe-app/tests/look.test.ts
+cafe-app/tests/no-local-paths.test.ts
 cafe-app/tests/operator-edits.test.ts
 cafe-app/tests/outbox.test.ts
 cafe-app/tests/pdf.test.ts
@@ -339,6 +340,7 @@ docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 docs/superpowers/specs/2026-10-21-cafe-agentic-inbox-design.md
 docs/superpowers/specs/2026-10-22-cafe-rounds-pictures-design.md
+docs/video/creators-cafe.mp4
 scripts/build-github-agent.sh
 scripts/build.sh
 scripts/fetch-without-zip.ps1

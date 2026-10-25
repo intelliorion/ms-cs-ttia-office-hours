@@ -33,7 +33,14 @@ export function designPlanInput(idea: Idea, state: DesignState): DesignPlanInput
     idea: { id: idea.id, title: idea.title, challenge: idea.challenge, current_process: idea.current_process, outcomes: idea.outcomes },
     summary: state.summary ?? '',
     // A feature the design left out of the proof of concept is not planned.
-    features: toolFeatures(state).filter((f) => f.scope?.status !== 'out').map((f) => ({ name: f.name, ...(f.what ? { what: f.what } : {}), ...(f.tool ? { tool: f.tool } : {}) })),
+    // A feature done with another tool, outside the build, is set up beside the picked tool and has no kit of its own
+    // to plan under: it carries the picked tool's label (the plan's schema takes approved tools only) and says the other.
+    features: toolFeatures(state).filter((f) => f.scope?.status !== 'out').map((f) => {
+      const outside = f.scope?.status === 'outside' && state.tool ? f.scope.by : undefined;
+      const what = outside ? `Done with ${outside}, outside the ${state.tool!.tool} build${f.what ? `: ${f.what}` : ''}` : f.what;
+      const tool = outside ? state.tool!.tool : f.tool;
+      return { name: f.name, ...(what ? { what } : {}), ...(tool ? { tool } : {}) };
+    }),
     // Only what was settled; a step's source says nothing the plan needs.
     steps: state.steps.filter((s) => s.answer?.trim()).map((s) => ({ question: s.question, answer: s.answer!.trim() })),
     guidance: skillGuidance('writing-plans'),

@@ -151,6 +151,7 @@ cafe-app/tests/design-kit-content.test.ts
 cafe-app/tests/design-kits.test.ts
 cafe-app/tests/design-old-flags.test.ts
 cafe-app/tests/design-plan-names.test.ts
+cafe-app/tests/design-plan-outside.test.ts
 cafe-app/tests/design-points.test.ts
 cafe-app/tests/design-ready.test.ts
 cafe-app/tests/design-redesign.test.ts

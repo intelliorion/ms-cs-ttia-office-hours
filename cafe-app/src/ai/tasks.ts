@@ -1091,6 +1091,7 @@ export const designPlanTask: Task<DesignPlanOutput> = {
       'A feature whose tool is "custom app" is not built in the Café: its task is a hand-off to a coding agent (Claude Code or GitHub Copilot) working from design.md and plan.md, inside a starter folder, and it needs the CSIC Repository before any build beyond a proof of concept.',
       'A feature whose tool is "Microsoft Copilot" needs no build: its task is writing and trying the prompts.',
       `Approved tools (use exactly one of these labels for each task's "tool", normally the tool picked for the feature it builds): ${APPROVED_TOOLS.join(', ')}.`,
+      'A feature whose "what" says it is done with another tool, outside the build, keeps the picked tool\'s label: name the other tool in the task\'s title (for example "Set up the weekly count in Excel").',
       `Reply {"tasks": [...], "risks": [...]}: ${PLAN_TASKS_MIN} to ${PLAN_TASKS_MAX} tasks, each with title (at most 80 characters), detail (what to do, at most 300), tool, and done_when (how the builder knows it is done, at most 160). risks: at most ${PLAN_RISKS_MAX} things that could stop the proof of concept, each at most 160 characters, with no value words.`,
       '"steps" are the design questions and the answers the design settled. "summary" is the approved design.',
     ], DESIGN_PLAN_SCHEMA, designPlanData(i), 'an approved Café design: the idea, its summary, its features and tools, and the design answers');

@@ -40,7 +40,7 @@ async function mount() {
 }
 
 describe('the Café assistant', () => {
-  let refresh: ReturnType<typeof vi.fn>;
+  let refresh: ReturnType<typeof vi.fn<() => Promise<void>>>;
   beforeEach(() => {
     vi.mocked(chatStream).mockReset(); vi.mocked(chatPost).mockReset();
     refresh = vi.fn(async () => {});

@@ -15,7 +15,7 @@ const item = (id: string, extra: Partial<InboxItemView>): InboxItemView => ({ id
 const view = (items: InboxItemView[]) => ({ items, counts: { new: 0, ok: 0, held: 0, applied: 0 }, problems: [] });
 
 describe('InboxPopout', () => {
-  let refreshInbox: ReturnType<typeof vi.fn>;
+  let refreshInbox: ReturnType<typeof vi.fn<() => Promise<void>>>;
   beforeEach(() => {
     vi.useFakeTimers();
     refreshInbox = vi.fn(async () => {});

@@ -85,7 +85,7 @@ function typeInto(el: HTMLInputElement | HTMLSelectElement, value: string) {
 describe('title bar and the Rounds pop-out', () => {
   let el: HTMLDivElement;
   let root: Root;
-  let refresh: ReturnType<typeof vi.fn>;
+  let refresh: ReturnType<typeof vi.fn<() => Promise<void>>>;
   beforeEach(() => {
     vi.mocked(post).mockClear();
     refresh = vi.fn(async () => {});

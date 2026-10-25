@@ -345,7 +345,6 @@ docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md
 docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md
 docs/superpowers/specs/2026-10-21-cafe-agentic-inbox-design.md
 docs/superpowers/specs/2026-10-22-cafe-rounds-pictures-design.md
-docs/video/creators-cafe.mp4
 scripts/build-github-agent.sh
 scripts/build.sh
 scripts/fetch-without-zip.ps1

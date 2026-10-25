@@ -39,6 +39,21 @@ export const SUGGESTED_MAX = 120;
 export const ANSWER_MAX = 1000;
 export const SUMMARY_MAX = 600;
 
+/**
+ * A summary cut to the cap (names restored after the AI can make it longer; the reply's own check cuts it with an
+ * ellipsis): it ends on its last whole sentence when that keeps at least half of it, else on a whole word with an
+ * ellipsis. design.md's "What it must show" and every kit read it, so it never stops mid-word.
+ */
+export function fitSummary(full: string): string {
+  // Over the cap, or cut already at the cap by the reply's own check (it ends with an ellipsis there).
+  const cut = full.length > SUMMARY_MAX || (full.length >= SUMMARY_MAX - 20 && full.endsWith('…'));
+  if (!cut) return full;
+  const head = full.replace(/…$/, '').slice(0, SUMMARY_MAX);
+  const stop = Math.max(...['. ', '! ', '? '].map((p) => head.lastIndexOf(p)), /[.!?]$/.test(head) ? head.length - 1 : -1);
+  if (stop >= SUMMARY_MAX / 2) return head.slice(0, stop + 1);
+  return `${head.slice(0, SUMMARY_MAX - 1).replace(/\s+\S*$/, '')}…`;
+}
+
 export type DesignEvent =
   | { t: 'step'; question: string; suggested: string[]; why?: string; tag?: DesignTag | null; source: StepSource }
   | { t: 'done'; summary: string; settled?: Partial<Record<string, string>> }
@@ -89,9 +104,7 @@ export function reduceDesign(prev: DesignState, e: DesignEvent, clock: Clock): {
       break;
     }
     case 'done': {
-      // A summary longer than the cap (names restored after the AI can make it so) ends on a whole word, with an ellipsis.
-      const full = line(e.summary, 4000);
-      const summary = full.length <= SUMMARY_MAX ? full : `${full.slice(0, SUMMARY_MAX - 1).replace(/\s+\S*$/, '')}…`;
+      const summary = fitSummary(line(e.summary, 4000));
       if (!summary) throw new DesignError('A finished design needs a summary');
       state.summary = summary;
       // What the earlier answers settle though no question was tagged with it: design tags only, one line each.

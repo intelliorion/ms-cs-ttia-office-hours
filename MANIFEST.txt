@@ -143,6 +143,7 @@ cafe-app/tests/data-roadshow.test.ts
 cafe-app/tests/data-routes.test.ts
 cafe-app/tests/data-tasks.test.ts
 cafe-app/tests/dataFixtures.ts
+cafe-app/tests/design-approach-summary.test.ts
 cafe-app/tests/design-brainstorm.test.ts
 cafe-app/tests/design-diagram.test.ts
 cafe-app/tests/design-kit-cleanup.test.ts

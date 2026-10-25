@@ -117,3 +117,18 @@ export function matchPerson(name: string, known: readonly string[]): string | un
     ?? pick((k) => k.length >= 2 && k.every((w) => words.includes(w)))
     ?? pick((k) => k.length >= 2 && words.length >= 2 && k[0] === words[0] && alike(k[k.length - 1], words[words.length - 1]) >= 0.6);
 }
+
+/**
+ * People appear by role in anything shared: every name the idea holds (the submitter and the team) becomes its role
+ * ("the builder", "the lead and builder", "the submitter"), wherever the design's own words or the AI's put it.
+ */
+export function peopleByRole(idea: Idea): (text: string) => string {
+  const people = [
+    ...idea.people.team.map((p) => ({ name: p.name.trim(), role: `the ${rolesText(p.roles)}` })),
+    ...(idea.people.submitter?.trim() && !idea.people.team.some((p) => p.name.trim().toLowerCase() === idea.people.submitter!.trim().toLowerCase())
+      ? [{ name: idea.people.submitter.trim(), role: 'the submitter' }] : []),
+  ].filter((p) => p.name.length > 1).sort((a, b) => b.name.length - a.name.length);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rules = people.map((p) => ({ re: new RegExp(`(?<![\\p{L}\\p{N}])${esc(p.name)}(?![\\p{L}\\p{N}])`, 'giu'), role: p.role }));
+  return (text: string) => rules.reduce((t, r) => t.replace(r.re, r.role), text);
+}

@@ -38,7 +38,7 @@ export const TOOL_STEP = 's3e';
 /** Said on a tool the operator chose with no AI to evaluate it. */
 export const NEEDS_AI_NOTE = 'Pros, cons and fit need the AI: connect one and Re-evaluate.';
 
-import { builderOf } from '../ideas/people';
+import { builderOf, peopleByRole } from '../ideas/people';
 export { builderOf, pathwayOf, outOfDate, toolFeatures };
 
 /** The pathway as written in approach.md, with the Assisted Citizen note when no builder is named. */
@@ -190,7 +190,8 @@ export function renderApproachMd(idea: Idea, state: Pick<DesignState, 'features'
   }
   if (t.context.length) { out.push('', '## Why this tool', ''); for (const c of t.context) out.push(`- ${mdLine(c)}`); }
   out.push('');
-  return out.join('\n');
+  // The kits send the builder here (Read first): people by role, as in the kits, never by name.
+  return peopleByRole(idea)(out.join('\n'));
 }
 
 /** The team's replies so far: answers the Import recorded on the idea, then answered design steps. */

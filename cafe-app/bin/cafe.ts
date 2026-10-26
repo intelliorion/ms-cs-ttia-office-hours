@@ -6,6 +6,7 @@ import { importExport } from '../src/import/importRows';
 import { loadSteps } from '../src/rules/stages';
 import { systemClock } from '../src/clock';
 import { checkWorkspace } from '../src/graph/check';
+import { writeExport } from '../src/graph/jsonld';
 
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -55,6 +56,12 @@ async function main(): Promise<void> {
       for (const v of violations) console.log(v);
       console.log(violations.length ? `${violations.length} violation${violations.length === 1 ? '' : 's'} (nothing was changed)` : `No violations: ${checked.nodes} stars, ${checked.edges} links and ${checked.derived} derived links checked against the ontology.`);
       if (violations.length) process.exit(1);
+      return;
+    }
+    case 'export': {
+      const idea = flag('idea');
+      const file = await writeExport(root, idea ? { kind: 'idea', id: idea } : { kind: 'all' }, clock);
+      console.log(`Written: ${file}`);
       return;
     }
     case undefined:

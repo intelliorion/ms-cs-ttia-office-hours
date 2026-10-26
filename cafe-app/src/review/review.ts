@@ -8,6 +8,8 @@ import type { Settings } from '../round/round';
 import { withTick } from '../checklist/checklist';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
+import { rebuildGraph } from '../graph/store';
+import { exportJsonLd, subgraphOf } from '../graph/jsonld';
 
 export const CRITERIA = [
   { id: 'feasible', text: 'A proof of concept is feasible with approved tools and no live non-Microsoft system' },
@@ -115,7 +117,12 @@ export async function saveReview(
   const suggest = suggestion(idea, DECISION_SUGGESTS[decision]);
   const settings = await loadSettings(root);
 
-  if (handoff) await writeFileAtomic(handoff, renderHandoff(idea, settings));
+  if (handoff) {
+    await writeFileAtomic(handoff, renderHandoff(idea, settings));
+    // The idea's corner of the knowledge graph, for the CSIC Repository's own tools, beside the draft.
+    const graph = await rebuildGraph(root);
+    await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify(exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`), null, 1));
+  }
   await writeFileAtomic(path.join(dir, 'review.md'), renderReview(idea, review));
   await saveIdea(root, idea);
   if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });

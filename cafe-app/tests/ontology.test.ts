@@ -118,3 +118,65 @@ describe('cafe ontology check', () => {
     expect(await readFile(paths(root).entities, 'utf8')).toBe(before);
   });
 });
+
+import { exportJsonLd, fromJsonLd, subgraphOf, writeExport, CAFE_VOCAB } from '../src/graph/jsonld';
+import { buildGraph } from '../src/graph/build';
+import { sampleIdea } from './helpers';
+import { readdir } from 'node:fs/promises';
+import { saveIdea, ideaDir } from '../src/ideas/store';
+import { saveReview } from '../src/review/review';
+
+describe('JSON-LD export', () => {
+  const ideas = [
+    sampleIdea({ id: 'CAFE-2026-004', slug: 'expense', title: 'Expense anomaly finder', function: 'GSS', entity: 'CS', dedupe_key: 'd', use_case_category: ['Anomaly detection'],
+      people: { submitter: 'Ingrid Solberg', team: [{ name: 'Noor El-Sayed', roles: ['sponsor'] }] }, features: ['Duplicate claim spotting'], tools: { 'Duplicate claim spotting': 'Dataiku' } }),
+    sampleIdea({ id: 'CAFE-2026-006', slug: 'travel', title: 'Travel policy assistant', function: 'GSS', entity: 'CS', dedupe_key: 'f', people: { submitter: 'Lucía Fernández', team: [] } }),
+  ];
+  const graph = buildGraph(ideas, []);
+  it('round-trips: every star and link, derived ones flagged, through a context that maps the ontology', () => {
+    const doc = exportJsonLd(graph, { kind: 'all' });
+    expect(doc['@context']['@vocab']).toBe(CAFE_VOCAB);
+    expect(doc['@context'].NEEDS).toEqual({ '@id': `${CAFE_VOCAB}NEEDS`, '@type': '@id' });
+    expect(doc['@context'].Idea).toBe(`${CAFE_VOCAB}Idea`);
+    expect(doc.scope).toBe('all');
+    const idea = doc['@graph'].find((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-004')!;
+    expect(idea['@type']).toBe('Idea'); expect(idea.label).toBe('Expense anomaly finder');
+    expect(idea.NEEDS).toEqual([{ '@id': 'cafe:capability:duplicate-claim-spotting' }]);
+    expect(idea.USES).toEqual([{ '@id': 'cafe:tool:dataiku' }]);
+    expect(doc.links.find((l: any) => l.rel === 'USES')).toMatchObject({ from: 'idea:CAFE-2026-004', to: 'tool:dataiku', source: 'rule:needs+built_with', derived: { rule: 'needs+built_with' } });
+    const back = fromJsonLd(doc);
+    expect(back.nodes).toEqual(graph.nodes);
+    expect(back.edges).toEqual(graph.edges);
+    // Names stay as in the files: the export is local.
+    expect(JSON.stringify(doc)).toContain('Ingrid Solberg');
+  });
+  it('an idea\'s subgraph: the idea, every star it touches, and the links among them', () => {
+    const sub = subgraphOf(graph, 'CAFE-2026-004');
+    expect(sub.nodes.map((n) => n.id).sort()).toEqual([
+      'capability:duplicate-claim-spotting', 'category:anomaly-detection', 'idea:CAFE-2026-004', 'person:ingrid-solberg', 'person:noor-el-sayed', 'round:ROUND-2026-Q4', 'team:gss', 'tool:dataiku',
+    ]);
+    expect(sub.edges.some((e) => e.id === 'capability:duplicate-claim-spotting|BUILT_WITH|tool:dataiku')).toBe(true);
+    expect(sub.edges.some((e) => e.from === 'idea:CAFE-2026-006')).toBe(false);
+    expect(subgraphOf(graph, 'CAFE-2026-999')).toEqual({ nodes: [], edges: [] });
+    const doc = exportJsonLd(sub, { kind: 'idea', id: 'CAFE-2026-004' });
+    expect(doc.scope).toBe('CAFE-2026-004');
+    expect(fromJsonLd(doc)).toEqual(sub);
+  });
+  it('writeExport puts a stamped file under data/exports; the hand-off writes the idea\'s subgraph beside csic-handoff.md', async () => {
+    const root = await tmpWorkspace();
+    for (const i of ideas) await saveIdea(root, i);
+    const file = await writeExport(root, { kind: 'idea', id: 'CAFE-2026-004' }, fixedClock('2026-10-26'));
+    expect(file).toMatch(/data\/exports\/20261026-\d{6}-CAFE-2026-004\.jsonld$/);
+    const doc = JSON.parse(await readFile(file, 'utf8'));
+    expect(doc['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-004')).toBe(true);
+    const all = await writeExport(root, { kind: 'all' }, fixedClock('2026-10-26'));
+    expect(all).toMatch(/-all\.jsonld$/);
+    expect((await readdir(paths(root).exports)).filter((f) => f.endsWith('.jsonld'))).toHaveLength(2);
+    await saveReview(root, 'CAFE-2026-004', { decision: 'csic', reason: 'Bigger than the Café' }, { clock: fixedClock('2026-10-26'), steps: DEFAULT_STEPS });
+    const dir = await ideaDir(root, 'CAFE-2026-004');
+    const handoff = JSON.parse(await readFile(path.join(dir, 'csic-handoff.jsonld'), 'utf8'));
+    expect(handoff.scope).toBe('CAFE-2026-004');
+    expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:tool:dataiku')).toBe(true);
+    expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-006')).toBe(false);
+  });
+});

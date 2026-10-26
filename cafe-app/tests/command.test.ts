@@ -363,3 +363,19 @@ describe('the Café assistant: aliases', () => {
     expect((await loadRegistry(root)).resolve('Team', 'global sourcing services')).toBeUndefined();
   });
 });
+describe('the Café assistant: export', () => {
+  it('"export graph" writes the whole graph, "export graph [idea]" that idea\'s subgraph; the card says where', async () => {
+    const { root, ai } = await setup([(d) => (/\[/.test(d.message)
+      ? propose([{ op: 'export', a: code(d, 'Idea', 'Desk booking assistant') }])({})
+      : propose([{ op: 'export' }])({}))]);
+    const all = await runCommand(root, 'export graph', ai, clock);
+    expect(all.actions.map((a) => a.label)).toEqual(['Export the whole graph as JSON-LD']);
+    const done = await doActions(root, all.id, undefined, clock);
+    expect(done.actions[0].note).toMatch(/^Written to data\/exports\/20261022-\d{6}-all\.jsonld$/);
+    expect(done.actions[0].inverse).toBeUndefined();
+    const one = await runCommand(root, 'export graph for Desk booking assistant', ai, clock);
+    expect(one.actions.map((a) => a.label)).toEqual(['Export Desk booking assistant and what it touches as JSON-LD']);
+    const d2 = await doActions(root, one.id, undefined, clock);
+    expect(d2.actions[0].note).toMatch(/CAFE-2026-001\.jsonld$/);
+  });
+});

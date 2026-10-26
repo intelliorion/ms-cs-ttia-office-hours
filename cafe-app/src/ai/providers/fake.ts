@@ -487,6 +487,12 @@ function agentFor(prompt: string) {
   if (/^\s*merge/i.test(cmd) && a && b) return propose(`You asked to merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
   if (/^\s*alias\s+(.+?)\s+as\s+\[/i.test(cmd) && a) return propose(`You asked to give [${a}] another name.`, [{ op: 'alias', a, name: /^\s*alias\s+(.+?)\s+as\s+\[/i.exec(cmd)![1].trim() }]);
   if (/^\s*move/i.test(cmd) && a) return propose(`You asked to move [${a}] to another stage.`, [{ op: 'stage', a }]);
+  if (/^\s*export/i.test(cmd)) return propose(a ? `You asked to export [${a}] and what it touches.` : 'You asked to export the graph.', [{ op: 'export', ...(a ? { a } : {}) }]);
+  if (/^\s*add\s+(?:a|an)?\s*(pain point|capability|system|support|outcome|beneficiary|category)\s+(.+?)\s+to\s+\[/i.test(cmd) && a) {
+    const m = /^\s*add\s+(?:a|an)?\s*(pain point|capability|system|support|outcome|beneficiary|category)\s+(.+?)\s+to\s+\[/i.exec(cmd)!;
+    const type = { 'pain point': 'PainPoint', capability: 'Capability', system: 'System', support: 'Support', outcome: 'Outcome', beneficiary: 'Beneficiary', category: 'Category' }[m[1].toLowerCase()];
+    return propose(`You asked to add a ${m[1]} to [${a}].`, [{ op: 'add_star', type, name: m[2].trim(), b: a }]);
+  }
   return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
 }
 

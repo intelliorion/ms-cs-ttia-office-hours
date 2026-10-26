@@ -12,6 +12,8 @@ import type { Coded } from './names';
 import type { Connector } from '../ai/connector';
 import { growIdea } from '../ai/grow';
 import { mergeStars, setAiLinkStatus } from '../graph/store';
+import { writeExport } from '../graph/jsonld';
+import { dataKey } from '../workspace/paths';
 import type { Registry } from '../graph/registry';
 
 /** What the app will do for one step of a command, once the operator says "Do it". */
@@ -34,7 +36,8 @@ export type CommandAction =
   | { t: 'alias'; node: string; label: string; of: string }
   | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string }; idea?: string }
   | { t: 'remove_star'; node: string }
-  | { t: 'grow'; ideaId: string };
+  | { t: 'grow'; ideaId: string }
+  | { t: 'export'; ideaId?: string };
 
 /** How to take a done action back. */
 export type CommandInverse =
@@ -245,6 +248,12 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!a || !b) { missing(s); continue; }
       if (a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) { problems.push(`${a.label} and ${b.label} can't be merged: only two stars of the same kind (not ideas, rounds or the division) can.`); continue; }
       proposals.push({ label: `Merge ${a.label} into ${b.label} (its links move to ${b.label})`, action: { t: 'merge', from: a.id, into: b.id } });
+    } else if (s.op === 'export') {
+      const a = star(s.a); const idea = a ? ideaOf(a) : undefined;
+      if (a && !idea) { problems.push(`${a.label} is not an idea: export the whole graph, or name an idea.`); continue; }
+      proposals.push(idea
+        ? { label: `Export ${idea.title} and what it touches as JSON-LD`, action: { t: 'export', ideaId: idea.id } }
+        : { label: 'Export the whole graph as JSON-LD', action: { t: 'export' } });
     } else if (s.op === 'alias') {
       // Another name for a star: kept in the registry, so a label under that wording lands on this star from now on.
       const a = star(s.a); const name = s.name?.trim().replace(/\s+/g, ' ');
@@ -276,6 +285,11 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
     case 'merge': { const r = await mergeStars(root, a.from, a.into, clock); return { inverse: { t: 'edits-off', ids: r.edits } }; }
     case 'alias': return edit({ t: 'alias', node: a.node, label: a.label, of: a.of });
+    case 'export': {
+      // A file written for the operator: nothing to undo, the card says where it is.
+      const file = await writeExport(root, a.ideaId ? { kind: 'idea', id: a.ideaId } : { kind: 'all' }, clock);
+      return { note: `Written to data/${dataKey(root, file)}` };
+    }
     case 'remove_star': return edit({ t: 'remove', node: a.node });
     case 'grow': {
       if (!ai) throw new Error('No AI: growing an idea needs the AI helper');

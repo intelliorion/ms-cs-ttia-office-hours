@@ -121,3 +121,47 @@ describe('similar ideas: the graph first, Deep read second', () => {
     expect(e.highlight).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
   });
 });
+
+describe('impact of a system change: the derived links first, search second', () => {
+  const link = (from: string, rel: AiLink['rel'], to: string, type: 'Capability' | 'System', label: string): AiLink =>
+    ({ from, rel, to, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed', idea: from.startsWith('idea:') ? from.slice(5) : 'CAFE-2026-001', newNodes: [{ id: to, type, label }] });
+  /** Two ideas need capabilities that read the travel policy (DEPENDS_ON derived); a third names the policy in its text but needs nothing that reads it. */
+  async function seed(root: string) {
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', challenge: 'Travel policy questions flood the mailbox.', dedupe_key: 'a' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', title: 'Expense anomaly finder', challenge: 'Claims are checked by hand against the rules.', dedupe_key: 'b' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-003', title: 'Desk booking assistant', challenge: 'Desks are double booked; the travel policy is unrelated but mentioned here.', dedupe_key: 'c' }));
+    for (const [id, cap, label] of [['CAFE-2026-001', 'policy-q-a', 'Policy Q&A'], ['CAFE-2026-002', 'claim-scoring', 'Claim scoring']] as const) {
+      await appendAiLink(root, link(`idea:${id}`, 'NEEDS', `capability:${cap}`, 'Capability', label));
+      await appendAiLink(root, { ...link(`capability:${cap}`, 'USES_DATA', 'system:travel-policy', 'System', 'Travel policy'), idea: id });
+    }
+  }
+  const ask = (base: string) => post(base, '/api/chat', { text: 'which ideas would need rework if the travel policy is rewritten?' }).then(j);
+  const DERIVED = [
+    'Travel policy assistant depends on Travel policy: derived by needs+uses_data from Travel policy assistant NEEDS Policy Q&A, Policy Q&A USES_DATA Travel policy',
+    'Expense anomaly finder depends on Travel policy: derived by needs+uses_data from Expense anomaly finder NEEDS Claim scoring, Claim scoring USES_DATA Travel policy',
+  ];
+
+  it('with Deep read off: the policy star, follow DEPENDS_ON in, the two depending ideas lit and the rule in the trace; no search', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    const e = await ask(base);
+    expect(e.kind).toBe('question');
+    expect(e.steps.map((s: { kind: string }) => s.kind)).toEqual(['search']);
+    expect(e.trace).toHaveLength(1);
+    expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(['Start from Travel policy', 'Follow depends on links to ideas', ...DERIVED]);
+    expect(e.highlight.sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'system:travel-policy']);
+    expect(e.reply).toBe('By the graph, 2 ideas depend on Travel policy: Travel policy assistant (via Policy Q&A), Expense anomaly finder (via Claim scoring).');
+  });
+
+  it('with Deep read on: the same graph step first, then a search of the text kept apart as a reading', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    await post(base, '/api/memory/run');
+    await untilIdle(base);
+    const e = await ask(base);
+    expect(e.trace.map((t: { text: string }[]) => t[0].text)).toEqual(['Start from Travel policy', 'Search what people wrote for "travel policy"']);
+    expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(['Start from Travel policy', 'Follow depends on links to ideas', ...DERIVED]);
+    expect(e.highlight.slice(0, 3).sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'system:travel-policy']);
+    expect(e.reply).toMatch(/^By the graph, 2 ideas depend on Travel policy: Travel policy assistant \(via Policy Q&A\), Expense anomaly finder \(via Claim scoring\)\. By reading, the text also names it in: Desk booking assistant\.$/);
+  });
+});

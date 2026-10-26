@@ -464,7 +464,6 @@ function agentFor(prompt: string) {
   const propose = (reply: string, actions: unknown[]) => ({ next: 'propose', thought: 'Working out the change', reply, actions });
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
-    // "which ideas depend on [S1]?": the derived relation, so the trace names the rule.
     // "which ideas are similar to [I1]?": the derived SIMILAR_TO links first (facts, with the shared stars), then Deep read's reading when it has run.
     if (start && /similar|\blike\b|same as|overlap/i.test(cmd)) {
       if (!data.steps?.length) return { next: 'search', thought: `Looking for the ideas SIMILAR_TO [${start}] by shared stars`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'SIMILAR_TO', type: 'Idea' }] } };
@@ -489,7 +488,23 @@ function agentFor(prompt: string) {
       const team = me.team === 'no team recorded' ? 'no team recorded' : `team: [${me.team}]`;
       return { next: 'answer', thought: 'Answering from the roles and the team', reply: `[${start}] is ${roles}; ${team}.`, followups: [`What else is [${start}] linked to?`] };
     }
-    if (!data.steps?.length && start && /depend/i.test(cmd)) return { next: 'search', thought: `Looking at what depends on [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } };
+    // "which ideas depend on / would need rework if [S1] is rewritten?": the derived relation first (DEPENDS_ON for a system, USES for a tool),
+    // so the trace names the rule; then, once Deep read has run, a search of the text, kept apart as a reading.
+    const legend: { code: string; type: string; label?: string }[] = data.stars ?? [];
+    const subject = legend.find((x) => x.code === start && (x.type === 'System' || x.type === 'Tool')) ?? legend.find((x) => x.type === 'System' || x.type === 'Tool');
+    if (subject && /depend|rework|affect|retir|\bhit\b|break|rewrit/i.test(cmd)) {
+      const rel = subject.type === 'Tool' ? 'USES' : 'DEPENDS_ON';
+      if (!data.steps?.length) return { next: 'search', thought: `Looking at what ${rel === 'USES' ? 'uses' : 'depends on'} [${subject.code}]`, query: { steps: [{ op: 'stars', codes: [subject.code] }, { op: 'follow', rel, dir: 'in', type: 'Idea' }] } };
+      if (data.steps.length === 1 && data.deepRead?.on && subject.label) return { next: 'search', thought: `Reading what the text says about [${subject.code}]`, query: { steps: [{ op: 'search', match: subject.label.toLowerCase().slice(0, 60) }] } };
+      const why: { from: string; to: string; why: string }[] = data.steps[0]?.result?.reasons ?? [];
+      const byGraph: { code: string }[] = data.steps[0]?.result?.stars ?? [];
+      const graphSet = new Set(byGraph.map((x) => x.code));
+      const byReading: string[] = (data.steps[1]?.result?.stars ?? []).map((x: { code: string }) => x.code).filter((c: string) => !graphSet.has(c));
+      const verb = rel === 'USES' ? 'use' : 'depend on';
+      const list = byGraph.map((x) => { const r = why.find((w) => w.from === x.code); return `[${x.code}]${r ? ` (${r.why})` : ''}`; }).join(', ');
+      const reply = `By the graph, ${byGraph.length} idea${byGraph.length === 1 ? '' : 's'} ${verb} [${subject.code}]${byGraph.length ? `: ${list}` : ''}.${byReading.length ? ` By reading, the text also names it in: ${byReading.map((c) => `[${c}]`).join(', ')}.` : ''}`;
+      return { next: 'answer', thought: 'Answering: the derived links first, the reading second', reply, followups: ['Who leads each of them?'] };
+    }
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
     // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.
     if (!start && data.deepRead?.on) {

@@ -124,6 +124,13 @@ describe('the query over derived relations', () => {
   it('the guide names the derived relations', () => {
     expect(QUERY_GUIDE.join('\n')).toMatch(/Derived by the rules.*DEPENDS_ON/);
   });
+  it('the guide sends an impact question about a system or tool through DEPENDS_ON or USES first, search second', () => {
+    const guide = QUERY_GUIDE.join('\n');
+    expect(guide).toMatch(/affected, needs rework, depends on, breaks, or would be hit if a system, data source or tool changes, is retired or is rewritten/);
+    expect(guide).toMatch(/follow DEPENDS_ON or USES \(dir in\) to the ideas\. Use search only afterwards/);
+    expect(guide).toContain('- which ideas would need rework if [S1] changes: [{"op":"stars","codes":["S1"]},{"op":"follow","rel":"DEPENDS_ON","dir":"in","type":"Idea"}]');
+    expect(guide).toMatch(/if \[T1\] is retired: \[\{"op":"stars","codes":\["T1"\]\},\{"op":"follow","rel":"USES","dir":"in","type":"Idea"\}\]/);
+  });
   it('the guide plans a "similar ideas" question over SIMILAR_TO first, Deep read second, and says which is fact and which is reading', () => {
     const guide = QUERY_GUIDE.join('\n');
     expect(guide).toContain('- which ideas are similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]');

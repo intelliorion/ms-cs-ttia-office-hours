@@ -15,8 +15,9 @@ panels, large white titles and pill buttons at the bottom.
 
 - **The universe (centre).** The knowledge graph as a 3D star map. Each idea is a star; teams, people,
   pain points, capabilities, tools and systems orbit the ideas they relate to. Click a star to fly to it and
-  see its card; hover to light up its links. A dashed link is one the AI found that waits on you (see the graph rule
-  below); every other link is solid.
+  see its card; hover to light up its links. A dashed amber link is one the AI found that waits on you (see the graph
+  rule below); a dashed violet link is one the rules derived (see Knowledge graph below); every other link is solid.
+  The **Show** menu at the bottom has the legend.
   If the browser has no WebGL it falls back to a flat 2D map.
 - **Left: ideas.** The list of ideas, with a coloured ring for the stage. Click one and the universe flies to
   its star (its links lit, the rest dimmed) while the left panel switches to that idea's details, in one column:
@@ -24,7 +25,8 @@ panels, large white titles and pill buttons at the bottom.
   a link a conflict rule held), Details
   and History. **← Back** (or Esc) returns to the list where you left it (same search, filters and scroll); the
   star stays selected. Opening an idea turns Focus off so the panel shows.
-- **Right: charts.** Pipeline by stage, then demand: support asked for and function by region.
+- **Right: charts.** Pipeline by stage, then demand: support asked for, function by region, and, once the rules have
+  derived anything, the systems ideas depend on and the tools in use.
 - **Pop-outs.** Import, Rounds, Project configuration and AI open in front of the universe; close them with the X or Esc.
   (Import with a report opens from a link inside the Import.) Ideas never open in a pop-out: an idea link in the
   Import or the late list opens it in the left panel.
@@ -88,11 +90,15 @@ data/                 the Café's data: safe to delete
                       roadshow (roadshow.yaml, and roadshow/ with the deck, the script and the photos)
   cohorts/  roadshows/
   graph/              the universe: ai-links.jsonl (AI suggestions and your Yes or No), operator.jsonl (your
-                      changes from the assistant), layout.json (cached star positions)
+                      changes from the assistant: links, renames, merges, aliases), ai-reads.json (when the AI last
+                      read each idea), layout.json (cached star positions); nodes.jsonl and edges.jsonl are what the
+                      last build held (derived links flagged), rewritten on every read
   chat/               the assistant's conversations
-  exports/            files the app writes for you
+  exports/            files the app writes for you, the JSON-LD exports of the graph among them
   memory/             Deep read's index (index.jsonl, state.json, labels.jsonl): rebuilt by a Run, safe to delete
-rules/                your configuration: settings.yaml (your name, links, the AI choice), stages.yaml. Keep it.
+rules/                your configuration: settings.yaml (your name, links, the AI choice), stages.yaml, and the
+                      knowledge graph's entities.yaml (stable names and aliases), inference.yaml (the rules) and
+                      ontology.yaml (what each kind of star and each link means). Keep it.
 templates/            the email templates. Keep them; a missing one is copied back at the next start.
 ```
 
@@ -212,6 +218,9 @@ What a change can do:
   Pain points, capabilities, systems and support requests can be created; a system links to a capability.
 - Remove a star with all its links: "remove the star Shared mailbox" (the card says how many links go with it).
   The same four kinds; people, ideas, teams, rounds and tools come from elsewhere, and the agent says where.
+- Give a star another name: "alias travel policy as Travel & Expense policy" (see Knowledge graph: the registry).
+- Export the graph as JSON-LD: "export graph", or "export graph for the travel policy assistant" for one idea's corner
+  of it; the card says where the file went (data/exports/).
 
 The AI proposes; the app checks every action against the universe before it shows a card, and explains anything it
 left out. Stages still move only by your hand (the agent points you to the stage button), tools are still picked in
@@ -453,6 +462,70 @@ AI sees a passage, exactly as today.
 nothing downloaded). `npm test` uses it and never loads the library. Set it with `CAFE_AI_FAKE=1` to try the whole
 flow without a real AI: Deep read reaches 100 % on the test data, and a plain question ("what did teams say about data
 access?") is answered from the passages with a trace.
+
+## Knowledge graph: the registry, the rules and the ontology
+
+The universe is a property graph: stars (`GNode`) and links (`GEdge`), rebuilt in memory on every read from the ideas,
+the AI links and your edits, nothing kept that cannot be rebuilt. Three more layers in the same build make it a
+knowledge graph. They work from the first imported idea; there is no "build the knowledge graph" step and no switch.
+
+**The registry: one star per thing, whatever people call it.** `rules/entities.yaml` (written by `init`) holds stable
+identities, one section per kind (`Tool`, `System`, `Team`, `Entity`, `Capability`, `PainPoint`, `Beneficiary`):
+`id` (`type:slug`), `label`, `aliases`, and an optional `ref` (a CSIC catalogue id, say). It starts with the approved
+tools and their aliases, which used to live only in code. Wherever a star is born (a form's team, feature or tool, a
+star the AI proposes, a star you add or rename, the Import's read of new ideas) its label is looked up here first, by
+label or alias, ignoring case, spacing and accents: "travel policy" and "Travel & Expense policy" are one star. Then the
+exact label, then Deep read's nearest star (when an index exists), then a new star. The star's details show **Also known
+as** and **Reference**. A **merge** records the merged label as an alias of the star kept, so the twin cannot come back
+at the next import or re-read; the assistant's `alias X as Y` records one by hand. Aliases are edits in
+`graph/operator.jsonl` (`t: alias`), undoable like the others. With no file (an older workspace) the registry is the
+approved tools alone and the graph is exactly what it was.
+
+**The rules: facts nobody typed.** `rules/inference.yaml` (written by `init`; the built-in rules when absent) runs as
+the last layer of every build, after your edits:
+
+| Rule | From | Derives |
+|---|---|---|
+| `needs+uses_data` | Idea NEEDS Capability, Capability USES_DATA System, **for the same idea** | Idea DEPENDS_ON System |
+| `needs+built_with` | Idea NEEDS Capability, Capability BUILT_WITH Tool (a capability's tool is shared) | Idea USES Tool |
+| `member+submitted` | Team HAS_MEMBER Person, Person SUBMITTED Idea | Team OWNS Idea |
+| `shared-stars` | two ideas sharing two or more capabilities, pain points or categories | Idea SIMILAR_TO Idea, confidence n/3 |
+
+Each rule can be switched off in the file (`enabled: false`). A derived link looks derived: dashed violet in the
+universe (the Show menu has the legend), `source: rule:<name>`, with `derived: { rule, inputs }` naming the links it
+rests on; its confidence is the lowest of its inputs and it is confirmed only when every input is. It is never confirmed,
+routed or merged by itself, it is left out of counts (the idea card, the Links tab, the star's links) and the link tables
+tag it "derived by <rule>" with no Add it anyway. The **same idea** scope matters: the AI extracts links for one idea at
+a time (each AI link carries `idea`), so a capability two ideas share does not hand one idea's data dependency to the
+other. A link you make with an idea open on the left is that idea's; one made with nothing open is shared knowledge.
+`edges.jsonl` holds the derived links too, flagged. Demand's **Systems depended on** and **Tools in use** beams, the
+idea's **Similar ideas** block (with the shared stars as the why), and the assistant's `follow`/`rank` with a derived
+relation ("which ideas depend on the expense system", "what does GSS own") all come from here; the trace says "derived
+by <rule> from <the links>". A plain `follow` keeps to stated links.
+
+**How it stays current.** Nothing is rebuilt that did not change: the build keeps one bundle per idea, keyed by a hash
+of the idea's record and the registry's version, and the operator log is folded by its appended lines; a rebuild
+recomputes the bundles of the ideas that changed (an Import, a save, a touch from Deep read's bus) and runs the rules
+in full (cheap at this scale; the bookkeeping for neighbourhood recompute is there). The AI is never called on its own:
+the idea's Connections say when the AI last read its text and whether the text changed since, with **Read again**.
+
+**The ontology as data.** `rules/ontology.yaml` (written by `init`) is what each kind of star is (label, colour,
+description) and what each link means (from, to, meaning, inverse, derived). The app applies it over the built-in
+ontology, so the panels, the universe and the extraction prompt (which tells the AI what each link means, not only
+which kinds it joins) use your words. Only the kinds and relations the code knows can be changed; anything else is
+reported by the check and ignored.
+
+```bash
+npm run cafe -- ontology check --workspace ~/cafe-workspace   # files and graph against the ontology; prints violations, fixes nothing
+npm run cafe -- export --workspace ~/cafe-workspace [--idea CAFE-2026-004]   # JSON-LD into data/exports/
+```
+
+**Check** reads `ontology.yaml`, `entities.yaml` (sections, id prefixes, duplicate ids and aliases),
+`inference.yaml` (unknown relations, chains whose kinds do not line up), then the graph and the files behind it (an AI
+link or an edit the build skipped, an alias on a star that is gone), one line per violation, exit code 1 when any.
+**Export** writes the graph, or one idea and what it touches, as JSON-LD with an `@context` mapping the ontology; the
+assistant's "export graph [idea]" does the same, and routing an idea to CSIC writes its corner of the graph as
+`csic-handoff.jsonld` beside `csic-handoff.md`. The export is local and holds people's names as the files do.
 
 ## AI help (optional)
 

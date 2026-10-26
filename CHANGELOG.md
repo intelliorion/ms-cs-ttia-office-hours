@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-10-26 (Café app: the graph becomes a knowledge graph)
+
+- **The registry.** `rules/entities.yaml` (written by `init`, seeded with the approved tools and their aliases) gives
+  stars a stable identity with aliases and an optional reference; every place a star is born resolves its label there
+  first (form stars, extraction, the assistant's add and rename, the Import), ignoring case, spacing and accents. A
+  merge records the merged label as an alias of the star kept, so the twin cannot return; the assistant gains
+  `alias X as Y`; star details show "Also known as" and "Reference". With no file the graph is exactly as before.
+- **Inference.** `rules/inference.yaml` (four rules, each switchable) runs as the last layer of every build and derives
+  DEPENDS_ON, USES, OWNS and SIMILAR_TO, marked derived (dashed violet, `source: rule:<name>`, inputs named, the lowest
+  confidence, confirmed only when every input is, left out of counts). `needs+uses_data` is scoped to the idea the data
+  link was extracted for, the bug the simulation caught. Demand gains beams by system and by tool; the idea's
+  Connections gain Similar ideas and a "changed since the AI last read it" line with Read again; the assistant follows
+  and ranks over derived relations and its trace says what derived each link.
+- **Incremental.** One bundle per idea cached by the record's hash and the registry's version, dropped on a Deep read
+  touch; the operator log folded by appended lines; incremental equals full after every kind of change.
+- **Ontology as data.** `rules/ontology.yaml` (types with label, colour and description; relations with from, to,
+  meaning, inverse and derived) applied over the built-in ontology for the panels, the universe and the extraction
+  prompt. `cafe ontology check` validates the files and the graph and prints violations, fixing nothing. JSON-LD
+  export (`cafe export`, the assistant's "export graph [idea]") and `csic-handoff.jsonld` beside the hand-off. Spec:
+  `docs/superpowers/specs/2026-10-26-cafe-knowledge-graph-design.md`.
+
 ## 2026-10-26 (Café app: Deep read keeps itself current)
 
 - **Deep read upkeep.** After the first Run the index keeps itself current, piece by piece and deliberately: every

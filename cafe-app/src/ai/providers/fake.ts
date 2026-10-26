@@ -464,6 +464,8 @@ function agentFor(prompt: string) {
   const propose = (reply: string, actions: unknown[]) => ({ next: 'propose', thought: 'Working out the change', reply, actions });
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
+    // "which ideas depend on [S1]?": the derived relation, so the trace names the rule.
+    if (!data.steps?.length && start && /depend/i.test(cmd)) return { next: 'search', thought: `Looking at what depends on [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } };
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
     // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.
     if (!start && data.deepRead?.on) {

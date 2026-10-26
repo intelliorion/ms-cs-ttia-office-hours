@@ -5,7 +5,7 @@ import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea } from '../src/ideas/store';
 import { cosine, fakeEmbedder, fakeVector, getEmbedder, embedderName, meanVector, modelDir, FAKE_DIMS, EMBED_MODEL } from '../src/memory/embed';
 import { chunkWorkspace } from '../src/memory/chunks';
-import { groupByIdea, ideaCentroids, indexAvailable, labelVectors, nearestChunks, readIndex, readState, summary, writeIndex, writeState, type IndexRow } from '../src/memory/index';
+import { groupByIdea, ideaCentroids, indexAvailable, labelVectors, nearestChunks, readIndex, readState, summary, updateState, writeIndex, writeState, type IndexRow } from '../src/memory/index';
 
 const FAKE = { ...process.env, CAFE_EMBED_FAKE: '1' };
 
@@ -51,6 +51,26 @@ describe('the index', () => {
     expect(s).toMatchObject({ chunks: 1, embedded: 0, percent: 0, available: false });
     expect(s.ideas).toEqual([{ id: 'CAFE-2026-001', title: 'Email scheduler', chunks: 1, embedded: 0, status: 'new', kinds: { submission: { chunks: 1, embedded: 0 } } }]);
     expect((await readdir(path.join(root, 'data'))).includes('memory')).toBe(true);
+  });
+
+  it('updateState serialises read-modify-write per workspace: two writers at once lose nothing (the job loop and upkeep share state.json)', async () => {
+    const root = await tmpWorkspace();
+    await writeState(root, { status: 'running', embedder: 'fake', done: 0, total: 4, stale: [] });
+    // The job writes "paused" while upkeep records a decision: fired together, no await between them.
+    const decision = { act: 'queue' as const, ideas: ['CAFE-2026-001'], why: 'a read is running', at: '2026-10-26T09:00:00.000Z' };
+    const [a, b] = await Promise.all([
+      updateState(root, (s) => ({ ...s, status: 'paused' })),
+      updateState(root, (s) => ({ ...s, lastDecision: decision })),
+    ]);
+    expect(a.status).toBe('paused');
+    expect(b).toMatchObject({ status: 'paused', lastDecision: decision });
+    expect(await readState(root)).toMatchObject({ status: 'paused', lastDecision: decision, embedder: 'fake', total: 4 });
+    // Many counters at once: every increment lands.
+    await Promise.all(Array.from({ length: 20 }, () => updateState(root, (s) => ({ ...s, done: s.done + 1 }))));
+    expect((await readState(root)).done).toBe(20);
+    // A throwing update does not jam the chain for the next one.
+    await expect(updateState(root, () => { throw new Error('no'); })).rejects.toThrow('no');
+    expect((await updateState(root, (s) => ({ ...s, status: 'done' }))).status).toBe('done');
   });
 
   it('round-trips rows and state; a passage that changed makes its idea stale, a new idea is new', async () => {

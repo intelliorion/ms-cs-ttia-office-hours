@@ -87,7 +87,7 @@ export function decide(trigger: UpkeepTrigger, state: UpkeepState): UpkeepDecisi
 
 import { chunkIdea } from './chunks';
 import { loadIdea, ideaDir } from '../ideas/store';
-import { labelVectors, readIndex, readState, writeIndex, writeState, type IndexRow, type MemoryState } from './index';
+import { labelVectors, readIndex, readState, updateState, writeIndex, type IndexRow, type MemoryState } from './index';
 import { embedderName, type Embedder } from './embed';
 import { onTouched } from './touch';
 import type { DeepRead } from './job';
@@ -149,9 +149,10 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
     working = flush(take, withStars).catch(() => undefined).finally(() => { working = null; if (pending.size || stars) schedule(); });
   };
 
-  const record = async (d: UpkeepDecision, patch: Partial<MemoryState> = {}) => {
-    const s = await readState(root);
-    await writeState(root, { ...s, ...patch, lastDecision: { act: d.act, ideas: d.ideas, why: d.why, at: clock() } });
+  // Upkeep's fields only, lastDecision and stale, patched over the state as it is at the write (the job loop writes
+  // status to the same file; a copy read earlier is never written back).
+  const record = async (d: UpkeepDecision, patch: (s: MemoryState) => Pick<Partial<MemoryState>, 'stale'> = () => ({})) => {
+    await updateState(root, (s) => ({ ...s, ...patch(s), lastDecision: { act: d.act, ideas: d.ideas, why: d.why, at: clock() } }));
   };
   const refreshLabels = async () => { await labelVectors(root, opts.embedder(), (await opts.nodes()) as GNode[]); };
 
@@ -181,7 +182,7 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
     }
     if (d.act === 'skip') {
       if (d.labels) await refreshLabels();
-      await record(d, state.status === 'paused' ? { stale: [...new Set([...state.stale, ...d.ideas])] } : {});
+      await record(d, (s) => (state.status === 'paused' ? { stale: [...new Set([...s.stale, ...d.ideas])] } : {}));
       return;
     }
     try {
@@ -199,8 +200,7 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
       const next = [...rows.filter((r) => !touchedIds.has(r.ideaId) || keep.has(r.hash)), ...fresh];
       await writeIndex(root, next);
       if (d.labels) await refreshLabels();
-      const now = await readState(root);
-      await record(d, { stale: now.stale.filter((id) => !touchedIds.has(id)) });
+      await record(d, (s) => ({ stale: s.stale.filter((id) => !touchedIds.has(id)) }));
     } catch (e) {
       await record({ ...d, act: 'defer', why: `could not read ${d.ideas.map((id) => id.replace(/^CAFE-/, '')).join(', ')}: ${(e as Error).message}; will try again at the next change` });
     }

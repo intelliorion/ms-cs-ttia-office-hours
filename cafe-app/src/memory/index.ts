@@ -57,6 +57,20 @@ export async function readState(root: string): Promise<MemoryState> {
 export async function writeState(root: string, state: MemoryState): Promise<void> {
   await writeFileAtomic(stateFile(root), JSON.stringify(state, null, 1));
 }
+/**
+ * One read-modify-write at a time per workspace. state.json has two writers in one process (the job loop and upkeep),
+ * each patching its own fields; a plain readState + writeState in each would let one hand back the other's stale copy
+ * (a "paused" overwritten with "running" by an upkeep record that read before the pause landed). Every patch goes
+ * through here, queued behind the last one for the same root. writeState stays for whole writes with no one else about.
+ */
+const updates = new Map<string, Promise<unknown>>();
+export async function updateState(root: string, fn: (state: MemoryState) => MemoryState): Promise<MemoryState> {
+  const prev = updates.get(root) ?? Promise.resolve();
+  const turn = prev.then(async () => { const next = fn(await readState(root)); await writeState(root, next); return next; });
+  const settled = turn.catch(() => undefined);
+  updates.set(root, settled);
+  try { return await turn; } finally { if (updates.get(root) === settled) updates.delete(root); }
+}
 /** Rerun all: the index and the labels go; the state keeps nothing of the last run. */
 export async function dropIndex(root: string): Promise<void> {
   await fs.rm(indexFile(root), { force: true });

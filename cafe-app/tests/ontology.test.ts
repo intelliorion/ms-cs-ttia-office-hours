@@ -63,3 +63,58 @@ describe('the ontology as data', () => {
     expect(extractTask.prompt({ idea: { id: 'CAFE-2026-001', title: 'X' }, existing: { capabilities: [], systems: [], painPoints: [] } })).toContain('NEEDS Capability (must be able to do this)');
   });
 });
+
+import { checkWorkspace } from '../src/graph/check';
+import { importExport } from '../src/import/importRows';
+import { DEFAULT_STEPS } from '../src/rules/stages';
+import { fixedClock } from '../src/clock';
+import { appendAiLink } from '../src/graph/store';
+import { appendEdit } from '../src/graph/operator';
+import { FIXTURE } from './helpers';
+
+describe('cafe ontology check', () => {
+  it('a workspace built by the app is clean', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, { clock: fixedClock('2026-10-26'), steps: DEFAULT_STEPS });
+    await appendAiLink(root, { from: 'idea:CAFE-2026-001', to: 'capability:slot-finding', rel: 'NEEDS', description: 'd', source: 'ai:fake:challenge', confidence: 0.9, status: 'confirmed', idea: 'CAFE-2026-001', newNodes: [{ id: 'capability:slot-finding', type: 'Capability', label: 'Slot finding' }] });
+    await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'alias', node: 'capability:slot-finding', label: 'Finding slots', of: 'Slot finding' });
+    const r = await checkWorkspace(root);
+    expect(r.violations).toEqual([]);
+    expect(r.checked).toMatchObject({ nodes: expect.any(Number), edges: expect.any(Number), derived: expect.any(Number) });
+    expect(r.checked.nodes).toBeGreaterThan(0);
+  });
+  it('a broken workspace: every violation named, nothing fixed', async () => {
+    const root = await tmpWorkspace();
+    await importExport(root, FIXTURE, { clock: fixedClock('2026-10-26'), steps: DEFAULT_STEPS });
+    await writeYaml(paths(root).ontology, { nodes: { Gadget: { label: 'G', colour: '#fff', description: '' } }, relations: { NEEDS: { from: 'Idea', to: 'Gadget' } } });
+    await writeYaml(paths(root).entities, {
+      Tool: [{ id: 'tool:dataiku', label: 'Dataiku', aliases: ['dss'] }, { id: 'tool:dataiku', label: 'Dataiku again', aliases: [] }],
+      System: [{ id: 'system:a', label: 'A', aliases: ['dss'] }, { id: 'capability:wrong', label: 'Wrong prefix', aliases: ['dss'] }, { label: 'No id' }],
+      Widget: [],
+    });
+    await writeYaml(paths(root).inference, { rules: [{ name: 'bad', chain: ['NEEDS', 'NOPE'], then: 'DEPENDS_ON' }, { name: 'misfit', chain: ['NEEDS', 'HAS_MEMBER'], then: 'OWNS' }, { name: 'stated', chain: ['NEEDS', 'USES_DATA'], then: 'NEEDS' }] });
+    await appendAiLink(root, { from: 'idea:CAFE-2026-001', to: 'system:x', rel: 'NEEDS', description: 'd', source: 'ai:fake', confidence: 0.9, status: 'confirmed', newNodes: [{ id: 'system:x', type: 'System', label: 'X' }] });
+    await appendAiLink(root, { from: 'idea:CAFE-2026-001', to: 'capability:y', rel: 'LOVES' as any, description: 'd', source: 'ai:fake', confidence: 0.9, status: 'confirmed' });
+    await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'alias', node: 'capability:gone', label: 'Nothing', of: 'Gone' });
+    await appendEdit(root, { id: 'op-2', at: '2026-10-26', status: 'active', t: 'link', from: 'idea:CAFE-2026-001', rel: 'HAS_MEMBER', to: 'idea:CAFE-2026-002' });
+    const before = await readFile(paths(root).entities, 'utf8');
+    const { violations } = await checkWorkspace(root);
+    expect(violations).toEqual([
+      'ontology.yaml: unknown node type "Gadget" (ignored)',
+      'ontology.yaml: NEEDS: unknown node type "Gadget" (the pair is kept as built in)',
+      'entities.yaml: Tool: duplicate id "tool:dataiku"',
+      'entities.yaml: System: "capability:wrong" does not start with "system:"',
+      'entities.yaml: System: "capability:wrong": alias "dss" is already A\'s',
+      'entities.yaml: System: entry 3 has no id or label',
+      'entities.yaml: unknown section "Widget"',
+      'inference.yaml: bad: unknown relation "NOPE"',
+      'inference.yaml: misfit: NEEDS ends at Capability but HAS_MEMBER starts at Team',
+      'inference.yaml: stated: NEEDS is not a derived relation',
+      'ai-links.jsonl line 1: NEEDS goes Idea → Capability, not Idea → System (skipped by the build)',
+      'ai-links.jsonl line 2: unknown relation "LOVES" (skipped by the build)',
+      'operator.jsonl op-1: alias "Nothing" on capability:gone, which is not in the graph',
+      'operator.jsonl op-2: HAS_MEMBER goes Team → Person, not Idea → Idea (skipped by the build)',
+    ]);
+    expect(await readFile(paths(root).entities, 'utf8')).toBe(before);
+  });
+});

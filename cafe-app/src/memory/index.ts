@@ -12,7 +12,12 @@ import type { GNode } from '../graph/ontology';
  * run) and labels.jsonl (star labels embedded on demand). All of it is rebuilt from the idea folders by a Run, so
  * data/ stays deletable.
  */
-export interface IndexRow extends Chunk { vector: number[] }
+export interface IndexRow extends Chunk {
+  vector: number[];
+  /** When this passage was embedded (ISO 8601); rows written before upkeep existed have none. */
+  at?: string;
+}
+export interface UpkeepRecord { act: 'read' | 'skip' | 'queue' | 'defer'; ideas: string[]; why: string; at: string }
 export type JobStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
 export interface MemoryState {
   status: JobStatus;
@@ -25,6 +30,8 @@ export interface MemoryState {
   error?: string;
   /** Ideas whose passages changed since they were read (as of the last summary). */
   stale: string[];
+  /** What upkeep last decided, and why. */
+  lastDecision?: UpkeepRecord;
 }
 export const EMPTY_STATE: MemoryState = { status: 'idle', done: 0, total: 0, stale: [] };
 

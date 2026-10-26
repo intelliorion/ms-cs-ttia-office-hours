@@ -72,7 +72,8 @@ export function decide(trigger: UpkeepTrigger, state: UpkeepState): UpkeepDecisi
     const fresh = i.present.filter((h) => !have.has(h)).length;
     const lost = i.indexed.filter((h) => !now.has(h)).length;
     if (!fresh && !lost) continue;
-    changed.push(id); passages += fresh; dropped += lost;
+    // A changed passage is one fresh and one lost: "dropped" counts only what went beyond that (an email removed, say).
+    changed.push(id); passages += fresh; dropped += Math.max(0, lost - fresh);
     if (!i.present.length && i.indexed.length) gone.push(id);
   }
   if (!changed.length) return skip(`nothing changed in ${list(ideas)}`, labels);
@@ -80,4 +81,152 @@ export function decide(trigger: UpkeepTrigger, state: UpkeepState): UpkeepDecisi
     ? `${list(gone)} removed: its passages dropped`
     : `read ${list(changed)} ${sourceWords(trigger.sources)} · ${passages} passage${passages === 1 ? '' : 's'}${dropped ? ` · ${dropped} dropped` : ''}`;
   return { act: 'read', ideas: changed, why, passages, ...labels };
+}
+
+/* ---------- The runner ---------- */
+
+import { chunkIdea } from './chunks';
+import { loadIdea, ideaDir } from '../ideas/store';
+import { labelVectors, readIndex, readState, writeIndex, writeState, type IndexRow, type MemoryState } from './index';
+import { embedderName, type Embedder } from './embed';
+import { onTouched } from './touch';
+import type { DeepRead } from './job';
+import type { GNode } from '../graph/ontology';
+
+export interface UpkeepOptions {
+  job: DeepRead;
+  embedder: () => Embedder;
+  env?: NodeJS.ProcessEnv;
+  clock?: () => string;
+  /** Quiet time after the last touch before a flush (5 s), and the longest a touch may wait (30 s). */
+  quietMs?: number;
+  maxMs?: number;
+  /** The per-workspace switch, read at each flush. */
+  on: () => Promise<boolean>;
+  /** The stars, for the label refresh after a rename or merge. */
+  nodes: () => Promise<Pick<GNode, 'id' | 'type' | 'label'>[]>;
+}
+export interface Upkeep {
+  touch(ideas: string[], source: TouchSource): void;
+  /** Touches are pending and the timer is set ("waiting for changes to settle"). */
+  waiting(): boolean;
+  pending(): number;
+  /** The last decision this process made, on disk or not (before the first run nothing is written). */
+  last(): UpkeepDecision | undefined;
+  /** Settles when nothing is pending or running. The run and rerun routes wait on it so two writers never meet. */
+  settle(): Promise<void>;
+  idle(): Promise<void>;
+  close(): void;
+}
+
+export const UPKEEP_QUIET_MS = 5000;
+export const UPKEEP_MAX_MS = 30_000;
+const BATCH = 16;
+
+export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
+  const env = opts.env ?? process.env;
+  const clock = opts.clock ?? (() => new Date().toISOString());
+  const quietMs = opts.quietMs ?? UPKEEP_QUIET_MS;
+  const maxMs = opts.maxMs ?? UPKEEP_MAX_MS;
+  const pending = new Map<string, Set<TouchSource>>();
+  let stars = false;
+  let timer: NodeJS.Timeout | undefined;
+  let firstAt: number | undefined;
+  let working: Promise<void> | null = null;
+  let last: UpkeepDecision | undefined;
+
+  const schedule = () => {
+    firstAt ??= Date.now();
+    if (timer) clearTimeout(timer);
+    const left = maxMs - (Date.now() - firstAt);
+    timer = setTimeout(fire, Math.max(0, Math.min(quietMs, left)));
+  };
+  const fire = () => {
+    timer = undefined;
+    if (working) { schedule(); return; }
+    const take = new Map(pending); const withStars = stars;
+    pending.clear(); stars = false; firstAt = undefined;
+    working = flush(take, withStars).catch(() => undefined).finally(() => { working = null; if (pending.size || stars) schedule(); });
+  };
+
+  const record = async (d: UpkeepDecision, patch: Partial<MemoryState> = {}) => {
+    const s = await readState(root);
+    await writeState(root, { ...s, ...patch, lastDecision: { act: d.act, ideas: d.ideas, why: d.why, at: clock() } });
+  };
+  const refreshLabels = async () => { await labelVectors(root, opts.embedder(), (await opts.nodes()) as GNode[]); };
+
+  const flush = async (take: Map<string, Set<TouchSource>>, withStars: boolean, folded = false): Promise<void> => {
+    const [state, rows, on] = await Promise.all([readState(root), readIndex(root), opts.on()]);
+    const sources = [...new Set([...withStars ? ['stars' as const] : [], ...[...take.values()].flatMap((s) => [...s])])];
+    const ids = [...take.keys()];
+    // Only the touched ideas are chunked (file reads only); the index rows of each give what is already read.
+    const present = new Map<string, { hash: string; row: Omit<IndexRow, 'vector'> }[]>();
+    for (const id of ids) {
+      const idea = await loadIdea(root, id).catch(() => undefined);
+      const chunks = idea ? await chunkIdea(root, idea, await ideaDir(root, id)) : [];
+      present.set(id, chunks.map((c) => ({ hash: c.hash, row: c })));
+    }
+    const d = decide(
+      { sources, ideas: ids, at: clock() },
+      { hasIndex: rows.length > 0, indexEmbedder: state.embedder, embedder: embedderName(env), on, status: state.status, ideas: ids.map((id) => ({ id, present: present.get(id)!.map((p) => p.hash), indexed: rows.filter((r) => r.ideaId === id).map((r) => r.hash) })) },
+    );
+    last = d;
+    // Before the first run nothing is written: an operator who never uses Deep read has no memory folder at all.
+    if (!rows.length || !state.embedder) return;
+    if (d.act === 'queue') {
+      await record(d);
+      await opts.job.idle();
+      if (!folded) await flush(take, withStars, true);
+      return;
+    }
+    if (d.act === 'skip') {
+      if (d.labels) await refreshLabels();
+      await record(d, state.status === 'paused' ? { stale: [...new Set([...state.stale, ...d.ideas])] } : {});
+      return;
+    }
+    try {
+      const have = new Set(rows.map((r) => r.hash));
+      const todo = d.ideas.flatMap((id) => present.get(id)!.filter((p) => !have.has(p.hash)).map((p) => p.row));
+      const emb = opts.embedder();
+      const fresh: IndexRow[] = [];
+      for (let i = 0; i < todo.length; i += BATCH) {
+        const batch = todo.slice(i, i + BATCH);
+        const vectors = await emb.embed(batch.map((c) => c.text));
+        fresh.push(...batch.map((c, k) => ({ ...c, vector: vectors[k], at: clock() })));
+      }
+      const keep = new Set(d.ideas.flatMap((id) => present.get(id)!.map((p) => p.hash)));
+      const touchedIds = new Set(d.ideas);
+      const next = [...rows.filter((r) => !touchedIds.has(r.ideaId) || keep.has(r.hash)), ...fresh];
+      await writeIndex(root, next);
+      if (d.labels) await refreshLabels();
+      const now = await readState(root);
+      await record(d, { stale: now.stale.filter((id) => !touchedIds.has(id)) });
+    } catch (e) {
+      await record({ ...d, act: 'defer', why: `could not read ${d.ideas.map((id) => id.replace(/^CAFE-/, '')).join(', ')}: ${(e as Error).message}; will try again at the next change` });
+    }
+  };
+
+  const touch = (ideas: string[], source: TouchSource) => {
+    if (source === 'stars') stars = true;
+    for (const id of ideas) { const s = pending.get(id); if (s) s.add(source); else pending.set(id, new Set([source])); }
+    schedule();
+  };
+  const off = onTouched((t) => { if (t.root === root) touch(t.ideas, t.source); });
+  const idle = async () => {
+    for (;;) {
+      if (working) { await working; continue; }
+      if (!timer && !pending.size && !stars) return;
+      if (timer) { clearTimeout(timer); timer = undefined; fire(); continue; }
+      await new Promise((r) => setTimeout(r, 2));
+    }
+  };
+  return {
+    touch,
+    waiting: () => !!timer || !!working || pending.size > 0,
+    pending: () => pending.size,
+    last: () => last,
+    settle: idle,
+    idle,
+    close: () => { off(); if (timer) clearTimeout(timer); timer = undefined; pending.clear(); stars = false; },
+  };
 }

@@ -99,3 +99,216 @@ describe('decide()', () => {
     expect(sourceWords([])).toBe('after a change');
   });
 });
+
+/* ---------- The runner: timers, the flush, and what it writes ---------- */
+
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { tmpWorkspace, sampleIdea } from './helpers';
+import { saveIdea } from '../src/ideas/store';
+import { fakeEmbedder, type Embedder } from '../src/memory/embed';
+import { createDeepRead } from '../src/memory/job';
+import { readIndex, readState, memoryDir } from '../src/memory/index';
+import { createUpkeep } from '../src/memory/upkeep';
+
+const FAKE = { ...process.env, CAFE_EMBED_FAKE: '1' };
+const clock = () => '2026-10-26T09:00:00.000Z';
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** An embedder that counts the texts it was asked for. */
+function counting(): { embedder: () => Embedder; texts: string[] } {
+  const texts: string[] = [];
+  const base = fakeEmbedder();
+  return { texts, embedder: () => ({ ...base, embed: async (t) => { texts.push(...t); return base.embed(t); } }) };
+}
+const ID1 = 'CAFE-2026-001'; const ID2 = 'CAFE-2026-002';
+async function twoIdeas(root: string) {
+  await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Contracts are read by hand.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
+  await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Desks are double booked.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));
+}
+function setup(root: string, opts: { embedder?: () => Embedder; on?: boolean; quietMs?: number; maxMs?: number; nodes?: () => Promise<{ id: string; type: 'Capability' | 'Person'; label: string }[]> } = {}) {
+  const emb = opts.embedder ?? fakeEmbedder;
+  const job = createDeepRead(root, emb, clock);
+  const upkeep = createUpkeep(root, { job, embedder: emb, env: FAKE, clock, quietMs: opts.quietMs ?? 20, maxMs: opts.maxMs ?? 200, on: async () => opts.on ?? true, nodes: opts.nodes ?? (async () => []) });
+  return { job, upkeep };
+}
+
+describe('the upkeep runner', () => {
+  it('does nothing before the first run: no decision, no memory folder', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const { upkeep } = setup(root);
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed.', dedupe_key: 'a' }));
+    upkeep.touch([ID1], 'save');
+    await upkeep.idle();
+    expect(upkeep.last()).toMatchObject({ act: 'skip', why: 'Deep read has not been run yet' });
+    await expect(fs.stat(path.join(memoryDir(root), 'state.json'))).rejects.toThrow();
+    await expect(fs.stat(path.join(memoryDir(root), 'index.jsonl'))).rejects.toThrow();
+    upkeep.close();
+  });
+
+  it('after a run, a changed idea is re-read: only its changed passages, the rows replaced and stamped, the reason kept', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { job, upkeep } = setup(root, { embedder: c.embedder });
+    await job.run(); await job.idle();
+    expect(c.texts).toHaveLength(4);
+    c.texts.length = 0;
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Contracts are read by hand, late.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
+    upkeep.touch([ID1], 'save');
+    expect(upkeep.waiting()).toBe(true);
+    await upkeep.idle();
+    expect(c.texts).toEqual(['Vendor contracts\nContracts are read by hand, late.']);
+    const state = await readState(root);
+    expect(state.lastDecision).toEqual({ act: 'read', ideas: [ID1], why: 'read 2026-001 after a save · 1 passage', at: clock() });
+    expect(state.status).toBe('done');
+    const rows = await readIndex(root);
+    expect(rows).toHaveLength(4);
+    expect(rows.filter((r) => r.ideaId === ID1).map((r) => r.at)).toEqual([clock(), clock()]);
+    expect(upkeep.waiting()).toBe(false);
+  });
+
+  it('a save with no text change is skipped, and said', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { job, upkeep } = setup(root, { embedder: c.embedder });
+    await job.run(); await job.idle(); c.texts.length = 0;
+    await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Desks are double booked.', current_process: 'A spreadsheet.', dedupe_key: 'b', stage: 2 } as never));
+    upkeep.touch([ID2], 'save');
+    await upkeep.idle();
+    expect(c.texts).toEqual([]);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'skip', why: 'nothing changed in 2026-002' });
+  });
+
+  it('a burst becomes one read: many touches inside the quiet time, one decision, one embed call; the longest wait is capped', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { job, upkeep } = setup(root, { embedder: c.embedder, quietMs: 30, maxMs: 90 });
+    await job.run(); await job.idle(); c.texts.length = 0;
+    const calls: number[] = [];
+    const e = c.embedder; const spy = () => { const x = e(); return { ...x, embed: async (t: string[]) => { calls.push(t.length); return x.embed(t); } }; };
+    const u2 = createUpkeep(root, { job, embedder: spy, env: FAKE, clock, quietMs: 30, maxMs: 90, on: async () => true, nodes: async () => [] });
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'One.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
+    await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Two.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));
+    // Touches every 10 ms for 70 ms: never 30 ms of quiet, so the 90 ms cap flushes it.
+    const t0 = Date.now();
+    for (let i = 0; i < 7; i++) { u2.touch([i % 2 ? ID1 : ID2], i === 3 ? 'import' : 'save'); await wait(10); }
+    await u2.idle();
+    expect(Date.now() - t0).toBeLessThan(400);
+    expect(calls).toEqual([2]);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'read', ideas: [ID2, ID1], why: 'read 2026-002 and 2026-001 after Import · 2 passages' });
+    upkeep.close(); u2.close();
+  });
+
+  it('while a read runs the trigger is queued and folded into the end of that run; paused is never resumed', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    let gate: (() => void) | undefined;
+    const slow = (): Embedder => ({ ...fakeEmbedder(), embed: async (t) => { await new Promise<void>((r) => { gate = r; }); return fakeEmbedder().embed(t); } });
+    const { job, upkeep } = setup(root, { embedder: fakeEmbedder });
+    await job.run(); await job.idle();
+    // A slower job for the second run, sharing the upkeep.
+    const job2 = createDeepRead(root, slow, clock);
+    const up2 = createUpkeep(root, { job: job2, embedder: fakeEmbedder, env: FAKE, clock, quietMs: 10, maxMs: 50, on: async () => true, nodes: async () => [] });
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed once.', dedupe_key: 'a' }));
+    await job2.run();
+    await wait(15);
+    expect((await readState(root)).status).toBe('running');
+    await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Changed too.', dedupe_key: 'b' }));
+    up2.touch([ID2], 'save');
+    await wait(40);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'queue', why: 'a read is running: 2026-002 will be checked when it ends' });
+    gate?.();
+    await job2.idle();
+    await up2.idle();
+    // The fold: the run read everything, so the re-check finds nothing to do, or reads the one passage the plan missed.
+    const after = await readState(root);
+    expect(after.status).toBe('done');
+    expect(['skip', 'read']).toContain(after.lastDecision?.act);
+    expect(after.lastDecision?.why).toMatch(/^(nothing changed in 2026-002|read 2026-002 after a save)/);
+    // Paused before its first batch: nothing read, and a change while paused is marked stale, never read.
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed again.', dedupe_key: 'a' }));
+    await job2.run(); await job2.pause(); await job2.idle();
+    expect((await readState(root)).status).toBe('paused');
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed a third time.', dedupe_key: 'a' }));
+    up2.touch([ID1], 'save');
+    await up2.idle();
+    const paused = await readState(root);
+    expect(paused.status).toBe('paused');
+    expect(paused.lastDecision).toMatchObject({ act: 'skip', why: 'paused by you: 2026-001 will be read at Continue' });
+    expect(paused.stale).toEqual([ID1]);
+    upkeep.close(); up2.close();
+  });
+
+  it('the switch off: a decision is recorded, nothing is read', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { job, upkeep } = setup(root, { embedder: c.embedder, on: false });
+    await job.run(); await job.idle(); c.texts.length = 0;
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed.', dedupe_key: 'a' }));
+    upkeep.touch([ID1], 'save');
+    await upkeep.idle();
+    expect(c.texts).toEqual([]);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'skip', why: 'automatic upkeep is off' });
+  });
+
+  it('a failing embedder defers once with the error and is not retried until the next touch', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const { job } = setup(root);
+    await job.run(); await job.idle();
+    let calls = 0;
+    const failing = (): Embedder => ({ ...fakeEmbedder(), embed: async () => { calls++; throw new Error('The model could not be loaded'); } });
+    const up = createUpkeep(root, { job, embedder: failing, env: FAKE, clock, quietMs: 10, maxMs: 50, on: async () => true, nodes: async () => [] });
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed.', dedupe_key: 'a' }));
+    up.touch([ID1], 'save');
+    await up.idle();
+    await wait(60);
+    expect(calls).toBe(1);
+    const s = await readState(root);
+    expect(s.status).toBe('done');
+    expect(s.lastDecision).toMatchObject({ act: 'defer', ideas: [ID1], why: 'could not read 2026-001: The model could not be loaded; will try again at the next change' });
+    expect(await readIndex(root)).toHaveLength(4);
+    up.touch([ID1], 'save');
+    await up.idle();
+    expect(calls).toBe(2);
+    up.close();
+  });
+
+  it('a renamed or merged star refreshes the missing label vectors only; no passage is read', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const nodes = [{ id: 'cap:1', type: 'Capability' as const, label: 'Contract summary' }, { id: 'person:1', type: 'Person' as const, label: 'A Person' }];
+    const { job, upkeep } = setup(root, { embedder: c.embedder, nodes: async () => nodes });
+    await job.run(); await job.idle(); c.texts.length = 0;
+    upkeep.touch([], 'stars');
+    await upkeep.idle();
+    expect(c.texts).toEqual(['Contract summary']);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'skip', why: 'star labels refreshed; no passage changed' });
+    const labels = await fs.readFile(path.join(memoryDir(root), 'labels.jsonl'), 'utf8');
+    expect(labels.trim().split('\n')).toHaveLength(1);
+    // Again: cached, nothing embedded.
+    c.texts.length = 0;
+    upkeep.touch([], 'stars');
+    await upkeep.idle();
+    expect(c.texts).toEqual([]);
+  });
+
+  it('an idea whose folder is gone has its passages dropped', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const { job, upkeep } = setup(root);
+    await job.run(); await job.idle();
+    const dir = (await fs.readdir(path.join(root, 'data', 'ideas'))).find((n) => n.startsWith(ID2))!;
+    await fs.rm(path.join(root, 'data', 'ideas', dir), { recursive: true });
+    upkeep.touch([ID2], 'save');
+    await upkeep.idle();
+    expect((await readIndex(root)).map((r) => r.ideaId)).toEqual([ID1, ID1]);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'read', why: '2026-002 removed: its passages dropped' });
+  });
+});

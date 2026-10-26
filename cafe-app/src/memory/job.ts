@@ -44,7 +44,7 @@ export function createDeepRead(root: string, embedder: () => Embedder, clock: ()
         if (pauseAsked) { state = { ...state, status: 'paused' }; await writeState(root, state); return; }
         const batch = todo.slice(i, i + BATCH);
         const vectors = await emb.embed(batch.map((c) => c.text));
-        rows = [...rows, ...batch.map((c, k) => ({ ...c, vector: vectors[k] }))];
+        rows = [...rows, ...batch.map((c, k) => ({ ...c, vector: vectors[k], at: clock() }))];
         await writeIndex(root, rows);
         state = { ...state, done: rows.length };
         await writeState(root, state);

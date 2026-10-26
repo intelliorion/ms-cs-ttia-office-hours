@@ -2,7 +2,7 @@ import { AI_NODE_TYPES, AI_RELATIONS, APPROVED_TOOLS, type NodeType, type Relati
 import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
-import { QUERY_GUIDE, QUERY_SCHEMA } from '../command/query';
+import { QUERY_SCHEMA, queryGuide } from '../command/query';
 import { BUILD_HINTS, BUILD_TAGS, DESIGN_TAGS, POINT_MAX } from '../design/points';
 import { COLUMN_ROLES, DATA_KINDS, DATA_TOPICS } from '../data/model';
 import { ORDINARY_ROWS } from '../design/sampleData';
@@ -1653,9 +1653,10 @@ export interface AgentInput {
   vocabulary?: { stages: string[]; functions: string[]; regions: string[]; rounds: string[] };
   steps: AgentStepDone[];
   stepsLeft: number;
-  /** Deep read has an index: the search and similar query steps work. */
-  deepRead?: boolean;
+  /** Where Deep read stands: on when its index exists (the search and similar steps work), how much is read, how many ideas changed since. */
+  deepRead?: DeepReadState;
 }
+export interface DeepReadState { on: boolean; percent: number; staleIdeas: number; lastRead?: string }
 export interface AgentOutput {
   next: (typeof AGENT_NEXT)[number];
   thought: string;
@@ -1708,9 +1709,15 @@ export const agentTask: Task<AgentOutput> = {
       '- clarify: you cannot tell what they want; reply asks one short question.',
       'thought: one short line saying what this step does ("Looking for capabilities named like policy"), shown to the operator as you work.',
       `You have ${a.stepsLeft} step${a.stepsLeft === 1 ? '' : 's'} left including this one; with 1 left you must answer, propose or clarify.`,
-      ...QUERY_GUIDE,
-      a.deepRead ? 'Deep read has run: search and similar work, and a search result\'s hits are passages people wrote (idea, section, text): quote from them in your answer.'
-        : 'Deep read has not run: search and similar find nothing. Use stars, follow, filter and read_idea.',
+      ...queryGuide(a.deepRead?.on === true),
+      ...(a.deepRead?.on
+        ? [
+          `Deep read is on: ${a.deepRead.percent} % of what people wrote is read, ${a.deepRead.staleIdeas} idea${a.deepRead.staleIdeas === 1 ? '' : 's'} changed since it was read${a.deepRead.lastRead ? `, last read ${a.deepRead.lastRead}` : ''}.`,
+          'Use search and similar only for questions about what people WROTE (the challenge text, answers, designs, reviews, emails); a search result\'s hits are passages (idea, section, text): quote from them.',
+          'For stars, links, counts, people and stages use stars, follow, filter, role, rank and count_by as before. A search step\'s result may list stale: ideas whose text changed since it was read;',
+          '  you may say so in one short line, and the app reads them again by itself.',
+        ]
+        : ['Deep read has not run: the search and similar steps do not exist. Use stars, follow, filter, role, rank, count_by and read_idea.']),
       'Actions (codes without brackets in a, b and ideas):',
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
       '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
@@ -1725,7 +1732,7 @@ export const agentTask: Task<AgentOutput> = {
       '',
       'DATA (JSON, between the markers):',
       '<<<DATA',
-      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps, deepRead: a.deepRead === true }),
+      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps, deepRead: a.deepRead ?? { on: false, percent: 0, staleIdeas: 0 } }),
       'DATA>>>',
     ].join('\n');
   },

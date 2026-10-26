@@ -466,7 +466,7 @@ function agentFor(prompt: string) {
     const start = a ?? focus;
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
     // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.
-    if (!start && data.deepRead) {
+    if (!start && data.deepRead?.on) {
       if (!data.steps?.length) return { next: 'search', thought: 'Searching what people wrote', query: { steps: [{ op: 'search', match: cmd.replace(/\?\s*$/, '').trim().slice(0, 60) }] } };
       const hits: { idea: string; section: string; text: string }[] = data.steps[0]?.result?.hits ?? [];
       const n: number = data.steps[0]?.result?.total ?? 0;

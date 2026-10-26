@@ -86,6 +86,9 @@ export const QUERY_GUIDE = [
   '- ideas like [I1]: [{"op":"similar","codes":["I1"],"limit":5}]',
 ];
 
+/** The guide the agent reads: with Deep read off, the search and similar steps are left out (they do not exist for it). */
+export const queryGuide = (deepRead: boolean): string[] => (deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l)));
+
 export interface StepTrace { text: string; size: number }
 /** One passage a search found: where it came from and its text (names are coded before the AI sees it). */
 export interface QueryHit { ideaId: string; section: string; file: string; text: string; score: number }

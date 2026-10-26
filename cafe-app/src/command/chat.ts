@@ -15,7 +15,7 @@ import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } 
 import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
-import { indexAvailable } from '../memory/index';
+import { indexAvailable, summary as memorySummary } from '../memory/index';
 
 export interface ChatAction {
   id: string; label: string; action: CommandAction;
@@ -169,8 +169,13 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
   };
-  // Deep read: when its index exists the agent is told the search and similar steps work (and they are prepared per query).
-  const deepRead = await indexAvailable(root);
+  // Deep read: when its index exists the agent is told where it stands (the search and similar steps work, and are prepared per query);
+  // the summary is file reads only, once per message, and names the ideas whose text changed since they were read.
+  const available = await indexAvailable(root);
+  const mem = available ? await memorySummary(root) : undefined;
+  const staleIdeas = new Set((mem?.ideas ?? []).filter((i) => i.status !== 'read').map((i) => i.id));
+  const lastRead = (mem?.ideas ?? []).map((i) => i.lastRead).filter((t): t is string => !!t).sort().at(-1);
+  const deepRead = { on: available, percent: mem?.percent ?? 0, staleIdeas: staleIdeas.size, ...(lastRead ? { lastRead } : {}) };
   const history = all.filter((e) => e.thread === thread.id && e.coded).slice(-HISTORY)
     .map((e) => ({ operator: e.coded!.text, agent: e.coded!.reply, ...(e.coded!.found?.length ? { found: e.coded!.found } : {}) }));
 
@@ -198,8 +203,11 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       if (output.next === 'search') {
         const errs = validate(QUERY_SCHEMA, output.query);
         if (errs.length) { done.push({ did: 'search', thought: output.thought, result: { error: `The query was malformed: ${errs.slice(0, 3).join('; ')}` } }); continue; }
-        const memory = deepRead ? await prepareMemory(root, output.query as Query, graph) : undefined;
+        const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
         const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound, ...(memory ? { memory } : {}) });
+        // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
+        const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
+        for (const id of stale) r.trace.push({ text: `${id.replace(/^CAFE-/, '')} changed since it was read`, size: 1 });
         results.push(r);
         lastFound = r.final;
         const s: ChatStep = { kind: 'search', text: thought, found: r.final.length };
@@ -213,6 +221,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
             // Deep read's passages, names coded like an idea's text, with the idea and section each came from.
             ...(r.hits ? { hits: r.hits.slice(0, 12).map((h) => ({ idea: codeFor(hidden.codes, nodes.get(`idea:${h.ideaId}`)!), section: h.section, text: coded(h.text).slice(0, HIT_MAX) })) } : {}),
+            ...(stale.length ? { stale: stale.map((id) => codeFor(hidden.codes, nodes.get(`idea:${id}`)!)) } : {}),
           },
         });
       } else if (output.next === 'read_idea') {

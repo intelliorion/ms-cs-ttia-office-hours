@@ -255,6 +255,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
           const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds, registry: await loadRegistry(root), ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
+          // Nothing to apply: the reply is what stood in the way, never the AI's sentence claiming a change it did not propose.
+          if (!proposals.length && problems.length) entry.reply = problems.join(' ');
         } else {
           entry.kind = 'unclear';
         }

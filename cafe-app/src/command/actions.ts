@@ -200,24 +200,37 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         problems.push(OWNED_ELSEWHERE[type]?.(name) ?? (type === 'Person' ? "People come from the ideas' teams: add someone with a role, such as \"make X a member of Y\"." : 'Ideas come from the submissions.'));
         continue;
       }
-      const home = star(s.b);
+      let home = star(s.b);
       if (!home) { problems.push(`Say which idea or star ${name} belongs to, so it is not left floating.`); continue; }
+      // A system on an idea: it links to one of the idea's capabilities, not to the idea. One capability: that one; several: ask which.
+      if (type === 'System' && home.type === 'Idea') {
+        const caps = ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS' && !e.derived).map((e) => nodes.get(e.to)).filter((n): n is GNode => n?.type === 'Capability')
+          .sort((x, y) => x.label.localeCompare(y.label));
+        if (caps.length !== 1) {
+          problems.push(caps.length
+            ? `A system links to a capability, not to an idea. ${home.label}'s capabilities are ${caps.map((c) => c.label).join(', ')}: say which one uses ${name}.`
+            : `A system links to a capability, not to an idea: say which capability uses ${name}.`);
+          continue;
+        }
+        home = caps[0];
+      }
       const hit = ctx.registry?.resolve(type, name);
-      const same = ctx.graph.nodes.find((n) => n.label.toLowerCase() === name.toLowerCase()) ?? (hit ? nodes.get(hit.id) : undefined);
-      if (same) { problems.push(`${same.label} is already a star${hit && same.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : ''}: ask me to link it to ${home.label} instead.`); continue; }
-      const rel = (Object.keys(ALLOWED) as Relation[]).find((r) => { const [f, t] = ALLOWED[r]; return (f === home.type && t === type) || (f === type && t === home.type); });
-      if (!rel) {
-        problems.push(type === 'System' && home.type === 'Idea'
-          ? `A system links to a capability, not to an idea: say which capability uses ${name}.`
-          : `A ${word(type)} can't be linked to a ${word(home.type)}.`);
+      const same = ctx.graph.nodes.find((n) => n.type === type && n.label.toLowerCase() === name.toLowerCase()) ?? (hit ? nodes.get(hit.id) : undefined);
+      const rel = (Object.keys(ALLOWED) as Relation[]).find((r) => { const [f, t] = ALLOWED[r]; return (f === home!.type && t === type) || (f === type && t === home!.type); });
+      if (!rel) { problems.push(`A ${word(type)} can't be linked to a ${word(home.type)}.`); continue; }
+      // A name the registry knows but no star carries yet is born with its registered id and label.
+      const node = same?.id ?? hit?.id ?? nodeId(type, name);
+      const label = same?.label ?? hit?.label ?? name;
+      const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
+      const onIdea = home.type === 'Idea' ? undefined : ctx.focusIdea;
+      if (same) {
+        // The star is there already: the add becomes the link, under the name the operator used.
+        const known = same.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : '';
+        if (ctx.graph.edges.some((e) => e.id === edgeId(from, rel, to))) { problems.push(`${nodes.get(from)!.label} already ${REL_WORD[rel] ?? 'is linked to'} ${nodes.get(to)!.label}.`); continue; }
+        proposals.push({ label: `Link ${same.label}${known} to ${home.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from, rel, to, ...(onIdea ? { idea: onIdea } : {}) } });
         continue;
       }
-      // A name the registry knows but no star carries yet is born with its registered id and label.
-      const node = hit?.id ?? nodeId(type, name);
-      const label = hit?.label ?? name;
-      const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
       const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
-      const onIdea = home.type === 'Idea' ? undefined : ctx.focusIdea;
       proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) } });
     } else if (s.op === 'remove_star') {
       const a = star(s.a);

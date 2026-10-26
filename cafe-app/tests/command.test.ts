@@ -8,6 +8,12 @@ import { rebuildGraph } from '../src/graph/store';
 import { createRound, listRounds } from '../src/round/store';
 import { runCommand, doActions, cancelActions, undoChatAction, readChat, listThreads, type Progress } from '../src/command/chat';
 import { fakeProvider } from '../src/ai/providers/fake';
+import { appendAiLink } from '../src/graph/store';
+import { writeYaml } from '../src/workspace/files';
+import { paths } from '../src/workspace/paths';
+import { readText } from '../src/workspace/files';
+import YAML from 'yaml';
+import type { AiLink } from '../src/graph/ontology';
 
 const clock = fixedClock('2026-10-22');
 const IDEAS = [
@@ -408,4 +414,82 @@ describe('the Café assistant: who is a person (the fake provider, as the practi
     expect(entry.reply).toMatch(/Zainab Okafor is the member of Procurement FAQ bot/);
     expect(entry.reply).toMatch(/no team recorded/);
   }));
+});
+
+describe('the Café assistant: adding a star the registry already knows', () => {
+  const link = (from: string, rel: AiLink['rel'], to: string, type: 'Capability' | 'System', label: string, idea: string): AiLink =>
+    ({ from, rel, to, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed', idea, newNodes: [{ id: to, type, label }] });
+  /** The registry knows "Travel & Expense policy" as "travel policy" and "T&E policy"; Policy Q&A already reads it; Document parsing does not.
+   * Desk booking assistant needs one capability (Document parsing); Procurement FAQ bot needs two (Policy Q&A, Claim scoring). */
+  async function seed(root: string) {
+    const file = YAML.parse((await readText(paths(root).entities)) ?? '{}');
+    await writeYaml(paths(root).entities, { ...file, System: [{ id: 'system:travel-expense-policy', label: 'Travel & Expense policy', aliases: ['travel policy', 'T&E policy'] }] });
+    await appendAiLink(root, link('idea:CAFE-2026-001', 'NEEDS', 'capability:document-parsing', 'Capability', 'Document parsing', 'CAFE-2026-001'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'NEEDS', 'capability:policy-q-a', 'Capability', 'Policy Q&A', 'CAFE-2026-002'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'NEEDS', 'capability:claim-scoring', 'Capability', 'Claim scoring', 'CAFE-2026-002'));
+    await appendAiLink(root, link('capability:policy-q-a', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy', 'CAFE-2026-002'));
+  }
+  /** The AI proposes the add and, like the real one did, claims in its reply that it links. */
+  const add = (name: string) => (d: any) => propose([{ op: 'add_star', type: 'System', name, b: d.stars.find((s: any) => s.code === d.message.match(/\[(\w+)\]\s*\?*$/)?.[1])?.code }], 'This links it to the system as the data it uses.')({});
+
+  it('an alias of a known system becomes a link proposal to the capability, named with the alias; nothing is pushed as a problem', async () => {
+    const { root, ai } = await setup([add('T&E policy')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system T&E policy to @Document parsing', ai, clock, { mentions: ['capability:document-parsing'] });
+    expect(e.problems).toEqual([]);
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
+    expect(e.reply).toBe('This links it to the system as the data it uses.');
+    await doActions(root, e.id, undefined, clock);
+    expect(await rels(root)).toContain('capability:document-parsing USES_DATA system:travel-expense-policy');
+  });
+
+  it('the link already there: a problem that says so, and the reply is that problem, not the AI\'s claim', async () => {
+    const { root, ai } = await setup([add('travel policy')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system travel policy to @Policy Q&A', ai, clock, { mentions: ['capability:policy-q-a'] });
+    expect(e.actions).toEqual([]);
+    expect(e.problems).toEqual(['Policy Q&A already uses the data Travel & Expense policy.']);
+    expect(e.reply).toBe('Policy Q&A already uses the data Travel & Expense policy.');
+  });
+
+  it('a system added to an idea with one capability: the link goes to that capability', async () => {
+    const { root, ai } = await setup([add('travel policy')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system travel policy to @Desk booking assistant', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
+    expect(e.problems).toEqual([]);
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "travel policy") to Document parsing (uses the data)']);
+    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
+  });
+
+  it('a system added to an idea with several capabilities: the problem names them, and the reply carries it', async () => {
+    const { root, ai } = await setup([add('travel policy')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system travel policy to @Procurement FAQ bot', ai, clock, { mentions: ['idea:CAFE-2026-002'] });
+    expect(e.actions).toEqual([]);
+    expect(e.problems).toEqual(["A system links to a capability, not to an idea. Procurement FAQ bot's capabilities are Claim scoring, Policy Q&A: say which one uses travel policy."]);
+    expect(e.reply).toBe(e.problems[0]);
+  });
+
+  it('a brand-new system named for an idea with one capability is born linked to that capability', async () => {
+    const { root, ai } = await setup([add('Floor plan system')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system Floor plan system to @Desk booking assistant', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
+    expect(e.problems).toEqual([]);
+    expect(e.actions.map((a) => a.label)).toEqual(['New system or data: Floor plan system, linked from Document parsing (uses the data)']);
+  });
+
+  it('the fake provider plans the add, and the practice flow shows the link proposal', async () => {
+    const was = process.env.CAFE_AI_FAKE; process.env.CAFE_AI_FAKE = '1';
+    try {
+      const root = await tmpWorkspace();
+      for (const i of IDEAS) await saveIdea(root, i);
+      await seed(root);
+      const ai = createConnector({ providers: [fakeProvider()], settings: DEFAULT_SETTINGS });
+      const e = await runCommand(root, 'add the system T&E policy to @Document parsing', ai, clock, { mentions: ['capability:document-parsing'] });
+      expect(e.kind).toBe('command');
+      expect(e.problems).toEqual([]);
+      expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+    } finally { process.env.CAFE_AI_FAKE = was; }
+  });
 });

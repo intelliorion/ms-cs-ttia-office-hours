@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from '../src/round/round';
 import { rebuildGraph } from '../src/graph/store';
 import { createRound, listRounds } from '../src/round/store';
 import { runCommand, doActions, cancelActions, undoChatAction, readChat, listThreads, type Progress } from '../src/command/chat';
+import { fakeProvider } from '../src/ai/providers/fake';
 
 const clock = fixedClock('2026-10-22');
 const IDEAS = [
@@ -135,9 +136,10 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
     expect(entry.highlight).toEqual(['idea:CAFE-2026-001', 'person:avery-chen']);
     expect(entry.trace).toHaveLength(1);
     expect(events.map((e) => e.stage)).toEqual(['thinking', 'step', 'thinking']);
-    // The second call saw what the search returned: the lead as a person code, never a name.
+    // The second call saw what the search returned: the lead as a person code, never a name, with their roles on the idea and their team.
     const second = JSON.parse(prompts[1].slice(prompts[1].indexOf('<<<DATA') + 7, prompts[1].indexOf('DATA>>>')));
-    expect(second.steps[0].result).toEqual({ stars: [{ code: expect.stringMatching(/^P\d+$/), type: 'Person' }], total: 1 });
+    const p = expect.stringMatching(/^P\d+$/); const i = expect.stringMatching(/^I\d+$/);
+    expect(second.steps[0].result).toEqual({ stars: [{ code: p, type: 'Person' }], total: 1, people: [{ code: p, roles: [{ idea: i, role: 'submitter' }, { idea: i, role: 'lead' }], team: expect.stringMatching(/^T\d+$/) }] });
     expect(prompts.join('\n')).not.toMatch(NAMES);
   });
 
@@ -378,4 +380,32 @@ describe('the Café assistant: export', () => {
     const d2 = await doActions(root, one.id, undefined, clock);
     expect(d2.actions[0].note).toMatch(/CAFE-2026-001\.jsonld$/);
   });
+});
+describe('the Café assistant: who is a person (the fake provider, as the practice server runs it)', () => {
+  const fakeAi = async () => {
+    const root = await tmpWorkspace();
+    for (const i of IDEAS) await saveIdea(root, i);
+    return { root, ai: createConnector({ providers: [fakeProvider()], settings: DEFAULT_SETTINGS }) };
+  };
+  const withFake = async <T>(f: () => Promise<T>) => { const was = process.env.CAFE_AI_FAKE; process.env.CAFE_AI_FAKE = '1'; try { return await f(); } finally { process.env.CAFE_AI_FAKE = was; } };
+
+  it('"who is @Avery Chen" plans stars + role, then the team; the reply names the role per idea and the team', () => withFake(async () => {
+    const { root, ai } = await fakeAi();
+    const entry = await runCommand(root, 'who is @Avery Chen?', ai, clock, { mentions: ['person:avery-chen'] });
+    expect(entry.kind).toBe('question');
+    expect(entry.reply).toMatch(/Avery Chen is the submitter and lead of Desk booking assistant/);
+    expect(entry.reply).toMatch(/team: BSI/);
+    expect(entry.trace!.map((t) => t.map((s) => s.text))).toEqual([
+      ['Start from Avery Chen', 'Go to everyone on the team, from the ideas\' records: Avery Chen is the submitter and lead of Desk booking assistant'],
+      ['Start from Avery Chen', 'Follow has member links to teams'],
+    ]);
+    expect(entry.highlight).toEqual(expect.arrayContaining(['person:avery-chen', 'idea:CAFE-2026-001', 'team:bsi']));
+  }));
+
+  it('a person added by hand, on an idea but never a submitter: their role, and "no team recorded"', () => withFake(async () => {
+    const { root, ai } = await fakeAi();
+    const entry = await runCommand(root, 'who is @Zainab Okafor?', ai, clock, { mentions: ['person:zainab-okafor'] });
+    expect(entry.reply).toMatch(/Zainab Okafor is the member of Procurement FAQ bot/);
+    expect(entry.reply).toMatch(/no team recorded/);
+  }));
 });

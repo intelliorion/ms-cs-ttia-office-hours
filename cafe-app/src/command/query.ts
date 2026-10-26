@@ -59,6 +59,7 @@ export const QUERY_GUIDE = [
   '- follow: go to the stars linked to the set, along rel (any when left out), dir out (set → star), in (star → set) or both (the default), keeping type when given.',
   '- filter: keep the stars of type, whose label contains match, or (ideas) with that stage, function, region or round.',
   '- role: from ideas to their people with role (submitter, lead, sponsor, builder, member; anyone when left out; one person can have several), or from people to the ideas they have that role on.',
+  '  Its result lists people: each person\'s role per idea and their team (or "no team recorded"). For a question about a person, always use role, so the reply can say lead, sponsor, builder or member per idea; use follow over HAS_MEMBER for their team.',
   '- intersect: keep only the stars also found by the steps in with (a query of its own), for "both" and "shared" questions.',
   '- path: the shortest chain of links between the two stars in codes.',
   '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
@@ -84,6 +85,7 @@ export const QUERY_GUIDE = [
   '- the most needed capability: [{"op":"stars","type":"Capability"},{"op":"rank","rel":"NEEDS","dir":"in","limit":3}]',
   '- ideas that use data from systems named like expense: [{"op":"stars","type":"System","match":"expense"},{"op":"follow","rel":"USES_DATA","type":"Capability"},{"op":"follow","rel":"NEEDS","type":"Idea"}]',
   '- who leads [I1]: [{"op":"stars","codes":["I1"]},{"op":"role","role":"lead"}]',
+  '- who is [P1]: [{"op":"stars","codes":["P1"]},{"op":"role"}] and, for their team star, [{"op":"stars","codes":["P1"]},{"op":"follow","rel":"HAS_MEMBER","dir":"in","type":"Team"}]',
   '- ideas per stage in round 2026 Q4: [{"op":"stars","type":"Idea","round":"2026 Q4"},{"op":"count_by","by":"stage"}]',
   '- ideas that want the same outcome as [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"WANTS","type":"Outcome"},{"op":"follow","rel":"WANTS","type":"Idea"}]',
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
@@ -122,6 +124,8 @@ export interface QueryResult {
   path?: string[];
   /** The passages a search step found, best first. */
   hits?: QueryHit[];
+  /** A role step's facts: each person it started from or reached, their role words per idea, and the teams they submitted from (none when added by hand). */
+  people?: { id: string; roles: { idea: string; role: string }[]; teams: string[] }[];
   trace: StepTrace[];
 }
 
@@ -194,6 +198,13 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return lines;
   };
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
+  let peopleFacts: QueryResult['people'];
+  /** "the submitter and lead of [idea], and the member of [idea]": one person's roles, grouped by idea, in words. */
+  const roleWords = (roles: { idea: string; role: string }[]): string => {
+    const byIdea = new Map<string, string[]>();
+    for (const r of roles) byIdea.set(r.idea, [...(byIdea.get(r.idea) ?? []), r.role]);
+    return [...byIdea].map(([idea, rs]) => `the ${rs.join(' and ')} of ${name(idea)}`).join(', and ');
+  };
   /** Deep read's fallback for a match no label contains: the nearest labels by meaning, within the candidates. */
   const nearestIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
     if (!s.match || !w.memory) return { ids: [], note: '' };
@@ -254,8 +265,19 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           if (n?.type === 'Idea') { const idea = ideaById.get(id); if (idea) for (const p of people(idea, s.role)) { const pid = personByLabel.get(p.name); if (pid) out.add(pid); } }
           if (n?.type === 'Person') for (const idea of w.ideas) if (people(idea, s.role).some((p) => p.name === n.label)) out.add(`idea:${idea.id}`);
         }
+        // The facts the reply needs: for each person on either side, every role they have on the ideas on the other side, and their team.
+        const persons = [...new Set([...set, ...out])].filter((id) => nodes.get(id)?.type === 'Person');
+        const ideaIds = new Set([...set, ...out].filter((id) => nodes.get(id)?.type === 'Idea'));
+        const facts = persons.map((pid) => ({
+          id: pid,
+          roles: w.ideas.filter((i) => ideaIds.has(`idea:${i.id}`)).flatMap((i) => people(i).filter((p) => p.name === nodes.get(pid)!.label).map((p) => ({ idea: `idea:${i.id}`, role: p.role }))),
+          teams: w.graph.edges.filter((e) => e.rel === 'HAS_MEMBER' && e.to === pid && !e.derived).map((e) => e.from),
+        })).filter((p) => p.roles.length);
+        if (log) peopleFacts = [...(peopleFacts ?? []), ...facts];
         set = [...out];
         text = `Go to ${s.role ? `the ${s.role}s` : 'everyone on the team'}, from the ideas' records`;
+        const said = facts.slice(0, DERIVED_TRACE_MAX).map((p) => `${name(p.id)} is ${roleWords(p.roles)}`);
+        if (said.length) text += `: ${said.join('; ')}${facts.length > said.length ? `; and ${facts.length - said.length} more` : ''}`;
       } else if (s.op === 'intersect') {
         const other = new Set(run(s.with ?? [], false));
         set = set.filter((id) => other.has(id));
@@ -300,7 +322,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}) };
 }
 
 function ideaFilterWords(s: QueryStep): string {

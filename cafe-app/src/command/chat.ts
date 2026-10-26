@@ -220,6 +220,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
             ...(r.counts ? { counts: r.counts } : {}),
             ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
+            // A role step's facts: each person's role word per idea and their team, so the reply can state them, never guess.
+            ...(r.people ? { people: r.people.map((p) => ({ code: codeFor(hidden.codes, nodes.get(p.id)!), roles: p.roles.map((x) => ({ idea: codeFor(hidden.codes, nodes.get(x.idea)!), role: x.role })), team: p.teams.map((t) => codeFor(hidden.codes, nodes.get(t)!)).join(', ') || 'no team recorded' })) } : {}),
             // Deep read's passages, names coded like an idea's text, with the idea and section each came from.
             ...(r.hits ? { hits: r.hits.slice(0, 12).map((h) => ({ idea: codeFor(hidden.codes, nodes.get(`idea:${h.ideaId}`)!), section: h.section, text: coded(h.text).slice(0, HIT_MAX) })) } : {}),
             ...(stale.length ? { stale: stale.map((id) => codeFor(hidden.codes, nodes.get(`idea:${id}`)!)) } : {}),

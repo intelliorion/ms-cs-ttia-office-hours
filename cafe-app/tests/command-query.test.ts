@@ -22,7 +22,7 @@ const links: AiLink[] = [
   ai('idea:CAFE-2026-001', 'REPLACES', 'painpoint:policy-emails', 'PainPoint', 'Policy emails'),
 ];
 const graph = buildGraph(ideas, links, [{ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' } as any]);
-const codes: Record<string, string> = { I1: 'idea:CAFE-2026-001', I2: 'idea:CAFE-2026-002', I3: 'idea:CAFE-2026-003', S1: 'system:expense-export', T1: 'team:gss', P1: 'person:person-1' };
+const codes: Record<string, string> = { I1: 'idea:CAFE-2026-001', I2: 'idea:CAFE-2026-002', I3: 'idea:CAFE-2026-003', S1: 'system:expense-export', T1: 'team:gss', P1: 'person:person-1', P2: 'person:person-2' };
 const world = { graph, ideas, rounds: [{ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' } as any], idOf: (c: string) => codes[c] };
 const q = (steps: Query['steps']) => runQuery({ steps }, world);
 
@@ -55,6 +55,21 @@ describe('the knowledge-graph query', () => {
     const r = q([{ op: 'stars', type: 'Capability', match: 'policy' }, { op: 'follow', rel: 'NEEDS', type: 'Idea' }, { op: 'role', role: 'lead' }]);
     expect(r.final.sort()).toEqual(['person:person-1', 'person:person-3']);
     expect(q([{ op: 'stars', codes: ['P1'] }, { op: 'role' }]).final).toEqual(['idea:CAFE-2026-001']);
+  });
+
+  it('a role step hands over the facts about each person: the role word per idea, and the team or none', () => {
+    // From a person: their roles on the ideas found, and the team they submitted from.
+    expect(q([{ op: 'stars', codes: ['P1'] }, { op: 'role' }]).people).toEqual([
+      { id: 'person:person-1', roles: [{ idea: 'idea:CAFE-2026-001', role: 'submitter' }, { idea: 'idea:CAFE-2026-001', role: 'lead' }], teams: ['team:gss'] },
+    ]);
+    // A sponsor who never submitted has no team recorded.
+    expect(q([{ op: 'stars', codes: ['P2'] }, { op: 'role' }]).people).toEqual([
+      { id: 'person:person-2', roles: [{ idea: 'idea:CAFE-2026-001', role: 'sponsor' }], teams: [] },
+    ]);
+    // From ideas: the people found, with every role they have on those ideas, even when the step asked for one.
+    const r = q([{ op: 'stars', codes: ['I2'] }, { op: 'role', role: 'lead' }]);
+    expect(r.people).toEqual([{ id: 'person:person-3', roles: [{ idea: 'idea:CAFE-2026-002', role: 'submitter' }, { idea: 'idea:CAFE-2026-002', role: 'lead' }], teams: ['team:gss'] }]);
+    expect(q([{ op: 'stars', codes: ['I1'] }, { op: 'follow' }]).people).toBeUndefined();
   });
 
   it('shared: GSS ideas that also replace a pain point', () => {
@@ -100,5 +115,12 @@ describe('the query over derived relations', () => {
   });
   it('the guide names the derived relations', () => {
     expect(QUERY_GUIDE.join('\n')).toMatch(/Derived by the rules.*DEPENDS_ON/);
+  });
+  it('the guide shows how to answer "who is [P1]": role for the roles per idea, follow HAS_MEMBER for the team', () => {
+    const guide = QUERY_GUIDE.join('\n');
+    expect(guide).toContain('- who is [P1]: [{"op":"stars","codes":["P1"]},{"op":"role"}]');
+    expect(guide).toMatch(/who is \[P1\].*\{"op":"follow","rel":"HAS_MEMBER","dir":"in","type":"Team"\}/);
+    expect(guide).toMatch(/question about a person, always use role/);
+    expect(guide).toContain('no team recorded');
   });
 });

@@ -465,6 +465,19 @@ function agentFor(prompt: string) {
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
     // "which ideas depend on [S1]?": the derived relation, so the trace names the rule.
+    // "who is [P1]?": their roles per idea from the ideas' records, then their team star, then the answer states both.
+    if (start && /who is\b/i.test(cmd)) {
+      if (!data.steps?.length) return { next: 'search', thought: `Looking at what [${start}] does on each idea`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'role' }] } };
+      if (data.steps.length === 1) return { next: 'search', thought: `Looking for the team of [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'HAS_MEMBER', dir: 'in', type: 'Team' }] } };
+      const facts: { code: string; roles: { idea: string; role: string }[]; team: string }[] = data.steps[0]?.result?.people ?? [];
+      const me = facts.find((p) => p.code === start);
+      if (!me) return { next: 'answer', thought: 'Answering', reply: `The graph holds no idea that [${start}] has a role on; no team recorded.`, followups: ['Which ideas are in BSI?'] };
+      const byIdea = new Map<string, string[]>();
+      for (const r of me.roles) byIdea.set(r.idea, [...(byIdea.get(r.idea) ?? []), r.role]);
+      const roles = [...byIdea].map(([idea, rs]) => `the ${rs.join(' and ')} of [${idea}]`).join(', and ');
+      const team = me.team === 'no team recorded' ? 'no team recorded' : `team: [${me.team}]`;
+      return { next: 'answer', thought: 'Answering from the roles and the team', reply: `[${start}] is ${roles}; ${team}.`, followups: [`What else is [${start}] linked to?`] };
+    }
     if (!data.steps?.length && start && /depend/i.test(cmd)) return { next: 'search', thought: `Looking at what depends on [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } };
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
     // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.

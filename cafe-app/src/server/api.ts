@@ -225,7 +225,8 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('GET', '/api/graph', async () => {
     const graph = await rebuildGraph(root);
     const layout = await layoutFor(root, graph);
-    return { ...graph, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed).length };
+    // What waits on the operator: a derived edge waits on its inputs, so it is not counted twice.
+    return { ...graph, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
   });
   add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });

@@ -90,9 +90,10 @@ describe('buildGraph', () => {
     expect(idea.attrs).toMatchObject({ stage: 2, stageLabel: 'Review and Select' });
   });
 
-  it('gives every edge a source and confidence 1 for form links', () => {
+  it('gives every edge a source and confidence 1 for form links; the rules derive on top, marked', () => {
     const g = buildGraph([rfx], []);
-    for (const e of g.edges) {
+    expect(g.edges.filter((e) => e.derived).map((e) => e.rel)).toEqual(['OWNS']);
+    for (const e of g.edges.filter((e) => !e.derived)) {
       expect(e.source).toMatch(/^form:/);
       expect(e.confidence).toBe(1);
       expect(e.confirmed).toBe(true);

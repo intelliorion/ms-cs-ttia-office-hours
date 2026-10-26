@@ -4,6 +4,7 @@ import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
 import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, NOT_APPROVED_NOTE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
 import { defaultEntries, makeRegistry, type Registry } from './registry';
+import { DEFAULT_RULES, infer, type Rule } from './rules';
 export { nodeId } from './ontology';
 
 /** The registry a build uses when given none: the built-in tools, so a graph built without a workspace is today's. */
@@ -11,6 +12,8 @@ export const DEFAULT_REGISTRY: Registry = makeRegistry(defaultEntries(), []);
 export interface BuildOptions {
   /** Stable identities and aliases (rules/entities.yaml plus alias edits): where a star is born, its label resolves here first. */
   registry?: Registry;
+  /** The inference rules (rules/inference.yaml): the last layer, run after the operator's edits. The defaults when absent. */
+  rules?: Rule[];
 }
 
 /** Longer than this, a choice-column answer is free text, not a choice other ideas could share. */
@@ -29,11 +32,11 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     const hit = registry.resolve(type, label);
     return node(hit ? { id: hit.id, type, label: nodes.get(hit.id)?.label ?? hit.label } : { id: nodeId(type, label), type, label });
   };
-  const edge = (from: string, rel: Relation, to: string, description: string, source: string, confidence = 1, confirmed = true) => {
+  const edge = (from: string, rel: Relation, to: string, description: string, source: string, confidence = 1, confirmed = true, idea?: string) => {
     const id = edgeId(from, rel, to);
     const existing = edges.get(id);
     if (existing) { if (description && !existing.description.includes(description)) existing.description += `; ${description}`; return; }
-    edges.set(id, { id, from, to, rel, description, source, confidence, confirmed });
+    edges.set(id, { id, from, to, rel, description, source, confidence, confirmed, ...(idea ? { idea } : {}) });
   };
 
   // Every round is a star, with or without ideas. An idea whose round folder is gone still gets its round by id.
@@ -133,10 +136,13 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     if (toNew && !toKnown) node(toNew);
     // A link that brings new nodes is a suggestion until the operator says yes, whatever its confidence.
     const confirmed = l.status === 'confirmed' || (l.confidence >= CONFIRMED_AT && !(l.newNodes?.length));
-    edge(l.from, l.rel, l.to, l.description, l.source, l.confidence, confirmed);
+    edge(l.from, l.rel, l.to, l.description, l.source, l.confidence, confirmed, l.idea);
   }
 
   applyEdits(nodes, edges, edits);
+
+  // The last layer: what the rules derive from everything above. Recomputed every time, never read from disk.
+  for (const e of infer([...nodes.values()], [...edges.values()], opts.rules ?? DEFAULT_RULES)) if (!edges.has(e.id)) edges.set(e.id, e);
 
   // What the registry knows of each star that is left: its other names and its reference, for the star's details.
   for (const n of nodes.values()) {
@@ -168,7 +174,7 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
       const pair = ALLOWED[e.rel]; const from = nodes.get(e.from); const to = nodes.get(e.to);
       if (!pair || !from || !to || from.type !== pair[0] || to.type !== pair[1]) continue;
       const id = edgeId(e.from, e.rel, e.to);
-      if (!edges.has(id)) edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: 'operator', confidence: 1, confirmed: true });
+      if (!edges.has(id)) edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: 'operator', confidence: 1, confirmed: true, ...(e.idea ? { idea: e.idea } : {}) });
     } else if (e.t === 'merge') {
       const from = nodes.get(e.from); const into = nodes.get(e.into);
       if (!from || !into || from.id === into.id || from.type !== into.type || !MERGEABLE.includes(from.type)) continue;

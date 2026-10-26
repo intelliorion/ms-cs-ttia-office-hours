@@ -1,4 +1,4 @@
-import { ALLOWED, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALLOWED, DERIVED_RELATIONS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -24,7 +24,7 @@ export function cantLink(a: NodeType, b: NodeType): string {
 }
 
 export type CommandAction =
-  | { t: 'link'; from: string; rel: Relation; to: string }
+  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string; source: string }
   | { t: 'role'; ideaId: string; person: string; role: PersonRole | null; drop?: boolean }
   | { t: 'round'; ideaIds: string[]; roundId?: string; newName?: string }
@@ -32,7 +32,7 @@ export type CommandAction =
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }
   | { t: 'alias'; node: string; label: string; of: string }
-  | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string } }
+  | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string }; idea?: string }
   | { t: 'remove_star'; node: string }
   | { t: 'grow'; ideaId: string };
 
@@ -71,6 +71,8 @@ export interface ResolveContext {
   rounds: Round[];
   /** The workspace's registry (stable names and aliases), when the caller has it. */
   registry?: Registry;
+  /** The idea on screen when the command was made: a link made then is that idea's (the rules scope by it). */
+  focusIdea?: string;
 }
 
 /**
@@ -144,14 +146,16 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         continue;
       }
       const fits = (rel: Relation) => { const [f, t] = ALLOWED[rel]; return (a.type === f && b.type === t) || (b.type === f && a.type === t); };
-      const choices = (s.rel ? [s.rel] : (Object.keys(ALLOWED) as Relation[])).filter(fits);
+      if (s.rel && DERIVED_RELATIONS.includes(s.rel)) { problems.push(`${s.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules from what the graph holds, not linked by hand.`); continue; }
+      const choices = (s.rel ? [s.rel] : (Object.keys(ALLOWED) as Relation[])).filter(fits).filter((r) => !DERIVED_RELATIONS.includes(r));
       if (choices.includes('BUILT_WITH')) { problems.push('Tools are picked in the tool picker, so I left that link out.'); continue; }
       const rel = choices.filter((r) => r !== 'IN_ROUND')[0];
       if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
       const [ft] = ALLOWED[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
       if (ctx.graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) { problems.push(`${from.label} and ${to.label} are already linked.`); continue; }
-      proposals.push({ label: `Link ${from.label} → ${to.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from: from.id, rel, to: to.id } });
+      const onIdea = [from, to].some((n) => n.type === 'Idea') ? undefined : ctx.focusIdea;
+      proposals.push({ label: `Link ${from.label} → ${to.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from: from.id, rel, to: to.id, ...(onIdea ? { idea: onIdea } : {}) } });
     } else if (s.op === 'role') {
       const a = star(s.a); const b = star(s.b);
       // A person not yet in the graph comes by name: the same person if the name matches one, else a new one.
@@ -210,7 +214,8 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const label = hit?.label ?? name;
       const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
       const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
-      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to } } });
+      const onIdea = home.type === 'Idea' ? undefined : ctx.focusIdea;
+      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) } });
     } else if (s.op === 'remove_star') {
       const a = star(s.a);
       if (!a) { missing(s); continue; }
@@ -267,7 +272,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     return { inverse: { t: 'edit-off' as const, id } };
   };
   switch (a.t) {
-    case 'link': return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to });
+    case 'link': return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to, ...(a.idea ? { idea: a.idea } : {}) });
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
     case 'merge': { const r = await mergeStars(root, a.from, a.into, clock); return { inverse: { t: 'edits-off', ids: r.edits } }; }
     case 'alias': return edit({ t: 'alias', node: a.node, label: a.label, of: a.of });
@@ -285,7 +290,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     case 'add_star': {
       // The star and its link are two edits, done and undone together.
       const star = await edit({ t: 'add', node: a.node, type: a.type, label: a.label });
-      const link = await edit({ t: 'link', ...a.link });
+      const link = await edit({ t: 'link', ...a.link, ...(a.idea ? { idea: a.idea } : {}) });
       return { inverse: { t: 'edits-off', ids: [star.inverse.id, link.inverse.id] } };
     }
     case 'unlink': {

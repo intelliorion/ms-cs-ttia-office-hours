@@ -10,7 +10,8 @@ export const NODE_COLOURS: Record<NodeType, string> = {
   PainPoint: '#14b8a6', Capability: '#f59e0b', Tool: '#ef4444', System: '#10b981', Round: '#e7d8b1', Support: '#f472b6',
   Outcome: '#a3e635', Beneficiary: '#facc15', Category: '#93c5fd',
 };
-export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'LEADS' | 'SPONSORS' | 'BUILDS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY';
+export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'LEADS' | 'SPONSORS' | 'BUILDS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY'
+  | 'DEPENDS_ON' | 'USES' | 'OWNS' | 'SIMILAR_TO';
 export const ALLOWED: Record<Relation, [NodeType, NodeType]> = {
   HAS_TEAM: ['Entity', 'Team'], HAS_MEMBER: ['Team', 'Person'],
   SUBMITTED: ['Person', 'Idea'], LEADS: ['Person', 'Idea'], SPONSORS: ['Person', 'Idea'], BUILDS: ['Person', 'Idea'], RELATED: ['Person', 'Idea'],
@@ -18,7 +19,11 @@ export const ALLOWED: Record<Relation, [NodeType, NodeType]> = {
   BUILT_WITH: ['Capability', 'Tool'], USES_DATA: ['Capability', 'System'],
   IN_ROUND: ['Idea', 'Round'], ASKS_FOR: ['Idea', 'Support'],
   WANTS: ['Idea', 'Outcome'], BENEFITS: ['Idea', 'Beneficiary'], IN_CATEGORY: ['Idea', 'Category'],
+  // Derived by the rules (rules/inference.yaml): never stated by the form or the AI, recomputed on every build.
+  DEPENDS_ON: ['Idea', 'System'], USES: ['Idea', 'Tool'], OWNS: ['Team', 'Idea'], SIMILAR_TO: ['Idea', 'Idea'],
 };
+/** The relations the rules derive: facts that look derived (dashed), are never confirmed by hand and are left out of counts. */
+export const DERIVED_RELATIONS: Relation[] = ['DEPENDS_ON', 'USES', 'OWNS', 'SIMILAR_TO'];
 /** Relations the AI may propose. People links come only from the form. */
 export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA'];
 export const AI_NODE_TYPES: NodeType[] = ['PainPoint', 'Capability', 'Tool', 'System'];
@@ -28,13 +33,17 @@ export interface GNode { id: string; type: NodeType; label: string; attrs?: Reco
 export interface GEdge {
   id: string; from: string; to: string; rel: Relation; description: string;
   source: string; confidence: number; confirmed: boolean;
+  /** The idea an AI edge was extracted for, or an operator link was made on (the rules scope by it). */
+  idea?: string;
+  /** Set on an edge a rule derived: the rule's name and the ids of the edges it rests on. */
+  derived?: { rule: string; inputs: string[] };
 }
 /**
  * A change the operator asked for in the command bar, kept in graph/operator.jsonl and laid over the graph built
  * from the ideas and AI links, in file order. "undone" edits are kept for the record and do nothing.
  */
 export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone' } & (
-  | { t: 'link'; from: string; rel: Relation; to: string }
+  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string }
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }

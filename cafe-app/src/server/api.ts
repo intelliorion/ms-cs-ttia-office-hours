@@ -45,6 +45,10 @@ import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
+import { createDeepRead } from '../memory/job';
+import { embedderName, getEmbedder, modelCached, modelDir } from '../memory/embed';
+import { summary as memorySummary } from '../memory/index';
+import { rankIdeas } from '../memory/lookup';
 import { edgeId, APPROVED_TOOLS, MERGEABLE, retiredToolNote } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
@@ -111,6 +115,20 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
   add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock, ai));
   add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));
   add('POST', '/api/chat/:id/undo', async ({ params, body }) => undoChatAction(root, params.id, String(body.actionId ?? ''), clock));
+
+  // Deep read: the reading index. One background job per server; it runs on after the request and the pop-out polls.
+  const deepRead = createDeepRead(root, () => getEmbedder(), () => new Date().toISOString());
+  const memoryView = async () => ({
+    model: { id: embedderName(), dir: modelDir(), cached: embedderName() === 'fake' || await modelCached() },
+    job: await deepRead.status(), summary: await memorySummary(root),
+  });
+  add('GET', '/api/memory', memoryView);
+  add('POST', '/api/memory/run', async () => { await deepRead.run(); return memoryView(); });
+  add('POST', '/api/memory/pause', async () => { await deepRead.pause(); return memoryView(); });
+  add('POST', '/api/memory/continue', async () => { await deepRead.continue(); return memoryView(); });
+  add('POST', '/api/memory/rerun', async () => { await deepRead.rerun(); return memoryView(); });
+  // The ideas panel's "by meaning": null until Deep read has run, so the panel behaves as before.
+  add('GET', '/api/memory/ideas', async ({ query }) => ({ ideas: await rankIdeas(root, String(query?.q ?? '')) }));
 
   add('GET', '/api/rounds', async () => {
     const [{ rounds, problems }, { ideas }] = await Promise.all([listRoundsChecked(root), listIdeas(root)]);

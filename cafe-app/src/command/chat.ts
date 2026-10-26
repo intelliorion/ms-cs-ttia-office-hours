@@ -14,6 +14,8 @@ import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
 import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
+import { prepareMemory } from '../memory/lookup';
+import { indexAvailable } from '../memory/index';
 
 export interface ChatAction {
   id: string; label: string; action: CommandAction;
@@ -91,6 +93,8 @@ const HISTORY = 6;
 const RESULT_STARS = 60;
 /** How many stars light up at most. */
 const LIT_MAX = 150;
+/** How much of a passage the agent sees. */
+const HIT_MAX = 500;
 
 export type Progress = { stage: 'thinking'; step: number } | { stage: 'step'; step: ChatStep };
 export interface RunOptions {
@@ -165,6 +169,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
   };
+  // Deep read: when its index exists the agent is told the search and similar steps work (and they are prepared per query).
+  const deepRead = await indexAvailable(root);
   const history = all.filter((e) => e.thread === thread.id && e.coded).slice(-HISTORY)
     .map((e) => ({ operator: e.coded!.text, agent: e.coded!.reply, ...(e.coded!.found?.length ? { found: e.coded!.found } : {}) }));
 
@@ -184,7 +190,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       opts.progress?.({ stage: 'thinking', step });
       const { provider, output } = await ai.runWith(agentTask, {
         ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
-        stars: hidden.legend, vocabulary, steps: done, stepsLeft: left,
+        stars: hidden.legend, vocabulary, steps: done, stepsLeft: left, deepRead,
       });
       entry.provider = provider;
       const thought = showNames(output.thought, hidden.codes);
@@ -192,7 +198,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       if (output.next === 'search') {
         const errs = validate(QUERY_SCHEMA, output.query);
         if (errs.length) { done.push({ did: 'search', thought: output.thought, result: { error: `The query was malformed: ${errs.slice(0, 3).join('; ')}` } }); continue; }
-        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound });
+        const memory = deepRead ? await prepareMemory(root, output.query as Query, graph) : undefined;
+        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound, ...(memory ? { memory } : {}) });
         results.push(r);
         lastFound = r.final;
         const s: ChatStep = { kind: 'search', text: thought, found: r.final.length };
@@ -204,6 +211,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
             ...(r.counts ? { counts: r.counts } : {}),
             ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
+            // Deep read's passages, names coded like an idea's text, with the idea and section each came from.
+            ...(r.hits ? { hits: r.hits.slice(0, 12).map((h) => ({ idea: codeFor(hidden.codes, nodes.get(`idea:${h.ideaId}`)!), section: h.section, text: coded(h.text).slice(0, HIT_MAX) })) } : {}),
           },
         });
       } else if (output.next === 'read_idea') {

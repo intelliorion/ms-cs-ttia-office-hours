@@ -1653,6 +1653,8 @@ export interface AgentInput {
   vocabulary?: { stages: string[]; functions: string[]; regions: string[]; rounds: string[] };
   steps: AgentStepDone[];
   stepsLeft: number;
+  /** Deep read has an index: the search and similar query steps work. */
+  deepRead?: boolean;
 }
 export interface AgentOutput {
   next: (typeof AGENT_NEXT)[number];
@@ -1707,6 +1709,8 @@ export const agentTask: Task<AgentOutput> = {
       'thought: one short line saying what this step does ("Looking for capabilities named like policy"), shown to the operator as you work.',
       `You have ${a.stepsLeft} step${a.stepsLeft === 1 ? '' : 's'} left including this one; with 1 left you must answer, propose or clarify.`,
       ...QUERY_GUIDE,
+      a.deepRead ? 'Deep read has run: search and similar work, and a search result\'s hits are passages people wrote (idea, section, text): quote from them in your answer.'
+        : 'Deep read has not run: search and similar find nothing. Use stars, follow, filter and read_idea.',
       'Actions (codes without brackets in a, b and ideas):',
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
       '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
@@ -1721,7 +1725,7 @@ export const agentTask: Task<AgentOutput> = {
       '',
       'DATA (JSON, between the markers):',
       '<<<DATA',
-      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps }),
+      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps, deepRead: a.deepRead === true }),
       'DATA>>>',
     ].join('\n');
   },

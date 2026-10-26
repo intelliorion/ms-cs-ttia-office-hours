@@ -465,6 +465,13 @@ function agentFor(prompt: string) {
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
+    // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.
+    if (!start && data.deepRead) {
+      if (!data.steps?.length) return { next: 'search', thought: 'Searching what people wrote', query: { steps: [{ op: 'search', match: cmd.replace(/\?\s*$/, '').trim().slice(0, 60) }] } };
+      const hits: { idea: string; section: string; text: string }[] = data.steps[0]?.result?.hits ?? [];
+      const n: number = data.steps[0]?.result?.total ?? 0;
+      return { next: 'answer', thought: 'Answering from the passages', reply: hits.length ? `${n} idea${n === 1 ? '' : 's'} mention${n === 1 ? 's' : ''} that. ${hits.slice(0, 2).map((h) => `[${h.idea}] (${h.section}): "${h.text.slice(0, 80)}"`).join(' ')}` : 'Nothing people wrote mentions that.', followups: ['Which of those are in BSI?'] };
+    }
     const found = data.steps?.[0]?.result?.total ?? 0;
     return { next: 'answer', thought: 'Answering', reply: found ? `The graph links [${start}] to ${found} stars.` : 'The graph does not hold that.', followups: ['Who leads them?', 'Which of those are in BSI?'] };
   }

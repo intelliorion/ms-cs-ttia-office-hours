@@ -7,6 +7,11 @@ import { readIndex, readState, summary } from '../src/memory/index';
 
 const FAKE = { ...process.env, CAFE_EMBED_FAKE: '1' };
 const clock = () => '2026-10-26T09:00:00.000Z';
+/** Polls the state until the test's condition holds (the loop runs in the background). */
+async function until(root: string, ok: (s: { done: number; status: string }) => boolean) {
+  for (let i = 0; i < 500; i++) { const s = await readState(root); if (ok(s)) return s; await new Promise((r) => setTimeout(r, 5)); }
+  throw new Error('state never reached');
+}
 
 async function ideas(root: string, n: number) {
   for (let i = 1; i <= n; i++) {
@@ -72,7 +77,7 @@ describe('the Deep read job', () => {
     expect(started.status).toBe('running');
     // One batch through, then pause: the loop stops before the next batch.
     slow.release();
-    await new Promise((r) => setTimeout(r, 30));
+    await until(root, (s) => s.done >= BATCH);
     await job.pause();
     slow.release();
     await job.idle();
@@ -85,8 +90,6 @@ describe('the Deep read job', () => {
     const before = slow.calls;
     const cont = await job.continue();
     expect(cont.status).toBe('running');
-    slow.release();
-    await new Promise((r) => setTimeout(r, 30));
     slow.release();
     await job.idle();
     state = await readState(root);

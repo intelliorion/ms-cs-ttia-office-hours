@@ -7,7 +7,7 @@ import type { JsonSchema } from '../ai/schema';
  * The questions the command bar can answer, as steps over a set of stars. The AI writes the steps; the app runs
  * them on the graph and the idea records, so every answer, count and lit star comes from the knowledge graph itself.
  */
-export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by'] as const;
+export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by', 'search', 'similar'] as const;
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
 const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
@@ -61,6 +61,12 @@ export const QUERY_GUIDE = [
   '- path: the shortest chain of links between the two stars in codes.',
   '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
   '- count_by: count the set by stage, function, region, round or type (the set stays as it is).',
+  '- search: Deep read. Start a new set from what people wrote: the ideas whose submission, emails, answers, design, review or roadshow are nearest in meaning to match',
+  '  (free text, up to 60 characters), best first, top limit (default 8). The result lists the passages (hits) with the idea and section each came from: quote from them.',
+  '  Use it for "what did teams say about …", "which ideas mention …", "who has a problem with …". It finds nothing until Deep read has run.',
+  '- similar: Deep read. From the one star in codes, the nearest stars of its kind by meaning (an idea: the nearest other ideas; a capability: the nearest capabilities),',
+  '  or from match text, the nearest ideas (or stars of type). Top limit (default 5). Use it for "ideas like [I1]", "is there a capability like X already".',
+  '- A match on stars or filter that finds no label containing the words falls back, once Deep read has run, to the stars nearest in meaning; the trace says "nearest".',
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
@@ -76,9 +82,25 @@ export const QUERY_GUIDE = [
   '- ideas that want the same outcome as [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"WANTS","type":"Outcome"},{"op":"follow","rel":"WANTS","type":"Idea"}]',
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
   '- how [P1] is connected to [I2]: [{"op":"path","codes":["P1","I2"]}]',
+  '- what did teams say about data access: [{"op":"search","match":"data access"}]',
+  '- ideas like [I1]: [{"op":"similar","codes":["I1"],"limit":5}]',
 ];
 
 export interface StepTrace { text: string; size: number }
+/** One passage a search found: where it came from and its text (names are coded before the AI sees it). */
+export interface QueryHit { ideaId: string; section: string; file: string; text: string; score: number }
+/**
+ * Deep read's lookups, prepared before the query runs (every match text embedded in one call), so the query itself
+ * stays synchronous. Absent when there is no index: every step then behaves as it did before Deep read.
+ */
+export interface QueryMemory {
+  /** The ideas whose passages are nearest the text, best first, each with its best passages. */
+  search(text: string, limit: number): { ideaId: string; score: number; hits: QueryHit[] }[];
+  /** The nearest stars to a star (of its kind, or of type) or to a text (ideas, or stars of type). */
+  similar(from: { node: GNode } | { text: string }, type: NodeType | undefined, limit: number): { id: string; score: number }[];
+  /** The stars (of type when given) whose labels are nearest the text. */
+  nearestLabels(text: string, type: NodeType | undefined, limit: number): { id: string; score: number }[];
+}
 export interface QueryResult {
   /** The set the last step left, in order (ranked when ranked). */
   final: string[];
@@ -87,6 +109,8 @@ export interface QueryResult {
   ranked?: { id: string; n: number }[];
   counts?: Record<string, number>;
   path?: string[];
+  /** The passages a search step found, best first. */
+  hits?: QueryHit[];
   trace: StepTrace[];
 }
 
@@ -98,6 +122,8 @@ export interface QueryWorld {
   idOf: (code: string) => string | undefined;
   /** The stars the previous answer in the conversation found, for follow-ups. */
   last?: string[];
+  /** Deep read's index, when there is one. */
+  memory?: QueryMemory;
 }
 
 const PLURAL: Record<NodeType, string> = {
@@ -144,7 +170,14 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const touched = new Set<string>();
   const trace: StepTrace[] = [];
-  let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined;
+  let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
+  /** Deep read's fallback for a match no label contains: the nearest labels by meaning, within the candidates. */
+  const nearestIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
+    if (!s.match || !w.memory) return { ids: [], note: '' };
+    const pool = new Set(from);
+    const ids = w.memory.nearestLabels(s.match, s.type, 5).map((x) => x.id).filter((id) => pool.has(id) && nodes.get(id)?.type !== 'Person' && ideaFits(id, s));
+    return { ids, note: ids.length ? ` (nearest: ${ids.map(name).join(', ')})` : '' };
+  };
 
   const run = (steps: QueryStep[], log: boolean): string[] => {
     let set: string[] = [];
@@ -154,8 +187,11 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
         const from = s.last ? (w.last ?? []).filter((id) => nodes.has(id)) : s.codes?.length ? coded : w.graph.nodes.map((n) => n.id);
         set = from.filter((id) => fits(id, s));
+        const near = set.length || s.codes?.length ? { ids: [], note: '' } : nearestIn(s, from);
+        if (near.ids.length) set = near.ids;
         text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
           : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
+        text += near.note;
       } else if (s.op === 'follow') {
         const from = new Set(set); const out = new Set<string>();
         for (const e of w.graph.edges) {
@@ -166,8 +202,25 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         set = [...out].filter((id) => !s.type || nodes.get(id)?.type === s.type);
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}`;
       } else if (s.op === 'filter') {
+        const before = set;
         set = set.filter((id) => fits(id, s));
-        text = `Keep ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
+        const near = set.length ? { ids: [], note: '' } : nearestIn(s, before);
+        if (near.ids.length) set = near.ids;
+        text = `Keep ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}${near.note}`;
+      } else if (s.op === 'search') {
+        const limit = Math.min(s.limit ?? 8, 20);
+        const found = s.match && w.memory ? w.memory.search(s.match, limit) : [];
+        set = found.map((f) => `idea:${f.ideaId}`).filter((id) => nodes.has(id) && ideaFits(id, s));
+        const keep = new Set(set);
+        hits = [...(hits ?? []), ...found.filter((f) => keep.has(`idea:${f.ideaId}`)).flatMap((f) => f.hits)];
+        text = !w.memory ? 'Deep read has not run: nothing to search' : `Search what people wrote for "${s.match ?? ''}"${ideaFilterWords(s)}`;
+      } else if (s.op === 'similar') {
+        const limit = Math.min(s.limit ?? 5, 20);
+        const code = (s.codes ?? []).map(w.idOf).find((x): x is string => !!x && nodes.has(x));
+        const from = code ? { node: nodes.get(code)! } : s.match ? { text: s.match } : undefined;
+        const found = from && w.memory ? w.memory.similar(from, s.type, limit) : [];
+        set = found.map((f) => f.id).filter((id) => nodes.has(id) && ideaFits(id, s));
+        text = !w.memory ? 'Deep read has not run: nothing to compare' : `Nearest ${kinds(s.type ?? (code ? nodes.get(code)!.type : 'Idea'))} to ${code ? name(code) : `"${s.match ?? ''}"`}`;
       } else if (s.op === 'role') {
         const out = new Set<string>();
         for (const id of set) {
@@ -221,7 +274,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}) };
 }
 
 function ideaFilterWords(s: QueryStep): string {

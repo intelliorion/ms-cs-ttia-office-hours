@@ -4,8 +4,9 @@ import { readText, writeFileAtomic } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
 import { buildGraph } from './build';
-import { readEdits } from './operator';
-import type { AiLink, GEdge, GNode } from './ontology';
+import { appendEdit, nextEditId, readEdits } from './operator';
+import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
+import type { Clock } from '../clock';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
 
@@ -59,4 +60,19 @@ export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edge
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
   return { ...graph, problems };
+}
+
+/**
+ * Merges one star into another: its links move over and it goes. The merged label is recorded as an alias of the star
+ * kept, so the twin cannot come back at the next import or re-read. Two edits, undone together.
+ */
+export async function mergeStars(root: string, from: string, into: string, clock: Clock): Promise<{ from: string; into: string; edits: string[] }> {
+  const graph = await rebuildGraph(root);
+  const a = graph.nodes.find((n) => n.id === from); const b = graph.nodes.find((n) => n.id === into);
+  if (!a || !b || a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) throw new Error('Those two stars cannot be merged');
+  const mergeId = await nextEditId(root);
+  await appendEdit(root, { id: mergeId, at: clock(), status: 'active', t: 'merge', from, into });
+  const aliasId = await nextEditId(root);
+  await appendEdit(root, { id: aliasId, at: clock(), status: 'active', t: 'alias', node: into, label: a.label, of: b.label });
+  return { from: a.label, into: b.label, edits: [mergeId, aliasId] };
 }

@@ -16,6 +16,7 @@ import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
+import { loadRegistry } from '../graph/registryFile';
 
 export interface ChatAction {
   id: string; label: string; action: CommandAction;
@@ -247,7 +248,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         } else if (output.next === 'propose') {
           // The AI proposes; the app checks every action against the graph and the ideas before it shows a card.
           entry.kind = 'command';
-          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds });
+          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds, registry: await loadRegistry(root) });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
         } else {

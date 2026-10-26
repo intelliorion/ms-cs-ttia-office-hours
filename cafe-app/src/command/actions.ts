@@ -11,7 +11,8 @@ import type { CommandStep } from '../ai/tasks';
 import type { Coded } from './names';
 import type { Connector } from '../ai/connector';
 import { growIdea } from '../ai/grow';
-import { setAiLinkStatus } from '../graph/store';
+import { mergeStars, setAiLinkStatus } from '../graph/store';
+import type { Registry } from '../graph/registry';
 
 /** What the app will do for one step of a command, once the operator says "Do it". */
 
@@ -30,6 +31,7 @@ export type CommandAction =
   | { t: 'new_round'; name: string }
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }
+  | { t: 'alias'; node: string; label: string; of: string }
   | { t: 'add_star'; node: string; type: NodeType; label: string; link: { from: string; rel: Relation; to: string } }
   | { t: 'remove_star'; node: string }
   | { t: 'grow'; ideaId: string };
@@ -67,6 +69,8 @@ export interface ResolveContext {
   graph: { nodes: GNode[]; edges: GEdge[] };
   ideas: Idea[];
   rounds: Round[];
+  /** The workspace's registry (stable names and aliases), when the caller has it. */
+  registry?: Registry;
 }
 
 /**
@@ -231,6 +235,14 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!a || !b) { missing(s); continue; }
       if (a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) { problems.push(`${a.label} and ${b.label} can't be merged: only two stars of the same kind (not ideas, rounds or the division) can.`); continue; }
       proposals.push({ label: `Merge ${a.label} into ${b.label} (its links move to ${b.label})`, action: { t: 'merge', from: a.id, into: b.id } });
+    } else if (s.op === 'alias') {
+      // Another name for a star: kept in the registry, so a label under that wording lands on this star from now on.
+      const a = star(s.a); const name = s.name?.trim().replace(/\s+/g, ' ');
+      if (!a || !name) { problems.push('Say which star, and the other name it goes by.'); continue; }
+      if (a.type === 'Person' || a.type === 'Idea' || a.type === 'Round') { problems.push(`${a.label} comes from the form, so it has no aliases.`); continue; }
+      const known = ctx.registry?.resolve(a.type, name) ?? ctx.graph.nodes.filter((n) => n.type === a.type).map((n) => ({ id: n.id, label: n.label })).find((n) => n.label.toLowerCase() === name.toLowerCase());
+      if (known) { problems.push(known.id === a.id ? `${a.label} is already known as "${name}".` : `"${name}" is already a ${word(a.type)}: ${known.label}. Merge them instead.`); continue; }
+      proposals.push({ label: `Also know ${a.label} as "${name}"`, action: { t: 'alias', node: a.id, label: name, of: a.label } });
     }
   }
   // "Create the round X" next to "Create the round X and put … in it" says the same thing twice: keep the one that does both.
@@ -252,7 +264,8 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
   switch (a.t) {
     case 'link': return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to });
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
-    case 'merge': return edit({ t: 'merge', from: a.from, into: a.into });
+    case 'merge': { const r = await mergeStars(root, a.from, a.into, clock); return { inverse: { t: 'edits-off', ids: r.edits } }; }
+    case 'alias': return edit({ t: 'alias', node: a.node, label: a.label, of: a.of });
     case 'remove_star': return edit({ t: 'remove', node: a.node });
     case 'grow': {
       if (!ai) throw new Error('No AI: growing an idea needs the AI helper');

@@ -336,3 +336,30 @@ describe('the chat route', () => {
     } finally { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); }
   });
 });
+
+import { readEdits } from '../src/graph/operator';
+import { loadRegistry } from '../src/graph/registryFile';
+describe('the Café assistant: aliases', () => {
+  it('a merge records an alias of the merged label on the star kept; Undo takes both back', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'merge', a: code(d, 'Team', 'BSI'), b: code(d, 'Team', 'GSS') }])({})]);
+    const m = await runCommand(root, 'merge BSI into GSS', ai, clock);
+    await doActions(root, m.id, undefined, clock);
+    expect((await readEdits(root)).map((e) => e.t)).toEqual(['merge', 'alias']);
+    expect((await loadRegistry(root)).resolve('Team', 'bsi')).toEqual({ id: 'team:gss', label: 'GSS' });
+    await undoChatAction(root, m.id, 'a1', clock);
+    expect((await readEdits(root)).map((e) => e.status)).toEqual(['undone', 'undone']);
+    expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'team:bsi')).toBe(true);
+  });
+  it('"alias X as star": the star gains another name, the card says so, Undo takes it back; an alias a star already has is refused', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'alias', a: code(d, 'Team', 'GSS'), name: 'Global Sourcing Services' }])({})]);
+    const e = await runCommand(root, 'alias Global Sourcing Services as GSS', ai, clock);
+    expect(e.actions.map((a) => a.label)).toEqual(['Also know GSS as "Global Sourcing Services"']);
+    await doActions(root, e.id, undefined, clock);
+    expect((await loadRegistry(root)).resolve('Team', 'global sourcing services')).toEqual({ id: 'team:gss', label: 'GSS' });
+    const again = await runCommand(root, 'alias Global Sourcing Services as GSS', ai, clock);
+    expect(again.actions).toEqual([]);
+    expect(again.problems[0]).toMatch(/already/);
+    await undoChatAction(root, e.id, 'a1', clock);
+    expect((await loadRegistry(root)).resolve('Team', 'global sourcing services')).toBeUndefined();
+  });
+});

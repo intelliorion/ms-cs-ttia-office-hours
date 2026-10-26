@@ -485,6 +485,7 @@ function agentFor(prompt: string) {
   }
   if (/^\s*rename/i.test(cmd) && a) return propose(`You asked to rename [${a}].`, [{ op: 'rename', a, name: /to\s+(.+)$/i.exec(cmd)?.[1]?.trim() || 'Renamed' }]);
   if (/^\s*merge/i.test(cmd) && a && b) return propose(`You asked to merge [${a}] into [${b}].`, [{ op: 'merge', a, b }]);
+  if (/^\s*alias\s+(.+?)\s+as\s+\[/i.test(cmd) && a) return propose(`You asked to give [${a}] another name.`, [{ op: 'alias', a, name: /^\s*alias\s+(.+?)\s+as\s+\[/i.exec(cmd)![1].trim() }]);
   if (/^\s*move/i.test(cmd) && a) return propose(`You asked to move [${a}] to another stage.`, [{ op: 'stage', a }]);
   return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
 }

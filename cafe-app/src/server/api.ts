@@ -18,8 +18,7 @@ import { applyAnswerUpdates, removeAnswer, takeInAnswers } from '../review/updat
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
-import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink } from '../graph/store';
-import { appendEdit, nextEditId } from '../graph/operator';
+import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink, mergeStars } from '../graph/store';
 import { layoutFor } from '../graph/layout';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, dataStepTask, type DesignKitOutput } from '../ai/tasks';
@@ -50,7 +49,7 @@ import { createUpkeep } from '../memory/upkeep';
 import { embedderName, getEmbedder, modelCached, modelDir } from '../memory/embed';
 import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
-import { edgeId, APPROVED_TOOLS, MERGEABLE, retiredToolNote } from '../graph/ontology';
+import { edgeId, APPROVED_TOOLS, retiredToolNote } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -324,13 +323,8 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   });
   // Merge one star into another (its links move): the same operator edit the assistant's merge makes, so it can be undone there.
   add('POST', '/api/graph/merge', async ({ body }) => {
-    const from = String(body.from ?? ''); const into = String(body.into ?? '');
-    const graph = await rebuildGraph(root);
-    const a = graph.nodes.find((n) => n.id === from); const b = graph.nodes.find((n) => n.id === into);
-    if (!a || !b || a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) throw new Error('Those two stars cannot be merged');
-    const id = await nextEditId(root);
-    await appendEdit(root, { id, at: clock(), status: 'active', t: 'merge', from, into } as never);
-    return { merged: true, from: a.label, into: b.label, edit: id };
+    const r = await mergeStars(root, String(body.from ?? ''), String(body.into ?? ''), clock);
+    return { merged: true, from: r.from, into: r.into, edit: r.edits[0], alias: r.edits[1] };
   });
   // Design series: the brainstorm. One question at a time; every change re-renders design.md.
   add('POST', '/api/ideas/:id/design/step', async ({ params, body }) => {

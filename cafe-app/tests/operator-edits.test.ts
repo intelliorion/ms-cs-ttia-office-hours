@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../src/graph/build';
 import { appendEdit, readEdits, setEditStatus } from '../src/graph/operator';
-import { rebuildGraph } from '../src/graph/store';
+import { rebuildGraph, mergeStars } from '../src/graph/store';
+import { loadRegistry } from '../src/graph/registryFile';
+import { fixedClock } from '../src/clock';
 import { saveIdea } from '../src/ideas/store';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import type { OperatorEdit } from '../src/graph/ontology';
@@ -60,5 +62,27 @@ describe('operator edits on the graph', () => {
     await setEditStatus(root, 'op-1', 'undone');
     expect((await readEdits(root))[0].status).toBe('undone');
     expect(rels(await rebuildGraph(root))).not.toContain('team:gss HAS_MEMBER person:person-2');
+  });
+});
+
+describe('a merge records an alias, so the twin cannot come back', () => {
+  it('mergeStars appends the merge and an alias of the merged label on the target; both undo together', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, a); await saveIdea(root, b);
+    const r = await mergeStars(root, 'support:agent-design-guidance-support', 'support:agent-design-guidance', fixedClock('2026-10-26'));
+    expect(r).toMatchObject({ from: 'Agent design guidance support', into: 'Agent Design Guidance', edits: ['op-1', 'op-2'] });
+    const edits = await readEdits(root);
+    expect(edits[0]).toMatchObject({ t: 'merge', from: 'support:agent-design-guidance-support', into: 'support:agent-design-guidance' });
+    expect(edits[1]).toMatchObject({ t: 'alias', node: 'support:agent-design-guidance', label: 'Agent design guidance support', of: 'Agent Design Guidance' });
+    expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'support:agent-design-guidance-support')).toBe(false);
+    expect((await loadRegistry(root)).resolve('Support', 'agent design guidance support')).toEqual({ id: 'support:agent-design-guidance', label: 'Agent Design Guidance' });
+    await expect(mergeStars(root, 'team:gss', 'person:person-1', fixedClock('2026-10-26'))).rejects.toThrow(/cannot be merged/);
+    for (const id of r.edits) await setEditStatus(root, id, 'undone');
+    expect((await rebuildGraph(root)).nodes.some((n) => n.id === 'support:agent-design-guidance-support')).toBe(true);
+    expect((await loadRegistry(root)).resolve('Support', 'agent design guidance support')).toBeUndefined();
+  });
+  it('an alias edit on its own changes no node or link in the build', () => {
+    const g = buildGraph([a, b], [], [], [edit({ t: 'alias', node: 'team:gss', label: 'Global Sourcing' })]);
+    expect(g).toEqual(buildGraph([a, b], []));
   });
 });

@@ -72,6 +72,14 @@ describe('the knowledge-graph query', () => {
     expect(q([{ op: 'stars', codes: ['I1'] }, { op: 'follow' }]).people).toBeUndefined();
   });
 
+  it('a follow over a derived relation hands over why each link holds: the chain star of DEPENDS_ON', () => {
+    // (These ideas share one star only, so no SIMILAR_TO is derived here; the shared-stars reason is covered by the assistant's test.)
+    expect(q([{ op: 'stars', codes: ['S1'] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }]).reasons).toEqual([
+      { from: 'idea:CAFE-2026-003', to: 'system:expense-export', rel: 'DEPENDS_ON', why: 'via Claim scoring' },
+    ]);
+    expect(q([{ op: 'stars', codes: ['I1'] }, { op: 'follow', rel: 'NEEDS' }]).reasons).toBeUndefined();
+  });
+
   it('shared: GSS ideas that also replace a pain point', () => {
     const r = q([{ op: 'stars', type: 'Idea', function: 'GSS' }, { op: 'intersect', with: [{ op: 'stars', type: 'PainPoint' }, { op: 'follow', rel: 'REPLACES', type: 'Idea' }] }]);
     expect(r.final).toEqual(['idea:CAFE-2026-001']);
@@ -115,6 +123,14 @@ describe('the query over derived relations', () => {
   });
   it('the guide names the derived relations', () => {
     expect(QUERY_GUIDE.join('\n')).toMatch(/Derived by the rules.*DEPENDS_ON/);
+  });
+  it('the guide plans a "similar ideas" question over SIMILAR_TO first, Deep read second, and says which is fact and which is reading', () => {
+    const guide = QUERY_GUIDE.join('\n');
+    expect(guide).toContain('- which ideas are similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]');
+    expect(guide).toMatch(/then, for more candidates.*\{"op":"similar","codes":\["I1"\],"limit":5\}/);
+    expect(guide).toMatch(/similar, like, same as, overlaps with.*SIMILAR_TO first/);
+    expect(guide).toMatch(/SIMILAR_TO hits are facts with reasons/);
+    expect(guide).toMatch(/a similar step after it adds readings with a score/);
   });
   it('the guide shows how to answer "who is [P1]": role for the roles per idea, follow HAS_MEMBER for the team', () => {
     const guide = QUERY_GUIDE.join('\n');

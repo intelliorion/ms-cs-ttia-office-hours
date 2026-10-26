@@ -465,6 +465,17 @@ function agentFor(prompt: string) {
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
     // "which ideas depend on [S1]?": the derived relation, so the trace names the rule.
+    // "which ideas are similar to [I1]?": the derived SIMILAR_TO links first (facts, with the shared stars), then Deep read's reading when it has run.
+    if (start && /similar|\blike\b|same as|overlap/i.test(cmd)) {
+      if (!data.steps?.length) return { next: 'search', thought: `Looking for the ideas SIMILAR_TO [${start}] by shared stars`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'SIMILAR_TO', type: 'Idea' }] } };
+      if (data.steps.length === 1 && data.deepRead?.on) return { next: 'search', thought: `Reading for ideas near [${start}]`, query: { steps: [{ op: 'similar', codes: [start], limit: 5 }] } };
+      const shared: { from: string; to: string; why: string }[] = data.steps[0]?.result?.reasons ?? [];
+      const byStars = shared.map((r) => ({ code: r.from === start ? r.to : r.from, why: r.why }));
+      const seen = new Set([start, ...byStars.map((x) => x.code)]);
+      const byReading: string[] = (data.steps[1]?.result?.stars ?? []).map((x: { code: string }) => x.code).filter((c: string) => !seen.has(c));
+      const reply = `By shared stars: ${byStars.length ? byStars.map((x) => `[${x.code}] (${x.why})`).join(', ') : 'none'}.${byReading.length ? ` By reading, also: ${byReading.map((c) => `[${c}]`).join(', ')}.` : ''}`;
+      return { next: 'answer', thought: 'Answering: the graph first, the reading second', reply, followups: [`What does [${start}] need?`] };
+    }
     // "who is [P1]?": their roles per idea from the ideas' records, then their team star, then the answer states both.
     if (start && /who is\b/i.test(cmd)) {
       if (!data.steps?.length) return { next: 'search', thought: `Looking at what [${start}] does on each idea`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'role' }] } };

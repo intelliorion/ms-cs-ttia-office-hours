@@ -220,6 +220,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
             ...(r.counts ? { counts: r.counts } : {}),
             ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
+            // Why each derived link held (SIMILAR_TO: the shared stars), so the reply can give the reason, not just the pair.
+            ...(r.reasons ? { reasons: r.reasons.map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), to: codeFor(hidden.codes, nodes.get(x.to)!), rel: x.rel, why: coded(x.why) })) } : {}),
             // A role step's facts: each person's role word per idea and their team, so the reply can state them, never guess.
             ...(r.people ? { people: r.people.map((p) => ({ code: codeFor(hidden.codes, nodes.get(p.id)!), roles: p.roles.map((x) => ({ idea: codeFor(hidden.codes, nodes.get(x.idea)!), role: x.role })), team: p.teams.map((t) => codeFor(hidden.codes, nodes.get(t)!)).join(', ') || 'no team recorded' })) } : {}),
             // Deep read's passages, names coded like an idea's text, with the idea and section each came from.

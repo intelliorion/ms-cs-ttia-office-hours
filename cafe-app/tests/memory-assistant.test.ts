@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { startServer, sampleIdea } from './helpers';
 import { saveIdea, loadIdea } from '../src/ideas/store';
+import { appendAiLink } from '../src/graph/store';
+import type { AiLink } from '../src/graph/ontology';
 import { fullIdea } from './memory-chunks.test';
 import { agentTask, type AgentInput } from '../src/ai/tasks';
 import { queryGuide, QUERY_GUIDE } from '../src/command/query';
@@ -48,7 +50,9 @@ describe('the assistant knows where Deep read stands', () => {
     // An older caller passing nothing still gets a sensible prompt.
     expect(agentTask.prompt(input(undefined))).toContain('Deep read has not run');
     expect(queryGuide(true)).toEqual(QUERY_GUIDE);
-    expect(queryGuide(false).filter((l) => /Deep read|similar|"search"/.test(l))).toEqual([]);
+    expect(queryGuide(false).filter((l) => /Deep read|"op":"similar"|"op":"search"/.test(l))).toEqual([]);
+    // The graph's own way to similar ideas stays when Deep read is off: SIMILAR_TO is a fact, not a reading.
+    expect(queryGuide(false).join('\n')).toContain('- which ideas are similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]');
   });
 
   it('a question about stars runs graph steps only, never a search; a stale idea is named in the trace, not re-read inline', async () => {
@@ -78,5 +82,42 @@ describe('the assistant knows where Deep read stands', () => {
     // Not re-read inline: still stale after the answer.
     expect((await get(base, '/api/memory')).summary.ideas[0].status).toBe('stale');
     expect(e.reply).toMatch(/^2 ideas mention that\./);
+  });
+});
+
+describe('similar ideas: the graph first, Deep read second', () => {
+  const needs = (idea: string, cap: string, label: string): AiLink =>
+    ({ from: `idea:${idea}`, rel: 'NEEDS', to: `capability:${cap}`, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed', newNodes: [{ id: `capability:${cap}`, type: 'Capability', label }] });
+  /** Three ideas with alike text: Travel policy and Procurement FAQ share two capabilities (SIMILAR_TO derived); the expense finder shares no star. */
+  async function seed(root: string) {
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Expense anomaly finder', challenge: 'Expense policy questions flood the mailbox.', dedupe_key: 'a' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', title: 'Travel policy assistant', challenge: 'Travel policy questions flood the mailbox.', dedupe_key: 'b' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-003', title: 'Procurement FAQ bot', challenge: 'Procurement policy questions flood the mailbox.', dedupe_key: 'c' }));
+    for (const id of ['CAFE-2026-002', 'CAFE-2026-003']) { await appendAiLink(root, needs(id, 'policy-q-a', 'Policy Q&A')); await appendAiLink(root, needs(id, 'mailbox-triage', 'Mailbox triage')); }
+  }
+  const ask = (base: string) => post(base, '/api/chat', { text: 'which ideas are similar to @Travel policy assistant?', mentions: ['idea:CAFE-2026-002'] }).then(j);
+
+  it('with Deep read run: the SIMILAR_TO idea with its shared stars comes first, the reading hits after, lit in that order', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    await post(base, '/api/memory/run');
+    await untilIdle(base);
+    const e = await ask(base);
+    expect(e.kind).toBe('question');
+    expect(e.reply).toMatch(/^By shared stars: Procurement FAQ bot \(share Mailbox triage, Policy Q&A\)\. By reading, also: Expense anomaly finder\.$/);
+    const texts = e.trace.map((t: { text: string }[]) => t.map((s) => s.text));
+    expect(texts[0]).toEqual(['Start from Travel policy assistant', 'Follow similar to links to ideas', 'Travel policy assistant similar to Procurement FAQ bot: derived by shared-stars from Travel policy assistant NEEDS Mailbox triage, Procurement FAQ bot NEEDS Mailbox triage, Travel policy assistant NEEDS Policy Q&A, Procurement FAQ bot NEEDS Policy Q&A']);
+    expect(texts[1]).toEqual(['Nearest ideas to Travel policy assistant']);
+    expect(e.highlight.slice(0, 2)).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
+    expect(e.highlight).toContain('idea:CAFE-2026-001');
+  });
+
+  it('with Deep read never run: only the graph part, no reading step', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    const e = await ask(base);
+    expect(e.reply).toBe('By shared stars: Procurement FAQ bot (share Mailbox triage, Policy Q&A).');
+    expect(e.trace).toHaveLength(1);
+    expect(e.highlight).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
   });
 });

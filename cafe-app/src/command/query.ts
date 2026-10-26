@@ -76,6 +76,8 @@ export const QUERY_GUIDE = [
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
+  'For similar, like, same as, overlaps with [I1]: follow SIMILAR_TO first; its result gives reasons (the shared stars of each link). SIMILAR_TO hits are facts with reasons: "By shared stars: X (shared …)".',
+  '  Deep read: a similar step after it adds readings with a score; the reply keeps them apart: "… By reading, also: Y." (no second part when Deep read is off or found nothing).',
   'A follow or rank with no rel walks the stated links only. For what people WROTE use search, not the derived links.',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
   'Use one query unless the question has separate parts. Examples (codes as in "stars"):',
@@ -91,9 +93,9 @@ export const QUERY_GUIDE = [
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
   '- how [P1] is connected to [I2]: [{"op":"path","codes":["P1","I2"]}]',
   '- ideas that depend on [S1]: [{"op":"stars","codes":["S1"]},{"op":"follow","rel":"DEPENDS_ON","dir":"in","type":"Idea"}]',
-  '- the ideas SIMILAR_TO [I1] by shared stars: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
+  '- which ideas are similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
+  '  then, for more candidates once Deep read has run: [{"op":"similar","codes":["I1"],"limit":5}]',
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
-  '- ideas like [I1]: [{"op":"similar","codes":["I1"],"limit":5}]',
 ];
 
 /** The guide the agent reads: with Deep read off, the search and similar steps are left out (they do not exist for it). */
@@ -126,6 +128,8 @@ export interface QueryResult {
   hits?: QueryHit[];
   /** A role step's facts: each person it started from or reached, their role words per idea, and the teams they submitted from (none when added by hand). */
   people?: { id: string; roles: { idea: string; role: string }[]; teams: string[] }[];
+  /** Why each derived link a follow walked holds (the shared stars of SIMILAR_TO, the chain star of DEPENDS_ON …), so the reply can say it. */
+  reasons?: { from: string; to: string; rel: Relation; why: string }[];
   trace: StepTrace[];
 }
 
@@ -198,7 +202,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return lines;
   };
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
-  let peopleFacts: QueryResult['people'];
+  let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons'];
   /** "the submitter and lead of [idea], and the member of [idea]": one person's roles, grouped by idea, in words. */
   const roleWords = (roles: { idea: string; role: string }[]): string => {
     const byIdea = new Map<string, string[]>();
@@ -237,7 +241,11 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         }
         set = [...out].filter((id) => !s.type || nodes.get(id)?.type === s.type);
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}`;
-        if (log && used.length) { trace.push({ text, size: set.length }); trace.push(...derivedLines(used.filter((e) => set.includes(e.from) || set.includes(e.to)))); text = ''; }
+        if (log && used.length) {
+          const kept = used.filter((e) => set.includes(e.from) || set.includes(e.to));
+          trace.push({ text, size: set.length }); trace.push(...derivedLines(kept)); text = '';
+          reasons = [...(reasons ?? []), ...kept.map((e) => ({ from: e.from, to: e.to, rel: e.rel, why: e.description }))];
+        }
       } else if (s.op === 'filter') {
         const before = set;
         set = set.filter((id) => fits(id, s));
@@ -322,7 +330,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}) };
 }
 
 function ideaFilterWords(s: QueryStep): string {

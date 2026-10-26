@@ -299,3 +299,35 @@ describe('picture settings', () => {
     expect(readLabels()).toBe('smart');
   });
 });
+
+import { systemDemand, toolDemand, similarIdeas } from './store';
+describe('demand from the derived links', () => {
+  const graph = {
+    nodes: [
+      { id: 'idea:A', type: 'Idea', label: 'A' }, { id: 'idea:B', type: 'Idea', label: 'B' }, { id: 'idea:C', type: 'Idea', label: 'C' },
+      { id: 'system:x', type: 'System', label: 'Expense export' }, { id: 'system:y', type: 'System', label: 'Policy library' },
+      { id: 'tool:d', type: 'Tool', label: 'Dataiku' }, { id: 'capability:k', type: 'Capability', label: 'Claim scoring' }, { id: 'category:c', type: 'Category', label: 'Anomalies' },
+    ],
+    edges: [
+      { id: '1', from: 'idea:A', to: 'system:x', rel: 'DEPENDS_ON', confirmed: true, confidence: 0.9, source: 'rule:needs+uses_data', description: 'via Claim scoring', derived: { rule: 'needs+uses_data', inputs: [] } },
+      { id: '2', from: 'idea:B', to: 'system:x', rel: 'DEPENDS_ON', confirmed: false, confidence: 0.5, source: 'rule:needs+uses_data', description: 'via Claim scoring', derived: { rule: 'needs+uses_data', inputs: [] } },
+      { id: '3', from: 'idea:B', to: 'system:y', rel: 'DEPENDS_ON', confirmed: true, confidence: 0.8, source: 'rule:needs+uses_data', description: 'via Policy Q&A', derived: { rule: 'needs+uses_data', inputs: [] } },
+      { id: '4', from: 'idea:A', to: 'tool:d', rel: 'USES', confirmed: true, confidence: 1, source: 'rule:needs+built_with', description: 'via Claim scoring', derived: { rule: 'needs+built_with', inputs: [] } },
+      { id: '5', from: 'idea:A', to: 'idea:B', rel: 'SIMILAR_TO', confirmed: true, confidence: 0.67, source: 'rule:shared-stars', description: 'share Anomalies, Claim scoring', derived: { rule: 'shared-stars', inputs: [] } },
+      { id: '6', from: 'idea:B', to: 'idea:C', rel: 'SIMILAR_TO', confirmed: false, confidence: 1, source: 'rule:shared-stars', description: 'share Anomalies, Claim scoring, Expense export', derived: { rule: 'shared-stars', inputs: [] } },
+      { id: '7', from: 'idea:A', to: 'capability:k', rel: 'NEEDS', confirmed: true, confidence: 1, source: 'form:A', description: '' },
+    ],
+  };
+  it('by system and by tool: ideas per star, most first', () => {
+    expect(systemDemand(graph)).toEqual([['Expense export', 2], ['Policy library', 1]]);
+    expect(toolDemand(graph)).toEqual([['Dataiku', 1]]);
+    expect(systemDemand(null)).toEqual([]);
+  });
+  it('similar ideas: the other idea, why, the confidence, surest first', () => {
+    expect(similarIdeas(graph, 'B')).toEqual([
+      { id: 'idea:C', label: 'C', why: 'share Anomalies, Claim scoring, Expense export', confidence: 1, confirmed: false },
+      { id: 'idea:A', label: 'A', why: 'share Anomalies, Claim scoring', confidence: 0.67, confirmed: true },
+    ]);
+    expect(similarIdeas(graph, 'Z')).toEqual([]);
+  });
+});

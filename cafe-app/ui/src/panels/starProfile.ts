@@ -33,7 +33,8 @@ export function starProfile(graph: { nodes: any[]; edges: any[] } | null | undef
   const node = graph?.nodes.find((n) => n.id === id);
   if (!node || node.type === 'Idea') return null;
   const nodes = new Map(graph!.nodes.map((n) => [n.id, n]));
-  const links = graph!.edges.filter((e) => e.from === id || e.to === id);
+  // The stated links: what a rule derived is left out of the counts and the groups.
+  const links = graph!.edges.filter((e) => (e.from === id || e.to === id) && !e.derived);
   const ideaIds = new Set(links.map((e) => (e.from === id ? e.to : e.from)).filter((x) => nodes.get(x)?.type === 'Idea'));
 
   const facts: [string, string][] = [];

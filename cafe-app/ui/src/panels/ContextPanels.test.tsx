@@ -26,10 +26,12 @@ const graph = {
     { id: 'e4', from: 'team:gss', to: 'person:p1', rel: 'HAS_MEMBER', confirmed: true, confidence: 1, source: 'form:x', description: '' },
     { id: 'e5', from: 'person:p1', to: 'idea:CAFE-2026-001', rel: 'SUBMITTED', confirmed: true, confidence: 1, source: 'form:x', description: '' },
     { id: 'e6', from: 'entity:cs', to: 'team:gss', rel: 'HAS_TEAM', confirmed: true, confidence: 1, source: 'form:x', description: '' },
+    { id: 'd1', from: 'idea:CAFE-2026-001', to: 'system:policy-library', rel: 'DEPENDS_ON', confirmed: true, confidence: 0.9, source: 'rule:needs+uses_data', description: 'via Policy Q&A', derived: { rule: 'needs+uses_data', inputs: ['e1', 'e3'] } },
+    { id: 'd2', from: 'idea:CAFE-2026-001', to: 'idea:CAFE-2026-002', rel: 'SIMILAR_TO', confirmed: true, confidence: 0.67, source: 'rule:shared-stars', description: 'share Policy Q&A, Knowledge assistant', derived: { rule: 'shared-stars', inputs: ['e1', 'e2'] } },
   ],
 };
 const ideas = [
-  { id: 'CAFE-2026-001', title: 'Travel policy assistant', stage: 1, outcomes: [], support: [], flags: ['Participation is Individual but 5 people are listed'], people: { team: [] }, overdue: [], challenge: 'Travellers ask the same questions.' },
+  { id: 'CAFE-2026-001', title: 'Travel policy assistant', stage: 1, outcomes: [], support: [], flags: ['Participation is Individual but 5 people are listed'], people: { team: [] }, overdue: [], challenge: 'Travellers ask the same questions.', aiRead: { at: '2026-10-26T14:02:00.000Z', changed: true } },
   { id: 'CAFE-2026-002', title: 'Procurement FAQ bot', stage: 2, outcomes: [], support: [], flags: [], people: { team: [] }, overdue: [] },
 ];
 
@@ -62,6 +64,12 @@ describe('RightPanels', () => {
     return { el, root, titles: () => [...el.querySelectorAll('h2')].map((h) => h.textContent) };
   };
 
+  it('the Demand panel adds beams by system and by tool from the derived links, only when there are any', async () => {
+    const { el, root } = await mount();
+    expect(el.querySelector('[data-testid="system-chart"]')?.textContent).toContain('Policy library');
+    expect(el.querySelector('[data-testid="tool-chart"]')).toBeNull();
+    act(() => root.unmount()); el.remove();
+  });
   it('overview: Pipeline and Demand; an idea: Submission (with flags and the challenge) and Connections; a star: the star and the ideas around it', async () => {
     const { el, root, titles } = await mount();
     expect(titles()).toEqual(['Pipeline', 'Demand']);
@@ -70,10 +78,24 @@ describe('RightPanels', () => {
     expect(titles()).toEqual(['Submission', 'Connections']);
     expect(el.querySelector('[data-testid="ctx-submission"]')?.textContent).toMatch(/Participation is Individual.*Travellers ask the same questions/s);
     expect(el.querySelector('[data-tab="links"]')?.textContent).toBe('Links 2');
+    // Derived links are listed, tagged, and left out of the count; the Similar block says why; the AI-read line offers Read again.
+    expect(el.querySelector('li[data-edge="d1"] .lk-derived')?.textContent).toBe('derived by needs+uses_data');
+    expect(el.querySelector('li[data-edge="d1"] [data-action="confirm-link"]')).toBeNull();
+    expect(el.querySelector('[data-testid="similar-ideas"]')?.textContent).toMatch(/Procurement FAQ bot.*share Policy Q&A, Knowledge assistant.*67 %/s);
+    expect(el.querySelector('[data-testid="ai-read"]')?.textContent).toMatch(/Text changed since the AI last read it/);
+    expect(el.querySelector('[data-testid="ai-read"] [data-action="read-again"]')?.textContent).toBe('Read again');
+    expect((el.querySelector('[data-testid="ai-read"] [data-action="read-again"]') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => { useStore.setState({ leftView: { kind: 'idea', id: 'CAFE-2026-002' } as any, ai: { provider: 'claude' } as any }); });
+    expect(el.querySelector('[data-testid="ai-read"]')?.textContent).toMatch(/The AI has not read this idea yet/);
+    expect((el.querySelector('[data-testid="ai-read"] [data-action="read-again"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(el.querySelector('[data-testid="similar-ideas"]')?.textContent).toMatch(/Travel policy assistant/);
+    await act(async () => { useStore.setState({ leftView: { kind: 'idea', id: 'CAFE-2026-001' } as any, ai: null }); });
 
     await act(async () => { useStore.setState({ leftView: { kind: 'list' } as any, selectedId: 'capability:policy-q-a' }); });
     expect(titles()).toEqual(['Star', 'Ideas around it']);
     expect(el.querySelector('.ctx-star-t')?.textContent).toBe('Policy Q&A');
+    expect(el.querySelector('.ctx-star-h .nc-sub:last-child')?.textContent).toBe('3 links');
     expect(el.querySelector('.ctx-stages')?.textContent).toBe('1 Review and Select1 Submit Idea');
     expect([...el.querySelectorAll('.ctx-idea')].map((b) => b.getAttribute('data-idea'))).toEqual(['CAFE-2026-002', 'CAFE-2026-001']);
 

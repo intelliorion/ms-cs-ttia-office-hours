@@ -18,6 +18,8 @@ export const LINK_COLOUR = '#7dd3cf';
 /** How strong a link in view is (a selected star's links, or links between lit stars): about half, so stars lead. */
 export const LINK_IN_VIEW = 0.42;
 export const UNCONFIRMED_COLOUR = '#f5b36b';
+/** A link a rule derived (dashed, like a waiting one, but its own colour: it waits on nobody). */
+export const DERIVED_COLOUR = '#a78bfa';
 export const DIM = 0.12;
 
 /**
@@ -49,23 +51,25 @@ export interface ScenePalette {
   /** Links in view (a selection's, or between lit stars). */
   linkHot: string;
   unconfirmed: string;
+  /** Links the rules derived. */
+  derived: string;
   /** Light backgrounds swallow thin lines: Frost draws them stronger. */
   linkBoost: number;
   ring: Record<string, string>;
 }
-export const NIGHT: ScenePalette = { frost: false, bg: '#07090b', link: LINK_COLOUR, linkHot: LINK_COLOUR, unconfirmed: UNCONFIRMED_COLOUR, linkBoost: 1, ring: STAGE_RING };
+export const NIGHT: ScenePalette = { frost: false, bg: '#07090b', link: LINK_COLOUR, linkHot: LINK_COLOUR, unconfirmed: UNCONFIRMED_COLOUR, derived: DERIVED_COLOUR, linkBoost: 1, ring: STAGE_RING };
 export const FROST: ScenePalette = {
-  frost: true, bg: '#eef3f8', link: '#8a9bb0', linkHot: '#1f6f5c', unconfirmed: '#b8862b', linkBoost: 2.4,
+  frost: true, bg: '#eef3f8', link: '#8a9bb0', linkHot: '#1f6f5c', unconfirmed: '#b8862b', derived: '#7a5aa8', linkBoost: 2.4,
   ring: { 2: '#b8862b', 3: '#1f6f5c', 4: '#7a5aa8', closed: '#a3b0bd' },
 };
 export const BLUEPRINT: ScenePalette = {
-  frost: false, blueprint: true, bg: '#2b5f96', link: '#d6e6ff', linkHot: '#ffd166', unconfirmed: '#ffd166', linkBoost: 1.7,
+  frost: false, blueprint: true, bg: '#2b5f96', link: '#d6e6ff', linkHot: '#ffd166', unconfirmed: '#ffd166', derived: '#e9d5ff', linkBoost: 1.7,
   ring: { 2: '#ffd166', 3: '#8fdcff', 4: '#ffffff', closed: '#6f8db3' },
 };
 /** Blueprint draws each kind in its full colour (no lightening): solid stars that stand out on the blue. */
 export const BLUEPRINT_TINT = 0;
 export const WORKSHOP: ScenePalette = {
-  frost: false, workshop: true, bg: '#efe3cf', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', linkBoost: 2.2,
+  frost: false, workshop: true, bg: '#efe3cf', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', derived: '#6d28d9', linkBoost: 2.2,
   ring: { 2: '#f96302', 3: '#2e7d32', 4: '#1f4e8c', closed: '#8a7f73' },
 };
 export const paletteFor = (theme?: string): ScenePalette =>
@@ -145,20 +149,22 @@ export const LABEL_MAX = 40;
 export const starLabel = (label: string) => (label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1).trimEnd()}…` : label);
 
 /** A selected star wins; otherwise a lit set (the stars an answer rests on) shows the links between them. */
-export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'> & { rel?: string }, selected: string | null, lit?: Set<string> | null, dim = DIM, hood?: Set<string> | null) {
-  const dashed = !edge.confirmed;
+export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'> & { rel?: string; derived?: unknown }, selected: string | null, lit?: Set<string> | null, dim = DIM, hood?: Set<string> | null) {
+  const derived = !!edge.derived;
+  // Dashed: a link that waits on you (amber), or one a rule derived (its own colour).
+  const dashed = !edge.confirmed || derived;
   if (selected) {
     const touches = edge.from === selected || edge.to === selected;
     // A selected idea's features keep their tool and system links in view too (no pulse: only the idea's own links travel).
     if (!touches && hood && (edge.rel === 'BUILT_WITH' || edge.rel === 'USES_DATA') && hood.has(edge.from) && hood.has(edge.to)) {
-      return { opacity: LINK_IN_VIEW, dashed, pulse: false };
+      return { opacity: LINK_IN_VIEW, dashed, derived, pulse: false };
     }
     // Links in view stay quieter than the stars they join: the eye goes to the stars first.
-    return { opacity: touches ? LINK_IN_VIEW : dim / 3, dashed, pulse: touches };
+    return { opacity: touches ? LINK_IN_VIEW : dim / 3, dashed, derived, pulse: touches };
   }
   // The rest fade with the stars: at the default dim a faint 0.03, gone entirely when the rest are hidden.
-  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? LINK_IN_VIEW : 0.25 * dim, dashed, pulse: false };
-  return { opacity: dashed ? 0.35 : 0.18, dashed, pulse: false };
+  if (lit) return { opacity: lit.has(edge.from) && lit.has(edge.to) ? LINK_IN_VIEW : 0.25 * dim, dashed, derived, pulse: false };
+  return { opacity: dashed && !derived ? 0.35 : 0.18, dashed, derived, pulse: false };
 }
 
 /** How bright the stars outside a highlight are, from how much of them is hidden (0.5 to 1). */

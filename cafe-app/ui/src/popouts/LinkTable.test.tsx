@@ -44,3 +44,16 @@ describe('LinkTable', () => {
     expect(confirmed).toEqual(['ai-wait']);
   });
 });
+
+describe('a derived link in the table', () => {
+  it('says which rule derived it instead of a source, and never offers Add it anyway, confirmed or not', () => {
+    const el = document.createElement('div');
+    const derived = (id: string, confirmed: boolean): LinkRow => ({ ...row(id, 'rule:needs+uses_data', confirmed), rel: 'DEPENDS_ON', derived: { rule: 'needs+uses_data', inputs: [] } });
+    act(() => createRoot(el).render(<LinkTable busy={false} onConfirm={() => {}} onOpen={() => {}} rows={[derived('sure', true), derived('unsure', false)]} />));
+    expect(el.querySelector('li[data-edge="sure"] .lk-derived')?.textContent).toBe('derived by needs+uses_data');
+    expect(el.querySelector('li[data-edge="unsure"] .lk-derived')?.textContent).toBe('derived by needs+uses_data');
+    expect(el.querySelector('li[data-edge="unsure"] .tag')?.textContent).toBe('Waits on its inputs');
+    expect(el.querySelectorAll('[data-action="confirm-link"]')).toHaveLength(0);
+    expect(el.querySelector('li[data-edge="sure"] .src')).toBeNull();
+  });
+});

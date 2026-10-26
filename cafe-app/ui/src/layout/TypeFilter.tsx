@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
-import { NODE_COLOURS } from '../universe/graphView';
+import { NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, DERIVED_COLOUR } from '../universe/graphView';
 import { NODE_LABELS, NODE_TYPES } from '../../../src/graph/ontology';
 
 /** "Show: All", or how many kinds are on when some are switched off. */
@@ -47,6 +47,12 @@ export function TypeFilter() {
               <span className="tf-n">{counts.get(t)}</span>
             </label>
           ))}
+          {/* What the links mean: solid is stated (the form, the AI, you); dashed amber waits on you; dashed violet a rule derived. */}
+          <div className="tf-legend" data-testid="link-legend" aria-label="What the links mean">
+            <span><i style={{ borderColor: LINK_COLOUR }} />stated</span>
+            <span><i className="dash" style={{ borderColor: UNCONFIRMED_COLOUR }} />waits on you</span>
+            <span><i className="dash" style={{ borderColor: DERIVED_COLOUR }} />derived by a rule</span>
+          </div>
           <div className="tf-foot">
             <span>Picture only: the chat and panels still use every star.</span>
             <button className="link" disabled={!filtered} onClick={showAllTypes}>Show all</button>

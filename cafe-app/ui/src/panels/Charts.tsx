@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore, useStageRing, ideasByStage, supportCounts, functionRegion } from '../state/store';
+import { useStore, useStageRing, ideasByStage, supportCounts, functionRegion, systemDemand, toolDemand } from '../state/store';
 
 /**
  * The right panel's charts, drawn in the universe's own language: stages as glowing stars on one line, demand as
@@ -66,5 +66,17 @@ export function FunctionChart() {
   const state = useStore((s) => s.state);
   const rows = useMemo(() => (state ? functionRegion(state) : []), [state]);
   return <Beams rows={rows} colour="#7dd3cf" testId="function-chart" />;
+}
+
+/** From the rules: how many ideas depend on each system, and use each tool. Nothing shows until a rule has derived something. */
+export function SystemChart() {
+  const graph = useStore((s) => s.graph);
+  const rows = useMemo(() => systemDemand(graph), [graph]);
+  return rows.length ? <><div className="sub-h">Systems depended on <span className="derived-note">derived</span></div><Beams rows={rows} colour="#10b981" testId="system-chart" /></> : null;
+}
+export function ToolChart() {
+  const graph = useStore((s) => s.graph);
+  const rows = useMemo(() => toolDemand(graph), [graph]);
+  return rows.length ? <><div className="sub-h">Tools in use <span className="derived-note">derived</span></div><Beams rows={rows} colour="#ef4444" testId="tool-chart" /></> : null;
 }
 

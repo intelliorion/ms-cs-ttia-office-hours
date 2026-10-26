@@ -61,6 +61,8 @@ export interface LinkRow {
   source: string;
   confidence: number;
   confirmed: boolean;
+  /** Set on a link a rule derived: it is listed, tagged, and left out of counts. */
+  derived?: { rule: string; inputs: string[] };
 }
 
 /** Every link touching a node, unconfirmed first, then by relation and the other node's label. */
@@ -76,10 +78,11 @@ export function nodeLinks(graph: { nodes: GNode[]; edges: GEdge[] } | null | und
       return {
         edge: e, rel: e.rel, out,
         other: { id: otherId, label: n?.label ?? otherId, type: n ? NODE_LABELS[n.type] ?? n.type : '', ...(n?.type === 'Tool' && n.attrs?.approved === false ? { unapproved: true } : {}) },
-        source: e.source, confidence: e.confidence, confirmed: e.confirmed,
+        source: e.source, confidence: e.confidence, confirmed: e.confirmed, ...(e.derived ? { derived: e.derived } : {}),
       };
     })
-    .sort((a, b) => Number(a.confirmed) - Number(b.confirmed) || a.rel.localeCompare(b.rel) || a.other.label.localeCompare(b.other.label));
+    // Waiting links first, derived ones last.
+    .sort((a, b) => Number(!!a.derived) - Number(!!b.derived) || Number(a.confirmed || !!a.derived) - Number(b.confirmed || !!b.derived) || a.rel.localeCompare(b.rel) || a.other.label.localeCompare(b.other.label));
 }
 
 /** This idea's links. Node ids for ideas are `idea:<Café ID>`. */
@@ -108,7 +111,7 @@ export function ideaCardModel(idea: any, graph: { nodes: GNode[]; edges: GEdge[]
     where: [idea.function, idea.region].filter(Boolean).join(' · ') || '—',
     emails: emailChips(idea, outbox),
     late: !idea.closed && idea.overdue?.[0]?.text ? String(idea.overdue[0].text) : null,
-    linkCount: (graph?.edges ?? []).filter((e) => e.from === nodeId || e.to === nodeId).length,
+    linkCount: (graph?.edges ?? []).filter((e) => (e.from === nodeId || e.to === nodeId) && !e.derived).length,
   };
 }
 

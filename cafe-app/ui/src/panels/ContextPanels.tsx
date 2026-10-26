@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useStore } from '../state/store';
+import { useStore, similarIdeas } from '../state/store';
 import { getHistory, post } from '../api';
 import { Panel } from '../layout/Panel';
-import { StageChart, SupportChart, FunctionChart } from './Charts';
+import { StageChart, SupportChart, FunctionChart, SystemChart, ToolChart } from './Charts';
 import { LinkTable } from '../popouts/LinkTable';
 import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
@@ -64,7 +64,7 @@ export function ContextStack() {
 function Overview({ part }: { part: 'pipeline' | 'demand' }) {
   return part === 'pipeline'
     ? <><div className="sub-h">Ideas by stage</div><StageChart /></>
-    : <><div className="sub-h">Support requested</div><SupportChart /><div className="sub-h">Function · region</div><FunctionChart /></>;
+    : <><div className="sub-h">Support requested</div><SupportChart /><div className="sub-h">Function · region</div><FunctionChart /><SystemChart /><ToolChart /></>;
 }
 
 /** What was submitted: the form's answers, read-only, and the import's flags. */
@@ -97,6 +97,7 @@ function IdeaConnections({ id }: { id: string }) {
   useEffect(() => { let live = true; getHistory(id).then((h) => { if (live) setHistory(h); }, () => { if (live) setHistory(null); }); return () => { live = false; }; }, [id, state]);
   useEffect(() => { setMsg(null); setTab('links'); }, [id]);
   const links = ideaLinks(graph, id);
+  const stated = links.filter((l) => !l.derived).length;
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     setBusy(true);
     try { await fn(); setMsg({ text: ok, kind: 'ok' }); } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
@@ -105,16 +106,60 @@ function IdeaConnections({ id }: { id: string }) {
   return (
     <div className="ctx-scroll" data-testid="ctx-connections">
       <div className="ctx-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'links'} className={tab === 'links' ? 'on' : ''} data-tab="links" onClick={() => setTab('links')}>Links <span className="sec-n">{links.length}</span></button>
+        <button role="tab" aria-selected={tab === 'links'} className={tab === 'links' ? 'on' : ''} data-tab="links" onClick={() => setTab('links')}>Links <span className="sec-n">{stated}</span></button>
         <button role="tab" aria-selected={tab === 'history'} className={tab === 'history' ? 'on' : ''} data-tab="history" onClick={() => setTab('history')}>History</button>
       </div>
       {msg && <div className={`pop-notice ${msg.kind}`} role="status">{msg.text}</div>}
       {tab === 'links' ? <>
+        <AiReadLine id={id} busy={busy} onRead={() => act(() => post('/api/ai/extract', { id }), 'Read again: what the AI found is in the universe.')} />
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
           onOpen={followLink} />
         <ThroughFeatures id={id} />
+        <SimilarIdeas id={id} />
       </> : <History history={history} steps={state?.steps} />}
+    </div>
+  );
+}
+
+/**
+ * When the AI last read the idea's text, and whether the text changed since: one button, Read again, which is the
+ * operator's call (the app never calls the AI on its own). Disabled with no AI.
+ */
+function AiReadLine({ id, busy, onRead }: { id: string; busy: boolean; onRead: () => void }) {
+  const idea = useStore((s) => s.state?.ideas?.find((i: any) => i.id === id));
+  const ai = useStore((s) => s.ai);
+  const read = idea?.aiRead as { at: string; changed: boolean } | undefined;
+  const when = read ? new Date(read.at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const text = !read ? 'The AI has not read this idea yet.' : read.changed ? `Text changed since the AI last read it (${when}).` : `Read by the AI ${when}.`;
+  return (
+    <div className={`ai-read${read?.changed ? ' changed' : ''}`} data-testid="ai-read">
+      <span>{text}</span>
+      <button className="btn sm" data-action="read-again" disabled={busy || !ai?.provider} title={ai?.provider ? 'Read the idea again with the AI and add what it finds' : NO_AI_READ} onClick={onRead}>{read ? 'Read again' : 'Read it'}</button>
+    </div>
+  );
+}
+const NO_AI_READ = 'No AI: pick one in Settings → AI connector';
+
+/** The ideas the rules find similar to this one (shared capabilities, pain points or categories), with the shared stars as the why. */
+function SimilarIdeas({ id }: { id: string }) {
+  const { graph, followLink, hover } = useStore();
+  const rows = similarIdeas(graph, id);
+  if (!rows.length) return null;
+  return (
+    <div className="ctx-through" data-testid="similar-ideas">
+      <div className="rs-th"><span>Similar ideas <span className="derived-note">derived</span></span></div>
+      <ul className="sd-list">
+        {rows.map((r) => (
+          <li key={r.id}>
+            <button className="sd-go" data-go={r.id} onClick={() => followLink(r.id)} onMouseEnter={() => hover(r.id)} onMouseLeave={() => hover(null)}>
+              <span className="dot" style={{ background: NODE_COLOURS.Idea }} />
+              <span className="sd-l">{r.label}</span>
+              <span className="rel">{r.why} · {Math.round(r.confidence * 100)} %</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -151,7 +196,8 @@ function StarLinks({ nodeId }: { nodeId: string }) {
   const node = graph?.nodes.find((n: any) => n.id === nodeId);
   if (!node) return null;
   const rows = nodeLinks(graph, nodeId);
-  const unconfirmed = rows.filter((r) => !r.confirmed).length;
+  const stated = rows.filter((r) => !r.derived);
+  const unconfirmed = stated.filter((r) => !r.confirmed).length;
   const confirm = async (edgeId: string) => {
     setBusy(true);
     try { await post('/api/graph/confirm', { edgeId }); setMsg({ text: 'Link confirmed.', kind: 'ok' }); }
@@ -169,7 +215,7 @@ function StarLinks({ nodeId }: { nodeId: string }) {
           {node.type === 'Tool' && node.attrs?.approved === false && <span className="tag amber" data-testid="not-approved">Not on the approved list</span>}
           {node.attrs?.aliases && <div className="nc-sub" data-testid="star-aliases">Also known as {String(node.attrs.aliases)}</div>}
           {node.attrs?.ref && <div className="nc-sub" data-testid="star-ref">Reference {String(node.attrs.ref)}</div>}
-          <div className="nc-sub">{rows.length} link{rows.length === 1 ? '' : 's'}{unconfirmed ? ` · ${unconfirmed} unconfirmed` : ''}</div>
+          <div className="nc-sub">{stated.length} link{stated.length === 1 ? '' : 's'}{unconfirmed ? ` · ${unconfirmed} unconfirmed` : ''}</div>
         </div>
         <button className="x" aria-label="Back to the overview" title="Back to the overview" onClick={() => select(null)}>✕</button>
       </div>

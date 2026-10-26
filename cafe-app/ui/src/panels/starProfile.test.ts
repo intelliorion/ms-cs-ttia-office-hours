@@ -19,6 +19,7 @@ const graph = {
     { from: 'team:gss', rel: 'HAS_MEMBER', to: 'person:p1' },
     { from: 'capability:c', rel: 'BUILT_WITH', to: 'tool:pa' },
     { from: 'idea:CAFE-2026-001', rel: 'NEEDS', to: 'capability:c' },
+    { from: 'team:gss', rel: 'OWNS', to: 'idea:CAFE-2026-001', derived: { rule: 'member+submitted', inputs: [] } },
   ],
 };
 const state = {

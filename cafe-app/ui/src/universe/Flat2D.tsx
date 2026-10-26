@@ -162,7 +162,7 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
           const s = edgeStyle(e, litSet ? null : selectedId, litSet, dim, hood);
           const hotLink = s.pulse || (!!litSet && litSet.has(e.from) && litSet.has(e.to));
-          const stroke = frost || draft || shop ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
+          const stroke = s.derived ? pal.derived : frost || draft || shop ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
           return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeOpacity={Math.min(1, (s.pulse ? 0.9 : s.opacity * 1.6) * (frost ? 1.5 : draft ? 1.3 : 1))} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
         })}
       </g>

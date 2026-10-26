@@ -106,3 +106,14 @@ describe('moveWaitText', () => {
     expect(moveWaitText({ closeAs: 'reuse' }, names, null)).toMatch(/^Closing it as Reuse: the app is finishing another change first/);
   });
 });
+
+import { ideaCardModel as cardModel } from './ideaHelpers';
+describe('counts leave derived links out', () => {
+  it('the idea card counts the stated links only', () => {
+    const g = { nodes: [{ id: 'idea:CAFE-2026-009', type: 'Idea', label: 'X' }], edges: [
+      { id: 'a', from: 'idea:CAFE-2026-009', to: 'capability:c', rel: 'NEEDS', confirmed: true, confidence: 1, source: 'form:x', description: '' },
+      { id: 'b', from: 'idea:CAFE-2026-009', to: 'system:s', rel: 'DEPENDS_ON', confirmed: true, confidence: 1, source: 'rule:r', description: '', derived: { rule: 'r', inputs: [] } },
+    ] } as any;
+    expect(cardModel({ id: 'CAFE-2026-009', title: 'X', stage: 2, outcomes: [], support: [], flags: [], people: { team: [] } }, g).linkCount).toBe(1);
+  });
+});

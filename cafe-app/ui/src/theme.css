@@ -1341,3 +1341,14 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .dr-table .st-stale .dr-pill{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 55%,transparent)}
 .dr-table .st-new .dr-pill{color:var(--cream);border-color:rgba(var(--rgb-line),.5)}
 .dr-table .dr-none td{text-align:center;color:var(--muted);padding:16px}
+
+/* Knowledge graph: derived links, the legend, the AI-read line */
+.lk-derived{font-size:11px;color:#c4b5fd;font-style:italic}
+.links li.derived .rel{color:#c4b5fd}
+.derived-note{font-size:10px;font-weight:400;letter-spacing:.04em;text-transform:uppercase;color:#c4b5fd;margin-left:6px;opacity:.8}
+.tf-legend{display:flex;gap:12px;flex-wrap:wrap;padding:8px 10px 2px;font-size:11.5px;color:var(--muted)}
+.tf-legend span{display:inline-flex;align-items:center;gap:6px}
+.tf-legend i{display:inline-block;width:18px;height:0;border-top:2px solid}
+.tf-legend i.dash{border-top-style:dashed}
+.ai-read{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 10px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--text) 5%,transparent);font-size:12px;color:var(--muted)}
+.ai-read.changed{color:var(--text);background:color-mix(in srgb,#f5b36b 12%,transparent)}

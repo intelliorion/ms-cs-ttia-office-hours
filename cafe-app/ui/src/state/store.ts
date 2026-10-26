@@ -310,3 +310,32 @@ export function functionRegion(s: any): [string, number][] {
   return tally(s.ideas.map((i: any) => `${i.function || '—'} · ${i.region || '—'}`));
 }
 
+/** Ideas per star over one derived relation (the idea is the link's "from"): the stars' labels, most first. */
+function derivedDemand(graph: any, rel: string): [string, number][] {
+  if (!graph) return [];
+  const label = new Map<string, string>(graph.nodes.map((n: any) => [n.id, n.label]));
+  const seen = new Set<string>();
+  const rows: string[] = [];
+  for (const e of graph.edges as any[]) {
+    if (e.rel !== rel || !e.derived) continue;
+    const k = `${e.from}|${e.to}`; if (seen.has(k)) continue; seen.add(k);
+    rows.push(label.get(e.to) ?? e.to);
+  }
+  return tally(rows);
+}
+/** Demand: ideas that depend on each system (DEPENDS_ON) and that use each tool (USES), from the rules. */
+export const systemDemand = (graph: any): [string, number][] => derivedDemand(graph, 'DEPENDS_ON');
+export const toolDemand = (graph: any): [string, number][] => derivedDemand(graph, 'USES');
+
+export interface SimilarIdea { id: string; label: string; why: string; confidence: number; confirmed: boolean }
+/** The ideas the shared-stars rule finds similar to one, surest first, with the shared stars as the why. */
+export function similarIdeas(graph: any, cafeId: string): SimilarIdea[] {
+  if (!graph) return [];
+  const me = `idea:${cafeId}`;
+  const label = new Map<string, string>(graph.nodes.map((n: any) => [n.id, n.label]));
+  return (graph.edges as any[])
+    .filter((e) => e.rel === 'SIMILAR_TO' && e.derived && (e.from === me || e.to === me))
+    .map((e) => { const other = e.from === me ? e.to : e.from; return { id: other, label: label.get(other) ?? other, why: String(e.description ?? ''), confidence: e.confidence, confirmed: e.confirmed }; })
+    .sort((a, b) => b.confidence - a.confidence || a.label.localeCompare(b.label));
+}
+

@@ -62,9 +62,9 @@ describe('graph view helpers', () => {
     expect(labelAlways({ type: 'Idea' } as any)).toBe(true); expect(labelAlways({ type: 'Round' } as any)).toBe(true); expect(labelAlways({ type: 'Person' } as any)).toBe(false);
   });
   it('styles edges by confirmation and selection', () => {
-    expect(edgeStyle(g.edges[1], null)).toEqual({ opacity: 0.35, dashed: true, pulse: false });
-    expect(edgeStyle(g.edges[0], 'a')).toEqual({ opacity: LINK_IN_VIEW, dashed: false, pulse: true });
-    expect(edgeStyle(g.edges[0], 'c')).toEqual({ opacity: 0.04, dashed: false, pulse: false });
+    expect(edgeStyle(g.edges[1], null)).toEqual({ opacity: 0.35, dashed: true, derived: false, pulse: false });
+    expect(edgeStyle(g.edges[0], 'a')).toEqual({ opacity: LINK_IN_VIEW, dashed: false, derived: false, pulse: true });
+    expect(edgeStyle(g.edges[0], 'c')).toEqual({ opacity: 0.04, dashed: false, derived: false, pulse: false });
   });
 });
 
@@ -166,5 +166,17 @@ describe('framing an answer', () => {
   it('litKey: the same stars in any order are the same highlight', () => {
     expect(litKey(['b', 'a'])).toBe(litKey(['a', 'b']));
     expect(litKey(null)).toBe(''); expect(litKey([])).toBe('');
+  });
+});
+
+import { NIGHT, FROST, BLUEPRINT, WORKSHOP } from './graphView';
+describe('derived links', () => {
+  it('a derived link is dashed and marked derived, whatever its confirmation; every palette has a colour for it', () => {
+    const d = { from: 'a', to: 'b', confirmed: true, derived: { rule: 'needs+uses_data', inputs: [] } };
+    expect(edgeStyle(d, null)).toMatchObject({ dashed: true, derived: true });
+    expect(edgeStyle({ from: 'a', to: 'b', confirmed: false }, null)).toMatchObject({ dashed: true, derived: false });
+    expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null)).toMatchObject({ dashed: false, derived: false });
+    expect(edgeStyle(d, 'a')).toMatchObject({ dashed: true, derived: true, pulse: true });
+    for (const p of [NIGHT, FROST, BLUEPRINT, WORKSHOP]) { expect(p.derived).toMatch(/^#/); expect(p.derived).not.toBe(p.unconfirmed); }
   });
 });

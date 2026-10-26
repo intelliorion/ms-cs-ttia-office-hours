@@ -21,7 +21,7 @@ describe('an idea and what its features stand on', () => {
   });
   it('the feature-to-tool links stay in view, without the pulse the idea\'s own links have', () => {
     const hood = neighbourhood(g, 'idea:A');
-    expect(edgeStyle(g.edges[2], 'idea:A', null, 0.2, hood)).toEqual({ opacity: LINK_IN_VIEW, dashed: false, pulse: false });
+    expect(edgeStyle(g.edges[2], 'idea:A', null, 0.2, hood)).toEqual({ opacity: LINK_IN_VIEW, dashed: false, derived: false, pulse: false });
     expect(edgeStyle(g.edges[5], 'idea:A', null, 0.2, hood).opacity).toBeLessThan(LINK_IN_VIEW);
   });
   it('lists the tool and systems with how many features lead there', () => {

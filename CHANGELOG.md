@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-26 (Café app: Deep read)
+
+- **Deep read**, a local long-term memory for the Creators' Café app, as an add-on: a title-bar button with a
+  progress ring opens a pop-out (what has been read, by kind and by idea; Run · Pause · Continue · Rerun all; why,
+  what happens without it, what it reads, privacy). A second, local model (Transformers.js, all-MiniLM-L6-v2,
+  downloaded once into `~/.cafe-ai/models`, `CAFE_MODEL_DIR` to move it) reads every idea folder into passages kept in
+  `data/memory/`. With an index the assistant gains `search` and `similar` steps and a nearest-label fallback, the
+  ideas panel finds by meaning, and extraction reuses the nearest existing star or holds a near one with the existing
+  near-duplicate rule. With no index every path behaves exactly as before. `CAFE_EMBED_FAKE=1` stubs the model for
+  tests. Spec: `docs/superpowers/specs/2026-10-26-cafe-deep-read-design.md`.
+
 ## 2026-10-25 (Copilot Studio agent removed)
 
 - The Copilot Studio agent package is gone: `COPILOT-STUDIO-AGENT.md`,

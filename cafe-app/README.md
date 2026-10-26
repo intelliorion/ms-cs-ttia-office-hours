@@ -44,7 +44,8 @@ panels, large white titles and pill buttons at the bottom.
   says so; in Full, if the first few seconds draw under 20 fps it switches to Lite once and says so. The choice is
   remembered per browser, and once you pick a level with the button nothing switches it for you again.
 - **Idea stars.** Clicking an idea star selects it and shows its card (ID, stage, emails, links); the card's Open idea button shows the idea's details in the left panel. Esc or ✕ closes the card.
-- **Title bar.** The newest round's name and today's date, the Import button (with how many things wait on you),
+- **Title bar.** The newest round's name and today's date, the AI assistant, **Deep read** (a small ring and a percentage: how
+  much of what people wrote the assistant has read; see Deep read below), the Import button (with how many things wait on you),
   Rounds, and ⚙ Settings: the AI connector (a dot shows whether an
   AI is answering), Project configuration (your email signature, several lines, the first being your name; the form, CSIC and Teams links, the
   distribution list; kept in rules/settings.yaml; it also shows where the data folder is, with
@@ -90,6 +91,7 @@ data/                 the Café's data: safe to delete
                       changes from the assistant), layout.json (cached star positions)
   chat/               the assistant's conversations
   exports/            files the app writes for you
+  memory/             Deep read's index (index.jsonl, state.json, labels.jsonl): rebuilt by a Run, safe to delete
 rules/                your configuration: settings.yaml (your name, links, the AI choice), stages.yaml. Keep it.
 templates/            the email templates. Keep them; a missing one is copied back at the next start.
 ```
@@ -363,6 +365,60 @@ ideas/<idea>/emails/in/   emails filed against an idea, each with a short summar
 ideas/<idea>/notes/       transcripts, notes and documents filed against an idea
 ```
 
+## Deep read (optional): a local long-term memory
+
+**What.** The universe holds names: ideas, people, capabilities, systems. Everything long stays in each idea's folder:
+the challenge, the current process, the business impact, the context, the team's answers, the emails (sent and filed),
+the review and its to-do list, the design and the approach, the roadshow script, the CSIC hand-off and the history.
+**Deep read** reads all of it into passages and keeps a map of what each says, on this machine, so the assistant and
+the search can find things by meaning. It is a reading index, not understanding.
+
+**Why, and what happens without it.** Without it the assistant answers from the stars alone: labels, not what people
+wrote. "What did teams say about data access" finds nothing. Ideas and capabilities that mean the same thing in
+different words stay apart, and twins pile up. With it:
+
+- **The assistant** has two more query steps: `search` (free text → the passages nearest in meaning, grouped by idea,
+  each hit shown with the idea and section it came from; the ideas light up in the universe) and `similar` (a star →
+  the nearest stars of its kind; text → the nearest ideas). A `match` no label contains falls back to the nearest
+  labels, and the trace says "nearest: …".
+- **The ideas panel** search finds by meaning when no ID, title or function has the words: the list shows a small
+  **by meaning** marker and a ≈ before each ID.
+- **Extraction** (Grow the universe, the Import's read of new ideas, a dropped file's facts, updates from answers):
+  a star the AI proposes that is close enough to one you already have reuses that star; one merely near it is kept and
+  its link is held with the existing "Looks like X: merge or keep both?" rule. No new approval step: the same hold as
+  today.
+
+**Add-on, not a must.** With nothing read, every path above behaves exactly as before (the tests say so). The pop-out
+copies nothing anywhere and asks no Yes/No: its controls are **Run**, **Pause**, **Continue** and **Rerun all**.
+
+**How.** Click **Deep read** in the title bar. The pop-out shows the ring (passages read ÷ passages present), the status
+("Reading 120 of 480…", "Paused at 160 of 480", "Read 26 Oct 14:02 in 48 s · 2 ideas changed since"), counts by kind
+(submissions, emails, designs, reviews, roadshows), each idea (read · changed since · not yet), five short blocks on why,
+and where the model lives. **Run** reads what is new or changed (incremental, by content hash); the job runs in the
+server, in the background, and goes on when the pop-out closes (Esc or ✕). **Pause** stops at the next batch (16
+passages); **Continue** picks up there; **Rerun all** drops the index first. An idea changed after it was read shows as
+changed since and is read on the next Run.
+
+**The model, and where it goes.** Deep read uses a second, local model, not the AI connector: Transformers.js
+(`@huggingface/transformers`) running `Xenova/all-MiniLM-L6-v2` (quantised, about 23 MB) on the CPU in the app's own
+process. The library is loaded only when a read starts (`npm start` and the tests never load it). The model is
+downloaded once, from the Hugging Face hub, on the first **Run**, into `~/.cafe-ai/models/` (outside the workspace, so
+`data/` stays deletable). After that nothing goes out: no text is sent anywhere, and people's names are coded before any
+AI sees a passage, exactly as today.
+
+- `CAFE_MODEL_DIR=/path/to/models` keeps the model somewhere else.
+- **A PC that cannot download.** Run Deep read once on a PC that can (the pop-out says "on this machine" once the model
+  is there), then copy the whole `~/.cafe-ai/models` folder to the same place on the other PC, or anywhere and point
+  `CAFE_MODEL_DIR` at it. It is a plain folder copy; no zip, no install. If a Run cannot get the model the pop-out says
+  "Could not finish: …" and nothing else changes.
+- An index built with another model (the test stub, say) shows as "Read with another model" and **Rerun all** reads
+  it again with this one.
+
+**Tests.** `CAFE_EMBED_FAKE=1` swaps the model for a stub that hashes words into a fixed-length vector (deterministic;
+nothing downloaded). `npm test` uses it and never loads the library. Set it with `CAFE_AI_FAKE=1` to try the whole
+flow without a real AI: Deep read reaches 100 % on the test data, and a plain question ("what did teams say about data
+access?") is answered from the passages with a trace.
+
 ## AI help (optional)
 
 With no AI, everything above works by hand and nothing breaks. With one, the app can do two things:
@@ -439,7 +495,7 @@ The VS Code helper is a small extension in `vscode-helper/`; see
 `CAFE_AI_FAKE=1 npm run cafe -- start ...` adds a fake provider that returns fixed answers. It exists only
 for the screenshot tour and tests. It cannot be picked in the chip, and only the exact value `1` turns it on.
 Do not set it for real rounds. `CAFE_AI_FAKE_DELAY=<ms>` (with the fake only) makes every fake answer wait that long
-first, so the tour can catch a step while it runs.
+first, so the tour can catch a step while it runs. `CAFE_EMBED_FAKE=1` does the same for Deep read's model (see Deep read).
 
 ## What the idea panel shows, by stage
 

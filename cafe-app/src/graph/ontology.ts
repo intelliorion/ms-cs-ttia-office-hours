@@ -40,6 +40,8 @@ export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone'
   | { t: 'merge'; from: string; into: string }
   | { t: 'add'; node: string; type: NodeType; label: string }
   | { t: 'remove'; node: string }
+  /** Another name for a star: `label` is the alias, `of` the star's label when it was recorded (a merged twin's). */
+  | { t: 'alias'; node: string; label: string; of?: string }
 );
 /** Stars the operator can create or remove from the command bar. The rest come from the form, the rounds or the tool picker. */
 export const OPERATOR_STARS: NodeType[] = ['PainPoint', 'Capability', 'System', 'Support', 'Outcome', 'Beneficiary', 'Category'];
@@ -66,16 +68,19 @@ export const edgeId = (from: string, rel: Relation, to: string) => `${from}|${re
 
 /** The Café's approved tools (app design section 6). Anything else is "not on the approved list". */
 export const APPROVED_TOOLS: string[] = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'custom app'];
-const TOOL_ALIASES: Record<string, string> = {
+export const TOOL_ALIASES: Record<string, string> = {
   'microsoft copilot': 'Microsoft Copilot', 'copilot': 'Microsoft Copilot', 'm365 copilot': 'Microsoft Copilot', 'microsoft 365 copilot': 'Microsoft Copilot',
   'copilot studio': 'Copilot Studio', 'microsoft copilot studio': 'Copilot Studio',
   'power apps': 'Power Apps', 'powerapps': 'Power Apps', 'microsoft power apps': 'Power Apps',
   'dataiku': 'Dataiku', 'dataiku dss': 'Dataiku',
   'custom app': 'custom app', 'custom application': 'custom app', 'custom code': 'custom app', 'custom-built app': 'custom app', 'bespoke app': 'custom app',
 };
-/** The canonical approved label for a tool name, or undefined when it is not on the list. */
+/** The built-in tool table, read until a workspace's registry is loaded (src/graph/registryFile.ts installs its own). */
+let resolveTool: (label: string) => string | undefined = (label) => TOOL_ALIASES[label.trim().toLowerCase().replace(/\s+/g, ' ')];
+export function setToolResolver(fn: (label: string) => string | undefined): void { resolveTool = fn; }
+/** The canonical approved label for a tool name, or undefined when it is not on the list (the registry decides). */
 export function canonicalTool(label: string): string | undefined {
-  return TOOL_ALIASES[label.trim().toLowerCase().replace(/\s+/g, ' ')];
+  return resolveTool(label);
 }
 export const isApprovedTool = (label: string) => canonicalTool(label) !== undefined;
 export const NOT_APPROVED_NOTE = ' — not on the approved list';

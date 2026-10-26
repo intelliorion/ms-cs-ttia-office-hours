@@ -4,12 +4,14 @@ import { paths, BUNDLED_TEMPLATES, DATA_FOLDERS } from './paths';
 import { writeFileAtomic, writeYaml } from './files';
 import { DEFAULT_STEPS } from '../rules/stages';
 import { DEFAULT_SETTINGS } from '../round/round';
+import { seedEntities } from '../graph/registry';
 
 export const WORKSPACE_README = `Creators' Café workspace
 
 data/        The Café's data: ideas, rounds, the inbox, the knowledge graph, chat, exports.
              Safe to delete, all of it or any part, even while the app runs: the Café starts again empty.
-rules/       Your configuration: settings.yaml (your name, links, the AI choice) and stages.yaml. Keep it.
+rules/       Your configuration: settings.yaml (your name, links, the AI choice), stages.yaml, and the knowledge
+             graph's entities.yaml (stable names and their aliases). Keep it.
 templates/   The email templates. Keep them; any that goes missing is copied back the next time the app starts.
 `;
 
@@ -70,6 +72,10 @@ export async function initWorkspace(root: string): Promise<{ created: string[]; 
   if (await missing(p.settings)) {
     await writeYaml(p.settings, DEFAULT_SETTINGS);
     created.push('rules/settings.yaml');
+  }
+  if (await missing(p.entities)) {
+    await writeYaml(p.entities, seedEntities());
+    created.push('rules/entities.yaml');
   }
   for (const name of (await fs.readdir(BUNDLED_TEMPLATES)).filter((n) => n.endsWith('.md'))) {
     try {

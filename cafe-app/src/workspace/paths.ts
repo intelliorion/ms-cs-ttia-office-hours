@@ -32,6 +32,10 @@ export function paths(root: string) {
     rules: path.join(root, 'rules'),
     settings: path.join(root, 'rules', 'settings.yaml'),
     stages: path.join(root, 'rules', 'stages.yaml'),
+    /** The knowledge graph's rules: stable identities with aliases, the inference rules, the ontology. */
+    entities: path.join(root, 'rules', 'entities.yaml'),
+    inference: path.join(root, 'rules', 'inference.yaml'),
+    ontology: path.join(root, 'rules', 'ontology.yaml'),
   };
 }
 

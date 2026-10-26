@@ -153,7 +153,7 @@ describe('JSON-LD export', () => {
   it('an idea\'s subgraph: the idea, every star it touches, and the links among them', () => {
     const sub = subgraphOf(graph, 'CAFE-2026-004');
     expect(sub.nodes.map((n) => n.id).sort()).toEqual([
-      'capability:duplicate-claim-spotting', 'category:anomaly-detection', 'idea:CAFE-2026-004', 'person:ingrid-solberg', 'person:noor-el-sayed', 'round:ROUND-2026-Q4', 'team:gss', 'tool:dataiku',
+      'capability:duplicate-claim-spotting', 'category:anomaly-detection', 'idea:CAFE-2026-004', 'person:ingrid-solberg', 'person:noor-el-sayed', 'round:round-2026-q4', 'team:gss', 'tool:dataiku',
     ]);
     expect(sub.edges.some((e) => e.id === 'capability:duplicate-claim-spotting|BUILT_WITH|tool:dataiku')).toBe(true);
     expect(sub.edges.some((e) => e.from === 'idea:CAFE-2026-006')).toBe(false);

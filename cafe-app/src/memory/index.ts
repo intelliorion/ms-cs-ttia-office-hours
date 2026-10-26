@@ -72,7 +72,13 @@ export async function indexAvailable(root: string, env = process.env): Promise<b
   return !!text && text.trim().length > 0;
 }
 
-export interface IdeaRead { id: string; title: string; chunks: number; embedded: number; status: 'read' | 'stale' | 'new' }
+export interface IdeaRead {
+  id: string; title: string; chunks: number; embedded: number; status: 'read' | 'stale' | 'new';
+  /** Present and read, per kind, for the kinds the idea has. */
+  kinds: Partial<Record<ChunkKind, { chunks: number; embedded: number }>>;
+  /** When its newest passage was embedded (rows written before upkeep carry no time). */
+  lastRead?: string;
+}
 export interface MemorySummary {
   chunks: number; embedded: number; percent: number;
   kinds: Record<ChunkKind, { chunks: number; embedded: number }>;
@@ -91,16 +97,19 @@ export async function summary(root: string, env = process.env): Promise<MemorySu
   const sameModel = !state.embedder || state.embedder === embedderName(env);
   const have = new Set(sameModel ? rows.map((r) => r.hash) : []);
   const kinds = Object.fromEntries(KINDS.map((k) => [k, { chunks: 0, embedded: 0 }])) as MemorySummary['kinds'];
-  const per = new Map(ideas.map((i) => [i.id, { id: i.id, title: i.title, chunks: 0, embedded: 0 }]));
+  const per = new Map(ideas.map((i) => [i.id, { id: i.id, title: i.title, chunks: 0, embedded: 0, kinds: {} as IdeaRead['kinds'] }]));
+  const lastRead = new Map<string, string>();
+  if (sameModel) for (const r of rows) if (r.at && (lastRead.get(r.ideaId) ?? '') < r.at) lastRead.set(r.ideaId, r.at);
   let embedded = 0;
   for (const c of chunks) {
     const hit = have.has(c.hash);
     kinds[c.kind].chunks++;
-    const p = per.get(c.ideaId); if (p) p.chunks++;
+    const p = per.get(c.ideaId);
+    if (p) { p.chunks++; const k = (p.kinds[c.kind] ??= { chunks: 0, embedded: 0 }); k.chunks++; if (hit) k.embedded++; }
     if (hit) { embedded++; kinds[c.kind].embedded++; if (p) p.embedded++; }
   }
   const everRead = new Set(sameModel ? rows.map((r) => r.ideaId) : []);
-  const list: IdeaRead[] = [...per.values()].map((p) => ({ ...p, status: p.chunks === p.embedded && p.chunks > 0 ? 'read' : everRead.has(p.id) ? 'stale' : 'new' }));
+  const list: IdeaRead[] = [...per.values()].map((p) => ({ ...p, status: p.chunks === p.embedded && p.chunks > 0 ? 'read' : everRead.has(p.id) ? 'stale' : 'new', ...(lastRead.has(p.id) ? { lastRead: lastRead.get(p.id) } : {}) }));
   return {
     chunks: chunks.length, embedded, percent: chunks.length ? Math.floor((embedded / chunks.length) * 100) : 0,
     kinds, ideas: list, available: sameModel && rows.length > 0,

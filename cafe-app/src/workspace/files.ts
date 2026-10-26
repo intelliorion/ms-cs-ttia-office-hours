@@ -1,6 +1,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { sourceOfPath, touched } from '../memory/touch';
+
+/** Deep read's upkeep hears every write into an idea folder from here, and nowhere else. */
+const noteWrite = (file: string) => { const t = sourceOfPath(file); if (t) touched(t.root, [t.ideaId], t.source); };
 
 export async function readText(file: string): Promise<string | undefined> {
   try {
@@ -42,6 +46,7 @@ export async function writeFileAtomic(file: string, content: string | Uint8Array
   const tmp = `${file}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await fs.writeFile(tmp, content);
   try { await moveFile(tmp, file, opts); } catch (e) { await fs.rm(tmp, { force: true }).catch(() => {}); throw e; }
+  noteWrite(file);
 }
 
 export async function writeYaml(file: string, data: unknown): Promise<void> {
@@ -61,6 +66,7 @@ export interface HistoryEntry {
 export async function appendHistory(dir: string, entry: HistoryEntry): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
   await fs.appendFile(path.join(dir, 'history.log'), `${JSON.stringify(entry)}\n`, 'utf8');
+  noteWrite(path.join(dir, 'history.log'));
 }
 
 export async function readHistory(dir: string): Promise<HistoryEntry[]> {

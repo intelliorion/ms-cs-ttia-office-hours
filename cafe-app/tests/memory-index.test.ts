@@ -49,7 +49,7 @@ describe('the index', () => {
     expect(await indexAvailable(root, FAKE)).toBe(false);
     const s = await summary(root, FAKE);
     expect(s).toMatchObject({ chunks: 1, embedded: 0, percent: 0, available: false });
-    expect(s.ideas).toEqual([{ id: 'CAFE-2026-001', title: 'Email scheduler', chunks: 1, embedded: 0, status: 'new' }]);
+    expect(s.ideas).toEqual([{ id: 'CAFE-2026-001', title: 'Email scheduler', chunks: 1, embedded: 0, status: 'new', kinds: { submission: { chunks: 1, embedded: 0 } } }]);
     expect((await readdir(path.join(root, 'data'))).includes('memory')).toBe(true);
   });
 

@@ -188,11 +188,13 @@ describe('the upkeep runner', () => {
     const c = counting();
     const { job, upkeep } = setup(root, { embedder: c.embedder, quietMs: 30, maxMs: 90 });
     await job.run(); await job.idle(); c.texts.length = 0;
+    // Every write into an idea folder reaches every runner on that root: the first one is closed, the saves are made, then the counting one listens.
+    upkeep.close();
     const calls: number[] = [];
     const e = c.embedder; const spy = () => { const x = e(); return { ...x, embed: async (t: string[]) => { calls.push(t.length); return x.embed(t); } }; };
-    const u2 = createUpkeep(root, { job, embedder: spy, env: FAKE, clock, quietMs: 30, maxMs: 90, on: async () => true, nodes: async () => [] });
     await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'One.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
     await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Two.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));
+    const u2 = createUpkeep(root, { job, embedder: spy, env: FAKE, clock, quietMs: 30, maxMs: 90, on: async () => true, nodes: async () => [] });
     // Touches every 10 ms for 70 ms: never 30 ms of quiet, so the 90 ms cap flushes it.
     const t0 = Date.now();
     for (let i = 0; i < 7; i++) { u2.touch([i % 2 ? ID1 : ID2], i === 3 ? 'import' : 'save'); await wait(10); }
@@ -200,7 +202,7 @@ describe('the upkeep runner', () => {
     expect(Date.now() - t0).toBeLessThan(400);
     expect(calls).toEqual([2]);
     expect((await readState(root)).lastDecision).toMatchObject({ act: 'read', ideas: [ID2, ID1], why: 'read 2026-002 and 2026-001 after Import · 2 passages' });
-    upkeep.close(); u2.close();
+    u2.close();
   });
 
   it('while a read runs the trigger is queued and folded into the end of that run; paused is never resumed', async () => {
@@ -210,7 +212,8 @@ describe('the upkeep runner', () => {
     const slow = (): Embedder => ({ ...fakeEmbedder(), embed: async (t) => { await new Promise<void>((r) => { gate = r; }); return fakeEmbedder().embed(t); } });
     const { job, upkeep } = setup(root, { embedder: fakeEmbedder });
     await job.run(); await job.idle();
-    // A slower job for the second run, sharing the upkeep.
+    upkeep.close();
+    // A slower job for the second run, with its own runner (the save's own touch, from the files layer, reaches it too).
     const job2 = createDeepRead(root, slow, clock);
     const up2 = createUpkeep(root, { job: job2, embedder: fakeEmbedder, env: FAKE, clock, quietMs: 10, maxMs: 50, on: async () => true, nodes: async () => [] });
     await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed once.', dedupe_key: 'a' }));
@@ -220,7 +223,8 @@ describe('the upkeep runner', () => {
     await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Changed too.', dedupe_key: 'b' }));
     up2.touch([ID2], 'save');
     await wait(40);
-    expect((await readState(root)).lastDecision).toMatchObject({ act: 'queue', why: 'a read is running: 2026-002 will be checked when it ends' });
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'queue' });
+    expect((await readState(root)).lastDecision?.why).toMatch(/^a read is running: 2026-00[12]( and 2026-002)? will be checked when it ends$/);
     gate?.();
     await job2.idle();
     await up2.idle();
@@ -228,7 +232,7 @@ describe('the upkeep runner', () => {
     const after = await readState(root);
     expect(after.status).toBe('done');
     expect(['skip', 'read']).toContain(after.lastDecision?.act);
-    expect(after.lastDecision?.why).toMatch(/^(nothing changed in 2026-002|read 2026-002 after a save)/);
+    expect(after.lastDecision?.why).toMatch(/^(nothing changed in (2026-001 and )?2026-002|read (2026-001 and )?2026-002 after a save)/);
     // Paused before its first batch: nothing read, and a change while paused is marked stale, never read.
     await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed again.', dedupe_key: 'a' }));
     await job2.run(); await job2.pause(); await job2.idle();
@@ -240,7 +244,7 @@ describe('the upkeep runner', () => {
     expect(paused.status).toBe('paused');
     expect(paused.lastDecision).toMatchObject({ act: 'skip', why: 'paused by you: 2026-001 will be read at Continue' });
     expect(paused.stale).toEqual([ID1]);
-    upkeep.close(); up2.close();
+    up2.close();
   });
 
   it('the switch off: a decision is recorded, nothing is read', async () => {
@@ -259,8 +263,9 @@ describe('the upkeep runner', () => {
   it('a failing embedder defers once with the error and is not retried until the next touch', async () => {
     const root = await tmpWorkspace();
     await twoIdeas(root);
-    const { job } = setup(root);
+    const { job, upkeep } = setup(root);
     await job.run(); await job.idle();
+    upkeep.close();
     let calls = 0;
     const failing = (): Embedder => ({ ...fakeEmbedder(), embed: async () => { calls++; throw new Error('The model could not be loaded'); } });
     const up = createUpkeep(root, { job, embedder: failing, env: FAKE, clock, quietMs: 10, maxMs: 50, on: async () => true, nodes: async () => [] });

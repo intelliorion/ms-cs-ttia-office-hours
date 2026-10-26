@@ -23,6 +23,7 @@ import { planAiLinks } from '../ai/apply';
 import { starMatcher } from '../memory/lookup';
 import { extractCoded } from '../ai/grow';
 import { loadIdea } from '../ideas/store';
+import { touched } from '../memory/touch';
 
 /** Route-level inbox operations. The server runs every one of these behind its POST lock. */
 
@@ -242,6 +243,9 @@ export async function processItem(
   const graphLine = [drawn?.line, graphApplied.length ? graphDetail(graphApplied) : ''].filter(Boolean).join('; ');
   await markStep(root, id, { id: 'graph', status: graphLine ? 'done' : 'skipped', detail: graphLine || 'No graph facts' });
   const created = isExport ? createdIdeas(records) : [];
+  // Deep read's upkeep: the ideas this run created or wrote to, so its reason can say "after Import".
+  const ideasTouched = [...created, ...(tr.ideaId && ctxApplied.length ? [tr.ideaId] : [])];
+  if (ideasTouched.length) touched(root, ideasTouched, 'import');
   if (created.length && connector && (await connector.status()).provider) {
     // The AI reads each new idea's challenge, process and outcomes in the background; the card shows it go.
     await markStep(root, id, { id: 'understand', status: 'running', detail: `Reading the ${created.length} new idea${created.length === 1 ? '' : 's'}…` });

@@ -5,7 +5,7 @@ import type { AddRoute } from './server';
 import { dataKey, paths } from '../workspace/paths';
 import { loadSteps, STAGE_NAMES } from '../rules/stages';
 import { ROUND_FIELDS, SETTING_FIELDS } from '../round/round';
-import { listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings } from '../round/store';
+import { listRoundsChecked, createRound, saveRound, setIdeaRound, assignIdeas, loadSettings, saveSettings, saveUpkeepSwitch, upkeepOn } from '../round/store';
 import { listIdeas, ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { tick } from '../checklist/checklist';
@@ -46,6 +46,7 @@ import { showNames } from '../command/names';
 import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { createDeepRead } from '../memory/job';
+import { createUpkeep } from '../memory/upkeep';
 import { embedderName, getEmbedder, modelCached, modelDir } from '../memory/embed';
 import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
@@ -68,7 +69,7 @@ export function fileNameOf(header: unknown): string {
 /** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
 const DESIGN_FILE = /^(design\.md|design-diagram\.html|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html|js|css))$/;
 
-export function registerApi(add: AddRoute, { root, clock, connector }: { root: string; clock: Clock; connector?: Connector }): void {
+export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upkeepTimes }: { root: string; clock: Clock; connector?: Connector; upkeep?: { quietMs?: number; maxMs?: number } }): void {
   const steps = () => loadSteps(root);
   const ai = connector ?? createConnector({ providers: defaultProviders(), settings: () => loadSettings(root) });
   /** AI failures never change anything; they tell the operator to carry on by hand. */
@@ -118,15 +119,22 @@ export function registerApi(add: AddRoute, { root, clock, connector }: { root: s
 
   // Deep read: the reading index. One background job per server; it runs on after the request and the pop-out polls.
   const deepRead = createDeepRead(root, () => getEmbedder(), () => new Date().toISOString());
+  // Upkeep: after an Import or a save, decides what (if anything) to re-read; never before the operator's first Run.
+  const upkeep = createUpkeep(root, {
+    job: deepRead, embedder: () => getEmbedder(), ...upkeepTimes,
+    on: async () => upkeepOn(await loadSettings(root)), nodes: async () => (await rebuildGraph(root)).nodes,
+  });
   const memoryView = async () => ({
+    upkeep: { on: upkeepOn(await loadSettings(root)), pending: upkeep.pending(), waiting: upkeep.waiting() },
     model: { id: embedderName(), dir: modelDir(), cached: embedderName() === 'fake' || await modelCached() },
     job: await deepRead.status(), summary: await memorySummary(root),
   });
   add('GET', '/api/memory', memoryView);
-  add('POST', '/api/memory/run', async () => { await deepRead.run(); return memoryView(); });
+  add('POST', '/api/memory/run', async () => { await upkeep.settle(); await deepRead.run(); return memoryView(); });
   add('POST', '/api/memory/pause', async () => { await deepRead.pause(); return memoryView(); });
   add('POST', '/api/memory/continue', async () => { await deepRead.continue(); return memoryView(); });
-  add('POST', '/api/memory/rerun', async () => { await deepRead.rerun(); return memoryView(); });
+  add('POST', '/api/memory/rerun', async () => { await upkeep.settle(); await deepRead.rerun(); return memoryView(); });
+  add('POST', '/api/memory/upkeep', async ({ body }) => { await saveUpkeepSwitch(root, body.on !== false); return memoryView(); });
   // The ideas panel's "by meaning": null until Deep read has run, so the panel behaves as before.
   add('GET', '/api/memory/ideas', async ({ query }) => ({ ideas: await rankIdeas(root, String(query?.q ?? '')) }));
 

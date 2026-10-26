@@ -7,6 +7,7 @@ import { withTick } from '../checklist/checklist';
 import { appendHistory } from '../workspace/files';
 import { FIRST_STAGE, type StepDef } from '../rules/stages';
 import type { Clock } from '../clock';
+import { touched } from '../memory/touch';
 
 export interface ImportReport {
   created: { id: string; title: string }[];
@@ -108,5 +109,6 @@ export async function importExport(
     report.created.push({ id, title });
     for (const message of flags) report.flags.push({ id, message });
   }
+  if (report.created.length) touched(root, report.created.map((c) => c.id), 'import');
   return report;
 }

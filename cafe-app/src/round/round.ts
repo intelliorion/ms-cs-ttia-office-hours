@@ -28,6 +28,8 @@ export interface Settings {
   deckTemplate?: string;
   /** Which coding tool lends the app an LLM. 'auto' tries Claude Code, then Copilot CLI, then VS Code. */
   ai?: { provider?: AiChoice };
+  /** Deep read: automatic upkeep (reads what changed after an Import or a save). Absent means on. */
+  deepRead?: { upkeep?: boolean };
 }
 
 export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';

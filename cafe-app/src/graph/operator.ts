@@ -2,6 +2,7 @@ import path from 'node:path';
 import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import type { OperatorEdit } from './ontology';
+import { touched } from '../memory/touch';
 
 const file = (root: string) => path.join(paths(root).graph, 'operator.jsonl');
 
@@ -22,6 +23,8 @@ async function writeEdits(root: string, edits: OperatorEdit[]): Promise<void> {
 
 export async function appendEdit(root: string, edit: OperatorEdit): Promise<void> {
   await writeEdits(root, [...(await readEdits(root)), edit]);
+  // Deep read's upkeep refreshes the star labels (a rename or merge changes no passage).
+  if (edit.t === 'rename' || edit.t === 'merge') touched(root, [], 'stars');
 }
 
 export async function setEditStatus(root: string, id: string, status: OperatorEdit['status']): Promise<OperatorEdit> {

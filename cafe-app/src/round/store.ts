@@ -136,6 +136,15 @@ export async function loadSettings(root: string): Promise<Settings> {
   return { ...DEFAULT_SETTINGS, ...raw };
 }
 
+/** The Deep read upkeep switch, kept in rules/settings.yaml; a settings toggle, not an approval. */
+export async function saveUpkeepSwitch(root: string, on: boolean): Promise<Settings> {
+  const settings = await loadSettings(root);
+  const next: Settings = { ...settings, deepRead: { ...(settings.deepRead ?? {}), upkeep: on } };
+  await writeYaml(paths(root).settings, next);
+  return next;
+}
+export const upkeepOn = (s: Settings): boolean => s.deepRead?.upkeep !== false;
+
 export async function saveSettings(root: string, patch: Record<string, unknown>): Promise<Settings> {
   const settings = await loadSettings(root);
   for (const [key] of SETTING_FIELDS) {

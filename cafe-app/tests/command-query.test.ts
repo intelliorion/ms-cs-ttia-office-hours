@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../src/graph/build';
-import { runQuery, shortestPath, type Query } from '../src/command/query';
+import { runQuery, shortestPath, QUERY_GUIDE, type Query } from '../src/command/query';
 import { sampleIdea } from './helpers';
 import type { AiLink } from '../src/graph/ontology';
 
@@ -22,7 +22,7 @@ const links: AiLink[] = [
   ai('idea:CAFE-2026-001', 'REPLACES', 'painpoint:policy-emails', 'PainPoint', 'Policy emails'),
 ];
 const graph = buildGraph(ideas, links, [{ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' } as any]);
-const codes: Record<string, string> = { I1: 'idea:CAFE-2026-001', I2: 'idea:CAFE-2026-002', S1: 'system:expense-export', T1: 'team:gss', P1: 'person:person-1' };
+const codes: Record<string, string> = { I1: 'idea:CAFE-2026-001', I2: 'idea:CAFE-2026-002', I3: 'idea:CAFE-2026-003', S1: 'system:expense-export', T1: 'team:gss', P1: 'person:person-1' };
 const world = { graph, ideas, rounds: [{ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' } as any], idOf: (c: string) => codes[c] };
 const q = (steps: Query['steps']) => runQuery({ steps }, world);
 
@@ -71,5 +71,34 @@ describe('the knowledge-graph query', () => {
     expect(r.path).toEqual(['idea:CAFE-2026-001', 'capability:policy-q-a', 'idea:CAFE-2026-002']);
     expect(q([{ op: 'stars', codes: ['Z9'] }]).final).toEqual([]);
     expect(shortestPath([], 'a', 'b')).toEqual([]);
+  });
+});
+
+describe('the query over derived relations', () => {
+  it('follow with a derived rel walks the rule\'s edges and the trace says what derived them', () => {
+    const r = q([{ op: 'stars', codes: ['S1'] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }]);
+    expect(r.final).toEqual(['idea:CAFE-2026-003']);
+    expect(r.trace.map((t) => t.text)).toEqual([
+      'Start from Expense export',
+      'Follow depends on links to ideas',
+      'Expense anomaly finder depends on Expense export: derived by needs+uses_data from Expense anomaly finder NEEDS Claim scoring, Claim scoring USES_DATA Expense export',
+    ]);
+    expect(r.trace[2].size).toBe(1);
+  });
+  it('follow with no rel keeps to what was stated: a derived link is not a neighbour', () => {
+    const r = q([{ op: 'stars', codes: ['S1'] }, { op: 'follow' }]);
+    expect(r.final).toEqual(['capability:claim-scoring']);
+    // The shortest chain goes through the capability, never over the derived DEPENDS_ON shortcut.
+    expect(q([{ op: 'path', codes: ['I3', 'S1'] }]).path).toEqual(['idea:CAFE-2026-003', 'capability:claim-scoring', 'system:expense-export']);
+  });
+  it('rank by a derived rel counts derived links; rank with no rel does not', () => {
+    const r = q([{ op: 'stars', type: 'System' }, { op: 'rank', rel: 'DEPENDS_ON', dir: 'in', limit: 1 }]);
+    expect(r.ranked).toEqual([{ id: 'system:expense-export', n: 1 }]);
+    expect(q([{ op: 'stars', type: 'System' }, { op: 'rank', limit: 1 }]).ranked).toEqual([{ id: 'system:expense-export', n: 1 }]);
+    expect(graph.edges.filter((e) => e.rel === 'OWNS').length).toBe(3);
+    expect(q([{ op: 'stars', codes: ['T1'] }, { op: 'follow', rel: 'OWNS', type: 'Idea' }]).final.sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002']);
+  });
+  it('the guide names the derived relations', () => {
+    expect(QUERY_GUIDE.join('\n')).toMatch(/Derived by the rules.*DEPENDS_ON/);
   });
 });

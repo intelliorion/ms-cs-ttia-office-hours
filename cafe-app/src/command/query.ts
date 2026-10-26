@@ -1,4 +1,4 @@
-import { NODE_LABELS, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { DERIVED_RELATIONS, NODE_LABELS, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -11,7 +11,9 @@ export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'pat
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
 const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
-const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'];
+const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY', ...DERIVED_RELATIONS];
+/** How many derived links a step names in the trace before "and N more". */
+const DERIVED_TRACE_MAX = 5;
 
 export interface QueryStep {
   op: (typeof QUERY_OPS)[number];
@@ -70,6 +72,10 @@ export const QUERY_GUIDE = [
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
+  'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
+  'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
+  'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "ideas similar to [I1]", "what does GSS own"): follow or rank with that rel.',
+  'A follow or rank with no rel walks the stated links only. For what people WROTE use search, not the derived links.',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
   'Use one query unless the question has separate parts. Examples (codes as in "stars"):',
   '- what is related to [T1]: [{"op":"stars","codes":["T1"]},{"op":"follow"}]',
@@ -82,6 +88,8 @@ export const QUERY_GUIDE = [
   '- ideas that want the same outcome as [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"WANTS","type":"Outcome"},{"op":"follow","rel":"WANTS","type":"Idea"}]',
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
   '- how [P1] is connected to [I2]: [{"op":"path","codes":["P1","I2"]}]',
+  '- ideas that depend on [S1]: [{"op":"stars","codes":["S1"]},{"op":"follow","rel":"DEPENDS_ON","dir":"in","type":"Idea"}]',
+  '- ideas similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
   '- ideas like [I1]: [{"op":"similar","codes":["I1"],"limit":5}]',
 ];
@@ -141,6 +149,8 @@ const SINGULAR: Record<NodeType, string> = {
 };
 const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
 const relWord = (r?: Relation) => (r ? r.toLowerCase().replace(/_/g, ' ') : 'any');
+/** The links a step walks: the stated ones, plus the derived ones only when the step asks for a derived rel. */
+const walkable = (edges: GEdge[], rel?: Relation) => (rel && DERIVED_RELATIONS.includes(rel) ? edges : edges.filter((e) => !e.derived));
 
 export function runQuery(q: Query, w: QueryWorld): QueryResult {
   const nodes = new Map(w.graph.nodes.map((n) => [n.id, n]));
@@ -173,6 +183,16 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const touched = new Set<string>();
   const trace: StepTrace[] = [];
+  const edgeById = new Map(w.graph.edges.map((e) => [e.id, e]));
+  /** One trace line per derived link a step used: what it says and the links it rests on, at most a few. */
+  const derivedLines = (used: GEdge[]): StepTrace[] => {
+    const lines = used.slice(0, DERIVED_TRACE_MAX).map((e) => ({
+      text: `${name(e.from)} ${relWord(e.rel)} ${name(e.to)}: derived by ${e.derived!.rule} from ${e.derived!.inputs.map((id) => { const i = edgeById.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}`,
+      size: 1,
+    }));
+    if (used.length > DERIVED_TRACE_MAX) lines.push({ text: `and ${used.length - DERIVED_TRACE_MAX} more derived links`, size: used.length - DERIVED_TRACE_MAX });
+    return lines;
+  };
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
   /** Deep read's fallback for a match no label contains: the nearest labels by meaning, within the candidates. */
   const nearestIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
@@ -196,14 +216,17 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
         text += near.note;
       } else if (s.op === 'follow') {
-        const from = new Set(set); const out = new Set<string>();
-        for (const e of w.graph.edges) {
+        const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
+        for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
-          if (s.dir !== 'in' && from.has(e.from)) out.add(e.to);
-          if (s.dir !== 'out' && from.has(e.to)) out.add(e.from);
+          let hit = false;
+          if (s.dir !== 'in' && from.has(e.from)) { out.add(e.to); hit = true; }
+          if (s.dir !== 'out' && from.has(e.to)) { out.add(e.from); hit = true; }
+          if (hit && e.derived) used.push(e);
         }
         set = [...out].filter((id) => !s.type || nodes.get(id)?.type === s.type);
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}`;
+        if (log && used.length) { trace.push({ text, size: set.length }); trace.push(...derivedLines(used.filter((e) => set.includes(e.from) || set.includes(e.to)))); text = ''; }
       } else if (s.op === 'filter') {
         const before = set;
         set = set.filter((id) => fits(id, s));
@@ -239,12 +262,12 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         text = 'Keep only what a second search also found';
       } else if (s.op === 'path') {
         const [a, b] = (s.codes ?? []).map(w.idOf);
-        path = a && b && nodes.has(a) && nodes.has(b) ? shortestPath(w.graph.edges, a, b) : [];
+        path = a && b && nodes.has(a) && nodes.has(b) ? shortestPath(walkable(w.graph.edges), a, b) : [];
         set = path;
         text = path.length ? `Shortest chain: ${path.map(name).join(' — ')}` : 'No chain of links between them';
       } else if (s.op === 'rank') {
         const n = new Map(set.map((id) => [id, 0]));
-        for (const e of w.graph.edges) {
+        for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
           if (s.dir !== 'in' && n.has(e.from)) n.set(e.from, n.get(e.from)! + 1);
           if (s.dir !== 'out' && n.has(e.to)) n.set(e.to, n.get(e.to)! + 1);
@@ -266,7 +289,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         }
         text = `Count by ${by}`;
       }
-      if (log) trace.push({ text, size: set.length });
+      if (log && text) trace.push({ text, size: set.length });
       // A broad scan to start from ("every capability") is not lit when later steps narrow it: only what the query found is.
       const broadStart = s.op === 'stars' && !s.codes?.length && !s.match && !s.last && steps.indexOf(s) < steps.length - 1;
       // The inner search of an intersect only filters; it is not part of the chain shown.

@@ -28,6 +28,8 @@ export interface ConflictContext {
   aiIdeaId: string | null;
   /** The screen's reasons, when it flagged anything (the file was still read). */
   screened: string[];
+  /** Deep read: a new star (by id) that is near in meaning to an existing one (its id), from planAiLinks. */
+  near?: Record<string, string>;
 }
 
 export const LOW_CONFIDENCE = 0.5;
@@ -77,7 +79,8 @@ const pct = (c: number) => `${Math.round(c * 100)}%`;
 function checkLink(l: AiLink, ctx: ConflictContext): Omit<Held, 'action'> | null {
   for (const n of l.newNodes ?? []) {
     if (n.type === 'Person' || isPersonLabel(n.label, ctx)) return { rule: 'person-star', why: 'People come from the form only, never from text' };
-    const twin = ctx.nodes.find((x) => x.type === n.type && x.id !== n.id && (sameLabel(x.label, n.label) || wordOverlap(x.label, n.label) >= NEAR_DUPLICATE));
+    const twin = ctx.nodes.find((x) => x.type === n.type && x.id !== n.id && (sameLabel(x.label, n.label) || wordOverlap(x.label, n.label) >= NEAR_DUPLICATE))
+      ?? (ctx.near?.[n.id] ? ctx.nodes.find((x) => x.id === ctx.near![n.id]) : undefined);
     if (twin) return { rule: 'near-duplicate-star', why: `Looks like ${twin.label}: merge or keep both?`, existing: twin.id, node: n.id };
   }
   if (l.confidence < LOW_CONFIDENCE) return { rule: 'low-confidence', why: `The AI was not sure (${pct(l.confidence)})` };

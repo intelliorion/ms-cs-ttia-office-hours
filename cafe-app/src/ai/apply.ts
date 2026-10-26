@@ -1,6 +1,10 @@
 import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
+import type { NearestStar } from '../memory/lookup';
+
+/** Deep read: a proposed label this close (cosine) to an existing star of the same type reuses that star. */
+export const REUSE_AT = 0.85;
 
 /** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
@@ -27,12 +31,17 @@ export function toAiLinks(
   return planAiLinks(ideaId, out, graph, previous, provider).links;
 }
 
-/** The pending links plus the new nodes they would bring, which the operator must accept first. */
+/**
+ * The pending links plus the new nodes they would bring, which the operator must accept first. With Deep read's
+ * `nearest` (undefined when there is no index): a proposed label at or above `reuseAt` to an existing star of its type
+ * uses that star; one below it but still near is kept as a new star and listed in `near` (new star id → the existing
+ * one), for the conflict rules to hold as a near duplicate. Without `nearest` nothing here changes.
+ */
 export function planAiLinks(
   ideaId: string, out: ExtractOutput,
   graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
-  opts: { status?: AiLink['status'] } = {},
-): { links: AiLink[]; newNodes: GNode[] } {
+  opts: { status?: AiLink['status']; nearest?: NearestStar; reuseAt?: number } = {},
+): { links: AiLink[]; newNodes: GNode[]; near: Record<string, string> } {
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
@@ -57,6 +66,18 @@ export function planAiLinks(
   }
   const existing = new Map<string, GNode>();
   for (const n of graph.nodes) if (n.type !== 'Idea' && n.type !== 'Person' && !existing.has(key(n.label))) existing.set(key(n.label), n);
+  // Deep read: a proposed star that only differs in wording from one already there ("Match invoices" / "Invoice
+  // matching") reuses it; one merely near it is kept, marked, so the operator is asked "merge or keep both?".
+  const near: Record<string, string> = {};
+  if (opts.nearest) {
+    for (const [k, p] of [...proposed.entries()]) {
+      if (existing.has(k)) continue;
+      const hit = opts.nearest(p.type, p.label);
+      if (!hit || hit.node.id === p.id) continue;
+      if (hit.score >= (opts.reuseAt ?? REUSE_AT)) proposed.set(k, hit.node);
+      else near[p.id] = hit.node.id;
+    }
+  }
   // A node is known only if something the operator stands behind put it there: the form
   // (and every idea), or an AI link the operator confirmed. Nodes that exist only because of
   // a still-pending AI link stay "new", so links to them stay unconfirmed too.
@@ -89,5 +110,6 @@ export function planAiLinks(
   }
   const newNodes = new Map<string, GNode>();
   for (const l of links) for (const n of l.newNodes ?? []) newNodes.set(n.id, n);
-  return { links, newNodes: [...newNodes.values()] };
+  const kept = new Set(newNodes.keys());
+  return { links, newNodes: [...newNodes.values()], near: Object.fromEntries(Object.entries(near).filter(([id]) => kept.has(id))) };
 }

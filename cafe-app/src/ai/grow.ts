@@ -11,6 +11,7 @@ import type { Idea } from '../ideas/idea';
 import type { Coded } from '../command/names';
 import { coder, codeAll, decodeValue, peopleFor, withNames } from '../review/suggestInput';
 import { knownParticipants } from '../inbox/screen';
+import { starMatcher } from '../memory/lookup';
 
 /**
  * The extract input with names coded before the AI sees it, as every other AI call codes them (reviewInput's coder):
@@ -46,11 +47,13 @@ export async function growIdea(root: string, ai: Connector, id: string): Promise
   const idea = await loadIdea(root, id);
   const before = await rebuildGraph(root);
   const { provider, output } = await extractCoded(root, ai, idea, before.nodes);
-  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
+  // Deep read, when it has run: a star that only differs in wording is reused; a near one is held for the operator.
+  const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
+  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
   const { ideas } = await listIdeas(root);
   const ctx: ConflictContext = {
     idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),
-    match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [],
+    match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [], near: planned.near,
   };
   const { apply, hold } = checkProposals(ctx, [{ t: 'graph_links', ideaId: idea.id, links: planned.links }]);
   for (const a of apply) if (a.t === 'graph_links') for (const l of a.links) await appendAiLink(root, l);

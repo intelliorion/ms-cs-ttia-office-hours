@@ -20,6 +20,7 @@ import { ideaDir } from '../ideas/store';
 import { readDesign } from '../design/store';
 import { rebuildGraph, readAiLinks } from '../graph/store';
 import { planAiLinks } from '../ai/apply';
+import { starMatcher } from '../memory/lookup';
 import { extractCoded } from '../ai/grow';
 import { loadIdea } from '../ideas/store';
 
@@ -321,13 +322,14 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
     try {
       const before = await rebuildGraph(root);
       const { provider, output } = await extractCoded(root, connector, idea, before.nodes);
-      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed' });
+      const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
+      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
       if (planned.links.length) {
         const item = await load(root, id);
         const { ideas } = await listIdeas(root);
         const ctx: ConflictContext = {
           idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),
-          match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [],
+          match: { ideaId: idea.id, confidence: 1, candidates: [idea.id] }, aiIdeaId: idea.id, screened: [], near: planned.near,
         };
         const { apply, hold } = checkProposals(ctx, [{ t: 'graph_links', ideaId: idea.id, links: planned.links }]);
         const records = [...recordsOf(item)];

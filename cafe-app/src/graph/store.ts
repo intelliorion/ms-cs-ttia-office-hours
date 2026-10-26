@@ -10,6 +10,7 @@ import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
 import type { Clock } from '../clock';
 import { registryFrom } from './registryFile';
 import { loadRules } from './rules';
+import { loadOntology } from './ontologyFile';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
 
@@ -62,6 +63,8 @@ onTouched((t) => { const c = caches.get(t.root); if (c) for (const id of t.ideas
 const cacheFor = (root: string) => { let c = caches.get(root); if (!c) caches.set(root, (c = new BundleCache())); return c; };
 
 export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
+  // The workspace's ontology first: the words and pairs every layer below reads.
+  await loadOntology(root);
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);

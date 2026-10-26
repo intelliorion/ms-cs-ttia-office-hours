@@ -1,20 +1,7 @@
-import { NODE_LABELS } from '../../../src/graph/ontology';
+import { NODE_LABELS, NODE_DESCRIPTIONS } from '../../../src/graph/ontology';
 
-/** What each kind of star is, in a line. */
-export const STAR_ABOUT: Record<string, string> = {
-  Person: 'Someone on one or more ideas: who submitted, leads, sponsors, builds or helps.',
-  Team: 'A CS Function: the team an idea came from.',
-  Entity: 'A division of the firm; its teams sit under it.',
-  PainPoint: 'A problem an idea sets out to fix.',
-  Capability: 'Something a solution needs to do: tools build it, systems feed it.',
-  Tool: 'A tool picked in the tool picker to build a feature.',
-  System: 'A system or data source a capability uses.',
-  Support: 'Help a submitter asked the Café for.',
-  Outcome: 'A desired outcome picked on the form.',
-  Beneficiary: 'Who would benefit, as picked on the form.',
-  Category: 'A use case category picked on the form.',
-  Round: 'A round of the Café: ideas submitted and reviewed together.',
-};
+/** What each kind of star is, in a line: the ontology's descriptions (rules/ontology.yaml). */
+export const STAR_ABOUT: Record<string, string> = NODE_DESCRIPTIONS;
 const ROLE_WORD: Record<string, string> = { submitter: 'Submitter', lead: 'Lead', sponsor: 'Sponsor', builder: 'Builder', member: 'Member' };
 
 export interface StarProfile {

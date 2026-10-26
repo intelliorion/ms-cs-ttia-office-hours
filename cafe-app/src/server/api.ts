@@ -51,6 +51,7 @@ import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
 import { edgeId, APPROVED_TOOLS, retiredToolNote } from '../graph/ontology';
 import { aiReads, aiReadOf } from '../ai/reads';
+import { currentOntology } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -99,6 +100,8 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
       decisions: DECISION_LABELS,
       fields: { round: ROUND_FIELDS, settings: SETTING_FIELDS },
       approvedTools: APPROVED_TOOLS,
+      // The workspace's ontology (rules/ontology.yaml): the UI takes its labels and colours from it.
+      ontology: currentOntology(),
     };
   });
 

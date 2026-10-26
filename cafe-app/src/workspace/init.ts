@@ -6,13 +6,15 @@ import { DEFAULT_STEPS } from '../rules/stages';
 import { DEFAULT_SETTINGS } from '../round/round';
 import { seedEntities } from '../graph/registry';
 import { DEFAULT_RULES } from '../graph/rules';
+import { seedOntology } from '../graph/ontologyFile';
 
 export const WORKSPACE_README = `Creators' Café workspace
 
 data/        The Café's data: ideas, rounds, the inbox, the knowledge graph, chat, exports.
              Safe to delete, all of it or any part, even while the app runs: the Café starts again empty.
 rules/       Your configuration: settings.yaml (your name, links, the AI choice), stages.yaml, and the knowledge
-             graph's entities.yaml (stable names and their aliases) and inference.yaml (the rules). Keep it.
+             graph's entities.yaml (stable names and their aliases), inference.yaml (the rules) and ontology.yaml
+             (what each kind of star and each link means). Keep it.
 templates/   The email templates. Keep them; any that goes missing is copied back the next time the app starts.
 `;
 
@@ -77,6 +79,10 @@ export async function initWorkspace(root: string): Promise<{ created: string[]; 
   if (await missing(p.entities)) {
     await writeYaml(p.entities, seedEntities());
     created.push('rules/entities.yaml');
+  }
+  if (await missing(p.ontology)) {
+    await writeYaml(p.ontology, seedOntology());
+    created.push('rules/ontology.yaml');
   }
   if (await missing(p.inference)) {
     await writeYaml(p.inference, { rules: DEFAULT_RULES.map(({ kind, ...r }) => (kind === 'chain' ? r : { ...r, kind })) });

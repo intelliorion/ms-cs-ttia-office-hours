@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { applyOntology } from '../../../src/graph/ontology';
 import { getState, getGraph, getAiStatus, getInbox, getMemory } from '../api';
 import type { DeepReadView, IdeaFilter } from '../popouts/deepReadHelpers';
 import type { AiStatus } from '../popouts/aiUi';
@@ -229,6 +230,8 @@ export const useStore = create<AppState>((set) => ({
     try {
       let graphError: string | null = null;
       const [state, graph] = await Promise.all([getState(), getGraph().catch((e: Error) => { graphError = e.message; return null; })]);
+      // The workspace's ontology (rules/ontology.yaml): its labels and colours apply to the constants every panel reads.
+      if (state?.ontology) applyOntology(state.ontology);
       // Keep the old graph (or its layout) when nothing changed, so the universe and its camera stay where they are.
       // A graph that cannot be read never blanks a universe that is already loaded.
       set((s) => ({

@@ -1,4 +1,4 @@
-import { AI_NODE_TYPES, AI_RELATIONS, APPROVED_TOOLS, type NodeType, type Relation } from '../graph/ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, APPROVED_TOOLS, RELATION_MEANINGS, type NodeType, type Relation } from '../graph/ontology';
 import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
@@ -234,7 +234,8 @@ export const extractTask: Task<ExtractOutput> = {
       'Never propose a tool or product to build it with: the tool is chosen later, in the app, by the operator.',
       'A capability is something the solution does. Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form.',
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
-      'Links: "from" is "idea" or a node label; "to" is a node label. Allowed: idea REPLACES PainPoint, idea NEEDS Capability, Capability USES_DATA System.',
+      // What each link means, from the ontology (rules/ontology.yaml), so the AI proposes links by their meaning, not by type pairs alone.
+      `Links: "from" is "idea" or a node label; "to" is a node label. Allowed: ${AI_RELATIONS.filter((r) => r !== 'BUILT_WITH').map((r) => `${ALLOWED[r][0] === 'Idea' ? 'idea' : ALLOWED[r][0]} ${r} ${ALLOWED[r][1]} (${RELATION_MEANINGS[r].meaning})`).join('; ')}.`,
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
       'People appear as codes such as [P1] and email addresses as <email>: never make either a label, and write a person as their code alone.',
     ], EXTRACT_SCHEMA, { idea: ideaData(idea), existing });

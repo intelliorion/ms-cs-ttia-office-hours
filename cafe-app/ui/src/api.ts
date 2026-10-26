@@ -29,6 +29,7 @@ export const getAiStatus = () => fetch('/api/ai/status').then((r) => handle<any>
 /** Deep read: what has been read, the four controls, and ideas ranked by meaning for the panel (null with no index). */
 export const getMemory = () => fetch('/api/memory').then((r) => handle<any>(r));
 export const memoryPost = (what: 'run' | 'pause' | 'continue' | 'rerun') => post(`/api/memory/${what}`);
+export const memoryUpkeep = (on: boolean) => post('/api/memory/upkeep', { on });
 export const memoryIdeas = (q: string) => fetch(`/api/memory/ideas?q=${encodeURIComponent(q)}`).then((r) => handle<{ ideas: { id: string; score: number; section: string }[] | null }>(r));
 
 export const getInbox = () => fetch('/api/inbox').then((r) => handle<any>(r));

@@ -1288,3 +1288,56 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 /* The ideas list, when the words matched nothing and Deep read found ideas by meaning. */
 .ideas .dr-mark{margin-left:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);border:1px solid rgba(var(--rgb-accent),.5);border-radius:999px;padding:1px 8px}
 .idea-list li.by-meaning .iid::before{content:"≈ ";color:var(--teal)}
+
+/* Deep read: the dashboard */
+.deep-pill{position:relative}
+.dr-attn{position:absolute;top:6px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber)}
+[data-quality="lite"] .dr-attn{box-shadow:none}
+.dr-top{flex-wrap:wrap}
+.dr-togo{font-family:var(--mono);font-size:12.5px;color:var(--cream)}
+.dr-tiles{display:grid;grid-template-columns:repeat(3,minmax(96px,1fr));gap:10px;flex:none;margin-left:auto}
+.dr-tile{--c:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 10px;border-radius:10px;border:1px solid rgba(var(--rgb-line),.18);background:linear-gradient(180deg,rgba(var(--rgb-s2),.55),rgba(var(--rgb-s2),.25));min-width:96px}
+.dr-tile b{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--c);text-shadow:0 0 14px color-mix(in srgb,var(--c) 45%,transparent)}
+.dr-tile span{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text);white-space:nowrap}
+.dr-tile i{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.dr-tile.t-read{--c:var(--teal)}
+.dr-tile.t-stale{--c:var(--amber)}
+.dr-tile.t-new{--c:var(--cream)}
+[data-quality="lite"] .dr-tile b{text-shadow:none}
+.dr-keeps p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:var(--text)}
+.dr-keeps-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.dr-switch{padding:5px 14px;font-size:13px}
+.dr-waiting{font-size:12.5px;color:var(--muted);font-style:italic}
+.dr-last{font-size:13px;color:var(--text)}
+.dr-last.a-read{color:var(--teal)}
+.dr-last.a-defer{color:var(--amber)}
+.dr-beams{margin:4px 0 0;gap:10px}
+.dr-beams li{grid-template-columns:150px 1fr 72px}
+.dr-beams .beam-track{--c:var(--teal)}
+.dr-beams .beam-total{position:absolute;left:0;right:0;height:4px;border-radius:2px;background:rgba(var(--rgb-line),.18)}
+.dr-beams .beam{position:relative;z-index:1}
+.dr-beams li.all .beam-n{color:var(--teal)}
+.dr-table-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:8px}
+.dr-table-h h3{margin:0;flex:none}
+.dr-search{margin-left:auto;max-width:220px;padding:5px 10px;font-size:13px}
+.dr-table-wrap{max-height:320px;overflow:auto;border:1px solid rgba(var(--rgb-line),.14);border-radius:8px}
+.dr-table-wrap::-webkit-scrollbar{width:6px}
+.dr-table-wrap::-webkit-scrollbar-thumb{background:rgba(var(--rgb-line),.3);border-radius:3px}
+.dr-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.dr-table th{position:sticky;top:0;z-index:1;text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:8px 10px;background:rgba(var(--rgb-s6),.96);border-bottom:1px solid rgba(var(--rgb-line),.18)}
+.dr-table td{padding:7px 10px;border-bottom:1px solid rgba(var(--rgb-line),.08);color:var(--text);vertical-align:middle}
+.dr-table th.num,.dr-table td.num{text-align:right}
+.dr-table tbody tr{cursor:pointer}
+.dr-table tbody tr:hover td,.dr-table tbody tr:focus-visible td{background:rgba(var(--rgb-s2),.5)}
+.dr-table tbody tr:focus-visible{outline:none}
+.dr-table .iid{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.dr-table .ttl{max-width:280px}
+.dr-table .ttl span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dr-table .dr-count{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.dr-table .dr-stale{font-size:12.5px;color:var(--amber)}
+.dr-table .dr-when{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.dr-pill{display:inline-block;font-size:11.5px;padding:1px 9px;border-radius:999px;border:1px solid rgba(var(--rgb-line),.35);color:var(--muted);white-space:nowrap}
+.dr-table .st-read .dr-pill{color:var(--teal);border-color:rgba(var(--rgb-accent),.5)}
+.dr-table .st-stale .dr-pill{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 55%,transparent)}
+.dr-table .st-new .dr-pill{color:var(--cream);border-color:rgba(var(--rgb-line),.5)}
+.dr-table .dr-none td{text-align:center;color:var(--muted);padding:16px}

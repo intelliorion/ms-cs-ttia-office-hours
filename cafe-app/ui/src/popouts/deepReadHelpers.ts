@@ -1,16 +1,25 @@
 /** What GET /api/memory returns: the model, the job and what has been read. */
 export type DeepReadStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
+export interface DeepReadDecision { act: 'read' | 'skip' | 'queue' | 'defer'; ideas: string[]; why: string; at: string }
 export interface DeepReadJob {
   status: DeepReadStatus; embedder?: string; done: number; total: number; startedAt?: string;
   lastRun?: { at: string; ms: number; chunks: number; ideas: number }; error?: string;
+  /** What upkeep last decided, and why. */
+  lastDecision?: DeepReadDecision;
 }
-export interface DeepReadIdea { id: string; title: string; chunks: number; embedded: number; status: 'read' | 'stale' | 'new' }
+export type IdeaStatus = 'read' | 'stale' | 'new';
+export interface DeepReadIdea {
+  id: string; title: string; chunks: number; embedded: number; status: IdeaStatus;
+  kinds: Record<string, { chunks: number; embedded: number }>;
+  lastRead?: string;
+}
+export interface DeepReadUpkeep { on: boolean; pending: number; waiting: boolean }
 export interface DeepReadSummary {
   chunks: number; embedded: number; percent: number;
   kinds: Record<string, { chunks: number; embedded: number }>;
   ideas: DeepReadIdea[]; available: boolean; otherModel?: string;
 }
-export interface DeepReadView { model: { id: string; dir: string; cached: boolean }; job: DeepReadJob; summary: DeepReadSummary }
+export interface DeepReadView { model: { id: string; dir: string; cached: boolean }; job: DeepReadJob; summary: DeepReadSummary; upkeep: DeepReadUpkeep }
 
 /** The ring's share, 0..1: what the job has done while it runs, else what the summary says is read. */
 export function ringShare(v: DeepReadView | null): number {
@@ -85,3 +94,63 @@ export const COPY: { title: string; text: string }[] = [
   { title: 'Stays here', text: 'Everything stays on this machine. A small reading model (about 23 MB) is downloaded once, on the first Run; after that nothing goes out. No text is sent anywhere, and people\'s names are coded before any AI sees a passage, exactly as today.' },
   { title: 'When it is on', text: 'The assistant can search what people wrote and say which passage it read. The ideas search finds by meaning when the words differ. A star the AI proposes is matched to one you already have before a twin is made. It is a reading index, not understanding: the app works the same without it.' },
 ];
+
+/* ---------- The dashboard: where things stand ---------- */
+
+export interface Dashboard {
+  total: number; read: number; stale: number; new: number;
+  /** Each group's share of the ideas, whole percentages that add up to 100 (0 with no ideas). */
+  shares: Record<IdeaStatus, number>;
+  /** Passages still to read, and their share of all passages. */
+  toGo: number; toGoPercent: number;
+}
+const STATUS_ORDER: IdeaStatus[] = ['new', 'stale', 'read'];
+
+export function dashboard(summary: DeepReadSummary): Dashboard {
+  const counts: Record<IdeaStatus, number> = { read: 0, stale: 0, new: 0 };
+  for (const i of summary.ideas) counts[i.status]++;
+  const total = summary.ideas.length;
+  const shares: Record<IdeaStatus, number> = { read: 0, stale: 0, new: 0 };
+  if (total) {
+    for (const k of STATUS_ORDER) shares[k] = Math.floor((counts[k] / total) * 100);
+    // The floors fall short of 100: the largest group takes the remainder (the first of equals).
+    const left = 100 - shares.read - shares.stale - shares.new;
+    const biggest = (['read', 'stale', 'new'] as IdeaStatus[]).reduce((b, k) => (counts[k] > counts[b] ? k : b));
+    shares[biggest] += left;
+  }
+  const toGo = Math.max(0, summary.chunks - summary.embedded);
+  return { total, read: counts.read, stale: counts.stale, new: counts.new, shares, toGo, toGoPercent: summary.chunks ? Math.ceil((toGo / summary.chunks) * 100) : 0 };
+}
+
+/** Not yet first, then changed since, then read; by ID within a group. */
+export function sortIdeas(ideas: DeepReadIdea[]): DeepReadIdea[] {
+  return [...ideas].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || a.id.localeCompare(b.id));
+}
+export type IdeaFilter = 'all' | IdeaStatus;
+export const FILTERS: { id: IdeaFilter; label: string }[] = [{ id: 'all', label: 'All' }, { id: 'new', label: 'Not yet' }, { id: 'stale', label: 'Changed since' }, { id: 'read', label: 'Read' }];
+/** The rows for a chip and a search (ID or title), in dashboard order. */
+export function filterIdeas(ideas: DeepReadIdea[], filter: IdeaFilter, q: string): DeepReadIdea[] {
+  const t = q.trim().toLowerCase();
+  return sortIdeas(ideas).filter((i) => (filter === 'all' || i.status === filter) && (!t || i.id.toLowerCase().includes(t) || i.title.toLowerCase().includes(t)));
+}
+const KIND_WORDS: Record<string, string> = { submission: 'submission', email: 'emails', design: 'design', review: 'review', roadshow: 'roadshow', other: 'notes' };
+/** "emails, design": the kinds of an idea with passages still to read. */
+export function staleKinds(idea: DeepReadIdea): string {
+  return Object.keys(KIND_WORDS).filter((k) => { const c = idea.kinds[k]; return c && c.embedded < c.chunks; }).map((k) => KIND_WORDS[k]).join(', ');
+}
+/** The by-kind bars: read ÷ present per kind, only the kinds the workspace has. */
+export const kindBars = kindCounts;
+
+const ACT_WORDS: Record<DeepReadDecision['act'], string> = { read: '', skip: 'skipped, ', queue: 'queued, ', defer: 'deferred, ' };
+/** "Last: read 2026-003 after Import · 3 passages · 26 Oct 14:02", "Last: skipped, nothing changed in 2026-003 · 26 Oct 14:02". */
+export function decisionLine(d: DeepReadDecision | undefined): string {
+  if (!d) return '';
+  return `Last: ${ACT_WORDS[d.act]}${d.why} · ${whenText(d.at)}`;
+}
+/** The title-bar dot: something is changed since or not yet, once there is an index. */
+export function attention(v: DeepReadView | null): boolean {
+  return !!v && v.summary.available && v.summary.ideas.some((i) => i.status !== 'read');
+}
+export const toRead = (v: DeepReadView | null): number => (v ? v.summary.ideas.filter((i) => i.status !== 'read').length : 0);
+
+export const KEEPS_CURRENT = 'Deep read keeps itself current: after an Import or a save it reads only what changed in the ideas that changed, never the whole workspace, never before your first Run, and never while you have it paused. When nothing changed it does nothing, and says so.';

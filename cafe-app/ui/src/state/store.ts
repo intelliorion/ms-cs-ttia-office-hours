@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { getState, getGraph, getAiStatus, getInbox, getMemory } from '../api';
-import type { DeepReadView } from '../popouts/deepReadHelpers';
+import type { DeepReadView, IdeaFilter } from '../popouts/deepReadHelpers';
 import type { AiStatus } from '../popouts/aiUi';
 import type { InboxView } from '../popouts/inboxHelpers';
 import { DEFAULT_LABELS, nextLabelMode, paletteFor, type LabelMode } from '../universe/graphView';
@@ -185,6 +185,9 @@ export interface AppState {
   /** What GET /api/memory said last (Deep read); null until read or when it can't be read. */
   memory: DeepReadView | null;
   refreshMemory: () => Promise<void>;
+  /** The Deep read dashboard's chip and search: kept here so they are there again after a row opened an idea. */
+  deepReadView: { filter: IdeaFilter; q: string };
+  setDeepReadView: (patch: Partial<{ filter: IdeaFilter; q: string }>) => void;
   /** Below 1000px wide the side panels become drawers; which one is open. */
   drawer: Drawer;
   setDrawer: (d: Drawer) => void;
@@ -219,6 +222,8 @@ export const useStore = create<AppState>((set) => ({
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
   refreshMemory: async () => { try { set({ memory: await getMemory() }); } catch { /* keep the last one */ } },
+  deepReadView: { filter: 'all', q: '' },
+  setDeepReadView: (patch) => set((s) => ({ deepReadView: { ...s.deepReadView, ...patch } })),
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
     try {

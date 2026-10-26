@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from '../state/store';
-import { ringLabel, ringShare } from '../popouts/deepReadHelpers';
+import { attention, ringLabel, ringShare, toRead } from '../popouts/deepReadHelpers';
 
 /** A thin ring that fills as Deep read reads: the title bar's small one and the pop-out's large one. */
 export function Ring({ share, size, width = 2, children }: { share: number; size: number; width?: number; children?: React.ReactNode }) {
@@ -29,10 +29,12 @@ export function DeepReadButton() {
     return () => clearInterval(t);
   }, [running, refreshMemory]);
   const label = ringLabel(memory);
+  const attn = attention(memory);
+  const n = toRead(memory);
   return (
-    <button className={`pill deep-pill${running ? ' reading' : ''}`} data-action="deep-read" aria-label={`Deep read${label ? `, ${label} read` : ''}`}
-      title="Deep read: what the assistant has read of what people wrote" onClick={() => openPopout({ kind: 'deep-read' })}>
-      <Ring share={ringShare(memory)} size={14} />Deep read{label && <span className="dr-pct">{label}</span>}
+    <button className={`pill deep-pill${running ? ' reading' : ''}`} data-action="deep-read" aria-label={`Deep read${label ? `, ${label} read` : ''}${attn ? `, ${n} idea${n === 1 ? '' : 's'} to read` : ''}`}
+      title={attn ? `Deep read: ${n} idea${n === 1 ? '' : 's'} changed since or not yet read` : 'Deep read: what the assistant has read of what people wrote'} onClick={() => openPopout({ kind: 'deep-read' })}>
+      <Ring share={ringShare(memory)} size={14} />Deep read{label && <span className="dr-pct">{label}</span>}{attn && <i className="dr-attn" aria-hidden="true" />}
     </button>
   );
 }

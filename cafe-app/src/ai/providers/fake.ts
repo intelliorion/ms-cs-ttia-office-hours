@@ -488,9 +488,17 @@ function agentFor(prompt: string) {
       const team = me.team === 'no team recorded' ? 'no team recorded' : `team: [${me.team}]`;
       return { next: 'answer', thought: 'Answering from the roles and the team', reply: `[${start}] is ${roles}; ${team}.`, followups: [`What else is [${start}] linked to?`] };
     }
+    // "which team owns [I1]?": the derived OWNS link from the submitter's team, never worked out through a lead; the reason names the submitter.
+    const legend: { code: string; type: string; label?: string }[] = data.stars ?? [];
+    const owned = legend.find((x) => x.code === start && x.type === 'Idea') ?? legend.find((x) => x.type === 'Idea');
+    if (owned && /\bowns?\b|\bwhose\b|behind/i.test(cmd)) {
+      if (!data.steps?.length) return { next: 'search', thought: `Looking at which team owns [${owned.code}]`, query: { steps: [{ op: 'stars', codes: [owned.code] }, { op: 'follow', rel: 'OWNS', dir: 'in', type: 'Team' }] } };
+      const why: { from: string; to: string; why: string }[] = data.steps[0]?.result?.reasons ?? [];
+      const said = why.map((r) => `[${r.from}] owns [${r.to}] (via the submitter ${r.why.replace(/^via /, '')})`);
+      return { next: 'answer', thought: 'Answering from the derived OWNS link', reply: said.length ? `By the graph, ${said.join('; ')}.` : `The graph records no team behind [${owned.code}]: no submitter with a team.`, followups: [`Who leads [${owned.code}]?`] };
+    }
     // "which ideas depend on / would need rework if [S1] is rewritten?": the derived relation first (DEPENDS_ON for a system, USES for a tool),
     // so the trace names the rule; then, once Deep read has run, a search of the text, kept apart as a reading.
-    const legend: { code: string; type: string; label?: string }[] = data.stars ?? [];
     const subject = legend.find((x) => x.code === start && (x.type === 'System' || x.type === 'Tool')) ?? legend.find((x) => x.type === 'System' || x.type === 'Tool');
     if (subject && /depend|rework|affect|retir|\bhit\b|break|rewrit/i.test(cmd)) {
       const rel = subject.type === 'Tool' ? 'USES' : 'DEPENDS_ON';

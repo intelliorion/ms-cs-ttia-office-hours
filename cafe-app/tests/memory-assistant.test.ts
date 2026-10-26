@@ -165,3 +165,20 @@ describe('impact of a system change: the derived links first, search second', ()
     expect(e.reply).toMatch(/^By the graph, 2 ideas depend on Travel policy: Travel policy assistant \(via Policy Q&A\), Expense anomaly finder \(via Claim scoring\)\. By reading, the text also names it in: Desk booking assistant\.$/);
   });
 });
+
+describe('which team owns an idea: the derived OWNS link, from the submitter, even with no lead', () => {
+  it('an idea with a submitter and no lead still has its team, the trace says member+submitted, and the reply names the submitter', async () => {
+    const { base, root } = await boot();
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', challenge: 'Travel policy questions flood the mailbox.', dedupe_key: 'a',
+      people: { submitter: 'Avery Chen', team: [] } }));
+    const e = await post(base, '/api/chat', { text: 'which team owns @Travel policy assistant?', mentions: ['idea:CAFE-2026-001'] }).then(j);
+    expect(e.kind).toBe('question');
+    expect(e.trace).toHaveLength(1);
+    expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual([
+      'Start from Travel policy assistant', 'Follow owns links to teams',
+      'GSS owns Travel policy assistant: derived by member+submitted from GSS HAS_MEMBER Avery Chen, Avery Chen SUBMITTED Travel policy assistant',
+    ]);
+    expect(e.highlight.sort()).toEqual(['idea:CAFE-2026-001', 'team:gss']);
+    expect(e.reply).toBe('By the graph, GSS owns Travel policy assistant (via the submitter Avery Chen).');
+  });
+});

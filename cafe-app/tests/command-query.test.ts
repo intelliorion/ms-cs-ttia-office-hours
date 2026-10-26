@@ -124,6 +124,13 @@ describe('the query over derived relations', () => {
   it('the guide names the derived relations', () => {
     expect(QUERY_GUIDE.join('\n')).toMatch(/Derived by the rules.*DEPENDS_ON/);
   });
+  it('the guide answers ownership over the derived OWNS link, never through a lead\'s team', () => {
+    const guide = QUERY_GUIDE.join('\n');
+    expect(guide).toMatch(/Which team owns, whose idea, which function or team is behind \[I1\]: follow OWNS \(dir in, type Team\) from the idea; it is derived from the submitter's team, so it exists even when no lead is recorded/);
+    expect(guide).toMatch(/Do not work ownership out through a lead's HAS_MEMBER link/);
+    expect(guide).toContain('- which team owns [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"OWNS","dir":"in","type":"Team"}]');
+    expect(guide).toContain('what does [T1] own: [{"op":"stars","codes":["T1"]},{"op":"follow","rel":"OWNS","dir":"out","type":"Idea"}]');
+  });
   it('the guide sends an impact question about a system or tool through DEPENDS_ON or USES first, search second', () => {
     const guide = QUERY_GUIDE.join('\n');
     expect(guide).toMatch(/affected, needs rework, depends on, breaks, or would be hit if a system, data source or tool changes, is retired or is rewritten/);

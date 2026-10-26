@@ -11,7 +11,7 @@ describe('workspace', () => {
     const root = await tmpWorkspace();
     // The setup at the top; everything the Café makes under data/, which can be deleted.
     expect((await readdir(root)).sort()).toEqual(['README.txt', 'data', 'rules', 'templates']);
-    expect((await readdir(path.join(root, 'data'))).sort()).toEqual(['chat', 'cohorts', 'exports', 'graph', 'ideas', 'inbox', 'roadshows', 'rounds']);
+    expect((await readdir(path.join(root, 'data'))).sort()).toEqual(['chat', 'cohorts', 'exports', 'graph', 'ideas', 'inbox', 'memory', 'roadshows', 'rounds']);
     expect(await readdir(path.join(root, 'templates'))).toHaveLength(17);
     expect(await readdir(path.join(root, 'data', 'rounds'))).toEqual([]);
   });

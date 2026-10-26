@@ -26,6 +26,8 @@ export function paths(root: string) {
     graph: path.join(data, 'graph'),
     chat: path.join(data, 'chat'),
     exports: path.join(data, 'exports'),
+    /** Deep read: the reading index (index.jsonl, state.json, labels.jsonl). Rebuilt by a Run; safe to delete. */
+    memory: path.join(data, 'memory'),
     templates: path.join(root, 'templates'),
     rules: path.join(root, 'rules'),
     settings: path.join(root, 'rules', 'settings.yaml'),
@@ -34,7 +36,7 @@ export function paths(root: string) {
 }
 
 /** The folders under data/, by name: what an older workspace kept at its top level. */
-export const DATA_FOLDERS = ['ideas', 'rounds', 'inbox', 'graph', 'chat', 'cohorts', 'roadshows', 'exports'] as const;
+export const DATA_FOLDERS = ['ideas', 'rounds', 'inbox', 'graph', 'chat', 'cohorts', 'roadshows', 'exports', 'memory'] as const;
 
 /** A data file as a stored reference: relative to data/, forward slashes ("ideas/CAFE-2026-001-x/emails/001-E2.md"). */
 export const dataKey = (root: string, file: string) => path.relative(paths(root).data, file).split(path.sep).join('/');

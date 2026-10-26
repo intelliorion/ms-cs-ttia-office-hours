@@ -53,7 +53,7 @@ export async function initWorkspace(root: string): Promise<{ created: string[]; 
   const p = paths(root);
   const created: string[] = [];
   const { moved, left } = await moveOldData(root);
-  for (const dir of [p.data, p.rounds, p.inbox, p.held, p.ideas, p.cohorts, p.roadshows, p.graph, p.chat, p.exports, p.templates, p.rules]) {
+  for (const dir of [p.data, p.rounds, p.inbox, p.held, p.ideas, p.cohorts, p.roadshows, p.graph, p.chat, p.exports, p.memory, p.templates, p.rules]) {
     await fs.mkdir(dir, { recursive: true });
   }
   if (!(await exists(path.join(root, 'README.txt')))) {

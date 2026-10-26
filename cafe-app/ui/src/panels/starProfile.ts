@@ -42,6 +42,9 @@ export function starProfile(graph: { nodes: any[]; edges: any[] } | null | undef
     for (const [k, label] of (state?.fields?.round ?? []) as [string, string][]) facts.push([label, round?.[k] || 'Not set']);
   }
   if (node.type === 'Tool' && node.attrs?.approved !== undefined) facts.push(['On the approved list', node.attrs.approved === false ? 'No' : 'Yes']);
+  // The registry's other names for it (rules/entities.yaml and merges), and its reference, when it has them.
+  if (node.attrs?.aliases) facts.push(['Also known as', String(node.attrs.aliases)]);
+  if (node.attrs?.ref) facts.push(['Reference', String(node.attrs.ref)]);
   facts.push(['Ideas', String(ideaIds.size)], ['Links', String(links.length)]);
 
   const roles = node.type !== 'Person' ? [] : (state?.ideas ?? []).flatMap((i: any) => {

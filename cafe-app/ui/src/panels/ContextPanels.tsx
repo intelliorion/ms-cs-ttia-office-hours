@@ -167,6 +167,8 @@ function StarLinks({ nodeId }: { nodeId: string }) {
           <div className="nc-type"><span className="dot" style={{ background: colour }} />{NODE_LABELS[node.type as keyof typeof NODE_LABELS] ?? node.type}</div>
           <div className="ctx-star-t">{node.label}</div>
           {node.type === 'Tool' && node.attrs?.approved === false && <span className="tag amber" data-testid="not-approved">Not on the approved list</span>}
+          {node.attrs?.aliases && <div className="nc-sub" data-testid="star-aliases">Also known as {String(node.attrs.aliases)}</div>}
+          {node.attrs?.ref && <div className="nc-sub" data-testid="star-ref">Reference {String(node.attrs.ref)}</div>}
           <div className="nc-sub">{rows.length} link{rows.length === 1 ? '' : 's'}{unconfirmed ? ` · ${unconfirmed} unconfirmed` : ''}</div>
         </div>
         <button className="x" aria-label="Back to the overview" title="Back to the overview" onClick={() => select(null)}>✕</button>

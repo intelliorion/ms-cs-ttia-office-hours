@@ -10,6 +10,7 @@ const graph = {
     { id: 'team:gss', type: 'Team', label: 'GSS' },
     { id: 'tool:pa', type: 'Tool', label: 'Power Apps', attrs: { approved: true } },
     { id: 'capability:c', type: 'Capability', label: 'Booking' },
+    { id: 'system:tep', type: 'System', label: 'Travel & Expense policy', attrs: { aliases: 'travel policy; T&E policy', ref: 'CSIC-SYS-014' } },
   ],
   edges: [
     { from: 'person:p1', rel: 'SUBMITTED', to: 'idea:CAFE-2026-001' },
@@ -58,5 +59,13 @@ describe('a star in the left panel', () => {
     expect(leftStar(s({ leftView: { kind: 'idea' } }), graph)).toBeNull();
     expect(leftStar(s({ selectedIds: ['team:gss', 'tool:pa'] }), graph)).toBeNull();
     expect(leftStar(s({ selectedId: null }), graph)).toBeNull();
+  });
+});
+
+describe('a registered star', () => {
+  it('lists its other names and its reference before the counts', () => {
+    const p = starProfile(graph, state, 'system:tep')!;
+    expect(p.facts).toEqual([['Also known as', 'travel policy; T&E policy'], ['Reference', 'CSIC-SYS-014'], ['Ideas', '0'], ['Links', '0']]);
+    expect(starProfile(graph, state, 'capability:c')!.facts).toEqual([['Ideas', '1'], ['Links', '2']]);
   });
 });

@@ -181,3 +181,63 @@ describe('the rules as a whole', () => {
     expect(await loadRules(root)).toEqual(DEFAULT_RULES);
   });
 });
+
+import { BundleCache, ideaBundle } from '../src/graph/build';
+import { appendAiLink } from '../src/graph/store';
+import { appendEdit, readEdits, setEditStatus } from '../src/graph/operator';
+import { listIdeas } from '../src/ideas/store';
+import { listRounds } from '../src/round/store';
+import { readAiLinks } from '../src/graph/store';
+import { registryFrom } from '../src/graph/registryFile';
+import { touched } from '../src/memory/touch';
+
+describe('incremental: per-idea bundles cached by content, folded operator log', () => {
+  it('ideaBundle is pure and the cache serves an unchanged idea again', () => {
+    const cache = new BundleCache();
+    const a = buildGraph([expense, travel, faq], LINKS, [], [], { cache });
+    expect(cache.misses).toBe(3); expect(cache.hits).toBe(0);
+    const b = buildGraph([expense, travel, faq], LINKS, [], [], { cache });
+    expect(cache.hits).toBe(3);
+    expect(b).toEqual(a);
+    expect(b).toEqual(buildGraph([expense, travel, faq], LINKS));
+    expect(ideaBundle(expense)).toEqual(ideaBundle({ ...expense }));
+    // An edited field is a new bundle; the others are served from the cache.
+    buildGraph([{ ...expense, title: 'Expense anomaly spotter' }, travel, faq], LINKS, [], [], { cache });
+    expect(cache.misses).toBe(4); expect(cache.hits).toBe(5);
+  });
+  it('after every kind of change the incremental rebuild equals a full build, edge for edge', async () => {
+    const root = await tmpWorkspace();
+    const full = async () => {
+      const [{ ideas }, { links }, rounds, edits] = await Promise.all([listIdeas(root), readAiLinks(root), listRounds(root), readEdits(root)]);
+      return buildGraph(ideas, links, rounds, edits, { registry: await registryFrom(root, edits), rules: await loadRules(root) });
+    };
+    const same = async () => { const inc = await rebuildGraph(root); const f = await full(); expect(inc.nodes).toEqual(f.nodes); expect(inc.edges).toEqual(f.edges); return inc; };
+    for (const i of [expense, travel]) await saveIdea(root, i);
+    await same();
+    await saveIdea(root, faq); await same();                                                          // a new idea
+    await saveIdea(root, { ...faq, use_case_category: ['Knowledge assistant', 'FAQ'] }); await same(); // an edited field
+    for (const l of LINKS) await appendAiLink(root, l);
+    await same();                                                                                     // AI links
+    await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'rename', node: 'capability:policy-q-a', label: 'Policy questions' }); await same(); // an operator edit
+    await appendEdit(root, { id: 'op-2', at: '2026-10-26', status: 'active', t: 'alias', node: 'capability:policy-q-a', label: 'Policy lookup', of: 'Policy questions' });
+    await saveIdea(root, { ...expense, features: ['Policy lookup'] }); await same();                   // an alias in use
+    await setEditStatus(root, 'op-1', 'undone'); await same();                                        // a rewritten log
+    await writeYaml(paths(root).inference, { rules: DEFAULT_RULES.map((r) => ({ ...r, enabled: r.name !== 'needs+uses_data' })) });
+    const g = await same();                                                                           // a rule off
+    expect(g.edges.some((e) => e.rel === 'DEPENDS_ON')).toBe(false);
+    expect(g.edges.some((e) => e.rel === 'OWNS')).toBe(true);
+    // A touch from Deep read's bus drops the idea's bundle; the graph is the same after.
+    touched(root, ['CAFE-2026-004'], 'save'); await same();
+  });
+  it('readEdits folds appended lines and re-reads a rewritten file', async () => {
+    const root = await tmpWorkspace();
+    await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'rename', node: 'team:gss', label: 'G' });
+    expect((await readEdits(root)).map((e) => e.id)).toEqual(['op-1']);
+    await appendEdit(root, { id: 'op-2', at: '2026-10-26', status: 'active', t: 'rename', node: 'team:gss', label: 'H' });
+    expect((await readEdits(root)).map((e) => e.id)).toEqual(['op-1', 'op-2']);
+    await setEditStatus(root, 'op-1', 'undone');
+    expect((await readEdits(root)).map((e) => e.status)).toEqual(['undone', 'active']);
+    await writeFileAtomic(path.join(paths(root).graph, 'operator.jsonl'), '');
+    expect(await readEdits(root)).toEqual([]);
+  });
+});

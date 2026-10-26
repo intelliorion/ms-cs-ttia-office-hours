@@ -20,6 +20,14 @@ export interface Registry {
   /** The approved tools' labels, in file order. */
   tools(): string[];
   entries: RegistryEntries;
+  /** A hash of what it was made from: part of the bundle cache's key, so a new alias or entry recomputes the bundles. */
+  version: string;
+}
+
+function fnv1a32(str: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16);
 }
 
 const typeOfId = (id: string): NodeType | undefined => NODE_TYPES.find((t) => id.startsWith(`${t.toLowerCase()}:`));
@@ -48,6 +56,7 @@ export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[]): R
   }
   return {
     entries,
+    version: fnv1a32(JSON.stringify([entries, edits.filter((e) => e.t === 'alias' && e.status === 'active')])),
     resolve(type, label) {
       const id = lookup.get(type)?.get(slug(label));
       return id ? { id, label: byId.get(id)!.label } : undefined;

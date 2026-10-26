@@ -3,7 +3,8 @@ import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
-import { buildGraph } from './build';
+import { buildGraph, BundleCache } from './build';
+import { onTouched } from '../memory/touch';
 import { appendEdit, nextEditId, readEdits } from './operator';
 import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
 import type { Clock } from '../clock';
@@ -55,11 +56,16 @@ export async function setAiLinkStatus(root: string, edgeId: string, status: AiLi
   await writeLines(root, lines);
 }
 
+/** One bundle cache per workspace; an idea's bundle goes when its folder is touched (Deep read's bus), or when its record changes. */
+const caches = new Map<string, BundleCache>();
+onTouched((t) => { const c = caches.get(t.root); if (c) for (const id of t.ideas) c.drop(id); });
+const cacheFor = (root: string) => { let c = caches.get(root); if (!c) caches.set(root, (c = new BundleCache())); return c; };
+
 export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);
-  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: await loadRules(root) });
+  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: await loadRules(root), cache: cacheFor(root) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
   return { ...graph, problems };

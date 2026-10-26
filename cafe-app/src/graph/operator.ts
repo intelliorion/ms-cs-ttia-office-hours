@@ -6,15 +6,28 @@ import { touched } from '../memory/touch';
 
 const file = (root: string) => path.join(paths(root).graph, 'operator.jsonl');
 
-/** The operator's edits, oldest first. A line that does not parse is skipped. */
-export async function readEdits(root: string): Promise<OperatorEdit[]> {
-  const text = (await readText(file(root))) ?? '';
+function parseLines(text: string): OperatorEdit[] {
   const out: OperatorEdit[] = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
     try { const v = JSON.parse(line); if (v && typeof v === 'object' && typeof v.t === 'string') out.push(v as OperatorEdit); } catch { /* skipped */ }
   }
   return out;
+}
+
+/** The log as last read, per file: an appended line is parsed on its own; a rewritten file (a status change) is read in full. */
+const folded = new Map<string, { text: string; edits: OperatorEdit[] }>();
+
+/** The operator's edits, oldest first. A line that does not parse is skipped. */
+export async function readEdits(root: string): Promise<OperatorEdit[]> {
+  const f = file(root);
+  const text = (await readText(f)) ?? '';
+  const last = folded.get(f);
+  const edits = last && text.startsWith(last.text) && last.text.endsWith('\n')
+    ? [...last.edits, ...parseLines(text.slice(last.text.length))]
+    : last && text === last.text ? last.edits : parseLines(text);
+  folded.set(f, { text, edits });
+  return edits.map((e) => ({ ...e }));
 }
 
 async function writeEdits(root: string, edits: OperatorEdit[]): Promise<void> {

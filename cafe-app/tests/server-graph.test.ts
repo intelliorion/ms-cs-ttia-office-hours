@@ -4,6 +4,9 @@ import path from 'node:path';
 import { startServer, sampleIdea, FIXTURE } from './helpers';
 import { saveIdea } from '../src/ideas/store';
 import { appendAiLink, readAiLinks } from '../src/graph/store';
+import { writeYaml } from '../src/workspace/files';
+import { paths } from '../src/workspace/paths';
+import { readEntities } from '../src/graph/registryFile';
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
@@ -87,5 +90,38 @@ describe('/api/graph', () => {
     expect(links.some((l) => l.from === 'system:shared-mailbox' || l.to === 'system:shared-mailbox')).toBe(false);
     const g = await json(await fetch(`${s.base}/api/graph`));
     expect(g.nodes.some((n: any) => n.id === 'system:shared-mailbox')).toBe(false);
+  });
+});
+
+describe('the registry across imports and re-reads', () => {
+  const post = (base: string, url: string, body: unknown) => fetch(`${base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(json);
+  it('a second read of the same capability under other wording lands on the registered star', async () => {
+    process.env.CAFE_AI_FAKE = '1';
+    const s = await startServer('2026-10-21');
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
+    await writeYaml(paths(s.root).entities, { ...(await readEntities(s.root)), Capability: [{ id: 'capability:reading-documents', label: 'Reading documents', aliases: ['Document parsing'] }] });
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
+    await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' });
+    const g = await json(await fetch(`${s.base}/api/graph`));
+    expect(g.nodes.some((n: any) => n.id === 'capability:document-parsing')).toBe(false);
+    expect(g.nodes.find((n: any) => n.id === 'capability:reading-documents')).toMatchObject({ label: 'Reading documents', attrs: { aliases: 'Document parsing' } });
+    expect(g.edges.some((e: any) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:reading-documents')).toBe(true);
+  });
+  it('merge then re-read stays merged: the twin the AI proposes again lands on the star kept', async () => {
+    process.env.CAFE_AI_FAKE = '1';
+    const s = await startServer('2026-10-21');
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
+    await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', dedupe_key: 'two', challenge: 'More emails' }));
+    await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' });
+    const m = await post(s.base, '/api/graph/merge', { from: 'capability:document-parsing', into: 'capability:workflow-routing' });
+    expect(m).toMatchObject({ merged: true, from: 'Document parsing', into: 'Workflow routing', edit: 'op-1', alias: 'op-2' });
+    await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' });
+    const g = await json(await fetch(`${s.base}/api/graph`));
+    expect(g.nodes.some((n: any) => n.id === 'capability:document-parsing')).toBe(false);
+    expect(g.nodes.find((n: any) => n.id === 'capability:workflow-routing')?.attrs?.aliases).toBe('Document parsing');
+    expect(g.edges.filter((e: any) => e.rel === 'NEEDS').map((e: any) => e.id).sort()).toEqual([
+      'idea:CAFE-2026-001|NEEDS|capability:workflow-routing', 'idea:CAFE-2026-002|NEEDS|capability:workflow-routing',
+    ]);
   });
 });

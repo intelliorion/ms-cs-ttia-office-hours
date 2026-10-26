@@ -22,6 +22,7 @@ import { rebuildGraph, readAiLinks } from '../graph/store';
 import { planAiLinks } from '../ai/apply';
 import { starMatcher } from '../memory/lookup';
 import { extractCoded } from '../ai/grow';
+import { loadRegistry } from '../graph/registryFile';
 import { loadIdea } from '../ideas/store';
 import { touched } from '../memory/touch';
 
@@ -327,7 +328,7 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
       const before = await rebuildGraph(root);
       const { provider, output } = await extractCoded(root, connector, idea, before.nodes);
       const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
-      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
+      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root) });
       if (planned.links.length) {
         const item = await load(root, id);
         const { ideas } = await listIdeas(root);

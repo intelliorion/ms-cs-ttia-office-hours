@@ -22,6 +22,7 @@ import { appendAiLink, readAiLinks, setAiLinkStatus } from '../graph/store';
 import { edgeId, type AiLink } from '../graph/ontology';
 import { planAiLinks } from '../ai/apply';
 import { starMatcher } from '../memory/lookup';
+import { loadRegistry } from '../graph/registryFile';
 import type { ExtractOutput } from '../ai/tasks';
 import { screen } from './screen';
 import { displayName } from './match';
@@ -234,10 +235,11 @@ async function planGraph(root: string, item: InboxItem, idea: Idea, out: Extract
   };
   const { ideas } = await listIdeas(root);
   const previous = (await readAiLinks(root)).links;
-  const graph = buildGraph(ideas, previous);
+  const registry = await loadRegistry(root);
+  const graph = buildGraph(ideas, previous, [], [], { registry });
   // Deep read, when it has run: a star that only differs in wording from one already there is reused.
   const matcher = await starMatcher(root, filtered.nodes.map((n) => n.label), graph.nodes);
-  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
+  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry });
   const sourced = links.map((l) => ({ ...l, source: `ai:${provider}:${item.file}` }));
   return { links: sourced };
 }

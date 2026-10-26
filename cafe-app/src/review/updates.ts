@@ -9,6 +9,7 @@ import { loadSteps } from '../rules/stages';
 import { showNames, type Coded } from '../command/names';
 import { planAiLinks } from '../ai/apply';
 import { starMatcher } from '../memory/lookup';
+import { loadRegistry } from '../graph/registryFile';
 import { rebuildGraph, readAiLinks, appendAiLink } from '../graph/store';
 import { edgeId, NODE_LABELS, type AiLink, type NodeType } from '../graph/ontology';
 import type { ReviewUpdates } from '../ai/tasks';
@@ -83,7 +84,7 @@ export async function planUpdates(
     if (u.graph?.nodes?.length || u.graph?.links?.length) {
       const graph = await graphNow();
       const matcher = await starMatcher(root, (u.graph.nodes ?? []).map((n) => n.label), graph.nodes);
-      const { links } = planAiLinks(idea.id, u.graph, graph, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
+      const { links } = planAiLinks(idea.id, u.graph, graph, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root) });
       const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label;
       for (const l of links) {
         const id = edgeId(l.from, l.rel, l.to);

@@ -12,6 +12,7 @@ import type { Coded } from '../command/names';
 import { coder, codeAll, decodeValue, peopleFor, withNames } from '../review/suggestInput';
 import { knownParticipants } from '../inbox/screen';
 import { starMatcher } from '../memory/lookup';
+import { loadRegistry } from '../graph/registryFile';
 
 /**
  * The extract input with names coded before the AI sees it, as every other AI call codes them (reviewInput's coder):
@@ -49,7 +50,7 @@ export async function growIdea(root: string, ai: Connector, id: string): Promise
   const { provider, output } = await extractCoded(root, ai, idea, before.nodes);
   // Deep read, when it has run: a star that only differs in wording is reused; a near one is held for the operator.
   const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
-  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse });
+  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root) });
   const { ideas } = await listIdeas(root);
   const ctx: ConflictContext = {
     idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),

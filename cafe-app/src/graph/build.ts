@@ -2,8 +2,16 @@ import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, NOT_APPROVED_NOTE, edgeId, isApprovedTool, nodeId, type AiLink, type GEdge, type GNode, type OperatorEdit, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, NOT_APPROVED_NOTE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
+import { defaultEntries, makeRegistry, type Registry } from './registry';
 export { nodeId } from './ontology';
+
+/** The registry a build uses when given none: the built-in tools, so a graph built without a workspace is today's. */
+export const DEFAULT_REGISTRY: Registry = makeRegistry(defaultEntries(), []);
+export interface BuildOptions {
+  /** Stable identities and aliases (rules/entities.yaml plus alias edits): where a star is born, its label resolves here first. */
+  registry?: Registry;
+}
 
 /** Longer than this, a choice-column answer is free text, not a choice other ideas could share. */
 export const CHOICE_MAX = 60;
@@ -11,10 +19,16 @@ export const CHOICE_MAX = 60;
 /** One link per role a person has on an idea. A plain team member is RELATED. */
 const ROLE_REL: Record<PersonRole, Relation> = { lead: 'LEADS', sponsor: 'SPONSORS', builder: 'BUILDS', member: 'RELATED' };
 
-export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = []): { nodes: GNode[]; edges: GEdge[] } {
+export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = [], opts: BuildOptions = {}): { nodes: GNode[]; edges: GEdge[] } {
+  const registry = opts.registry ?? DEFAULT_REGISTRY;
   const nodes = new Map<string, GNode>();
   const edges = new Map<string, GEdge>();
   const node = (n: GNode) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
+  /** A star born from a label: the registry's id and label when it knows the wording, else its own. */
+  const born = (type: NodeType, label: string) => {
+    const hit = registry.resolve(type, label);
+    return node(hit ? { id: hit.id, type, label: nodes.get(hit.id)?.label ?? hit.label } : { id: nodeId(type, label), type, label });
+  };
   const edge = (from: string, rel: Relation, to: string, description: string, source: string, confidence = 1, confirmed = true) => {
     const id = edgeId(from, rel, to);
     const existing = edges.get(id);
@@ -50,8 +64,8 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
       star.attrs!.ideas = Number(star.attrs!.ideas) + 1;
       edge(ideaId, 'IN_ROUND', star.id, 'Round', src);
     }
-    const teamId = idea.function ? node({ id: nodeId('Team', idea.function), type: 'Team', label: idea.function }) : undefined;
-    const entityId = idea.entity ? node({ id: nodeId('Entity', idea.entity), type: 'Entity', label: idea.entity === 'CS' ? 'Corporate Services (CS)' : idea.entity }) : undefined;
+    const teamId = idea.function ? born('Team', idea.function) : undefined;
+    const entityId = idea.entity ? (registry.resolve('Entity', idea.entity) ? born('Entity', idea.entity) : node({ id: nodeId('Entity', idea.entity), type: 'Entity', label: idea.entity === 'CS' ? 'Corporate Services (CS)' : idea.entity })) : undefined;
     if (entityId && teamId) edge(entityId, 'HAS_TEAM', teamId, 'CS Function', `${src}:CS Function`);
 
     // One link for each thing a person does on the idea: the submitter who also leads and builds it has three.
@@ -86,20 +100,20 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
       for (const v of values ?? []) {
         const label = v.trim();
         if (!label || label.length > CHOICE_MAX) continue;
-        const id = node({ id: nodeId(type, label), type, label });
+        const id = type === 'Beneficiary' ? born(type, label) : node({ id: nodeId(type, label), type, label });
         edge(ideaId, rel, id, column, `${src}:${column}`);
       }
     }
     // The saved features: the idea NEEDS each one; only the ones the tool covers are BUILT_WITH it.
     const tools = idea.tools ?? {};
     for (const feature of idea.features ?? Object.keys(tools)) {
-      const cid = node({ id: nodeId('Capability', feature), type: 'Capability', label: feature });
+      const cid = born('Capability', feature);
       const tool = tools[feature];
       edge(ideaId, 'NEEDS', cid, tool ? 'Feature' : 'Feature, not covered by the tool', `${src}:approach.md`);
       if (!tool) continue;
-      const tid = node({ id: nodeId('Tool', tool), type: 'Tool', label: tool });
+      const tid = born('Tool', tool);
       // An older record's tool that has left the approved list (UiPath) stays as it was, marked so.
-      edge(cid, 'BUILT_WITH', tid, isApprovedTool(tool) ? 'Tool pick' : `Tool pick${NOT_APPROVED_NOTE}`, `${src}:approach.md`);
+      edge(cid, 'BUILT_WITH', tid, registry.resolve('Tool', tool) ? 'Tool pick' : `Tool pick${NOT_APPROVED_NOTE}`, `${src}:approach.md`);
     }
   }
 
@@ -123,6 +137,12 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
   }
 
   applyEdits(nodes, edges, edits);
+
+  // What the registry knows of each star that is left: its other names and its reference, for the star's details.
+  for (const n of nodes.values()) {
+    const aliases = registry.aliasesOf(n.id); const ref = registry.refOf(n.id);
+    if (aliases.length || ref) nodes.set(n.id, { ...n, attrs: { ...n.attrs, ...(aliases.length ? { aliases: aliases.join('; ') } : {}), ...(ref ? { ref } : {}) } });
+  }
 
   return {
     nodes: [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id)),

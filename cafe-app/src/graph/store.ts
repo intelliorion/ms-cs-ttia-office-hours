@@ -7,6 +7,7 @@ import { buildGraph } from './build';
 import { appendEdit, nextEditId, readEdits } from './operator';
 import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
 import type { Clock } from '../clock';
+import { registryFrom } from './registryFile';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
 
@@ -56,7 +57,8 @@ export async function setAiLinkStatus(root: string, edgeId: string, status: AiLi
 export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
-  const graph = buildGraph(ideas, links, await listRounds(root), await readEdits(root));
+  const edits = await readEdits(root);
+  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
   return { ...graph, problems };

@@ -8,7 +8,9 @@ import { canonicalTool, isApprovedTool, APPROVED_TOOLS } from '../src/graph/onto
 import { appendEdit } from '../src/graph/operator';
 import { writeYaml, writeFileAtomic } from '../src/workspace/files';
 import { paths } from '../src/workspace/paths';
-import { tmpWorkspace } from './helpers';
+import { tmpWorkspace, sampleIdea } from './helpers';
+import { buildGraph } from '../src/graph/build';
+import { planAiLinks } from '../src/ai/apply';
 
 const entries: RegistryEntries = {
   Tool: [{ id: 'tool:microsoft-copilot', label: 'Microsoft Copilot', aliases: ['copilot', 'M365 Copilot'] }],
@@ -94,5 +96,29 @@ describe('loadRegistry', () => {
     await writeFileAtomic(paths(root).entities, 'Tool: [a: {');
     const r = await loadRegistry(root);
     expect(r.tools()).toEqual(APPROVED_TOOLS);
+  });
+});
+
+describe('extraction resolves through the registry before anything else', () => {
+  it('a proposed label that is an alias lands on the registered star, with no new star and no twin', () => {
+    const reg = makeRegistry(entries, [{ id: 'op-1', at: '2026-10-26', status: 'active', t: 'alias', node: 'capability:claim-scoring', label: 'Scoring claims', of: 'Claim scoring' }]);
+    const idea = sampleIdea({ id: 'CAFE-2026-003', slug: 'inv', title: 'Invoice Assessment', features: ['Claim scoring'], dedupe_key: 'c' });
+    const graph = buildGraph([idea], [], [], [], { registry: reg });
+    const out = {
+      nodes: [{ type: 'Capability' as const, label: 'Scoring claims' }, { type: 'Capability' as const, label: 'Policy questions and answers' }, { type: 'System' as const, label: 'T&E policy' }],
+      links: [
+        { from: 'idea', to: 'Scoring claims', rel: 'NEEDS' as const, description: 'a', confidence: 0.9 },
+        { from: 'idea', to: 'Policy questions and answers', rel: 'NEEDS' as const, description: 'b', confidence: 0.9 },
+        { from: 'Policy questions and answers', to: 'T&E policy', rel: 'USES_DATA' as const, description: 'c', confidence: 0.8 },
+      ],
+    };
+    const planned = planAiLinks(idea.id, out, graph, [], 'fake', { status: 'confirmed', registry: reg });
+    expect(planned.links.map((l) => `${l.from} ${l.rel} ${l.to}`)).toEqual([
+      'idea:CAFE-2026-003 NEEDS capability:policy-q-a',
+      'capability:policy-q-a USES_DATA system:travel-expense-policy',
+    ]);
+    // The alias of a star already on the idea is the same link: nothing new. Registered stars not yet born are new stars with their registered label.
+    expect(planned.newNodes.map((n) => [n.id, n.label])).toEqual([['capability:policy-q-a', 'Policy Q&A'], ['system:travel-expense-policy', 'Travel & Expense policy']]);
+    expect(planned.links.every((l) => l.idea === 'CAFE-2026-003')).toBe(true);
   });
 });

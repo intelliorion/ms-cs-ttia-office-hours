@@ -2,6 +2,8 @@ import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool,
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
 import type { NearestStar } from '../memory/lookup';
+import type { Registry } from '../graph/registry';
+import { DEFAULT_REGISTRY } from '../graph/build';
 
 /** Deep read: a proposed label this close (cosine) to an existing star of the same type reuses that star. */
 export const REUSE_AT = 0.85;
@@ -40,11 +42,15 @@ export function toAiLinks(
 export function planAiLinks(
   ideaId: string, out: ExtractOutput,
   graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
-  opts: { status?: AiLink['status']; nearest?: NearestStar; reuseAt?: number } = {},
+  opts: { status?: AiLink['status']; nearest?: NearestStar; reuseAt?: number; registry?: Registry } = {},
 ): { links: AiLink[]; newNodes: GNode[]; near: Record<string, string> } {
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
   const proposed = new Map<string, GNode>();
+  const registry = opts.registry ?? DEFAULT_REGISTRY;
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  /** Labels the registry settled: a star's own name or alias, never second-guessed by Deep read's nearest. */
+  const settled = new Set<string>();
   // The AI never picks a tool: a Tool star comes only from the operator's tool pick (approach.md), later in the app.
   // Nor any star or link the form owns (people, support, outcomes, beneficiaries, categories): only what it may suggest.
   out = {
@@ -57,6 +63,9 @@ export function planAiLinks(
     if (!raw || proposed.has(key(raw))) continue;
     // A Tool the Café approves takes its canonical label (so it merges with that star); any other
     // tool is kept, flagged, for the operator to decide.
+    // The registry first: a label it knows (by name or alias) is that star, born here with its registered label if new.
+    const hit = registry.resolve(n.type, raw);
+    if (hit) { proposed.set(key(raw), byId.get(hit.id) ?? { id: hit.id, type: n.type, label: hit.label }); settled.add(key(raw)); continue; }
     const canon = n.type === 'Tool' ? canonicalTool(raw) : undefined;
     const label = canon ?? raw;
     proposed.set(key(raw), {
@@ -71,7 +80,7 @@ export function planAiLinks(
   const near: Record<string, string> = {};
   if (opts.nearest) {
     for (const [k, p] of [...proposed.entries()]) {
-      if (existing.has(k)) continue;
+      if (existing.has(k) || settled.has(k)) continue;
       const hit = opts.nearest(p.type, p.label);
       if (!hit || hit.node.id === p.id) continue;
       if (hit.score >= (opts.reuseAt ?? REUSE_AT)) proposed.set(k, hit.node);
@@ -88,7 +97,8 @@ export function planAiLinks(
 
   const resolve = (label: string): GNode | undefined => {
     if (key(label) === 'idea') return { id: ideaNode, type: 'Idea', label: 'idea' };
-    return existing.get(key(label)) ?? proposed.get(key(label));
+    const k = key(label);
+    return settled.has(k) ? proposed.get(k) : existing.get(k) ?? proposed.get(k);
   };
 
   const links: AiLink[] = [];
@@ -104,7 +114,7 @@ export function planAiLinks(
     const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
     links.push({
       from: from.id, to: to.id, rel: l.rel, description: unapproved ? `${l.description}${NOT_APPROVED_NOTE}` : l.description, confidence: l.confidence,
-      source: `ai:${provider}:challenge`, status: opts.status ?? 'pending',
+      source: `ai:${provider}:challenge`, status: opts.status ?? 'pending', idea: ideaId,
       ...(newNodes.length ? { newNodes } : {}),
     });
   }

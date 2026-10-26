@@ -51,6 +51,8 @@ export const MERGEABLE: NodeType[] = ['Team', 'Person', 'PainPoint', 'Capability
 export interface AiLink {
   from: string; to: string; rel: Relation; description: string; source: string; confidence: number;
   status: 'pending' | 'confirmed' | 'removed'; newNodes?: GNode[];
+  /** The idea the link was extracted for (the rules scope by it). */
+  idea?: string;
 }
 
 function fnv1a32(str: string): number {

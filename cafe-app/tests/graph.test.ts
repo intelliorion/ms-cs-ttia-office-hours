@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildGraph, nodeId } from '../src/graph/build';
 import { ALLOWED, NODE_COLOURS } from '../src/graph/ontology';
+import { makeRegistry, defaultEntries } from '../src/graph/registry';
 import { layoutFor } from '../src/graph/layout';
 import { rebuildGraph, appendAiLink, setAiLinkStatus, readAiLinks } from '../src/graph/store';
 import { tmpWorkspace, sampleIdea, FIXTURE } from './helpers';
@@ -316,5 +317,40 @@ describe('rounds in the graph', () => {
     const star = g.nodes.find((n) => n.type === 'Round');
     expect(star?.label).toBe('ROUND-2026-Q4');
     expect(g.edges.filter((e) => e.rel === 'IN_ROUND').map((e) => [e.from, e.to])).toEqual([['idea:CAFE-2026-001', star?.id]]);
+  });
+});
+
+describe('the registry at birth: a star under another wording lands on its registered id', () => {
+  const registry = makeRegistry({
+    Capability: [{ id: 'capability:policy-q-a', label: 'Policy Q&A', aliases: ['Policy questions and answers'], ref: 'CAP-7' }],
+    Team: [{ id: 'team:gss', label: 'GSS', aliases: ['Global Sourcing Services'] }],
+    Tool: defaultEntries().Tool,
+  }, []);
+  it('form stars (team, feature, tool) resolve through the registry and carry their aliases and reference', () => {
+    const idea = sampleIdea({ ...inv, function: 'Global Sourcing Services', features: ['Policy questions and answers', 'Claim scoring'], tools: { 'Policy questions and answers': 'Power Apps' } });
+    const g = buildGraph([idea], [], [], [], { registry });
+    const cap = g.nodes.find((n) => n.id === 'capability:policy-q-a')!;
+    expect(cap).toMatchObject({ label: 'Policy Q&A', attrs: { aliases: 'Policy questions and answers', ref: 'CAP-7' } });
+    expect(g.nodes.some((n) => n.id === 'capability:policy-questions-and-answers')).toBe(false);
+    expect(g.nodes.find((n) => n.id === 'team:gss')).toMatchObject({ label: 'GSS', attrs: { aliases: 'Global Sourcing Services' } });
+    expect(g.nodes.some((n) => n.id === 'team:global-sourcing-services')).toBe(false);
+    const rels = g.edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
+    expect(rels).toContain('idea:CAFE-2026-003 NEEDS capability:policy-q-a');
+    expect(rels).toContain('capability:policy-q-a BUILT_WITH tool:power-apps');
+    expect(rels).toContain('team:gss HAS_MEMBER person:person-5');
+    expect(g.nodes.find((n) => n.id === 'capability:claim-scoring')?.attrs?.aliases).toBeUndefined();
+  });
+  it('two ideas, one under the label and one under the alias, share the star', () => {
+    const a = sampleIdea({ ...rfx, features: ['Policy Q&A'] });
+    const b = sampleIdea({ ...inv, features: ['policy questions and answers'] });
+    const g = buildGraph([a, b], [], [], [], { registry });
+    expect(g.nodes.filter((n) => n.type === 'Capability')).toHaveLength(1);
+    expect(g.edges.filter((e) => e.rel === 'NEEDS').map((e) => e.to)).toEqual(['capability:policy-q-a', 'capability:policy-q-a']);
+  });
+  it('with no registry file the graph is exactly the one built with the built-in tools', () => {
+    const ai = [{ from: 'idea:CAFE-2026-002', to: 'capability:ticketing', rel: 'NEEDS' as const, description: 'd', source: 'ai:x', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: 'capability:ticketing', type: 'Capability' as const, label: 'Ticketing' }] }];
+    const ideas = [sampleIdea({ ...rfx, features: ['Ticketing'], tools: { Ticketing: 'Dataiku' } }), inv];
+    expect(buildGraph(ideas, ai)).toEqual(buildGraph(ideas, ai, [], [], { registry: makeRegistry(defaultEntries(), []) }));
+    expect(buildGraph(ideas, ai).nodes.find((n) => n.id === 'tool:dataiku')?.attrs?.aliases).toBe('dataiku dss');
   });
 });

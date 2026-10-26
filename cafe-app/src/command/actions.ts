@@ -183,6 +183,8 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const a = star(s.a); const name = s.name?.trim();
       if (!a || !name) { missing(s); continue; }
       if (!RENAMEABLE.includes(a.type)) { problems.push(a.type === 'Round' ? 'Rename rounds in the Rounds pop-out.' : `${a.label} comes from the form, so its name changes there.`); continue; }
+      const taken = ctx.registry?.resolve(a.type, name);
+      if (taken && taken.id !== a.id && nodes.has(taken.id)) { problems.push(`"${name}" already names ${nodes.get(taken.id)!.label}: merge ${a.label} into it instead.`); continue; }
       proposals.push({ label: `Rename ${a.label} to ${name}`, action: { t: 'rename', node: a.id, label: name } });
     } else if (s.op === 'add_star') {
       const name = s.name?.trim(); const type = s.type;
@@ -193,8 +195,9 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       }
       const home = star(s.b);
       if (!home) { problems.push(`Say which idea or star ${name} belongs to, so it is not left floating.`); continue; }
-      const same = ctx.graph.nodes.find((n) => n.label.toLowerCase() === name.toLowerCase());
-      if (same) { problems.push(`${same.label} is already a star: ask me to link it to ${home.label} instead.`); continue; }
+      const hit = ctx.registry?.resolve(type, name);
+      const same = ctx.graph.nodes.find((n) => n.label.toLowerCase() === name.toLowerCase()) ?? (hit ? nodes.get(hit.id) : undefined);
+      if (same) { problems.push(`${same.label} is already a star${hit && same.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : ''}: ask me to link it to ${home.label} instead.`); continue; }
       const rel = (Object.keys(ALLOWED) as Relation[]).find((r) => { const [f, t] = ALLOWED[r]; return (f === home.type && t === type) || (f === type && t === home.type); });
       if (!rel) {
         problems.push(type === 'System' && home.type === 'Idea'
@@ -202,10 +205,12 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
           : `A ${word(type)} can't be linked to a ${word(home.type)}.`);
         continue;
       }
-      const node = nodeId(type, name);
+      // A name the registry knows but no star carries yet is born with its registered id and label.
+      const node = hit?.id ?? nodeId(type, name);
+      const label = hit?.label ?? name;
       const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
       const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
-      proposals.push({ label: `New ${word(type)}: ${name}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label: name, link: { from, rel, to } } });
+      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to } } });
     } else if (s.op === 'remove_star') {
       const a = star(s.a);
       if (!a) { missing(s); continue; }

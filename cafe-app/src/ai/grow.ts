@@ -12,6 +12,7 @@ import type { Coded } from '../command/names';
 import { coder, codeAll, decodeValue, peopleFor, withNames } from '../review/suggestInput';
 import { knownParticipants } from '../inbox/screen';
 import { starMatcher } from '../memory/lookup';
+import { noteAiRead } from './reads';
 import { loadRegistry } from '../graph/registryFile';
 
 /**
@@ -30,6 +31,8 @@ export async function codedExtractInput(root: string, idea: Idea, nodes: GNode[]
 export async function extractCoded(root: string, ai: Connector, idea: Idea, nodes: GNode[]): Promise<{ provider: string; output: ExtractOutput }> {
   const { input, codes } = await codedExtractInput(root, idea, nodes);
   const out = await ai.runWith(extractTask, input);
+  // Noted for the idea panel's "changed since the AI last read it"; the app never re-reads on its own.
+  await noteAiRead(root, idea);
   return { provider: out.provider, output: decodeValue(out.output, codes) };
 }
 

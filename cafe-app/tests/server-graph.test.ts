@@ -125,3 +125,25 @@ describe('the registry across imports and re-reads', () => {
     ]);
   });
 });
+
+describe('what the AI last read of an idea', () => {
+  it('the state says when the AI read it and whether its text changed since; never read means nothing to say', async () => {
+    process.env.CAFE_AI_FAKE = '1';
+    const s = await startServer('2026-10-21');
+    close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
+    const idea = async () => (await json(await fetch(`${s.base}/api/state`))).ideas.find((i: any) => i.id === 'CAFE-2026-001');
+    expect((await idea()).aiRead).toBeUndefined();
+    await fetch(`${s.base}/api/ai/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'CAFE-2026-001' }) });
+    const read = (await idea()).aiRead;
+    expect(read).toMatchObject({ changed: false });
+    expect(read.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    const reads = JSON.parse(await readFile(path.join(s.root, 'data', 'graph', 'ai-reads.json'), 'utf8'));
+    expect(reads['CAFE-2026-001']).toMatchObject({ at: read.at, hash: expect.any(String) });
+    // A change to a field the AI did not read (the region) is no change; the challenge is.
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails', region: 'EMEA' }));
+    expect((await idea()).aiRead.changed).toBe(false);
+    await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails, and too many meetings' }));
+    expect((await idea()).aiRead.changed).toBe(true);
+  });
+});

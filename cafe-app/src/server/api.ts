@@ -50,6 +50,7 @@ import { embedderName, getEmbedder, modelCached, modelDir } from '../memory/embe
 import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
 import { edgeId, APPROVED_TOOLS, retiredToolNote } from '../graph/ontology';
+import { aiReads, aiReadOf } from '../ai/reads';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -77,18 +78,20 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   };
 
   add('GET', '/api/state', async () => {
-    const [{ rounds, problems: roundProblems }, settings, st, list, { items: outbox, problems: outboxProblems }] = await Promise.all([
-      listRoundsChecked(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root),
+    const [{ rounds, problems: roundProblems }, settings, st, list, { items: outbox, problems: outboxProblems }, reads] = await Promise.all([
+      listRoundsChecked(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root), aiReads(root),
     ]);
     const today = clock();
     return {
       today, workspace: root, dataFolder: paths(root).data, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
       ideas: list.ideas.map((i) => {
         const late = overdue(i, st, today);
+        const aiRead = aiReadOf(reads, i);
         return {
           ...i,
           overdue: late,
           offerE2R: needsE2R(late) && !outbox.some((m) => m.idea === i.id && m.template === 'E2R' && m.status !== 'sent'),
+          ...(aiRead ? { aiRead } : {}),
         };
       }),
       outbox,

@@ -1,7 +1,8 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore, useStageRing } from '../state/store';
 import { useChat } from '../state/chat';
-import { filterIdeas, stageKey, emailChips } from './filterIdeas';
+import { filterIdeas, stageKey, emailChips, byMeaning } from './filterIdeas';
+import { memoryIdeas } from '../api';
 
 /** The list stays mounted while an idea's details show (hidden), so its search, chips and scroll are kept for Back. */
 export function IdeasList({ hidden = false }: { hidden?: boolean }) {
@@ -15,7 +16,20 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
   const [q, setQ] = useState('');
   const [stages, setStages] = useState<string[]>([]);
   const ideas: any[] = state?.ideas ?? [];
-  const shown = useMemo(() => filterIdeas(ideas, q, stages), [ideas, q, stages]);
+  const filtered = useMemo(() => filterIdeas(ideas, q, stages), [ideas, q, stages]);
+  // Deep read: when the words match nothing and the index exists, ask for the ideas nearest in meaning (debounced).
+  const canMean = useStore((s) => !!s.memory?.summary.available);
+  const [ranked, setRanked] = useState<{ q: string; ideas: { id: string }[] } | null>(null);
+  const wantMeaning = canMean && q.trim().length > 0 && filtered.length === 0;
+  useEffect(() => {
+    if (!wantMeaning) return;
+    const want = q.trim();
+    const t = setTimeout(() => { memoryIdeas(want).then((r) => setRanked({ q: want, ideas: r.ideas ?? [] })).catch(() => setRanked({ q: want, ideas: [] })); }, 300);
+    return () => clearTimeout(t);
+  }, [wantMeaning, q]);
+  const meaning = wantMeaning && ranked?.q === q.trim() ? byMeaning(ideas, ranked.ideas, stages) : [];
+  const shown = filtered.length ? filtered : meaning;
+  const showingMeaning = !filtered.length && meaning.length > 0;
   if (!state) return null;
   if (!ideas.length) {
     return (
@@ -34,7 +48,7 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
           <button key={k} className={`chip${stages.includes(k) ? ' on' : ''}`} style={{ ['--c' as string]: ring[k] }} aria-pressed={stages.includes(k)} onClick={() => toggle(k)}>{n}</button>
         ))}
       </div>
-      <div className="count">{shown.length} of {ideas.length} ideas</div>
+      <div className="count">{shown.length} of {ideas.length} ideas{showingMeaning && <span className="dr-mark" data-testid="by-meaning" title="Deep read: the nearest in meaning, since no ID, title or function has these words">by meaning</span>}</div>
       {selectedIds.length >= 2 && (
         <div className="multi-strip" data-testid="multi-strip">
           <span className="grow"><b>{selectedIds.length}</b> selected</span>
@@ -49,7 +63,7 @@ export function IdeasList({ hidden = false }: { hidden?: boolean }) {
           const mails = emailChips(i, state.outbox ?? []);
           const late = i.overdue?.[0];
           return (
-            <li key={i.id} className={picked.has(id) ? 'sel sel-many' : selectedId === id ? 'sel' : ''} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
+            <li key={i.id} className={`${picked.has(id) ? 'sel sel-many' : selectedId === id ? 'sel' : ''}${showingMeaning ? ' by-meaning' : ''}`} onMouseEnter={() => hover(id)} onMouseLeave={() => hover(null)}
               onClick={(e) => (e.ctrlKey || e.metaKey ? clickStar(id, true) : openIdea(i.id))}>
               <div className="r1" title={i.title}><span className="iid">{i.id.replace('CAFE-', '')}</span><span className="ttl">{i.title}</span></div>
               <div className="r2">

@@ -17,6 +17,7 @@ import { InboxPopout } from './popouts/InboxPopout';
 import { AiPopout } from './popouts/AiPopout';
 import { DesignPackPopout } from './popouts/DesignPackPopout';
 import { ConfigPopout } from './popouts/ConfigPopout';
+import { DeepReadPopout } from './popouts/DeepReadPopout';
 import { TypeFilter } from './layout/TypeFilter';
 import { labelModeText, visibleGraph } from './universe/graphView';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
@@ -101,6 +102,7 @@ export default function App() {
         {popout?.kind === 'inbox' && <InboxPopout />}
         {popout?.kind === 'ai' && <AiPopout />}
         {popout?.kind === 'config' && <ConfigPopout />}
+        {popout?.kind === 'deep-read' && <DeepReadPopout />}
         {popout?.kind === 'design-pack' && <DesignPackPopout id={popout.id} />}
       </Stage>
       {!focus && <Drawers />}

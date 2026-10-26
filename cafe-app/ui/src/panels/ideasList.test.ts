@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterIdeas, stageKey, emailChips } from './filterIdeas';
+import { byMeaning, filterIdeas, stageKey, emailChips } from './filterIdeas';
 
 const ideas: any[] = [
   { id: 'CAFE-2026-001', title: 'Email scheduler', function: 'BSI', stage: 1 },
@@ -27,5 +27,15 @@ describe('emailChips', () => {
   it('shows sent mails with a date and unsent drafts', () => {
     const chips = emailChips({ id: 'X', sent: { E1: '2026-10-19' } } as any, [{ idea: 'X', template: 'E5', status: 'draft' }, { idea: 'Y', template: 'E2', status: 'draft' }, { idea: 'X', template: 'E1', status: 'sent' }] as any);
     expect(chips).toEqual(['E1 ✓ 19 Oct', 'E5 draft']);
+  });
+});
+
+describe('byMeaning (Deep read)', () => {
+  it('keeps the server\'s order, drops unknown ids, and obeys the stage chips; nothing without a ranking', () => {
+    const ranked = [{ id: 'CAFE-2026-002' }, { id: 'CAFE-2026-999' }, { id: 'CAFE-2026-001' }];
+    expect(byMeaning(ideas, ranked, []).map((i) => i.id)).toEqual(['CAFE-2026-002', 'CAFE-2026-001']);
+    expect(byMeaning(ideas, ranked, [stageKey(ideas[0])]).map((i) => i.id)).toEqual(['CAFE-2026-001']);
+    expect(byMeaning(ideas, null, [])).toEqual([]);
+    expect(byMeaning(ideas, [], [])).toEqual([]);
   });
 });

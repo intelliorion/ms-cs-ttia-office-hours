@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { getState, getGraph, getAiStatus, getInbox } from '../api';
+import { getState, getGraph, getAiStatus, getInbox, getMemory } from '../api';
+import type { DeepReadView } from '../popouts/deepReadHelpers';
 import type { AiStatus } from '../popouts/aiUi';
 import type { InboxView } from '../popouts/inboxHelpers';
 import { DEFAULT_LABELS, nextLabelMode, paletteFor, type LabelMode } from '../universe/graphView';
@@ -11,6 +12,8 @@ export type Popout =
   | { kind: 'inbox' }
   | { kind: 'ai' }
   | { kind: 'config' }
+  /** Deep read: what the assistant has read. */
+  | { kind: 'deep-read' }
   /** Everything the design series made for one idea. */
   | { kind: 'design-pack'; id: string };
 
@@ -179,6 +182,9 @@ export interface AppState {
   /** What GET /api/inbox said last; null until read or when it can't be read. */
   inbox: InboxView | null;
   refreshInbox: () => Promise<void>;
+  /** What GET /api/memory said last (Deep read); null until read or when it can't be read. */
+  memory: DeepReadView | null;
+  refreshMemory: () => Promise<void>;
   /** Below 1000px wide the side panels become drawers; which one is open. */
   drawer: Drawer;
   setDrawer: (d: Drawer) => void;
@@ -209,9 +215,10 @@ function clickPatch(s: AppState, id: string | null, additive = false): Partial<A
 }
 
 export const useStore = create<AppState>((set) => ({
-  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: readHide(), hiddenTypes: readHiddenTypes(), hoverId: null, labels: readLabels(), viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', theme: readTheme(), qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, trail: [], notice: null, suggest: null, ai: null, inbox: null, drawer: null,
+  state: null, graph: null, selectedId: null, selectedIds: [], highlight: null, hideUnlit: readHide(), hiddenTypes: readHiddenTypes(), hoverId: null, labels: readLabels(), viewNonce: 0, focus: readFocus(), quality: readQuality() ?? 'full', theme: readTheme(), qualitySetByHand: readQualityByHand(), popout: null, leftView: LIST_VIEW, trail: [], notice: null, suggest: null, ai: null, inbox: null, memory: null, drawer: null,
   setDrawer: (d) => set({ drawer: d }),
   refreshInbox: async () => { try { set({ inbox: await getInbox() }); } catch { /* keep the last one */ } },
+  refreshMemory: async () => { try { set({ memory: await getMemory() }); } catch { /* keep the last one */ } },
   refreshAi: async () => { try { set({ ai: await getAiStatus() }); } catch { set({ ai: null }); } },
   refresh: async () => {
     try {
@@ -224,6 +231,8 @@ export const useStore = create<AppState>((set) => ({
         ...(graphError ? { notice: { text: `Couldn't refresh the universe: ${graphError}`, kind: 'error' as const } } : {}),
       }));
     } catch (e) { set({ notice: { text: (e as Error).message, kind: 'error' } }); }
+    // Deep read's counts follow the ideas: a changed idea shows as changed since it was read. Never a notice: the bar can wait.
+    try { await getMemory().then((memory) => set({ memory })); } catch { /* keep the last one */ }
   },
   select: (id) => set({ selectedId: id, selectedIds: [], trail: [] }),
   hover: (id) => set({ hoverId: id }),

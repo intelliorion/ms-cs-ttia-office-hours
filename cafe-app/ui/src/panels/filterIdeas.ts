@@ -9,6 +9,16 @@ export function filterIdeas(ideas: any[], q: string, stages: string[]): any[] {
   });
 }
 
+/**
+ * Deep read's "by meaning": the ideas the server ranked, in its order, among those the stage chips allow. Used only when
+ * the substring filter finds nothing and the index exists; otherwise the list is exactly as it was.
+ */
+export function byMeaning(ideas: any[], ranked: { id: string }[] | null | undefined, stages: string[]): any[] {
+  if (!ranked?.length) return [];
+  const byId = new Map(ideas.map((i) => [i.id, i]));
+  return ranked.map((r) => byId.get(r.id)).filter((i) => i && (!stages.length || stages.includes(stageKey(i))));
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const shortDate = (iso: string): string => {
   const [, m, d] = iso.slice(0, 10).split('-').map(Number);

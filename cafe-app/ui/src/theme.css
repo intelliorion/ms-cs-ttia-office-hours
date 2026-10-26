@@ -1241,3 +1241,50 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .rd-flash{animation:rd-flash 1.6s ease-out}
 @keyframes rd-flash{0%{box-shadow:0 0 0 3px rgba(var(--rgb-warm),.85)}100%{box-shadow:0 0 0 3px rgba(var(--rgb-warm),0)}}
 @media (max-width:560px){.rd-items li{grid-template-columns:16px 1fr}.rd-items li .rd-t,.rd-items li .link-btn{grid-column:2}}
+
+/* Deep read: the title-bar pill with its ring, and the pop-out. */
+.deep-pill{display:inline-flex;align-items:center;gap:8px}
+.dr-ring{position:relative;display:inline-flex;align-items:center;justify-content:center;color:var(--teal);flex:none}
+.dr-ring svg{position:absolute;inset:0}
+.dr-arc{transition:stroke-dashoffset .6s ease}
+.deep-pill .dr-pct{font-family:var(--mono);font-size:12px;color:var(--teal)}
+.deep-pill.reading .dr-ring{animation:dr-breathe 1.8s ease-in-out infinite}
+@keyframes dr-breathe{0%,100%{filter:drop-shadow(0 0 2px rgba(var(--rgb-accent),.4))}50%{filter:drop-shadow(0 0 7px rgba(var(--rgb-accent),.9))}}
+[data-quality="lite"] .deep-pill.reading .dr-ring{animation:none}
+[data-quality="lite"] .dr-arc{transition:none}
+.dr-wait{color:var(--muted);padding:20px 0}
+.dr-top{display:flex;align-items:center;gap:24px;padding:8px 0 16px;border-bottom:1px solid rgba(var(--rgb-line),.12)}
+.dr-top .dr-ring{color:var(--teal)}
+.dr-big{position:relative;font-family:var(--mono);font-size:22px;color:var(--strong);font-weight:600}
+.dr-lines{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.dr-n{font-size:17px;color:var(--text)}
+.dr-n b{color:var(--strong)}
+.dr-status{font-size:14px;color:var(--muted)}
+.dr-btns{display:flex;gap:10px;margin-top:4px}
+.dr-kinds{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13.5px;color:var(--muted);padding:2px 0 6px}
+.dr-kinds b{color:var(--text)}
+.dr-kinds .all b{color:var(--teal)}
+.dr-ideas{list-style:none;margin:0;padding:0;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;font-size:14px}
+.dr-ideas::-webkit-scrollbar{width:6px}
+.dr-ideas::-webkit-scrollbar-thumb{background:rgba(var(--rgb-line),.3);border-radius:3px}
+.dr-ideas li{display:flex;align-items:center;gap:10px;padding:4px 6px;border-radius:4px}
+.dr-ideas li:hover{background:rgba(var(--rgb-s2),.5)}
+.dr-ideas .iid{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none}
+.dr-ideas .ttl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.dr-ideas .dr-count{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none}
+.dr-ideas .dr-st{font-size:12px;flex:none;width:92px;text-align:right;color:var(--muted)}
+.dr-dot{width:8px;height:8px;border-radius:50%;flex:none;background:rgba(var(--rgb-line),.35)}
+.dr-ideas .st-read .dr-dot{background:var(--teal);box-shadow:0 0 6px rgba(var(--rgb-accent),.6)}
+.dr-ideas .st-read .dr-st{color:var(--teal)}
+.dr-ideas .st-stale .dr-dot{background:var(--amber)}
+.dr-ideas .st-stale .dr-st{color:var(--amber)}
+[data-quality="lite"] .dr-ideas .st-read .dr-dot{box-shadow:none}
+.dr-copy{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px}
+.dr-block h4{margin:0 0 4px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream);font-weight:600}
+.dr-block p{margin:0;font-size:13.5px;line-height:1.5;color:var(--text)}
+.dr-block:first-child{grid-column:1 / -1}
+.dr-model{font-size:12.5px;color:var(--muted);line-height:1.5}
+.dr-model code{font-family:var(--mono);font-size:12px;color:var(--text)}
+/* The ideas list, when the words matched nothing and Deep read found ideas by meaning. */
+.ideas .dr-mark{margin-left:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);border:1px solid rgba(var(--rgb-accent),.5);border-radius:999px;padding:1px 8px}
+.idea-list li.by-meaning .iid::before{content:"≈ ";color:var(--teal)}

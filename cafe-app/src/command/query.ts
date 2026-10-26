@@ -74,7 +74,7 @@ export const QUERY_GUIDE = [
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
-  'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "ideas similar to [I1]", "what does GSS own"): follow or rank with that rel.',
+  'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
   'A follow or rank with no rel walks the stated links only. For what people WROTE use search, not the derived links.',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
   'Use one query unless the question has separate parts. Examples (codes as in "stars"):',
@@ -89,7 +89,7 @@ export const QUERY_GUIDE = [
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
   '- how [P1] is connected to [I2]: [{"op":"path","codes":["P1","I2"]}]',
   '- ideas that depend on [S1]: [{"op":"stars","codes":["S1"]},{"op":"follow","rel":"DEPENDS_ON","dir":"in","type":"Idea"}]',
-  '- ideas similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
+  '- the ideas SIMILAR_TO [I1] by shared stars: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
   '- ideas like [I1]: [{"op":"similar","codes":["I1"],"limit":5}]',
 ];

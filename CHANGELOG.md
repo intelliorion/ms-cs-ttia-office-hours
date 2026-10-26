@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-26 (Café app: Deep read keeps itself current)
+
+- **Deep read upkeep.** After the first Run the index keeps itself current, piece by piece and deliberately: every
+  change (an Import, a save, a design, an email, the roadshow, the hand-off, a history line) goes through one pure
+  `decide()` whose reason is kept and shown ("Last: read 2026-003 after Import · 3 passages", "Last: skipped, nothing
+  changed"). Never before the first Run, never while paused, queued behind a running read, only the changed passages
+  of the touched ideas, bursts coalesced (5 s quiet, 30 s cap), never in the operator's way, a failure deferred once,
+  another model's index left alone, a renamed or merged star refreshes labels only. A per-workspace switch
+  (`rules/settings.yaml` → `deepRead.upkeep`) in the pop-out; no new approval step.
+- **The pop-out is a dashboard:** Read · Changed since · Not yet tiles with shares, "passages to go: N (NN %)", bars
+  by kind, a table of every idea (status, passages, kinds still to read, last read; not yet first) with filter chips
+  and a search, a row opening the idea; a dot on the title-bar pill when anything is changed since or not yet.
+- **The assistant** is told where Deep read stands (on, % read, ideas changed since, last read), searches what people
+  wrote only for questions about what they wrote, and names a stale idea in the trace. Spec:
+  `docs/superpowers/specs/2026-10-26-cafe-deep-read-upkeep-design.md`.
+
 ## 2026-10-26 (Café app: Deep read)
 
 - **Deep read**, a local long-term memory for the Creators' Café app, as an add-on: a title-bar button with a

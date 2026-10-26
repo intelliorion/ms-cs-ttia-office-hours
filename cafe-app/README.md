@@ -391,13 +391,48 @@ different words stay apart, and twins pile up. With it:
 **Add-on, not a must.** With nothing read, every path above behaves exactly as before (the tests say so). The pop-out
 copies nothing anywhere and asks no Yes/No: its controls are **Run**, **Pause**, **Continue** and **Rerun all**.
 
-**How.** Click **Deep read** in the title bar. The pop-out shows the ring (passages read ÷ passages present), the status
-("Reading 120 of 480…", "Paused at 160 of 480", "Read 26 Oct 14:02 in 48 s · 2 ideas changed since"), counts by kind
-(submissions, emails, designs, reviews, roadshows), each idea (read · changed since · not yet), five short blocks on why,
-and where the model lives. **Run** reads what is new or changed (incremental, by content hash); the job runs in the
-server, in the background, and goes on when the pop-out closes (Esc or ✕). **Pause** stops at the next batch (16
-passages); **Continue** picks up there; **Rerun all** drops the index first. An idea changed after it was read shows as
-changed since and is read on the next Run.
+**How.** Click **Deep read** in the title bar. The pop-out is a dashboard of where things stand: the ring (passages
+read ÷ passages present) with "passages to go: N (NN %)", the status ("Reading 120 of 480…", "Paused at 160 of 480",
+"Read 26 Oct 14:02 in 48 s · 2 ideas changed since"), three tiles with counts and shares (**Read** · **Changed since** ·
+**Not yet**), bars by kind (submissions, emails, designs, reviews, roadshows; read of present), and a table with every
+idea (Café ID, title, status, passages read / present, which kinds are still to read, last read), not yet first, then
+changed since, then read, with filter chips and a search; a row opens the idea in the left panel and the chips are
+there again when you come back. Then five short blocks on why, and where the model lives. **Run** reads what is new or
+changed (incremental, by content hash); the job runs in the server, in the background, and goes on when the pop-out
+closes (Esc or ✕). **Pause** stops at the next batch (16 passages); **Continue** picks up there; **Rerun all** drops
+the index first. The title-bar pill keeps the ring and the percentage and shows a small dot when anything is changed
+since or not yet, so you know at a glance.
+
+**Keeps itself current, and knows when not to.** After the first Run, Deep read keeps the index current by itself,
+piece by piece, and deliberately. Every change goes through one decision (`src/memory/upkeep.ts`, `decide()`), whose
+reason is kept and shown in the pop-out ("Last: read 2026-003 after Import · 3 passages · 26 Oct 14:02", "Last:
+skipped, nothing changed in 2026-003"). The rules, in order:
+
+1. **Never before your first Run.** With no index the app never downloads the model or builds one on its own.
+2. **Never while paused** (a change while paused is marked changed since and read at Continue); **queued** behind a
+   running read and checked once when it ends.
+3. **Only what changed, and only if it changed.** An Import or a save names the ideas it touched; only their passages
+   are re-hashed. Every hash already in the index: skipped, and said. Otherwise only the changed or new passages of
+   those ideas are read (and gone ones dropped). Never the whole workspace: **Rerun all** stays yours.
+4. **Bursts become one read.** An Import of forty files, or the design brainstorm writing after every answer, is one
+   re-read: five seconds of quiet after the last change (at most thirty seconds after the first), and the pop-out says
+   "waiting for changes to settle".
+5. **Never in your way.** Upkeep runs after the Import, the save or the assistant has returned; nothing waits on it.
+6. **Fails quietly, once.** If the model cannot be loaded the change is recorded as deferred with the error, shown
+   once, and tried again at the next change, never in a loop.
+7. **Another model's index** is left alone, and said; Rerun all is your call.
+8. **A star renamed or merged** refreshes its label vector only; no passage is read.
+
+What counts as a change: anything written into an idea's folder (the record, the design and approach, an email drafted,
+sent or filed, the roadshow, the CSIC hand-off, a history line). **Automatic upkeep: on/off** in the pop-out (kept in
+`rules/settings.yaml` as `deepRead.upkeep`; shown once you have run Deep read) turns it off for fully manual reading
+as before. It is a setting, not an approval: nothing asks Yes or No.
+
+**The assistant knows where Deep read stands.** It is told whether the index is on, how much is read, how many ideas
+changed since, and when it last read; it uses `search` and `similar` only for what people wrote (challenge text,
+answers, designs, reviews, emails) and the graph steps for stars, links, counts, people and stages. With no index the
+two steps do not exist for it. When a search lands on an idea whose text changed since it was read, the trace says
+"2026-003 changed since it was read"; the answer is not held up for a re-read, upkeep does that.
 
 **The model, and where it goes.** Deep read uses a second, local model, not the AI connector: Transformers.js
 (`@huggingface/transformers`) running `Xenova/all-MiniLM-L6-v2` (quantised, about 23 MB) on the CPU in the app's own

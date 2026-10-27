@@ -41,6 +41,8 @@ export interface GrowResult {
   held: { rule: string; why: string }[];
   links: GEdge[];
   suggestions: { newNodes: GNode[] };
+  /** The capabilities this read linked: how many were stars already there, how many it made. */
+  capabilities: { reused: number; new: number };
 }
 
 /**
@@ -65,5 +67,12 @@ export async function growIdea(root: string, ai: Connector, id: string): Promise
   const after = await rebuildGraph(root);
   const ids = new Set(planned.links.map((l) => edgeId(l.from, l.rel, l.to)));
   const added = after.edges.filter((e) => ids.has(e.id));
-  return { added: added.filter((e) => e.confirmed).length, held: hold.map(({ action: _a, ...h }) => h), links: added, suggestions: { newNodes: planned.newNodes } };
+  // Reused: a capability the graph held before this read; new: one this read made.
+  const had = new Set(before.nodes.filter((n) => n.type === 'Capability').map((n) => n.id));
+  const caps = new Set(planned.links.flatMap((l) => [l.from, l.to]).filter((id) => id.startsWith('capability:')));
+  const reused = [...caps].filter((id) => had.has(id)).length;
+  return {
+    added: added.filter((e) => e.confirmed).length, held: hold.map(({ action: _a, ...h }) => h), links: added, suggestions: { newNodes: planned.newNodes },
+    capabilities: { reused, new: caps.size - reused },
+  };
 }

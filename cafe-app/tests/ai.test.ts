@@ -192,6 +192,23 @@ describe('AI connector', () => {
     expect(reviewSuggestTask.prompt({ idea: INPUT.idea })).toContain('"notnow"');
   });
 
+  it('the extract prompt asks for capabilities at a reusable level, with worked examples, and keeps pain points specific', () => {
+    const p = extractTask.prompt(INPUT);
+    // What a capability is, how it is named, how many, and where the specifics go.
+    expect(p).toContain('A capability is something a solution does that another idea could reuse');
+    expect(p).toMatch(/short noun phrase \(2 to 4 words/);
+    expect(p).toContain('2 to 5 capabilities');
+    expect(p).toMatch(/specific detail .*link's "description", not the label/);
+    expect(p).toMatch(/pick an existing one from "existing\.capabilities" whenever the meaning matches, even if the wording differs/);
+    // Three worked examples, specific → reusable.
+    expect(p).toContain('"Region-specific policy rule lookup" → "Policy question answering"');
+    expect(p).toContain('"Split claim detection" → "Anomaly detection in claims"');
+    expect(p).toContain('"Natural language desk request" → "Request handling"');
+    // Pain points stay the idea's own; systems are the source, not the file.
+    expect(p).toMatch(/Pain points may stay specific/);
+    expect(p).toContain('"Expense system", not "Expense system export"');
+  });
+
   it("settings provider 'none' means no AI even when providers exist", async () => {
     const c = connector([fake(JSON.stringify(VALID))], { ...DEFAULT_SETTINGS, ai: { provider: 'none' } });
     expect((await c.status()).provider).toBeNull();

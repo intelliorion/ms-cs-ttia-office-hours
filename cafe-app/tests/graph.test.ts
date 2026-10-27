@@ -279,6 +279,82 @@ describe('approved tools', () => {
   });
 });
 
+describe('a capability named more specifically than a star already there reuses that star', () => {
+  const cap = (label: string, type: 'Capability' | 'PainPoint' = 'Capability') => ({ id: nodeId(type, label), type, label });
+  const stars = [cap('Policy question answering'), cap('Anomaly detection in claims'), cap('Reporting'), cap('Request handling', 'PainPoint')];
+  // Each star is known: the form of an earlier idea put it there.
+  const graph = {
+    nodes: stars,
+    edges: stars.map((n) => ({ id: `idea:CAFE-2026-000|NEEDS|${n.id}`, from: 'idea:CAFE-2026-000', to: n.id, rel: 'NEEDS' as const, description: '', source: 'form:CAFE-2026-000', confidence: 1, confirmed: true })),
+  };
+  const plan = (label: string, type: 'Capability' | 'PainPoint' = 'Capability') => planAiLinks('CAFE-2026-001', {
+    nodes: [{ type, label }],
+    links: [{ from: 'idea', to: label, rel: type === 'Capability' ? 'NEEDS' : 'REPLACES', description: 'Needed', confidence: 0.9 }],
+  } as any, graph, [], 'fake');
+
+  it.each([
+    // proposed label → the star it lands on, the description, and whether a star is born
+    ['Policy question answering for travel', 'capability:policy-question-answering', 'Needed (for travel)', false],
+    ['Travel policy question answering', 'capability:policy-question-answering', 'Needed (travel)', false],
+    ['Claims anomaly detection', 'capability:anomaly-detection-in-claims', 'Needed', false],
+    ['Policy rule checking', 'capability:policy-rule-checking', 'Needed', true],
+    ['Occupancy KPI reporting', 'capability:occupancy-kpi-reporting', 'Needed', true],
+    ['Policy question', 'capability:policy-question', 'Needed', true],
+  ])('%s → %s', (label, to, description, born) => {
+    const { links, newNodes } = plan(label);
+    expect(links.map((l) => [l.to, l.description])).toEqual([[to, description]]);
+    expect(newNodes.map((n) => n.id)).toEqual(born ? [to] : []);
+  });
+
+  it('only within a type: a pain point with the same words does not absorb a capability, nor the other way round', () => {
+    expect(plan('Request handling for desks').links.map((l) => l.to)).toEqual(['capability:request-handling-for-desks']);
+    expect(plan('Anomaly detection in claims today', 'PainPoint').links.map((l) => l.to)).toEqual(['painpoint:anomaly-detection-in-claims-today']);
+  });
+
+  it('the registry still comes first; without it the extra words reach every link that names the star', () => {
+    const out = {
+      nodes: [{ type: 'Capability', label: 'Policy question answering for travel' }, { type: 'System', label: 'Policy library' }],
+      links: [
+        { from: 'idea', to: 'Policy question answering for travel', rel: 'NEEDS', description: 'Answers', confidence: 0.9 },
+        { from: 'Policy question answering for travel', to: 'Policy library', rel: 'USES_DATA', description: 'Reads', confidence: 0.8 },
+      ],
+    } as any;
+    const registry = makeRegistry({ Capability: [{ id: 'capability:policy-q-a', label: 'Policy Q&A', aliases: ['Policy question answering for travel'] }] }, []);
+    expect(planAiLinks('CAFE-2026-001', out, graph, [], 'fake', { registry }).links.map((l) => [l.from, l.to, l.description])).toEqual([
+      ['idea:CAFE-2026-001', 'capability:policy-q-a', 'Answers'], ['capability:policy-q-a', 'system:policy-library', 'Reads'],
+    ]);
+    expect(planAiLinks('CAFE-2026-001', out, graph, [], 'fake').links.map((l) => [l.from, l.to, l.description])).toEqual([
+      ['idea:CAFE-2026-001', 'capability:policy-question-answering', 'Answers (for travel)'],
+      ['capability:policy-question-answering', 'system:policy-library', 'Reads (for travel)'],
+    ]);
+  });
+});
+
+describe('a read counts the capabilities it reused against the ones it made', () => {
+  it('growIdea reports reused vs new; a more specific name lands on the star an earlier idea made', async () => {
+    const { growIdea } = await import('../src/ai/grow');
+    const { createConnector } = await import('../src/ai/connector');
+    const { DEFAULT_SETTINGS } = await import('../src/round/round');
+    const root = await tmpWorkspace();
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', slug: 'a', title: 'A' }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', slug: 'b', title: 'B', dedupe_key: 'b|person 1' }));
+    const replies: Record<string, unknown> = {
+      A: { nodes: [{ type: 'Capability', label: 'Policy question answering' }, { type: 'Capability', label: 'Document parsing' }],
+        links: [{ from: 'idea', to: 'Policy question answering', rel: 'NEEDS', description: 'Answers', confidence: 0.9 }, { from: 'idea', to: 'Document parsing', rel: 'NEEDS', description: 'Reads', confidence: 0.9 }] },
+      B: { nodes: [{ type: 'Capability', label: 'Policy question answering for travel' }, { type: 'Capability', label: 'Desk booking' }, { type: 'PainPoint', label: 'Desks found by walking' }],
+        links: [{ from: 'idea', to: 'Policy question answering for travel', rel: 'NEEDS', description: 'Answers', confidence: 0.9 }, { from: 'idea', to: 'Desk booking', rel: 'NEEDS', description: 'Books', confidence: 0.9 }, { from: 'idea', to: 'Desks found by walking', rel: 'REPLACES', description: 'Walks', confidence: 0.9 }] },
+    };
+    const ai = createConnector({ providers: [{ id: 'claude', label: 'fake', available: async () => true, complete: async (prompt: string) => JSON.stringify(replies[/"title": "(A|B)"/.exec(prompt)![1]]) }], settings: DEFAULT_SETTINGS });
+    const first = await growIdea(root, ai, 'CAFE-2026-001');
+    expect(first.capabilities).toEqual({ reused: 0, new: 2 });
+    const second = await growIdea(root, ai, 'CAFE-2026-002');
+    expect(second.capabilities).toEqual({ reused: 1, new: 1 });
+    expect(second.links.map((l) => [l.to, l.description]).sort()).toEqual([
+      ['capability:desk-booking', 'Books'], ['capability:policy-question-answering', 'Answers (for travel)'], ['painpoint:desks-found-by-walking', 'Walks'],
+    ]);
+  });
+});
+
 describe('rounds in the graph', () => {
   const r1 = { id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' };
   const r2 = { id: 'ROUND-002', name: 'Spring pilots', created: '2026-10-20' };

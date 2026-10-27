@@ -98,9 +98,9 @@ function IdeaConnections({ id }: { id: string }) {
   useEffect(() => { setMsg(null); setTab('links'); }, [id]);
   const links = ideaLinks(graph, id);
   const stated = links.filter((l) => !l.derived).length;
-  const act = async (fn: () => Promise<unknown>, ok: string) => {
+  const act = async (fn: () => Promise<unknown>, ok: string | ((reply: any) => string)) => {
     setBusy(true);
-    try { await fn(); setMsg({ text: ok, kind: 'ok' }); } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
+    try { const r = await fn(); setMsg({ text: typeof ok === 'string' ? ok : ok(r), kind: 'ok' }); } catch (e) { setMsg({ text: (e as Error).message, kind: 'error' }); }
     await refresh(); setBusy(false);
   };
   return (
@@ -111,7 +111,7 @@ function IdeaConnections({ id }: { id: string }) {
       </div>
       {msg && <div className={`pop-notice ${msg.kind}`} role="status">{msg.text}</div>}
       {tab === 'links' ? <>
-        <AiReadLine id={id} busy={busy} onRead={() => act(() => post('/api/ai/extract', { id }), 'Read again: what the AI found is in the universe.')} />
+        <AiReadLine id={id} busy={busy} onRead={() => act(() => post('/api/ai/extract', { id }), (r) => `Read again: ${r?.capabilities?.reused ?? 0} capabilities reused, ${r?.capabilities?.new ?? 0} new.`)} />
         <LinkTable rows={links} busy={busy} compact
           onConfirm={(edgeId) => act(() => post('/api/graph/confirm', { edgeId }), 'Link confirmed.')}
           onOpen={followLink} />

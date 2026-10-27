@@ -8,6 +8,11 @@ import { DEFAULT_REGISTRY } from '../graph/build';
 /** Deep read: a proposed label this close (cosine) to an existing star of the same type reuses that star. */
 export const REUSE_AT = 0.85;
 
+/** Words that carry no meaning when two capability labels are compared ("in", "for"). */
+const STOP = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with', 'via']);
+const tokens = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+const contentWords = (s: string) => tokens(s).filter((w) => !STOP.has(w));
+
 /** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
   const labels = (t: NodeType) => nodes.filter((n) => n.type === t).map((n) => n.label).slice(0, 200);
@@ -87,6 +92,23 @@ export function planAiLinks(
       else near[p.id] = hit.node.id;
     }
   }
+  // A capability named more specifically than a star already there ("Policy question answering for travel" ⊇ "Policy
+  // question answering") is that star, and the extra words go into the description. Conservative: only a Capability,
+  // only a word superset (stop words aside) of a star with two or more words, so "Reporting" absorbs nothing.
+  const folded = new Map<string, string>();
+  const stars = graph.nodes.filter((n) => n.type === 'Capability')
+    .map((n) => ({ node: n, all: new Set(tokens(n.label)), words: new Set(contentWords(n.label)) })).filter((c) => c.words.size >= 2);
+  for (const [k, p] of [...proposed.entries()]) {
+    if (p.type !== 'Capability' || existing.has(k) || settled.has(k) || byId.has(p.id)) continue;
+    const mine = new Set(contentWords(p.label));
+    const hit = stars.filter((c) => [...c.words].every((w) => mine.has(w))).sort((a, b) => b.words.size - a.words.size)[0];
+    if (!hit) continue;
+    proposed.set(k, hit.node);
+    // The words the star does not have, lower-cased for a description fragment (an acronym keeps its capitals).
+    const extra = p.label.split(/[^\p{L}\p{N}]+/u).filter((w) => w && !hit.all.has(w.toLowerCase()))
+      .map((w) => (w.length > 1 && w === w.toUpperCase() ? w : w.toLowerCase()));
+    if (extra.length) folded.set(k, extra.join(' '));
+  }
   // A node is known only if something the operator stands behind put it there: the form
   // (and every idea), or an AI link the operator confirmed. Nodes that exist only because of
   // a still-pending AI link stay "new", so links to them stay unconfirmed too.
@@ -112,8 +134,10 @@ export function planAiLinks(
     seen.add(id);
     const unapproved = [from, to].some((n) => n.type === 'Tool' && n.attrs?.approved === false);
     const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
+    const extra = [l.from, l.to].map((x) => folded.get(key(x))).filter((x): x is string => !!x);
+    const description = `${l.description}${extra.length ? ` (${extra.join(', ')})` : ''}${unapproved ? NOT_APPROVED_NOTE : ''}`;
     links.push({
-      from: from.id, to: to.id, rel: l.rel, description: unapproved ? `${l.description}${NOT_APPROVED_NOTE}` : l.description, confidence: l.confidence,
+      from: from.id, to: to.id, rel: l.rel, description, confidence: l.confidence,
       source: `ai:${provider}:challenge`, status: opts.status ?? 'pending', idea: ideaId,
       ...(newNodes.length ? { newNodes } : {}),
     });

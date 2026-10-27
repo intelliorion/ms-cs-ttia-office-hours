@@ -232,7 +232,12 @@ export const extractTask: Task<ExtractOutput> = {
       "Read the idea's challenge, current process, outcomes and, when given, its business impact, beneficiaries and additional context.",
       'Propose the capabilities it needs (Capability), the pain points it replaces (PainPoint) and the systems or data it uses (System).',
       'Never propose a tool or product to build it with: the tool is chosen later, in the app, by the operator.',
-      'A capability is something the solution does. Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form.',
+      // Capabilities are the reusable unit of the knowledge graph (similar ideas, "which ideas need X"): named at a level
+      // another idea could share, the idea's own detail kept in the link's description.
+      'A capability is something a solution does that another idea could reuse. Name it as a short noun phrase (2 to 4 words) with no noun that belongs to this idea alone, and give 2 to 5 capabilities. The specific detail (the region, the kind of claim, the thing requested) goes into the link\'s "description", not the label.',
+      'Before inventing a capability label, pick an existing one from "existing.capabilities" whenever the meaning matches, even if the wording differs. Examples, specific → reusable: "Region-specific policy rule lookup" → "Policy question answering"; "Split claim detection" → "Anomaly detection in claims"; "Natural language desk request" → "Request handling".',
+      'Pain points may stay specific: they are the idea\'s own. A system is named as the system or data source, not the file it gives ("Expense system", not "Expense system export").',
+      'Never propose the help the submitter asked of the Café (design guidance, brainstorming, automation guidance): that comes from the form.',
       'Reuse a label from "existing" when it means the same thing. Labels are short nouns, at most 60 characters.',
       // What each link means, from the ontology (rules/ontology.yaml), so the AI proposes links by their meaning, not by type pairs alone.
       `Links: "from" is "idea" or a node label; "to" is a node label. Allowed: ${AI_RELATIONS.filter((r) => r !== 'BUILT_WITH').map((r) => `${ALLOWED[r][0] === 'Idea' ? 'idea' : ALLOWED[r][0]} ${r} ${ALLOWED[r][1]} (${RELATION_MEANINGS[r].meaning})`).join('; ')}.`,

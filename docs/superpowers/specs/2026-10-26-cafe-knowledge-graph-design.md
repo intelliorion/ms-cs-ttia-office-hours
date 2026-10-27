@@ -143,3 +143,23 @@ fixture, export round-trip, the hand-off's JSON-LD).
 
 No database, no RDF store, no OWL reasoner, no cloud. No change to AI providers. No auto-confirm, auto-route or
 auto-merge. No approval steps. No push.
+
+## 9. Addendum (2026-10-26): capabilities at a reusable level
+
+Measured on the practice workspace with the real provider, reading the 7 ideas gave 36 Capability stars, accurate
+but idea-specific ("Region-specific policy rule lookup", "Split claim detection"), so almost none was shared and
+`shared-stars` fired only on the stub provider's leftovers. The capability is the graph's reusable unit; these are
+decided, not re-opened:
+
+1. **The extract prompt.** A capability is "something a solution does that another idea could reuse", a short noun
+   phrase (2 to 4 words, no noun that belongs to the idea alone), 2 to 5 per idea; the specific detail goes into the
+   link's `description`. Before inventing a label the AI picks one from `existing.capabilities` whenever the meaning
+   matches, even if the wording differs. Three worked examples, specific → reusable. Pain points may stay specific;
+   a system is the system or data source, not the file ("Expense system", not "Expense system export").
+2. **A superset guard in `planAiLinks`.** After the registry, the exact label and Deep read's nearest, a proposed
+   Capability whose words (stop words aside) are a superset of an existing Capability's words reuses that star, and
+   the extra words go into the link's description ("Answers (for travel)"). Only a Capability, only a star of two or
+   more words (a one-word star such as "Reporting" absorbs nothing), never across types.
+3. **Counts.** `growIdea` reports `capabilities: { reused, new }`; the idea panel's Read again line says
+   "Read again: 3 capabilities reused, 1 new."
+4. **No change to the fake provider.** Its two generic capabilities already read as reusable.

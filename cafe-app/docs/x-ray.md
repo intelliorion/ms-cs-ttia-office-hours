@@ -35,7 +35,7 @@ flowchart TB
       W2["data/ideas/CAFE-…/ (markdown, json, design, plan, roadshow)<br/>data/graph/*.jsonl (nodes · edges · ai-links · operator)<br/>data/memory/index.jsonl · data/exports/*.jsonld"]
     end
     subgraph ai["AI on the same machine"]
-      P1["Claude Code CLI<br/>(headless, no tools, no session)"]
+      P1["Claude Code CLI<br/>(headless, one turn, no tools, no session)"]
       P2["GitHub Copilot CLI"]
       P3["VS Code helper"]
       E["Sentence embedder<br/>MiniLM ONNX on CPU<br/>~/.cafe-ai/models"]
@@ -61,14 +61,15 @@ flowchart TB
 Read it top down. The browser talks only to the local server over JSON. The server, the CLI, the graph build,
 Deep read, the AI connector, the assistant and the three stages are one Node process compiled from one TypeScript
 tree, so a change in the ontology is seen by the UI, the CLI and the tests at once. The workspace folder is the
-only state. The AI is a child process the app spawns on demand, with a scrubbed environment and no tools.
+only state. The two CLIs are child processes the app spawns on demand, with a scrubbed environment and no tools; the
+VS Code helper is an HTTP call on the local machine.
 
 ## 2. What it is built from
 
 | Part | Package | Why this one |
 |---|---|---|
 | Language, everywhere | TypeScript on Node 20 | One language for server, CLI, UI and tests; no second runtime to install on a locked-down PC |
-| Server | `node:http` (no framework) | A few dozen JSON routes and static files; a framework would add more than it removes |
+| Server | `node:http` (no framework) | 98 JSON routes registered in one file, and static files; a framework would add more than it removes |
 | UI | React 19, Vite | Built once into `web/`, served by the same process |
 | The universe | three.js, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing`, gsap | The 3D star field, the glow, the pulses |
 | UI state | zustand | Small store, no boilerplate |
@@ -77,7 +78,7 @@ only state. The AI is a child process the app spawns on demand, with a scrubbed 
 | Import readers | `pdfjs-dist`, `exceljs`, `csv-parse`, `@kenjiuno/msgreader`, `fflate` | Read what people drop in: PDF, Excel, CSV, Outlook `.msg`, zips |
 | Deck writer | `pptxgenjs` | Writes the roadshow deck |
 | Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process, downloaded once, cached outside the workspace |
-| Tests | vitest, jsdom, playwright-core | 880+ server tests and 360+ UI tests; the browser is driven headless for acceptance |
+| Tests | vitest, jsdom, playwright-core | About 860 server tests and about 370 UI tests; the browser is driven headless for acceptance |
 
 About 29,000 lines of TypeScript outside the tests.
 
@@ -99,9 +100,11 @@ flowchart LR
 ```
 
 **Today.** The app uses the AI the operator already has for their IDE. The connector tries Claude Code, then the
-Copilot CLI, then a VS Code helper, and uses the first one found on the machine. Each call is a child process with
-the prompt on stdin, every built-in tool disabled, no MCP servers, and no session saved, so the AI can read the
-prompt and nothing else. People's names are replaced by codes such as `[P1]` before the prompt is built and put
+Copilot CLI, then a VS Code helper, and uses the first one found on the machine. A CLI call is a child process with
+the prompt on stdin, every built-in tool disabled, one turn (`--max-turns 1`), no MCP servers, and no session saved,
+so the AI can read the prompt and nothing else; reading a picture allows a single Read on that one file in an
+otherwise empty folder. The VS Code helper is an HTTP call to a helper on the local machine, found through a port
+and token in the operator's home folder. People's names are replaced by codes such as `[P1]` before the prompt is built and put
 back after the answer, so a name never leaves the process. Every answer must match a JSON schema or it is sent back
 once and then dropped. An answer never changes the graph by itself: a proposed change is a card, and Do it is the
 operator's click.
@@ -113,10 +116,11 @@ provider answered.
 
 ## 4. Where the data lives, and how it would scale
 
-Everything is a file in the workspace folder. Idea records are markdown and JSON under `data/ideas/`, one folder
+Everything is a file in the workspace folder. Idea records are YAML (`idea.yaml`) plus markdown and a history log under `data/ideas/`, one folder
 per idea, with the design, the plan, the kits and the roadshow inside it. The graph is JSON lines under
 `data/graph/`: what the forms said, what the AI read (`ai-links.jsonl`), and what the operator changed
-(`operator.jsonl`, append-only, every edit dated). Deep read's index is one JSON lines file. The rules the graph is
+(`operator.jsonl`, every edit dated, never deleted: an undo flips its status). Deep read's index is three files under
+`data/memory/`: `index.jsonl`, `state.json` and `labels.jsonl`. The rules the graph is
 built from are YAML under `rules/`.
 
 Two properties follow. The `data/` folder can be deleted and rebuilt from the imports plus the operator log, and
@@ -171,7 +175,8 @@ the stage and the decision. Cheap, certain, and already enough for counts, lists
 every thing one star and a list of names for it, so "T&E policy" and "Travel & Expense policy" are one system and
 no twin is ever made. The inference rules derive links that nobody typed: an idea NEEDS a capability and that
 capability USES_DATA from a system, so the idea DEPENDS_ON the system, scoped to the idea the AI read it from.
-Every derived link records its rule and its inputs, is never stored, and is rebuilt on every read. The ontology
+Every derived link records its rule and its inputs and is rebuilt on every read; each rebuild writes `nodes.jsonl` and
+`edges.jsonl` as a snapshot for other tools, which the app never reads back. The ontology
 file says what may link to what, so a check can fail, and the export is JSON-LD that other tools read.
 
 **Deep read.** The text itself: the challenge, the current process, the emails, the designs, chunked and embedded
@@ -187,9 +192,10 @@ growth. The same pattern repeats three times: gather, code the names, ask, check
 ```mermaid
 flowchart LR
   subgraph S1["1 · Review and Select  (src/review)"]
-    D1["Suggest a decision<br/>reads the form, every email answer,<br/>the builder, attendance, flags,<br/>AND the idea's stars: pain points,<br/>capabilities, systems, similar ideas"]
-    D2["Five checks in code<br/>feasible · builder · data · theme · reuse"]
+    D1["Suggest a decision<br/>reads the form, every email answer,<br/>the builder, attendance, flags,<br/>AND the idea's stars: pain points,<br/>capabilities, systems, how many other ideas need each"]
+    D2["Five criteria<br/>feasible · builder · data · theme · reuse<br/>suggested by the AI, ticked by the operator"]
     D3["Decision card<br/>Select · Reuse · CSIC · Not now · Ask (E2)<br/>'basis' says what it was based on"]
+    D3 -->|CSIC| H["CSIC hand-off<br/>csic-handoff.md + JSON-LD subgraph<br/>with the derived links"]
     D1 --> D2 --> D3
   end
   subgraph S2["2 · Design series  (src/design)"]
@@ -202,24 +208,25 @@ flowchart LR
   subgraph S3["3 · Launch and Learn  (src/roadshow)"]
     R1["Photos (never sent to the AI)"]
     R2["What the story needs<br/>AI lists only what the record lacks;<br/>answers saved as they are pasted"]
-    R3["The deck and the script<br/>AI writes 10–14 slides as a checked<br/>structure; code removes any value<br/>claim or figure the record does not hold"]
+    R3["The deck and the script<br/>AI writes 6 to 16 slides as a checked<br/>structure; code removes any value<br/>claim or figure the record does not hold"]
     R1 --> R2 --> R3
   end
   G[("Knowledge graph<br/>+ Deep read")]
   G --> D1
   E2 --> G
-  G --> R2
+  R2 -->|answers saved on the record| G
   D3 -->|stage| S2
   E4 -->|stage| S3
-  R3 --> H["CSIC hand-off<br/>JSON-LD with the derived links"]
 ```
 
 **Decision.** The suggestion reads everything, not only the form: the team's email answers, whether a builder is
 named and can attend, and what the knowledge graph holds for the idea, which is its pain points, capabilities,
-systems, and the ideas it is similar to. So "Reuse" is suggested when another idea already needs the same
-capability, and "CSIC" when the idea depends on a live system that no approved tool may touch. The five criteria
-are checked in code and shown as boxes; the decision is one card, and its basis line says what the suggestion was
-based on, so a new email visibly changes it.
+systems, and for each one how many other ideas need it. So "Reuse" is suggested when another idea already needs the
+same capability, and "CSIC" when the idea depends on a live system that no approved tool may touch. The five criteria
+are suggested by the AI (ticked only where the data supports them) and shown as boxes the operator confirms or
+changes; the decision is one card, and its basis line says what the suggestion was based on, so a new email visibly
+changes it. A CSIC route writes `csic-handoff.md`, with a source line under every field, and `csic-handoff.jsonld`,
+the idea's subgraph with its derived links, so the next level starts from the graph and not from a retelling.
 
 **Design.** The tool picker is where the knowledge graph gains facts rather than only serving them. When the team
 picks a tool for a capability, the app writes BUILT_WITH links, and the inference rule derives USES for every idea
@@ -227,16 +234,14 @@ that needs that capability. That is what later answers "what breaks if Copilot S
 The data step enforces the Café data rule in code before the AI sees a file, the brainstorm saves the team's
 answers on the idea at once, and plan.md and the kits are written from the design, never application code.
 
-**Roadshow.** The AI reads the whole record, the design, the plan and the dates, and lists only what the deck still
-needs from the team; the answers are saved as they are pasted and rewrite "learned since the form". The deck is
-written as a structure the code checks: a value claim or a figure the record does not hold is removed, because the
-Café has no value story, CSIC does. The hand-off to CSIC is the same JSON-LD export, with the derived links, so the
-next level starts from the graph and not from a retelling.
+**Roadshow.** The AI reads the whole record, the design, the plan and the dates (the record alone: the roadshow does
+not query the graph), and lists only what the deck still needs from the team; the answers are saved as they are
+pasted and rewrite "learned since the form". The deck is written as a structure the code checks, 6 to 16 slides:
+a value claim or a figure the record does not hold is removed, because the Café has no value story, CSIC does.
 
-**What the graph and Deep read add at each stage.** Decision: similar ideas and shared capabilities, which the
-form alone cannot show. Design: the tool pick becomes a fact other ideas inherit. Roadshow: the "reuse" slide is
-the SIMILAR_TO and shared-capability links, with names, and the "what was hard" questions are asked only when Deep
-read finds no answer already written. Each stage adds to the record, upkeep re-reads only that idea, and the next
+**What the graph and Deep read add at each stage.** Decision: shared capabilities and systems, with how many other ideas need them, which the
+form alone cannot show. Design: the tool pick becomes a fact other ideas inherit. Roadshow: the team's answers become passages Deep read can
+quote, so the next question, "what did the team say was hard", finds them. Each stage adds to the record, upkeep re-reads only that idea, and the next
 question the operator asks sees it.
 
 ## 7. Why three layers, and what plain RAG cannot give

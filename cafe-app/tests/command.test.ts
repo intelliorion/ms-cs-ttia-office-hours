@@ -214,7 +214,8 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
     expect(stopped.error).toBe('Stopped. Nothing was changed.');
     expect(stopped.steps).toHaveLength(1);
     const long = await runCommand(s.root, 'list ideas?', s.ai, clock);
-    expect(long.steps).toHaveLength(5);
+    // The same search five times runs once: the other four are refused (the AI is told) and still use up the steps.
+    expect(long.steps).toHaveLength(1);
     expect(long.problems).toEqual(['I ran out of steps before I could finish. Try asking a narrower question.']);
     const bad = await setup([() => 'not json']);
     const failed = await runCommand(bad.root, 'link Zainab Okafor to BSI', bad.ai, clock);
@@ -493,6 +494,81 @@ describe('the Café assistant: adding a star the registry already knows', () => 
       expect(e.kind).toBe('command');
       expect(e.problems).toEqual([]);
       expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+    } finally { process.env.CAFE_AI_FAKE = was; }
+  });
+});
+
+describe('the Café assistant: a two-part message, the question answered and the action checked', () => {
+  const link = (from: string, rel: AiLink['rel'], to: string, type: 'Capability' | 'System', label: string, idea: string): AiLink =>
+    ({ from, rel, to, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed', idea, newNodes: [{ id: to, type, label }] });
+  /** Procurement FAQ bot needs Policy Q&A and Claim scoring; Policy Q&A reads the Travel & Expense policy, so the bot DEPENDS_ON it (derived). */
+  async function seed(root: string) {
+    const file = YAML.parse((await readText(paths(root).entities)) ?? '{}');
+    await writeYaml(paths(root).entities, { ...file, System: [{ id: 'system:travel-expense-policy', label: 'Travel & Expense policy', aliases: ['travel policy', 'T&E policy'] }] });
+    await appendAiLink(root, link('idea:CAFE-2026-001', 'NEEDS', 'capability:document-parsing', 'Capability', 'Document parsing', 'CAFE-2026-001'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'NEEDS', 'capability:policy-q-a', 'Capability', 'Policy Q&A', 'CAFE-2026-002'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'NEEDS', 'capability:claim-scoring', 'Capability', 'Claim scoring', 'CAFE-2026-002'));
+    await appendAiLink(root, link('capability:policy-q-a', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy', 'CAFE-2026-002'));
+  }
+  const MESSAGE = 'Add a system T&E policy to @Procurement FAQ bot, then tell me which ideas depend on the Travel & Expense policy.';
+  const PROBLEM = "A system links to a capability, not to an idea. Procurement FAQ bot's capabilities are Claim scoring, Policy Q&A: say which one uses T&E policy.";
+  const DERIVED = 'Procurement FAQ bot depends on Travel & Expense policy: derived by needs+uses_data from Procurement FAQ bot NEEDS Policy Q&A, Policy Q&A USES_DATA Travel & Expense policy';
+  /** The AI searches the dependency first, then proposes the add with its claim in reply and the question's answer in answer. */
+  const search: Turn = (d) => ({ next: 'search', thought: 'Looking at what depends on the policy', query: { steps: [{ op: 'stars', codes: [code(d, 'System')] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } });
+  const proposeWithAnswer = (to: string): Turn => (d) => ({
+    next: 'propose', thought: 'Proposing the add', reply: `You asked to add T&E policy to [${d.stars.find((s: any) => s.label === to).code}]; this links it as the data it uses.`,
+    answer: `By the graph, 1 idea depends on [${code(d, 'System')}]: [${code(d, 'Idea', 'Procurement FAQ bot')}] (via Policy Q&A).`,
+    actions: [{ op: 'add_star', type: 'System', name: 'T&E policy', b: d.stars.find((s: any) => s.label === to).code }],
+  });
+
+  it('the action becomes a problem: the reply is the answer first, then the problem; the trace and the lit stars stay', async () => {
+    const { root, ai } = await setup([search, proposeWithAnswer('Procurement FAQ bot')]);
+    await seed(root);
+    const e = await runCommand(root, MESSAGE, ai, clock, { mentions: ['idea:CAFE-2026-002'] });
+    expect(e.kind).toBe('command');
+    expect(e.actions).toEqual([]);
+    expect(e.problems).toEqual([PROBLEM]);
+    expect(e.reply).toBe(`By the graph, 1 idea depends on Travel & Expense policy: Procurement FAQ bot (via Policy Q&A). ${PROBLEM}`);
+    expect(e.trace).toHaveLength(1);
+    expect(e.trace![0].map((t) => t.text)).toEqual(['Start from Travel & Expense policy', 'Follow depends on links to ideas', DERIVED]);
+    expect(e.highlight!.sort()).toEqual(['idea:CAFE-2026-002', 'system:travel-expense-policy']);
+    expect(e.reply).not.toMatch(NAMES);
+  });
+
+  it('the action goes through: the reply is what they asked, then the answer, then the resolver\'s note', async () => {
+    const { root, ai } = await setup([search, proposeWithAnswer('Desk booking assistant')]);
+    await seed(root);
+    const e = await runCommand(root, 'Add a system T&E policy to @Desk booking assistant, then tell me which ideas depend on the Travel & Expense policy.', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
+    expect(e.problems).toEqual([]);
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+    expect(e.reply).toBe('You asked to add T&E policy to Desk booking assistant; this links it as the data it uses. By the graph, 1 idea depends on Travel & Expense policy: Procurement FAQ bot (via Policy Q&A). A system links to a capability: this goes to Document parsing. Travel & Expense policy already exists, known as "T&E policy": this links it instead of adding a new one.');
+  });
+
+  it('a search identical to one already run is not run again: the AI is told, the trace holds it once', async () => {
+    const { root, ai, prompts } = await setup([search, search, (d) => ({ next: 'answer', thought: 'Answering', reply: `${d.steps.length} steps, the second ${d.steps[1].result.error ? 'refused' : 'ran'}.` })]);
+    await seed(root);
+    const e = await runCommand(root, 'Which ideas depend on the Travel & Expense policy?', ai, clock);
+    expect(e.kind).toBe('question');
+    expect(e.trace).toHaveLength(1);
+    expect(e.steps).toHaveLength(1);
+    expect(e.reply).toBe('2 steps, the second refused.');
+    const third = JSON.parse(prompts[2].slice(prompts[2].indexOf('<<<DATA') + 7, prompts[2].indexOf('DATA>>>')));
+    expect(third.steps[1].result.error).toMatch(/already ran this exact search/);
+  });
+
+  it('the fake provider plans the same: the dependency answered, then the add proposed', async () => {
+    const was = process.env.CAFE_AI_FAKE; process.env.CAFE_AI_FAKE = '1';
+    try {
+      const root = await tmpWorkspace();
+      for (const i of IDEAS) await saveIdea(root, i);
+      await seed(root);
+      const ai = createConnector({ providers: [fakeProvider()], settings: DEFAULT_SETTINGS });
+      const e = await runCommand(root, MESSAGE, ai, clock, { mentions: ['idea:CAFE-2026-002'] });
+      expect(e.kind).toBe('command');
+      expect(e.actions).toEqual([]);
+      expect(e.problems).toEqual([PROBLEM]);
+      expect(e.trace![0].map((t) => t.text)).toEqual(['Start from Travel & Expense policy', 'Follow depends on links to ideas', DERIVED]);
+      expect(e.reply).toBe(`By the graph, 1 idea depends on Travel & Expense policy: Procurement FAQ bot (via Policy Q&A). ${PROBLEM}`);
     } finally { process.env.CAFE_AI_FAKE = was; }
   });
 });

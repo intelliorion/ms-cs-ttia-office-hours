@@ -182,3 +182,52 @@ describe('which team owns an idea: the derived OWNS link, from the submitter, ev
     expect(e.reply).toBe('By the graph, GSS owns Travel policy assistant (via the submitter Avery Chen).');
   });
 });
+
+describe('a capability shared by two teams: one grouped query, then what the submitters wrote', () => {
+  const link = (from: string, to: string, label: string): AiLink =>
+    ({ from, rel: 'NEEDS', to, description: '', source: 'ai:test', confidence: 0.9, status: 'confirmed', idea: from.slice(5), newNodes: [{ id: to, type: 'Capability', label }] });
+  /** GSS: 001 and 004; BSI: 002 and 003. Policy Q&A is needed on both sides (001, 003), Document parsing too (004, 002); Desk finding by BSI only. */
+  async function seed(root: string) {
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', current_process: 'Current process: today the travel desk answers each policy question by email, one at a time.', dedupe_key: 'a', people: { submitter: 'Person 1', team: [] } }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', title: 'Desk booking assistant', function: 'BSI', current_process: 'Current process: today the floor team books desks by hand from a spreadsheet every morning.', dedupe_key: 'b', people: { submitter: 'Person 2', team: [] } }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-003', title: 'Onboarding checklist helper', function: 'BSI', current_process: 'Current process: today a coordinator reads the policy pages and emails the checklist by hand.', dedupe_key: 'c', people: { submitter: 'Person 3', team: [] } }));
+    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-004', title: 'Expense anomaly finder', function: 'GSS', current_process: 'Current process: today claims are parsed by hand from the expense export and checked one by one.', dedupe_key: 'd', people: { submitter: 'Person 4', team: [] } }));
+    await appendAiLink(root, link('idea:CAFE-2026-001', 'capability:policy-q-a', 'Policy Q&A'));
+    await appendAiLink(root, link('idea:CAFE-2026-003', 'capability:policy-q-a', 'Policy Q&A'));
+    await appendAiLink(root, link('idea:CAFE-2026-004', 'capability:document-parsing', 'Document parsing'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'capability:document-parsing', 'Document parsing'));
+    await appendAiLink(root, link('idea:CAFE-2026-002', 'capability:desk-finding', 'Desk finding'));
+  }
+  const ask = (base: string) => post(base, '/api/chat', { text: 'Is there any capability shared by GSS and BSI ideas? If so, which ideas, and what did each submitter say the current process is?' }).then(j);
+  const GRAPH_TRACE = [
+    'Start from every idea in GSS', 'Follow needs links to capabilities', 'Keep only what a second search also found', 'Follow needs links to ideas, per capability',
+    'Policy Q&A: Travel policy assistant, Onboarding checklist helper', 'Document parsing: Desk booking assistant, Expense anomaly finder',
+  ];
+  const BY_GRAPH = 'By the graph, Policy Q&A: Travel policy assistant, Onboarding checklist helper (both need it); Document parsing: Desk booking assistant, Expense anomaly finder (both need it).';
+
+  it('with Deep read off: one query, the ideas grouped per shared capability in the trace, and one line that the text is unread', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    const e = await ask(base);
+    expect(e.kind).toBe('question');
+    expect(e.trace).toHaveLength(1);
+    expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(GRAPH_TRACE);
+    expect(e.highlight.sort()).toEqual(['capability:document-parsing', 'capability:policy-q-a', 'idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'idea:CAFE-2026-003', 'idea:CAFE-2026-004']);
+    expect(e.reply).toBe(`${BY_GRAPH} Deep read has not read what they wrote yet.`);
+  });
+
+  it('with Deep read on: the same query, then a search for the current process kept to those ideas, quoted per idea', async () => {
+    const { base, root } = await boot();
+    await seed(root);
+    await post(base, '/api/memory/run');
+    await untilIdle(base);
+    const e = await ask(base);
+    expect(e.trace).toHaveLength(2);
+    expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(GRAPH_TRACE);
+    expect(e.trace[1][0].text).toBe('Search what people wrote for "current process", among the previous answer');
+    expect(e.reply).toMatch(/^By the graph, Policy Q&A: Travel policy assistant, Onboarding checklist helper \(both need it\); Document parsing: Desk booking assistant, Expense anomaly finder \(both need it\)\. By reading, the current process: /);
+    expect(e.reply).toMatch(/Travel policy assistant: "Current process: today the travel desk answers each policy question by email/);
+    expect(e.reply).toMatch(/Desk booking assistant: "Current process: today the floor team books desks by hand/);
+    expect(e.reply).not.toMatch(/Person \d/);
+  });
+});

@@ -462,6 +462,57 @@ function agentFor(prompt: string) {
   const [a, b] = codes;
   const focus: string | undefined = data.focus;
   const propose = (reply: string, actions: unknown[]) => ({ next: 'propose', thought: 'Working out the change', reply, actions });
+  const legend: { code: string; type: string; label?: string }[] = data.stars ?? [];
+  /** "which ideas depend on [S1]": the answer from a DEPENDS_ON (system) or USES (tool) step's result, the reasons in brackets, the reading (a second step) apart. */
+  const dependAnswer = (subject: { code: string; type: string }, graphStep: any, readStep?: any) => {
+    const rel = subject.type === 'Tool' ? 'USES' : 'DEPENDS_ON';
+    const why: { from: string; to: string; why: string }[] = graphStep?.result?.reasons ?? [];
+    const byGraph: { code: string }[] = graphStep?.result?.stars ?? [];
+    const graphSet = new Set(byGraph.map((x) => x.code));
+    const byReading: string[] = (readStep?.result?.stars ?? []).map((x: { code: string }) => x.code).filter((c: string) => !graphSet.has(c));
+    const one = byGraph.length === 1;
+    const verb = rel === 'USES' ? (one ? 'uses' : 'use') : (one ? 'depends on' : 'depend on');
+    const list = byGraph.map((x) => { const r = why.find((w) => w.from === x.code); return `[${x.code}]${r ? ` (${r.why})` : ''}`; }).join(', ');
+    return `By the graph, ${byGraph.length} idea${one ? '' : 's'} ${verb} [${subject.code}]${byGraph.length ? `: ${list}` : ''}.${byReading.length ? ` By reading, the text also names it in: ${byReading.map((c) => `[${c}]`).join(', ')}.` : ''}`;
+  };
+  const addStar = /^\s*add\s+(?:a|an|the)?\s*(pain point|capability|system|support|outcome|beneficiary|category)\s+(.+?)\s+to\s+\[/i;
+  const addFor = (m: RegExpExecArray, home: string) => {
+    const type = { 'pain point': 'PainPoint', capability: 'Capability', system: 'System', support: 'Support', outcome: 'Outcome', beneficiary: 'Beneficiary', category: 'Category' }[m[1].toLowerCase()];
+    return { op: 'add_star', type, name: m[2].trim(), b: home };
+  };
+  // "add a system X to [I1], then tell me which ideas depend on [S1]": the question is searched first, then the add is proposed with the answer kept apart in answer.
+  const twoPart = /^(.*?\]),?\s*(?:and\s+)?then\s+tell\s+me\s+(.+)$/i.exec(cmd);
+  const subjectIn = (text: string) => { const c = /\[([A-Z]\d+)\]/.exec(text)?.[1]; return legend.find((x) => x.code === c && (x.type === 'System' || x.type === 'Tool')) ?? legend.find((x) => x.type === 'System' || x.type === 'Tool'); };
+  if (twoPart && addStar.test(twoPart[1]) && a && /depend|rework|affect|retir|\bhit\b|break|rewrit/i.test(twoPart[2]) && subjectIn(twoPart[2])) {
+    const subject = subjectIn(twoPart[2])!;
+    const rel = subject.type === 'Tool' ? 'USES' : 'DEPENDS_ON';
+    if (!data.steps?.length) return { next: 'search', thought: `Looking at what ${rel === 'USES' ? 'uses' : 'depends on'} [${subject.code}] first`, query: { steps: [{ op: 'stars', codes: [subject.code] }, { op: 'follow', rel, dir: 'in', type: 'Idea' }] } };
+    const m = addStar.exec(twoPart[1])!;
+    return { next: 'propose', thought: 'Proposing the add, the question answered', reply: `You asked to add a ${m[1]} to [${a}].`, answer: dependAnswer(subject, data.steps[0]), actions: [addFor(m, a)] };
+  }
+  // "is there a capability shared by [T1] and [T2] ideas? which ideas, and what did each submitter say the current process is?":
+  // one grouped query (each side's ideas, their capabilities, the intersection, then back to the ideas per capability), then, once Deep read has run and the question asks what they wrote, a search kept to those ideas.
+  const sharedBy = /shared by \[([A-Z]\d+)\] and \[([A-Z]\d+)\]/i.exec(cmd);
+  const sides = sharedBy ? [sharedBy[1], sharedBy[2]].map((c) => legend.find((x) => x.code === c && x.type === 'Team')) : [];
+  if (sharedBy && sides[0]?.label && sides[1]?.label) {
+    const wrote = /current process|wrote|say|said|challenge|answer/i.test(cmd);
+    const [x, y] = sides as { label: string }[];
+    if (!data.steps?.length) {
+      return { next: 'search', thought: `Looking for the capabilities both [${sharedBy[1]}] and [${sharedBy[2]}] ideas need, and which ideas`, query: { steps: [
+        { op: 'stars', type: 'Idea', function: x.label }, { op: 'follow', rel: 'NEEDS', type: 'Capability' },
+        { op: 'intersect', with: [{ op: 'stars', type: 'Idea', function: y.label }, { op: 'follow', rel: 'NEEDS', type: 'Capability' }] },
+        { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea', group: true },
+      ] } };
+    }
+    if (data.steps.length === 1 && wrote && data.deepRead?.on) return { next: 'search', thought: 'Reading what each submitter wrote about the current process', query: { steps: [{ op: 'search', match: 'current process', last: true, limit: 8 }] } };
+    const groups: { from: string; to: string[] }[] = data.steps[0]?.result?.groups ?? [];
+    const byGraph = groups.length ? `By the graph, ${groups.map((g) => `[${g.from}]: ${g.to.map((c) => `[${c}]`).join(', ')} (both need it)`).join('; ')}.` : `By the graph, no capability is needed by both a [${sharedBy[1]}] and a [${sharedBy[2]}] idea.`;
+    const hits: { idea: string; section: string; text: string }[] = data.steps[1]?.result?.hits ?? [];
+    const seen = new Set<string>();
+    const quoted = hits.filter((h) => h.section === 'current_process' && !seen.has(h.idea) && seen.add(h.idea)).map((h) => `[${h.idea}]: "${h.text.slice(0, 80)}"`);
+    const reading = !wrote ? '' : !data.deepRead?.on ? ' Deep read has not read what they wrote yet.' : quoted.length ? ` By reading, the current process: ${quoted.join('; ')}.` : ' By reading, no current process text was found for them.';
+    return { next: 'answer', thought: 'Answering per capability, the reading apart', reply: `${byGraph}${reading}`, followups: ['Who leads each of them?'] };
+  }
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
     // "which ideas are similar to [I1]?": the derived SIMILAR_TO links first (facts, with the shared stars), then Deep read's reading when it has run.
@@ -489,7 +540,6 @@ function agentFor(prompt: string) {
       return { next: 'answer', thought: 'Answering from the roles and the team', reply: `[${start}] is ${roles}; ${team}.`, followups: [`What else is [${start}] linked to?`] };
     }
     // "which team owns [I1]?": the derived OWNS link from the submitter's team, never worked out through a lead; the reason names the submitter.
-    const legend: { code: string; type: string; label?: string }[] = data.stars ?? [];
     const owned = legend.find((x) => x.code === start && x.type === 'Idea') ?? legend.find((x) => x.type === 'Idea');
     if (owned && /\bowns?\b|\bwhose\b|behind/i.test(cmd)) {
       if (!data.steps?.length) return { next: 'search', thought: `Looking at which team owns [${owned.code}]`, query: { steps: [{ op: 'stars', codes: [owned.code] }, { op: 'follow', rel: 'OWNS', dir: 'in', type: 'Team' }] } };
@@ -504,14 +554,7 @@ function agentFor(prompt: string) {
       const rel = subject.type === 'Tool' ? 'USES' : 'DEPENDS_ON';
       if (!data.steps?.length) return { next: 'search', thought: `Looking at what ${rel === 'USES' ? 'uses' : 'depends on'} [${subject.code}]`, query: { steps: [{ op: 'stars', codes: [subject.code] }, { op: 'follow', rel, dir: 'in', type: 'Idea' }] } };
       if (data.steps.length === 1 && data.deepRead?.on && subject.label) return { next: 'search', thought: `Reading what the text says about [${subject.code}]`, query: { steps: [{ op: 'search', match: subject.label.toLowerCase().slice(0, 60) }] } };
-      const why: { from: string; to: string; why: string }[] = data.steps[0]?.result?.reasons ?? [];
-      const byGraph: { code: string }[] = data.steps[0]?.result?.stars ?? [];
-      const graphSet = new Set(byGraph.map((x) => x.code));
-      const byReading: string[] = (data.steps[1]?.result?.stars ?? []).map((x: { code: string }) => x.code).filter((c: string) => !graphSet.has(c));
-      const verb = rel === 'USES' ? 'use' : 'depend on';
-      const list = byGraph.map((x) => { const r = why.find((w) => w.from === x.code); return `[${x.code}]${r ? ` (${r.why})` : ''}`; }).join(', ');
-      const reply = `By the graph, ${byGraph.length} idea${byGraph.length === 1 ? '' : 's'} ${verb} [${subject.code}]${byGraph.length ? `: ${list}` : ''}.${byReading.length ? ` By reading, the text also names it in: ${byReading.map((c) => `[${c}]`).join(', ')}.` : ''}`;
-      return { next: 'answer', thought: 'Answering: the derived links first, the reading second', reply, followups: ['Who leads each of them?'] };
+      return { next: 'answer', thought: 'Answering: the derived links first, the reading second', reply: dependAnswer(subject, data.steps[0], data.steps[1]), followups: ['Who leads each of them?'] };
     }
     if (!data.steps?.length && start) return { next: 'search', thought: `Looking at what links to [${start}]`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow' }] } };
     // A plain question with no star: once Deep read has run, search what people wrote and answer from the hits.
@@ -537,10 +580,9 @@ function agentFor(prompt: string) {
   if (/^\s*alias\s+(.+?)\s+as\s+\[/i.test(cmd) && a) return propose(`You asked to give [${a}] another name.`, [{ op: 'alias', a, name: /^\s*alias\s+(.+?)\s+as\s+\[/i.exec(cmd)![1].trim() }]);
   if (/^\s*move/i.test(cmd) && a) return propose(`You asked to move [${a}] to another stage.`, [{ op: 'stage', a }]);
   if (/^\s*export/i.test(cmd)) return propose(a ? `You asked to export [${a}] and what it touches.` : 'You asked to export the graph.', [{ op: 'export', ...(a ? { a } : {}) }]);
-  if (/^\s*add\s+(?:a|an|the)?\s*(pain point|capability|system|support|outcome|beneficiary|category)\s+(.+?)\s+to\s+\[/i.test(cmd) && a) {
-    const m = /^\s*add\s+(?:a|an|the)?\s*(pain point|capability|system|support|outcome|beneficiary|category)\s+(.+?)\s+to\s+\[/i.exec(cmd)!;
-    const type = { 'pain point': 'PainPoint', capability: 'Capability', system: 'System', support: 'Support', outcome: 'Outcome', beneficiary: 'Beneficiary', category: 'Category' }[m[1].toLowerCase()];
-    return propose(`You asked to add a ${m[1]} to [${a}].`, [{ op: 'add_star', type, name: m[2].trim(), b: a }]);
+  if (addStar.test(cmd) && a) {
+    const m = addStar.exec(cmd)!;
+    return propose(`You asked to add a ${m[1]} to [${a}].`, [addFor(m, a)]);
   }
   return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
 }

@@ -186,6 +186,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   };
   const done: AgentStepDone[] = [];
   const results: QueryResult[] = [];
+  /** The queries run for this message, so an identical one is not run again. */
+  const ran: string[] = [];
   let lastFound: string[] = thread.last;
   let finalReply = '';
   try {
@@ -204,6 +206,10 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       if (output.next === 'search') {
         const errs = validate(QUERY_SCHEMA, output.query);
         if (errs.length) { done.push({ did: 'search', thought: output.thought, result: { error: `The query was malformed: ${errs.slice(0, 3).join('; ')}` } }); continue; }
+        // The same steps again: not run, not traced twice; the agent is told its result is already in steps.
+        const key = JSON.stringify(output.query);
+        if (ran.includes(key)) { done.push({ did: 'search', thought: output.thought, result: { error: `You already ran this exact search: its result is in steps above. Use it, or search differently (one hop more, or a search of the text).` } }); continue; }
+        ran.push(key);
         const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
         const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound, ...(memory ? { memory } : {}) });
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
@@ -219,6 +225,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             stars: r.final.slice(0, RESULT_STARS).map((sid) => legendOf(nodes.get(sid)!)), total: r.final.length,
             ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
             ...(r.counts ? { counts: r.counts } : {}),
+            // A grouped follow: which stars each star of the set reached, so the reply can answer per capability.
+            ...(r.groups ? { groups: r.groups.map((g) => ({ from: codeFor(hidden.codes, nodes.get(g.from)!), to: g.to.map((id) => codeFor(hidden.codes, nodes.get(id)!)) })) } : {}),
             ...(r.path ? { path: r.path.map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}),
             // Why each derived link held (SIMILAR_TO: the shared stars), so the reply can give the reason, not just the pair.
             ...(r.reasons ? { reasons: r.reasons.map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), to: codeFor(hidden.codes, nodes.get(x.to)!), rel: x.rel, why: coded(x.why) })) } : {}),
@@ -245,6 +253,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         });
       } else {
         finalReply = output.reply ?? '';
+        // A message with a question in it as well: the answer to the question, kept apart from what the AI says about the change.
+        const answer = output.next === 'propose' && output.answer ? showNames(output.answer, hidden.codes).trim() : '';
         entry.reply = showNames(finalReply || output.thought, hidden.codes);
         if (output.next === 'answer') {
           entry.kind = 'question';
@@ -255,11 +265,11 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
           const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds, registry: await loadRegistry(root), ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
-          // Nothing to apply: the reply is what stood in the way, never the AI's sentence claiming a change it did not propose.
-          if (!proposals.length && problems.length) entry.reply = problems.join(' ');
-          // The resolver changed what the AI asked for (an add became a link): said after the AI's words, so the cards never contradict them.
-          const notes = proposals.map((p) => p.note).filter((n): n is string => !!n);
-          if (notes.length) entry.reply = [entry.reply.trim(), ...notes].filter(Boolean).join(' ');
+          // Nothing to apply: the reply is the question's answer (when the message asked one) and then what stood in the way, never the AI's sentence claiming a change it did not propose.
+          if (!proposals.length && problems.length) entry.reply = [answer, ...problems].filter(Boolean).join(' ');
+          // The resolver changed what the AI asked for (an add became a link): said after the AI's words and the answer, so the cards never contradict them.
+          else entry.reply = [entry.reply.trim(), answer, ...proposals.map((p) => p.note).filter((n): n is string => !!n)].filter(Boolean).join(' ');
+          if (answer) finalReply = [finalReply, output.answer].filter(Boolean).join(' ');
         } else {
           entry.kind = 'unclear';
         }

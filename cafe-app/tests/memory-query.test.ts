@@ -106,3 +106,13 @@ describe('match falls back to the nearest labels', () => {
     for (const q of qs) expect(withMemory(q)).toEqual(without(q));
   });
 });
+
+describe('search kept to the previous answer', () => {
+  it('with last: true a search keeps only the ideas the previous answer found, and the trace says so', () => {
+    const r = runQuery({ steps: [{ op: 'search', match: 'data access', last: true }] }, { ...base, memory, last: ['idea:CAFE-2026-001'] });
+    expect(r.final).toEqual(['idea:CAFE-2026-001']);
+    expect(r.hits!.map((h) => h.ideaId)).toEqual(['CAFE-2026-001']);
+    expect(r.trace).toEqual([{ text: 'Search what people wrote for "data access", among the previous answer', size: 1 }]);
+    expect(withMemory([{ op: 'search', match: 'data access' }]).final).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-003']);
+  });
+});

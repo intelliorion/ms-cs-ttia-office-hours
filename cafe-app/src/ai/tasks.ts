@@ -1669,6 +1669,8 @@ export interface AgentOutput {
   query?: unknown;
   idea?: string;
   reply?: string;
+  /** With propose, when the message also asked a question: the answer to it, from the steps, kept apart from the change. */
+  answer?: string;
   actions?: CommandStep[];
   followups?: string[];
 }
@@ -1681,6 +1683,7 @@ export const AGENT_SCHEMA: JsonSchema = {
     query: { type: 'object' },
     idea: CODE,
     reply: { type: 'string', minLength: 1, maxLength: 900 },
+    answer: { type: 'string', minLength: 1, maxLength: 900 },
     actions: ACTIONS_SCHEMA,
     followups: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 90 } },
   },
@@ -1712,6 +1715,9 @@ export const agentTask: Task<AgentOutput> = {
       '- propose: the message asks for changes. actions: the changes, as below; the operator presses Do it on each, and the app checks every one first.',
       '  reply: one or two sentences saying what they asked for, never that it is done. Search first when the change depends on what the graph holds',
       '  ("merge the duplicate capabilities": search, then propose merges for the ones you found).',
+      '  A message that asks for a change AND asks a question ("add X to [I1], then tell me which ideas depend on [S1]"): search for the question first, then propose,',
+      '  with the question\'s answer in answer (as for answer: from the steps, numbers as found) and only the change in reply. The app shows answer whatever becomes of the change,',
+      '  so never put the answer in reply, and never put the change in answer.',
       '- clarify: you cannot tell what they want; reply asks one short question.',
       'thought: one short line saying what this step does ("Looking for capabilities named like policy"), shown to the operator as you work.',
       `You have ${a.stepsLeft} step${a.stepsLeft === 1 ? '' : 's'} left including this one; with 1 left you must answer, propose or clarify.`,
@@ -1723,7 +1729,8 @@ export const agentTask: Task<AgentOutput> = {
           'For stars, links, counts, people and stages use stars, follow, filter, role, rank and count_by as before. A search step\'s result may list stale: ideas whose text changed since it was read;',
           '  you may say so in one short line, and the app reads them again by itself.',
         ]
-        : ['Deep read has not run: the search and similar steps do not exist. Use stars, follow, filter, role, rank, count_by and read_idea.']),
+        : ['Deep read has not run: the search and similar steps do not exist. Use stars, follow, filter, role, rank, count_by and read_idea.',
+          '  For what people WROTE (current process, challenge, answers) about one or two ideas use read_idea; for more, say in one line that Deep read has not read what they wrote yet.']),
       'Actions (codes without brackets in a, b and ideas):',
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
       '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',

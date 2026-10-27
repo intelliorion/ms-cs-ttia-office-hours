@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-27 (Café app: the assistant keeps both halves of a message, and follows a shared capability home)
+
+- **A two-part message.** "Add X to [I1], then tell me which ideas depend on [S1]": the agent searches the question
+  first and proposes with the answer in its own field (`answer`), kept apart from what it says about the change. When
+  the change becomes a problem the reply is the answer first, then the problem lines, so nothing computed is thrown
+  away and the card never contradicts the sentence above it; with a proposal the reply is the request, the answer,
+  then the resolver's notes. A search identical to one already run for the message is not run again: the agent is
+  told its result is in the steps, and the trace holds it once.
+- **Shared capabilities.** `follow` gains `group: true`: the result lists, for each star of the set, the stars it
+  reached, and the trace shows one line per group ("Policy Q&A: Travel policy assistant, Onboarding checklist
+  helper"). The guide plans "a capability shared by GSS and BSI ideas, and which ideas" as one query (each side's
+  ideas, NEEDS to capabilities, intersect, then NEEDS back to ideas grouped per capability) and answers per
+  capability; `search` gains `last: true`, which keeps it to the ideas the previous answer found, for "what did each
+  submitter say the current process is" once Deep read has run (one line that it has not read them yet, otherwise).
+  The fake provider plans both the same way.
+
 ## 2026-10-26 (Café app: the graph becomes a knowledge graph)
 
 - **The registry.** `rules/entities.yaml` (written by `init`, seeded with the approved tools and their aliases) gives

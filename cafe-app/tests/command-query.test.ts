@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../src/graph/build';
-import { runQuery, shortestPath, QUERY_GUIDE, type Query } from '../src/command/query';
+import { runQuery, shortestPath, QUERY_GUIDE, queryGuide, type Query } from '../src/command/query';
 import { sampleIdea } from './helpers';
 import type { AiLink } from '../src/graph/ontology';
 
@@ -152,5 +152,39 @@ describe('the query over derived relations', () => {
     expect(guide).toMatch(/who is \[P1\].*\{"op":"follow","rel":"HAS_MEMBER","dir":"in","type":"Team"\}/);
     expect(guide).toMatch(/question about a person, always use role/);
     expect(guide).toContain('no team recorded');
+  });
+});
+
+describe('a shared capability and which ideas need each: the grouped follow', () => {
+  it('follow with group keeps which star each result came from, in the result and the trace', () => {
+    const r = q([{ op: 'stars', type: 'Capability' }, { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea', group: true }]);
+    expect(r.final.sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
+    // The groups follow the set's order (the capabilities as the graph lists them), each with the ideas it reached.
+    expect(r.groups).toEqual([
+      { from: 'capability:claim-scoring', to: ['idea:CAFE-2026-003'] },
+      { from: 'capability:policy-q-a', to: ['idea:CAFE-2026-001', 'idea:CAFE-2026-002'] },
+    ]);
+    expect(r.trace.map((t) => t.text)).toEqual([
+      'Start from every capability', 'Follow needs links to ideas, per capability',
+      'Claim scoring: Expense anomaly finder', 'Policy Q&A: Travel policy assistant, Procurement FAQ bot',
+    ]);
+    expect(r.trace.map((t) => t.size)).toEqual([2, 3, 1, 2]);
+  });
+  it('a star that reaches nothing has no group; without group the result carries none', () => {
+    expect(q([{ op: 'stars', codes: ['S1'] }, { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea', group: true }]).groups).toEqual([]);
+    expect(q([{ op: 'stars', type: 'Capability' }, { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea' }]).groups).toBeUndefined();
+  });
+  it('the guide plans a "shared by two teams" question as one query that groups the ideas per capability, then a search kept to those ideas', () => {
+    const guide = QUERY_GUIDE.join('\n');
+    expect(guide).toMatch(/With group: true the result also lists groups/);
+    expect(guide).toMatch(/shared by two teams or functions, and which ideas: start from one side's ideas \(stars type Idea with function, or the team star then follow OWNS dir out\)/);
+    expect(guide).toMatch(/follow NEEDS to capabilities, intersect with the same steps for the other side, then follow NEEDS \(dir in, type Idea\) with group: true, all in ONE query/);
+    expect(guide).toMatch(/Never run the same steps twice/);
+    expect(guide).toContain('- capabilities shared by GSS and BSI ideas, and which ideas need each: [{"op":"stars","type":"Idea","function":"GSS"},{"op":"follow","rel":"NEEDS","type":"Capability"},{"op":"intersect","with":[{"op":"stars","type":"Idea","function":"BSI"},{"op":"follow","rel":"NEEDS","type":"Capability"}]},{"op":"follow","rel":"NEEDS","dir":"in","type":"Idea","group":true}]');
+    expect(guide).toMatch(/what the submitters WROTE \(current process, challenge, answers\).*\[\{"op":"search","match":"current process","last":true,"limit":8\}\]/);
+    // With Deep read off the search part is gone and the rest stays.
+    const off = queryGuide(false).join('\n');
+    expect(off).toContain('"group":true}]');
+    expect(off).not.toMatch(/"op":"search"/);
   });
 });

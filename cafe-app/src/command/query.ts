@@ -22,6 +22,8 @@ export interface QueryStep {
   stage?: string; function?: string; region?: string; round?: string;
   role?: (typeof QUERY_ROLES)[number];
   by?: (typeof COUNT_BY)[number]; limit?: number;
+  /** follow: keep which star of the set each result came from (the result lists groups). */
+  group?: boolean;
   with?: QueryStep[];
 }
 export interface Query { steps: QueryStep[] }
@@ -39,6 +41,7 @@ const STEP_PROPS: Record<string, JsonSchema> = {
   role: { type: 'string', enum: QUERY_ROLES },
   by: { type: 'string', enum: COUNT_BY },
   limit: { type: 'number', minimum: 1, maximum: 50 },
+  group: { type: 'boolean' },
 };
 const INNER_STEP: JsonSchema = { type: 'object', additionalProperties: false, required: ['op'], properties: STEP_PROPS };
 export const QUERY_SCHEMA: JsonSchema = {
@@ -57,6 +60,7 @@ export const QUERY_GUIDE = [
   '- stars: start a new set: the stars in codes, or every star of type, or those whose label contains match; ideas can also be narrowed by stage, function, region, round.',
   '  With last: true it starts from the stars the previous answer in this conversation found ("those", "of these", "which of them"), narrowed the same way.',
   '- follow: go to the stars linked to the set, along rel (any when left out), dir out (set → star), in (star → set) or both (the default), keeping type when given.',
+  '  With group: true the result also lists groups: for each star of the set, the stars it reached (from → to), for "which ideas need each capability".',
   '- filter: keep the stars of type, whose label contains match, or (ideas) with that stage, function, region or round.',
   '- role: from ideas to their people with role (submitter, lead, sponsor, builder, member; anyone when left out; one person can have several), or from people to the ideas they have that role on.',
   '  Its result lists people: each person\'s role per idea and their team (or "no team recorded"). For a question about a person, always use role, so the reply can say lead, sponsor, builder or member per idea; use follow over HAS_MEMBER for their team.',
@@ -67,6 +71,7 @@ export const QUERY_GUIDE = [
   '- search: Deep read. Start a new set from what people wrote: the ideas whose submission, emails, answers, design, review or roadshow are nearest in meaning to match',
   '  (free text, up to 60 characters), best first, top limit (default 8). The result lists the passages (hits) with the idea and section each came from: quote from them.',
   '  Use it for "what did teams say about …", "which ideas mention …", "who has a problem with …". It finds nothing until Deep read has run.',
+  '  With last: true it keeps only the ideas the previous answer found (the search before it in this message, or the last answer in the conversation).',
   '- similar: Deep read. From the one star in codes, the nearest stars of its kind by meaning (an idea: the nearest other ideas; a capability: the nearest capabilities),',
   '  or from match text, the nearest ideas (or stars of type). Top limit (default 5). Use it for "ideas like [I1]", "is there a capability like X already".',
   '- A match on stars or filter that finds no label containing the words falls back, once Deep read has run, to the stars nearest in meaning; the trace says "nearest".',
@@ -83,11 +88,16 @@ export const QUERY_GUIDE = [
   'For similar, like, same as, overlaps with [I1]: follow SIMILAR_TO first; its result gives reasons (the shared stars of each link). SIMILAR_TO hits are facts with reasons: "By shared stars: X (shared …)".',
   '  Deep read: a similar step after it adds readings with a score; the reply keeps them apart: "… By reading, also: Y." (no second part when Deep read is off or found nothing).',
   'A follow or rank with no rel walks the stated links only. For what people WROTE use search, not the derived links.',
+  'A capability (or pain point, outcome, category) shared by two teams or functions, and which ideas: start from one side\'s ideas (stars type Idea with function, or the team star then follow OWNS dir out),',
+  '  follow NEEDS to capabilities, intersect with the same steps for the other side, then follow NEEDS (dir in, type Idea) with group: true, all in ONE query, so its groups say which ideas need each shared capability.',
+  '  Never run the same steps twice: a result already in steps is the answer; one hop more goes in a new query. Answer per capability: "X: [I1], [I3]; Y: [I2], [I4]".',
+  '  When the question also asks what the submitters WROTE (current process, challenge, answers): a second query [{"op":"search","match":"current process","last":true,"limit":8}] keeps the search to those ideas; quote its hits per idea, kept apart as a reading.',
   'A team star links only to the people who submitted from it: find a function\'s ideas with stars type Idea and function, never through the team star.',
   'Use one query unless the question has separate parts. Examples (codes as in "stars"):',
   '- what is related to [T1]: [{"op":"stars","codes":["T1"]},{"op":"follow"}]',
   '- GSS ideas that share a capability with a BSI idea: [{"op":"stars","type":"Idea","function":"GSS"},{"op":"follow","rel":"NEEDS","type":"Capability"},',
   '  {"op":"intersect","with":[{"op":"stars","type":"Idea","function":"BSI"},{"op":"follow","rel":"NEEDS","type":"Capability"}]},{"op":"follow","rel":"NEEDS","type":"Idea"},{"op":"filter","function":"GSS"}]',
+  '- capabilities shared by GSS and BSI ideas, and which ideas need each: [{"op":"stars","type":"Idea","function":"GSS"},{"op":"follow","rel":"NEEDS","type":"Capability"},{"op":"intersect","with":[{"op":"stars","type":"Idea","function":"BSI"},{"op":"follow","rel":"NEEDS","type":"Capability"}]},{"op":"follow","rel":"NEEDS","dir":"in","type":"Idea","group":true}]',
   '- the most needed capability: [{"op":"stars","type":"Capability"},{"op":"rank","rel":"NEEDS","dir":"in","limit":3}]',
   '- ideas that use data from systems named like expense: [{"op":"stars","type":"System","match":"expense"},{"op":"follow","rel":"USES_DATA","type":"Capability"},{"op":"follow","rel":"NEEDS","type":"Idea"}]',
   '- who leads [I1]: [{"op":"stars","codes":["I1"]},{"op":"role","role":"lead"}]',
@@ -131,6 +141,8 @@ export interface QueryResult {
   path?: string[];
   /** The passages a search step found, best first. */
   hits?: QueryHit[];
+  /** A grouped follow's facts: for each star it started from (in the set's order), the stars it reached; a star that reached nothing has no group. */
+  groups?: { from: string; to: string[] }[];
   /** A role step's facts: each person it started from or reached, their role words per idea, and the teams they submitted from (none when added by hand). */
   people?: { id: string; roles: { idea: string; role: string }[]; teams: string[] }[];
   /** Why each derived link a follow walked holds (the shared stars of SIMILAR_TO, the chain star of DEPENDS_ON …), so the reply can say it. */
@@ -207,7 +219,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return lines;
   };
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
-  let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons'];
+  let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons']; let groups: QueryResult['groups'];
   /** "the submitter and lead of [idea], and the member of [idea]": one person's roles, grouped by idea, in words. */
   const roleWords = (roles: { idea: string; role: string }[]): string => {
     const byIdea = new Map<string, string[]>();
@@ -237,15 +249,29 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         text += near.note;
       } else if (s.op === 'follow') {
         const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
+        const by = new Map<string, Set<string>>();
+        const reach = (a: string, b: string) => { out.add(b); if (s.group) { const g = by.get(a); if (g) g.add(b); else by.set(a, new Set([b])); } };
         for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
           let hit = false;
-          if (s.dir !== 'in' && from.has(e.from)) { out.add(e.to); hit = true; }
-          if (s.dir !== 'out' && from.has(e.to)) { out.add(e.from); hit = true; }
+          if (s.dir !== 'in' && from.has(e.from)) { reach(e.from, e.to); hit = true; }
+          if (s.dir !== 'out' && from.has(e.to)) { reach(e.to, e.from); hit = true; }
           if (hit && e.derived) used.push(e);
         }
-        set = [...out].filter((id) => !s.type || nodes.get(id)?.type === s.type);
+        const keepType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
+        set = [...out].filter(keepType);
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}`;
+        if (s.group) {
+          // Which star each result came from, in the set's order: the reply answers per capability, the trace shows each group.
+          const grouped = [...from].filter((id) => by.has(id)).map((id) => ({ from: id, to: [...by.get(id)!].filter(keepType) })).filter((g) => g.to.length);
+          if (log) {
+            groups = [...(groups ?? []), ...grouped];
+            const kind = nodes.get([...from][0] ?? '')?.type;
+            trace.push({ text: `${text}, per ${kind ? SINGULAR[kind] : 'star'}`, size: set.length });
+            for (const g of grouped) trace.push({ text: `${name(g.from)}: ${g.to.map(name).join(', ')}`, size: g.to.length });
+          }
+          text = '';
+        }
         if (log && used.length) {
           const kept = used.filter((e) => set.includes(e.from) || set.includes(e.to));
           trace.push({ text, size: set.length }); trace.push(...derivedLines(kept)); text = '';
@@ -260,10 +286,12 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
       } else if (s.op === 'search') {
         const limit = Math.min(s.limit ?? 8, 20);
         const found = s.match && w.memory ? w.memory.search(s.match, limit) : [];
-        set = found.map((f) => `idea:${f.ideaId}`).filter((id) => nodes.has(id) && ideaFits(id, s));
+        // With last: the search stays within the ideas the previous answer found (the step before it in this message, or the conversation's last answer).
+        const within = s.last ? new Set(w.last ?? []) : undefined;
+        set = found.map((f) => `idea:${f.ideaId}`).filter((id) => nodes.has(id) && ideaFits(id, s) && (!within || within.has(id)));
         const keep = new Set(set);
         hits = [...(hits ?? []), ...found.filter((f) => keep.has(`idea:${f.ideaId}`)).flatMap((f) => f.hits)];
-        text = !w.memory ? 'Deep read has not run: nothing to search' : `Search what people wrote for "${s.match ?? ''}"${ideaFilterWords(s)}`;
+        text = !w.memory ? 'Deep read has not run: nothing to search' : `Search what people wrote for "${s.match ?? ''}"${ideaFilterWords(s)}${within ? ', among the previous answer' : ''}`;
       } else if (s.op === 'similar') {
         const limit = Math.min(s.limit ?? 5, 20);
         const code = (s.codes ?? []).map(w.idOf).find((x): x is string => !!x && nodes.has(x));
@@ -335,7 +363,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}), ...(groups ? { groups } : {}) };
 }
 
 function ideaFilterWords(s: QueryStep): string {

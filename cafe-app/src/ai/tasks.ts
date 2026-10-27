@@ -1661,6 +1661,8 @@ export interface AgentInput {
   stepsLeft: number;
   /** Where Deep read stands: on when its index exists (the search and similar steps work), how much is read, how many ideas changed since. */
   deepRead?: DeepReadState;
+  /** Set when the app asks again: what was wrong with the last step (no reply, a false step limit). */
+  note?: string;
 }
 export interface DeepReadState { on: boolean; percent: number; staleIdeas: number; lastRead?: string }
 export interface AgentOutput {
@@ -1689,6 +1691,14 @@ export const AGENT_SCHEMA: JsonSchema = {
   },
 };
 
+/** The step budget in words, exact for this call: which step this is, how many remain after it, and that the budget is not spent unless it is. */
+export function stepsLine(left: number): string {
+  const n = Math.max(1, Math.min(AGENT_MAX_STEPS, left));
+  const at = AGENT_MAX_STEPS - n + 1;
+  if (n === 1) return `This is step ${at} of ${AGENT_MAX_STEPS}, your last: you must answer, propose or clarify now.`;
+  return `This is step ${at} of ${AGENT_MAX_STEPS}. After it you have ${n - 1} more step${n - 1 === 1 ? '' : 's'}. You have not run out of steps: never say you ran out of steps or hit a step limit; take the step you need.`;
+}
+
 export const agentTask: Task<AgentOutput> = {
   name: 'agent',
   schema: AGENT_SCHEMA,
@@ -1698,6 +1708,7 @@ export const agentTask: Task<AgentOutput> = {
     return [
       'TASK: agent',
       'You are the Café assistant: you help the operator of an innovation programme run its knowledge graph. You work in steps and you have two tools.',
+      ...(a.note ? [`NOTE FROM THE APP: ${a.note}`] : []),
       'Each reply is one step. Stars are written as codes in square brackets, such as [P1]; "stars" lists the ones the message names, every idea, team,',
       'division and round, with type and label (a person by type only, never by name). "vocabulary" lists the stages, functions, regions and rounds.',
       '"history" is this conversation so far, oldest first, with the same codes: read the message in its light ("those", "the second one", "do the same for [T2]").',
@@ -1719,8 +1730,10 @@ export const agentTask: Task<AgentOutput> = {
       '  with the question\'s answer in answer (as for answer: from the steps, numbers as found) and only the change in reply. The app shows answer whatever becomes of the change,',
       '  so never put the answer in reply, and never put the change in answer.',
       '- clarify: you cannot tell what they want; reply asks one short question.',
+      'reply is required with answer, propose and clarify: the operator sees reply, never thought. An answer with no reply is sent back.',
+      'A reply that says which team owns or submitted an idea states it from a step that returned that team (follow OWNS, dir in, type Team, or a role step\'s team), never from memory.',
       'thought: one short line saying what this step does ("Looking for capabilities named like policy"), shown to the operator as you work.',
-      `You have ${a.stepsLeft} step${a.stepsLeft === 1 ? '' : 's'} left including this one; with 1 left you must answer, propose or clarify.`,
+      stepsLine(a.stepsLeft),
       ...queryGuide(a.deepRead?.on === true),
       ...(a.deepRead?.on
         ? [
@@ -1730,7 +1743,8 @@ export const agentTask: Task<AgentOutput> = {
           '  you may say so in one short line, and the app reads them again by itself.',
         ]
         : ['Deep read has not run: the search and similar steps do not exist. Use stars, follow, filter, role, rank, count_by and read_idea.',
-          '  For what people WROTE (current process, challenge, answers) about one or two ideas use read_idea; for more, say in one line that Deep read has not read what they wrote yet.']),
+          '  For what people WROTE (current process, challenge, answers) about one or two ideas use read_idea. For the current process, challenge or business impact of the ideas the previous step found,',
+          '  a query [{"op":"search","match":"current process","last":true}] reads that field from each of their records (records): quote each, per idea.']),
       'Actions (codes without brackets in a, b and ideas):',
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
       '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
@@ -1745,7 +1759,7 @@ export const agentTask: Task<AgentOutput> = {
       '',
       'DATA (JSON, between the markers):',
       '<<<DATA',
-      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps, deepRead: a.deepRead ?? { on: false, percent: 0, staleIdeas: 0 } }),
+      JSON.stringify({ ...(a.history?.length ? { history: a.history } : {}), message: String(a.message).slice(0, COMMAND_MAX), ...(a.focus ? { focus: a.focus } : {}), stars: a.stars, vocabulary: a.vocabulary ?? {}, steps: a.steps, stepsLeft: a.stepsLeft, deepRead: a.deepRead ?? { on: false, percent: 0, staleIdeas: 0 } }),
       'DATA>>>',
     ].join('\n');
   },

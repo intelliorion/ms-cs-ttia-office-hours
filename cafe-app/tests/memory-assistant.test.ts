@@ -205,15 +205,17 @@ describe('a capability shared by two teams: one grouped query, then what the sub
   ];
   const BY_GRAPH = 'By the graph, Policy Q&A: Travel policy assistant, Onboarding checklist helper (both need it); Document parsing: Desk booking assistant, Expense anomaly finder (both need it).';
 
-  it('with Deep read off: one query, the ideas grouped per shared capability in the trace, and one line that the text is unread', async () => {
+  it('with Deep read off: one query, the ideas grouped per shared capability in the trace, then each idea\'s current process read from its record', async () => {
     const { base, root } = await boot();
     await seed(root);
     const e = await ask(base);
     expect(e.kind).toBe('question');
-    expect(e.trace).toHaveLength(1);
+    expect(e.trace).toHaveLength(2);
     expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(GRAPH_TRACE);
+    expect(e.trace[1].map((t: { text: string }) => t.text)).toEqual(['Read current process from the records of 4 ideas']);
     expect(e.highlight.sort()).toEqual(['capability:document-parsing', 'capability:policy-q-a', 'idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'idea:CAFE-2026-003', 'idea:CAFE-2026-004']);
-    expect(e.reply).toBe(`${BY_GRAPH} Deep read has not read what they wrote yet.`);
+    expect(e.reply).toMatch(new RegExp(`^${BY_GRAPH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} By reading, the current process: `));
+    for (const t of ['Travel policy assistant: "Current process: today the travel desk', 'Desk booking assistant: "Current process:', 'Onboarding checklist helper: "Current process:', 'Expense anomaly finder: "Current process:']) expect(e.reply).toContain(t);
   });
 
   it('with Deep read on: the same query, then a search for the current process kept to those ideas, quoted per idea', async () => {
@@ -224,7 +226,7 @@ describe('a capability shared by two teams: one grouped query, then what the sub
     const e = await ask(base);
     expect(e.trace).toHaveLength(2);
     expect(e.trace[0].map((t: { text: string }) => t.text)).toEqual(GRAPH_TRACE);
-    expect(e.trace[1][0].text).toBe('Search what people wrote for "current process", among the previous answer');
+    expect(e.trace[1][0].text).toBe('Search what people wrote for "current process", among the ideas of the previous answer (4)');
     expect(e.reply).toMatch(/^By the graph, Policy Q&A: Travel policy assistant, Onboarding checklist helper \(both need it\); Document parsing: Desk booking assistant, Expense anomaly finder \(both need it\)\. By reading, the current process: /);
     expect(e.reply).toMatch(/Travel policy assistant: "Current process: today the travel desk answers each policy question by email/);
     expect(e.reply).toMatch(/Desk booking assistant: "Current process: today the floor team books desks by hand/);

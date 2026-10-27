@@ -544,12 +544,13 @@ describe('the Café assistant: a two-part message, the question answered and the
     expect(e.reply).toBe('You asked to add T&E policy to Desk booking assistant; this links it as the data it uses. By the graph, 1 idea depends on Travel & Expense policy: Procurement FAQ bot (via Policy Q&A). A system links to a capability: this goes to Document parsing. Travel & Expense policy already exists, known as "T&E policy": this links it instead of adding a new one.');
   });
 
-  it('a search identical to one already run is not run again: the AI is told, the trace holds it once', async () => {
+  it('a search identical to one already run is not run again: the AI is told, the trace holds its lines once and says it was not run', async () => {
     const { root, ai, prompts } = await setup([search, search, (d) => ({ next: 'answer', thought: 'Answering', reply: `${d.steps.length} steps, the second ${d.steps[1].result.error ? 'refused' : 'ran'}.` })]);
     await seed(root);
     const e = await runCommand(root, 'Which ideas depend on the Travel & Expense policy?', ai, clock);
     expect(e.kind).toBe('question');
-    expect(e.trace).toHaveLength(1);
+    expect(e.trace).toHaveLength(2);
+    expect(e.trace![1]).toEqual([{ text: expect.stringMatching(/^Not run: You already ran this exact search/), size: 0 }]);
     expect(e.steps).toHaveLength(1);
     expect(e.reply).toBe('2 steps, the second refused.');
     const third = JSON.parse(prompts[2].slice(prompts[2].indexOf('<<<DATA') + 7, prompts[2].indexOf('DATA>>>')));

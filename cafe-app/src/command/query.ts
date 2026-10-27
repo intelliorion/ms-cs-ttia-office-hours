@@ -1,4 +1,4 @@
-import { DERIVED_RELATIONS, NODE_LABELS, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { DERIVED_RELATIONS, NODE_LABELS, slug, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -66,12 +66,15 @@ export const QUERY_GUIDE = [
   '  Its result lists people: each person\'s role per idea and their team (or "no team recorded"). For a question about a person, always use role, so the reply can say lead, sponsor, builder or member per idea; use follow over HAS_MEMBER for their team.',
   '- intersect: keep only the stars also found by the steps in with (a query of its own), for "both" and "shared" questions.',
   '- path: the shortest chain of links between the two stars in codes.',
-  '- rank: order the set by how many links each star has (along rel and dir when given) and keep the top limit.',
+  '- rank: order the set by how many distinct stars each is linked to (along rel and dir, and only stars of type when given), keep the top limit and every star tied with the last one kept.',
+  '  It counts stars, never links: a person who submitted, leads and builds one idea counts that idea once.',
   '- count_by: count the set by stage, function, region, round or type (the set stays as it is).',
+  '- A match that is exactly a star\'s label or one of its registry aliases ("travel policy" for Travel & Expense policy) starts from that star only; the trace says "exactly".',
   '- search: Deep read. Start a new set from what people wrote: the ideas whose submission, emails, answers, design, review or roadshow are nearest in meaning to match',
   '  (free text, up to 60 characters), best first, top limit (default 8). The result lists the passages (hits) with the idea and section each came from: quote from them.',
   '  Use it for "what did teams say about …", "which ideas mention …", "who has a problem with …". It finds nothing until Deep read has run.',
-  '  With last: true it keeps only the ideas the previous answer found (the search before it in this message, or the last answer in the conversation).',
+  '  With last: true it keeps to the IDEAS of the previous answer (the step before it in this message, or the last answer in the conversation; for capabilities or groups, the ideas linked to them).',
+  '  A search with last: true for current process, challenge or business impact also reads that field from the record of every one of those ideas with no such passage (records): quote each.',
   '- similar: Deep read. From the one star in codes, the nearest stars of its kind by meaning (an idea: the nearest other ideas; a capability: the nearest capabilities),',
   '  or from match text, the nearest ideas (or stars of type). Top limit (default 5). Use it for "ideas like [I1]", "is there a capability like X already".',
   '- A match on stars or filter that finds no label containing the words falls back, once Deep read has run, to the stars nearest in meaning; the trace says "nearest".',
@@ -102,6 +105,7 @@ export const QUERY_GUIDE = [
   '- ideas that use data from systems named like expense: [{"op":"stars","type":"System","match":"expense"},{"op":"follow","rel":"USES_DATA","type":"Capability"},{"op":"follow","rel":"NEEDS","type":"Idea"}]',
   '- who leads [I1]: [{"op":"stars","codes":["I1"]},{"op":"role","role":"lead"}]',
   '- who is [P1]: [{"op":"stars","codes":["P1"]},{"op":"role"}] and, for their team star, [{"op":"stars","codes":["P1"]},{"op":"follow","rel":"HAS_MEMBER","dir":"in","type":"Team"}]',
+  '- who is on the most ideas, and in which roles: [{"op":"stars","type":"Person"},{"op":"rank","type":"Idea","limit":3},{"op":"role"}] (distinct ideas per person, ties kept; never rank people by links)',
   '- ideas per stage in round 2026 Q4: [{"op":"stars","type":"Idea","round":"2026 Q4"},{"op":"count_by","by":"stage"}]',
   '- ideas that want the same outcome as [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"WANTS","type":"Outcome"},{"op":"follow","rel":"WANTS","type":"Idea"}]',
   '- ideas per use case category: [{"op":"stars","type":"Category"},{"op":"rank","rel":"IN_CATEGORY","dir":"in","limit":10}]',
@@ -117,6 +121,20 @@ export const QUERY_GUIDE = [
 export const queryGuide = (deepRead: boolean): string[] => (deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l)));
 
 export interface StepTrace { text: string; size: number }
+/** A derived-link line cut from the trace (past the first few), with the two stars it joins, so it can come back when the reply names both. */
+export interface AsideLine extends StepTrace { ends: [string, string] }
+/** What a search read from the ideas' records (a field), for the ideas it was kept to that had no such passage. */
+export interface QueryRecord { idea: string; field: RecordField; text: string }
+export type RecordField = 'current_process' | 'challenge' | 'business_impact';
+const FIELD_WORDS: Record<RecordField, string> = { current_process: 'current process', challenge: 'challenge', business_impact: 'business impact' };
+/** The record field a search text asks about, if any. */
+export function fieldOf(text: string | undefined): RecordField | undefined {
+  const t = lc(text);
+  if (/current process|today|how (?:the work|it) is done|as.is|process/.test(t)) return 'current_process';
+  if (/business impact|impact|benefit/.test(t)) return 'business_impact';
+  if (/challenge|problem/.test(t)) return 'challenge';
+  return undefined;
+}
 /** One passage a search found: where it came from and its text (names are coded before the AI sees it). */
 export interface QueryHit { ideaId: string; section: string; file: string; text: string; score: number }
 /**
@@ -141,6 +159,10 @@ export interface QueryResult {
   path?: string[];
   /** The passages a search step found, best first. */
   hits?: QueryHit[];
+  /** A scoped search's reading of the ideas' records, for the ideas with no passage of that field. */
+  records?: QueryRecord[];
+  /** The derived-link lines cut from the trace: at is the index of the "and N more" line they stand behind. */
+  aside?: { at: number; lines: AsideLine[] }[];
   /** A grouped follow's facts: for each star it started from (in the set's order), the stars it reached; a star that reached nothing has no group. */
   groups?: { from: string; to: string[] }[];
   /** A role step's facts: each person it started from or reached, their role words per idea, and the teams they submitted from (none when added by hand). */
@@ -162,6 +184,7 @@ export interface QueryWorld {
   memory?: QueryMemory;
 }
 
+const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
 const PLURAL: Record<NodeType, string> = {
   Entity: 'divisions', Team: 'teams', Person: 'people', Idea: 'ideas', PainPoint: 'pain points', Capability: 'capabilities',
   Tool: 'tools', System: 'systems or data', Round: 'rounds', Support: 'support requests',
@@ -172,7 +195,6 @@ const SINGULAR: Record<NodeType, string> = {
   Tool: 'tool', System: 'system or data', Round: 'round', Support: 'support request',
   Outcome: 'desired outcome', Beneficiary: 'beneficiary', Category: 'use case category',
 };
-const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
 const relWord = (r?: Relation) => (r ? r.toLowerCase().replace(/_/g, ' ') : 'any');
 /** The links a step walks: the stated ones, plus the derived ones only when the step asks for a derived rel. */
 const walkable = (edges: GEdge[], rel?: Relation) => (rel && DERIVED_RELATIONS.includes(rel) ? edges : edges.filter((e) => !e.derived));
@@ -209,17 +231,20 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   const touched = new Set<string>();
   const trace: StepTrace[] = [];
   const edgeById = new Map(w.graph.edges.map((e) => [e.id, e]));
-  /** One trace line per derived link a step used: what it says and the links it rests on, at most a few. */
-  const derivedLines = (used: GEdge[]): StepTrace[] => {
-    const lines = used.slice(0, DERIVED_TRACE_MAX).map((e) => ({
-      text: `${name(e.from)} ${relWord(e.rel)} ${name(e.to)}: derived by ${e.derived!.rule} from ${e.derived!.inputs.map((id) => { const i = edgeById.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}`,
-      size: 1,
-    }));
-    if (used.length > DERIVED_TRACE_MAX) lines.push({ text: `and ${used.length - DERIVED_TRACE_MAX} more derived links`, size: used.length - DERIVED_TRACE_MAX });
-    return lines;
+  const derivedLine = (e: GEdge): AsideLine => ({
+    text: `${name(e.from)} ${relWord(e.rel)} ${name(e.to)}: derived by ${e.derived!.rule} from ${e.derived!.inputs.map((id) => { const i = edgeById.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}`,
+    size: 1, ends: [e.from, e.to],
+  });
+  const aside: { at: number; lines: AsideLine[] }[] = [];
+  /** One trace line per derived link a step used: what it says and the links it rests on, the first few; the rest kept aside behind "and N more". */
+  const pushDerived = (used: GEdge[]) => {
+    for (const e of used.slice(0, DERIVED_TRACE_MAX)) { const { ends: _, ...line } = derivedLine(e); trace.push(line); }
+    if (used.length <= DERIVED_TRACE_MAX) return;
+    trace.push({ text: `and ${used.length - DERIVED_TRACE_MAX} more derived links`, size: used.length - DERIVED_TRACE_MAX });
+    aside.push({ at: trace.length - 1, lines: used.slice(DERIVED_TRACE_MAX).map(derivedLine) });
   };
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
-  let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons']; let groups: QueryResult['groups'];
+  let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons']; let groups: QueryResult['groups']; let records: QueryRecord[] | undefined;
   /** "the submitter and lead of [idea], and the member of [idea]": one person's roles, grouped by idea, in words. */
   const roleWords = (roles: { idea: string; role: string }[]): string => {
     const byIdea = new Map<string, string[]>();
@@ -234,6 +259,36 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return { ids, note: ids.length ? ` (nearest: ${ids.map(name).join(', ')})` : '' };
   };
 
+  /** The stars whose label or a registry alias is exactly the match (case, spacing and accents ignored): these win over containment and the nearest. */
+  const exactIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
+    if (!s.match) return { ids: [], note: '' };
+    const k = slug(s.match);
+    let byAlias = false;
+    const ids = from.filter((id) => {
+      const n = nodes.get(id);
+      if (!n || (s.type && n.type !== s.type) || !ideaFits(id, s)) return false;
+      if (slug(n.label) === k) return true;
+      const hit = String(n.attrs?.aliases ?? '').split(';').some((a) => a.trim() && slug(a) === k);
+      if (hit) byAlias = true;
+      return hit;
+    });
+    return { ids, note: ids.length && byAlias ? ` (exactly: ${ids.map(name).join(', ')}, known as "${s.match}")` : '' };
+  };
+  /** The ideas of a previous answer: its ideas, the ideas of its groups and people, or else the ideas linked to its stars by a stated link. */
+  const ideasOf = (ids: string[]): string[] => {
+    const isIdea = (id: string) => nodes.get(id)?.type === 'Idea';
+    const direct = ids.filter(isIdea);
+    if (direct.length) return [...new Set(direct)];
+    const pool = new Set(ids);
+    const out = new Set<string>();
+    for (const e of w.graph.edges) {
+      if (e.derived) continue;
+      if (pool.has(e.from) && isIdea(e.to)) out.add(e.to);
+      if (pool.has(e.to) && isIdea(e.from)) out.add(e.from);
+    }
+    return [...out];
+  };
+
   const run = (steps: QueryStep[], log: boolean): string[] => {
     let set: string[] = [];
     for (const s of steps) {
@@ -241,12 +296,13 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
       if (s.op === 'stars') {
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
         const from = s.last ? (w.last ?? []).filter((id) => nodes.has(id)) : s.codes?.length ? coded : w.graph.nodes.map((n) => n.id);
-        set = from.filter((id) => fits(id, s));
+        const exact = s.codes?.length ? { ids: [], note: '' } : exactIn(s, from);
+        set = exact.ids.length ? exact.ids : from.filter((id) => fits(id, s));
         const near = set.length || s.codes?.length ? { ids: [], note: '' } : nearestIn(s, from);
         if (near.ids.length) set = near.ids;
         text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
           : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
-        text += near.note;
+        text += exact.note + near.note;
       } else if (s.op === 'follow') {
         const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
         const by = new Map<string, Set<string>>();
@@ -274,24 +330,46 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         }
         if (log && used.length) {
           const kept = used.filter((e) => set.includes(e.from) || set.includes(e.to));
-          trace.push({ text, size: set.length }); trace.push(...derivedLines(kept)); text = '';
+          if (text) trace.push({ text, size: set.length });
+          pushDerived(kept); text = '';
           reasons = [...(reasons ?? []), ...kept.map((e) => ({ from: e.from, to: e.to, rel: e.rel, why: e.description }))];
         }
       } else if (s.op === 'filter') {
         const before = set;
-        set = set.filter((id) => fits(id, s));
+        const exact = exactIn(s, before);
+        set = exact.ids.length ? exact.ids : set.filter((id) => fits(id, s));
         const near = set.length ? { ids: [], note: '' } : nearestIn(s, before);
         if (near.ids.length) set = near.ids;
-        text = `Keep ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}${near.note}`;
+        text = `Keep ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}${exact.note}${near.note}`;
       } else if (s.op === 'search') {
         const limit = Math.min(s.limit ?? 8, 20);
-        const found = s.match && w.memory ? w.memory.search(s.match, limit) : [];
-        // With last: the search stays within the ideas the previous answer found (the step before it in this message, or the conversation's last answer).
-        const within = s.last ? new Set(w.last ?? []) : undefined;
-        set = found.map((f) => `idea:${f.ideaId}`).filter((id) => nodes.has(id) && ideaFits(id, s) && (!within || within.has(id)));
+        // With last: the search stays within the IDEAS the previous answer found (the step before it in this message, or the
+        // conversation's last answer); for capabilities or groups, the ideas linked to them. It looks past the global top for them.
+        const scope = s.last ? ideasOf([...set.length ? set : (w.last ?? [])]) : undefined;
+        const within = scope ? new Set(scope) : undefined;
+        const found = s.match && w.memory ? w.memory.search(s.match, within ? Math.max(50, limit) : limit) : [];
+        set = found.map((f) => `idea:${f.ideaId}`).filter((id) => nodes.has(id) && ideaFits(id, s) && (!within || within.has(id))).slice(0, limit);
         const keep = new Set(set);
-        hits = [...(hits ?? []), ...found.filter((f) => keep.has(`idea:${f.ideaId}`)).flatMap((f) => f.hits)];
-        text = !w.memory ? 'Deep read has not run: nothing to search' : `Search what people wrote for "${s.match ?? ''}"${ideaFilterWords(s)}${within ? ', among the previous answer' : ''}`;
+        const stepHits = found.filter((f) => keep.has(`idea:${f.ideaId}`)).flatMap((f) => f.hits);
+        hits = [...(hits ?? []), ...stepHits];
+        // A field the question names (current process …): every scoped idea with no passage of it is read from its record.
+        const field = fieldOf(s.match);
+        const read: QueryRecord[] = [];
+        if (scope && field) {
+          for (const id of scope.slice(0, 8)) {
+            const idea = ideaById.get(id); const value = String(idea?.[field] ?? '').trim();
+            if (!idea || !value || !ideaFits(id, s) || stepHits.some((h) => `idea:${h.ideaId}` === id && h.section === field)) continue;
+            read.push({ idea: id, field, text: value.slice(0, 600) });
+          }
+        }
+        if (read.length) { records = [...(records ?? []), ...read]; set = [...new Set([...set, ...read.map((r) => r.idea)])]; }
+        const where = within ? `, among the ideas of the previous answer (${within.size})` : '';
+        const readLine = read.length ? `Read ${FIELD_WORDS[field!]} from the records of ${read.length} idea${read.length === 1 ? '' : 's'}` : '';
+        if (!w.memory) text = readLine || 'Deep read has not run: nothing to search';
+        else {
+          text = `Search what people wrote for "${s.match ?? ''}"${ideaFilterWords(s)}${where}`;
+          if (readLine && log) { trace.push({ text, size: keep.size }); text = readLine; }
+        }
       } else if (s.op === 'similar') {
         const limit = Math.min(s.limit ?? 5, 20);
         const code = (s.codes ?? []).map(w.idOf).find((x): x is string => !!x && nodes.has(x));
@@ -321,6 +399,8 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         if (said.length) text += `: ${said.join('; ')}${facts.length > said.length ? `; and ${facts.length - said.length} more` : ''}`;
       } else if (s.op === 'intersect') {
         const other = new Set(run(s.with ?? [], false));
+        // What the intersect drops is not part of the answer: it goes dark again.
+        if (log) for (const id of set) if (!other.has(id)) touched.delete(id);
         set = set.filter((id) => other.has(id));
         text = 'Keep only what a second search also found';
       } else if (s.op === 'path') {
@@ -329,15 +409,21 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         set = path;
         text = path.length ? `Shortest chain: ${path.map(name).join(' — ')}` : 'No chain of links between them';
       } else if (s.op === 'rank') {
-        const n = new Map(set.map((id) => [id, 0]));
+        // Distinct stars linked, never links: a person who submitted, leads and builds one idea counts it once.
+        const n = new Map(set.map((id) => [id, new Set<string>()]));
+        const fitsType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
         for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
-          if (s.dir !== 'in' && n.has(e.from)) n.set(e.from, n.get(e.from)! + 1);
-          if (s.dir !== 'out' && n.has(e.to)) n.set(e.to, n.get(e.to)! + 1);
+          if (s.dir !== 'in' && n.has(e.from) && fitsType(e.to)) n.get(e.from)!.add(e.to);
+          if (s.dir !== 'out' && n.has(e.to) && fitsType(e.from)) n.get(e.to)!.add(e.from);
         }
-        ranked = [...n].map(([id, k]) => ({ id, n: k })).sort((x, y) => y.n - x.n || name(x.id).localeCompare(name(y.id))).slice(0, s.limit ?? 10);
+        const all = [...n].map(([id, k]) => ({ id, n: k.size })).sort((x, y) => y.n - x.n || name(x.id).localeCompare(name(y.id)));
+        const top = s.limit ?? 10;
+        // A tie at the cut-off is kept: every star with as many as the last one kept.
+        const cut = all.length > top ? all[top - 1].n : -1;
+        ranked = all.filter((x, i) => i < top || (cut > 0 && x.n === cut));
         set = ranked.map((r) => r.id);
-        text = `Rank by ${s.rel ? `${relWord(s.rel)} ` : ''}links, top ${s.limit ?? 10}`;
+        text = `Rank by ${s.rel ? `${relWord(s.rel)} ` : ''}${s.type ? `distinct ${PLURAL[s.type]} linked` : 'distinct stars linked'}, top ${top}${ranked.length > top ? ` (${ranked.length} with ties)` : ''}`;
       } else if (s.op === 'count_by') {
         const by = s.by ?? 'type';
         counts = {};
@@ -363,7 +449,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}), ...(groups ? { groups } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(records?.length ? { records } : {}), ...(aside.length ? { aside } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}), ...(groups ? { groups } : {}) };
 }
 
 function ideaFilterWords(s: QueryStep): string {
@@ -387,4 +473,40 @@ export function shortestPath(edges: GEdge[], a: string, b: string, maxDepth = 8)
   const out: string[] = [];
   for (let x: string | null = b; x; x = prev.get(x) ?? null) out.unshift(x);
   return out;
+}
+
+/**
+ * The derived-link lines cut from a trace come back when the reply names both their stars (by label); the rest stay
+ * cut, and the "and N more" line says how many. The reply relies on what it names, so its derivations are listed.
+ */
+export function revealDerived(trace: StepTrace[], aside: { at: number; lines: AsideLine[] }[] | undefined, reply: string, name: (id: string) => string): StepTrace[] {
+  if (!aside?.length) return trace;
+  const out: StepTrace[] = [];
+  trace.forEach((t, i) => {
+    const a = aside.find((x) => x.at === i);
+    if (!a) { out.push(t); return; }
+    const named = a.lines.filter((l) => l.ends.every((id) => { const label = name(id); return !!label && reply.includes(label); }));
+    for (const { ends: _, ...l } of named) out.push(l);
+    const left = a.lines.length - named.length;
+    if (left) out.push({ text: `and ${left} more derived links`, size: left });
+  });
+  return out;
+}
+
+/** A plain reply from what the steps found, for when the AI gave none: the groups, the ranked list, the people or the set, then the records and passages. */
+export function plainReply(results: QueryResult[], name: (id: string) => string, say: (text: string) => string = (t) => t): string {
+  const facts: string[] = []; const readings: string[] = [];
+  const list = (ids: string[]) => ids.slice(0, 12).map(name).join(', ') + (ids.length > 12 ? ` and ${ids.length - 12} more` : '');
+  for (const r of results) {
+    if (r.groups?.length) facts.push(r.groups.map((g) => `${name(g.from)}: ${list(g.to)}`).join('; '));
+    else if (r.ranked?.length) facts.push(r.ranked.map((x) => `${name(x.id)} (${x.n})`).join(', '));
+    else if (r.people?.length) facts.push(r.people.map((p) => `${name(p.id)}: ${p.roles.map((x) => `${x.role} of ${name(x.idea)}`).join(', ')}`).join('; '));
+    else if (r.counts) facts.push(Object.entries(r.counts).map(([k, v]) => `${k}: ${v}`).join(', '));
+    else if (r.path?.length) facts.push(r.path.map(name).join(' — '));
+    else if (r.final.length && !r.records?.length && !r.hits?.length) facts.push(list(r.final));
+    for (const x of r.records ?? []) readings.push(`${name(x.idea)} (${FIELD_WORDS[x.field]}): "${say(x.text).slice(0, 200)}"`);
+    if (!r.records?.length) for (const h of (r.hits ?? []).slice(0, 3)) readings.push(`${name(`idea:${h.ideaId}`)} (${h.section.replace(/_/g, ' ')}): "${say(h.text).slice(0, 160)}"`);
+  }
+  if (!facts.length && !readings.length) return '';
+  return `From the graph: ${[facts.length ? `${facts.join('. ')}.` : '', ...readings].filter(Boolean).join(' ')}`.slice(0, 900);
 }

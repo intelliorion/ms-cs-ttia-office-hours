@@ -5,14 +5,14 @@ import { rebuildGraph } from '../graph/store';
 import { loadIdea } from '../ideas/store';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
-import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentStepDone } from '../ai/tasks';
+import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentOutput, type AgentStepDone } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
 import { nodeId, type GNode } from '../graph/ontology';
 import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
 import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
-import { QUERY_SCHEMA, runQuery, type Query, type QueryResult, type StepTrace } from './query';
+import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type Query, type QueryResult, type StepTrace } from './query';
 import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
@@ -188,6 +188,36 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   };
   const done: AgentStepDone[] = [];
   const results: QueryResult[] = [];
+  /** The trace, step by step in order: each search's lines, and a line for each step that was not run or was sent back. */
+  const traces: { trace: StepTrace[]; aside?: QueryResult['aside'] }[] = [];
+  /** A step that was not run: the AI is told why, and the trace says so in the same words. */
+  const refuse = (did: AgentStepDone['did'], thought: string, error: string) => {
+    done.push({ did, thought, result: { error } });
+    traces.push({ trace: [{ text: `Not run: ${error}`, size: 0 }] });
+  };
+  /** Each check that sends a final answer back runs once per message. */
+  const sentBack = new Set<'steps' | 'team'>();
+  const label = (id: string) => nodes.get(id)?.label ?? id;
+  const codeName = (id: string) => { const n = nodes.get(id); return n ? `[${codeFor(hidden.codes, n)}]` : id; };
+  /** A final answer sent back: the AI sees why as a step that was not run, the trace says it was asked again. */
+  const refuseFinal = (error: string, line: string) => {
+    done.push({ did: 'search', thought: 'Answer sent back by the app', result: { error } });
+    traces.push({ trace: [{ text: `Asked again: ${line}`, size: 0 }] });
+  };
+  /** The team stars a coded text names that no step of this message returned (nor the message itself named). */
+  const teamsNotReturned = (text: string): string[] => {
+    const seen = new Set<string>();
+    for (const r of results) {
+      for (const id of [...r.touched, ...r.final]) seen.add(id);
+      for (const g of r.groups ?? []) { seen.add(g.from); g.to.forEach((t) => seen.add(t)); }
+      for (const p of r.people ?? []) p.teams.forEach((t) => seen.add(t));
+      for (const x of r.reasons ?? []) { seen.add(x.from); seen.add(x.to); }
+    }
+    for (const n of focusNodes) seen.add(n.id);
+    const named = new Set([...hidden.text.matchAll(/\[([A-Z]+\d+)\]/g)].map((m) => hidden.codes.get(m[1])?.id));
+    return [...new Set([...text.matchAll(/\[([A-Z]+\d+)\]/g)].map((m) => hidden.codes.get(m[1])?.id).filter((id): id is string => !!id))]
+      .filter((id) => nodes.get(id)?.type === 'Team' && !seen.has(id) && !named.has(id));
+  };
   /** The queries run for this message, so an identical one is not run again. */
   const ran: string[] = [];
   let lastFound: string[] = thread.last;
@@ -198,19 +228,44 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       const left = AGENT_MAX_STEPS - step;
       if (left <= 0) { entry.problems.push('I ran out of steps before I could finish. Try asking a narrower question.'); break; }
       opts.progress?.({ stage: 'thinking', step });
-      const { provider, output } = await ai.runWith(agentTask, {
+      const ask = (stepsLeft: number, note?: string) => ai.runWith(agentTask, {
         ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
-        stars: hidden.legend, vocabulary, steps: done, stepsLeft: left, deepRead,
+        stars: hidden.legend, vocabulary, steps: done, stepsLeft, deepRead, ...(note ? { note } : {}),
       });
+      const asked = await ask(left);
+      const provider = asked.provider;
+      let output: AgentOutput = asked.output;
       entry.provider = provider;
+      // An answer with no reply: asked once more for the reply alone, from the steps already run (no new steps).
+      const silent = (o: AgentOutput) => (o.next === 'answer' || o.next === 'clarify' ? !o.reply?.trim() : o.next === 'propose' ? !o.reply?.trim() && !o.answer?.trim() : false);
+      if (silent(output)) {
+        const again = (await ask(1, `your last step chose ${output.next} with no reply. Write the reply now from the steps already run; take no new step.`)).output;
+        if (again.next === output.next || again.next === 'answer') output = again;
+      }
+      // A final answer that claims the step budget is spent while steps remain: sent back once, to take the step it skipped.
+      if (output.next === 'answer' && left > 1 && !sentBack.has('steps') && /\b(ran|run|running) out of steps\b|\bstep limit\b|\bno steps left\b|\bout of steps\b/i.test(output.reply ?? '')) {
+        sentBack.add('steps');
+        refuseFinal(`You have ${left - 1} steps left: you did not run out of steps. Take the step you skipped, then answer.`, `the answer said it ran out of steps with ${left - 1} left`);
+        continue;
+      }
+      // A reply that names a team no step returned: sent back once to follow OWNS (the team comes from a step, never from memory).
+      const unreturned = output.next === 'answer' ? teamsNotReturned(`${output.reply ?? ''}`) : [];
+      if (unreturned.length && !sentBack.has('team')) {
+        sentBack.add('team');
+        if (left > 1) {
+          refuseFinal(`Your reply names ${unreturned.map((t) => `[${codeFor(hidden.codes, nodes.get(t)!)}]`).join(', ')}, which no step returned: follow OWNS (dir in, type Team) from the ideas before saying which team owns them.`, `the answer named ${unreturned.map(label).join(', ')}, which no step returned`);
+          continue;
+        }
+        traces.push({ trace: [{ text: `Not from a step: the reply names ${unreturned.map(label).join(', ')}, which no step in this message returned`, size: 0 }] });
+      }
       const thought = showNames(output.thought, hidden.codes);
 
       if (output.next === 'search') {
         const errs = validate(QUERY_SCHEMA, output.query);
-        if (errs.length) { done.push({ did: 'search', thought: output.thought, result: { error: `The query was malformed: ${errs.slice(0, 3).join('; ')}` } }); continue; }
+        if (errs.length) { refuse('search', output.thought, `The query was malformed: ${errs.slice(0, 3).join('; ')}`); continue; }
         // The same steps again: not run, not traced twice; the agent is told its result is already in steps.
         const key = JSON.stringify(output.query);
-        if (ran.includes(key)) { done.push({ did: 'search', thought: output.thought, result: { error: `You already ran this exact search: its result is in steps above. Use it, or search differently (one hop more, or a search of the text).` } }); continue; }
+        if (ran.includes(key)) { refuse('search', output.thought, 'You already ran this exact search: its result is in steps above. Use it, or search differently (one hop more, or a search of the text).'); continue; }
         ran.push(key);
         const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
         const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound, ...(memory ? { memory } : {}) });
@@ -218,6 +273,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
         for (const id of stale) r.trace.push({ text: `${id.replace(/^CAFE-/, '')} changed since it was read`, size: 1 });
         results.push(r);
+        traces.push({ trace: r.trace, ...(r.aside ? { aside: r.aside } : {}) });
         lastFound = r.final;
         const s: ChatStep = { kind: 'search', text: thought, found: r.final.length };
         entry.steps!.push(s); opts.progress?.({ stage: 'step', step: s });
@@ -225,7 +281,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
           did: 'search', thought: output.thought,
           result: {
             stars: r.final.slice(0, RESULT_STARS).map((sid) => legendOf(nodes.get(sid)!)), total: r.final.length,
-            ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), links: x.n })) } : {}),
+            ...(r.ranked ? { ranked: r.ranked.map((x) => ({ code: codeFor(hidden.codes, nodes.get(x.id)!), count: x.n })) } : {}),
             ...(r.counts ? { counts: r.counts } : {}),
             // A grouped follow: which stars each star of the set reached, so the reply can answer per capability.
             ...(r.groups ? { groups: r.groups.map((g) => ({ from: codeFor(hidden.codes, nodes.get(g.from)!), to: g.to.map((id) => codeFor(hidden.codes, nodes.get(id)!)) })) } : {}),
@@ -237,12 +293,14 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             // Deep read's passages, names coded like an idea's text, with the idea and section each came from.
             ...(r.hits ? { hits: r.hits.slice(0, 12).map((h) => ({ idea: codeFor(hidden.codes, nodes.get(`idea:${h.ideaId}`)!), section: h.section, text: coded(h.text).slice(0, HIT_MAX) })) } : {}),
             ...(stale.length ? { stale: stale.map((id) => codeFor(hidden.codes, nodes.get(`idea:${id}`)!)) } : {}),
+            // A scoped search's reading of the records (current process …) for the ideas with no such passage: quote each.
+            ...(r.records ? { records: r.records.map((x) => ({ idea: codeFor(hidden.codes, nodes.get(x.idea)!), field: x.field, text: coded(x.text).slice(0, HIT_MAX) })) } : {}),
           },
         });
       } else if (output.next === 'read_idea') {
         const ideaId = output.idea ? hidden.codes.get(output.idea.replace(/^\[|\]$/g, ''))?.id : undefined;
         const idea = ideas.find((i) => `idea:${i.id}` === ideaId);
-        if (!idea) { done.push({ did: 'read_idea', thought: output.thought, result: { error: 'No idea has that code.' } }); continue; }
+        if (!idea) { refuse('read_idea', output.thought, 'No idea has that code.'); continue; }
         const s: ChatStep = { kind: 'read', text: thought };
         entry.steps!.push(s); opts.progress?.({ stage: 'step', step: s });
         done.push({
@@ -257,7 +315,11 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         finalReply = output.reply ?? '';
         // A message with a question in it as well: the answer to the question, kept apart from what the AI says about the change.
         const answer = output.next === 'propose' && output.answer ? showNames(output.answer, hidden.codes).trim() : '';
-        entry.reply = showNames(finalReply || output.thought, hidden.codes);
+        // Never the planner's note: with no reply after asking again, a plain reply from what the steps found.
+        if (!finalReply.trim() && !(output.next === 'propose' && output.answer?.trim())) {
+          finalReply = plainReply(results, codeName, coded) || (output.next === 'clarify' ? 'What would you like me to change, or what would you like to know?' : 'I could not put the answer into words; the steps above show what the graph holds.');
+        }
+        entry.reply = showNames(finalReply, hidden.codes);
         if (output.next === 'answer') {
           entry.kind = 'question';
           if (output.followups?.length) entry.followups = output.followups.map((f) => showNames(f, hidden.codes));
@@ -281,10 +343,9 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   } catch (e) {
     entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
-  if (results.length) {
-    entry.trace = results.map((r) => r.trace);
-    entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
-  }
+  // The derived links the reply relies on (both ends named in it) come back from behind "and N more".
+  if (traces.length) entry.trace = traces.map((t) => revealDerived(t.trace, t.aside, entry.reply, label));
+  if (results.length) entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
   entry.coded = { text: hidden.text, reply: finalReply, ...(results.length ? { found: lastFound.slice(0, RESULT_STARS).map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}) };
   await saveThread(root, { ...thread, updated: now, codes: [...hidden.codes], last: lastFound });
   // Changes left waiting in other conversations are not shown any more: cancel them, saying why.

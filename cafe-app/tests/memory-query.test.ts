@@ -112,7 +112,7 @@ describe('search kept to the previous answer', () => {
     const r = runQuery({ steps: [{ op: 'search', match: 'data access', last: true }] }, { ...base, memory, last: ['idea:CAFE-2026-001'] });
     expect(r.final).toEqual(['idea:CAFE-2026-001']);
     expect(r.hits!.map((h) => h.ideaId)).toEqual(['CAFE-2026-001']);
-    expect(r.trace).toEqual([{ text: 'Search what people wrote for "data access", among the previous answer', size: 1 }]);
+    expect(r.trace).toEqual([{ text: 'Search what people wrote for "data access", among the ideas of the previous answer (1)', size: 1 }]);
     expect(withMemory([{ op: 'search', match: 'data access' }]).final).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-003']);
   });
 });

@@ -504,13 +504,18 @@ function agentFor(prompt: string) {
         { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea', group: true },
       ] } };
     }
-    if (data.steps.length === 1 && wrote && data.deepRead?.on) return { next: 'search', thought: 'Reading what each submitter wrote about the current process', query: { steps: [{ op: 'search', match: 'current process', last: true, limit: 8 }] } };
+    // Deep read on or off: a search kept to those ideas; with nothing read it reads the current process from each record.
+    if (data.steps.length === 1 && wrote) return { next: 'search', thought: 'Reading what each submitter wrote about the current process', query: { steps: [{ op: 'search', match: 'current process', last: true, limit: 8 }] } };
     const groups: { from: string; to: string[] }[] = data.steps[0]?.result?.groups ?? [];
     const byGraph = groups.length ? `By the graph, ${groups.map((g) => `[${g.from}]: ${g.to.map((c) => `[${c}]`).join(', ')} (both need it)`).join('; ')}.` : `By the graph, no capability is needed by both a [${sharedBy[1]}] and a [${sharedBy[2]}] idea.`;
     const hits: { idea: string; section: string; text: string }[] = data.steps[1]?.result?.hits ?? [];
     const seen = new Set<string>();
-    const quoted = hits.filter((h) => h.section === 'current_process' && !seen.has(h.idea) && seen.add(h.idea)).map((h) => `[${h.idea}]: "${h.text.slice(0, 80)}"`);
-    const reading = !wrote ? '' : !data.deepRead?.on ? ' Deep read has not read what they wrote yet.' : quoted.length ? ` By reading, the current process: ${quoted.join('; ')}.` : ' By reading, no current process text was found for them.';
+    const records: { idea: string; field: string; text: string }[] = data.steps[1]?.result?.records ?? [];
+    const quoted = [
+      ...hits.filter((h) => h.section === 'current_process' && !seen.has(h.idea) && seen.add(h.idea)).map((h) => `[${h.idea}]: "${h.text.slice(0, 80)}"`),
+      ...records.filter((r) => !seen.has(r.idea) && seen.add(r.idea)).map((r) => `[${r.idea}]: "${r.text.slice(0, 120)}"`),
+    ];
+    const reading = !wrote ? '' : quoted.length ? ` By reading, the current process: ${quoted.join('; ')}` : ' By reading, no current process text was found for them.';
     return { next: 'answer', thought: 'Answering per capability, the reading apart', reply: `${byGraph}${reading}`, followups: ['Who leads each of them?'] };
   }
   if (/\?\s*$/.test(cmd)) {

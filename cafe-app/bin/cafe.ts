@@ -5,7 +5,7 @@ import { createApp } from '../src/server/server';
 import { importExport } from '../src/import/importRows';
 import { loadSteps } from '../src/rules/stages';
 import { systemClock } from '../src/clock';
-import { checkWorkspace } from '../src/graph/check';
+import { checkReport, checkWorkspace } from '../src/graph/check';
 import { writeExport } from '../src/graph/jsonld';
 
 const argv = process.argv.slice(2);
@@ -18,7 +18,7 @@ const [command, ...rest] = positional;
 const root = path.resolve(flag('workspace') ?? process.env.CAFE_WORKSPACE ?? 'cafe-workspace');
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check | export [--idea ID]> [--workspace DIR] [--port N]';
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | export [--idea ID]> [--workspace DIR] [--port N]';
 
 async function main(): Promise<void> {
   switch (command) {
@@ -52,10 +52,10 @@ async function main(): Promise<void> {
     }
     case 'ontology': {
       if (rest[0] !== 'check') throw new Error('Usage: cafe ontology check --workspace DIR');
-      const { violations, checked } = await checkWorkspace(root);
-      for (const v of violations) console.log(v);
-      console.log(violations.length ? `${violations.length} violation${violations.length === 1 ? '' : 's'} (nothing was changed)` : `No violations: ${checked.nodes} stars, ${checked.edges} links and ${checked.derived} derived links checked against the ontology.`);
-      if (violations.length) process.exit(1);
+      // --strict: a stale operator edit fails the check too.
+      const { lines, code } = checkReport(await checkWorkspace(root), process.argv.includes('--strict'));
+      for (const l of lines) console.log(l);
+      if (code) process.exit(code);
       return;
     }
     case 'export': {

@@ -98,7 +98,8 @@ describe('cafe ontology check', () => {
     await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'alias', node: 'capability:gone', label: 'Nothing', of: 'Gone' });
     await appendEdit(root, { id: 'op-2', at: '2026-10-26', status: 'active', t: 'link', from: 'idea:CAFE-2026-001', rel: 'HAS_MEMBER', to: 'idea:CAFE-2026-002' });
     const before = await readFile(paths(root).entities, 'utf8');
-    const { violations } = await checkWorkspace(root);
+    const { violations, stale } = await checkWorkspace(root);
+    expect(stale).toEqual([{ id: 'op-1', what: 'alias "Nothing" on capability:gone', missing: ['capability:gone'] }]);
     expect(violations).toEqual([
       'ontology.yaml: unknown node type "Gadget" (ignored)',
       'ontology.yaml: NEEDS: unknown node type "Gadget" (the pair is kept as built in)',
@@ -112,7 +113,6 @@ describe('cafe ontology check', () => {
       'inference.yaml: stated: NEEDS is not a derived relation',
       'ai-links.jsonl line 1: NEEDS goes Idea → Capability, not Idea → System (skipped by the build)',
       'ai-links.jsonl line 2: unknown relation "LOVES" (skipped by the build)',
-      'operator.jsonl op-1: alias "Nothing" on capability:gone, which is not in the graph',
       'operator.jsonl op-2: HAS_MEMBER goes Team → Person, not Idea → Idea (skipped by the build)',
     ]);
     expect(await readFile(paths(root).entities, 'utf8')).toBe(before);

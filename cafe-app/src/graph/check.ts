@@ -7,6 +7,7 @@ import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 import { readEdits } from './operator';
 import { readAiLinks, rebuildGraph } from './store';
+import { staleEdits, type StaleEdit } from './build';
 import { slug } from './ontology';
 import YAML from 'yaml';
 
@@ -14,7 +15,13 @@ import YAML from 'yaml';
  * `cafe ontology check`: the workspace's files and graph against the ontology. It reads, it reports, it never fixes.
  * Each violation is one line saying which file, where, and what is wrong.
  */
-export interface CheckResult { violations: string[]; checked: { nodes: number; edges: number; derived: number } }
+export interface CheckResult {
+  violations: string[]; checked: { nodes: number; edges: number; derived: number };
+  /** Operator edits pointing at stars the graph no longer holds (after following merges): skipped by the build, never deleted. */
+  stale: StaleEdit[];
+}
+/** One line per stale edit, as the CLI prints it and /api/graph lists it. */
+export const staleLine = (s: StaleEdit) => `operator.jsonl ${s.id}: ${s.what}: ${s.missing.join(', ')} ${s.missing.length === 1 ? 'is' : 'are'} not in the graph`;
 
 const isRelation = (v: unknown): v is Relation => typeof v === 'string' && Object.hasOwn(ALLOWED, v);
 const isType = (v: unknown): v is NodeType => typeof v === 'string' && NODE_TYPES.includes(v as NodeType);
@@ -92,14 +99,25 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
     const ft = typeOfAny(l.from, extra); const tt = typeOfAny(l.to, extra);
     if (ft && tt && (ft !== ALLOWED[l.rel][0] || tt !== ALLOWED[l.rel][1])) out.push(`ai-links.jsonl line ${line}: ${l.rel} goes ${pair(l.rel)}, not ${ft} → ${tt} (skipped by the build)`);
   });
-  for (const e of await readEdits(root)) {
+  const edits = await readEdits(root);
+  for (const e of edits) {
     if (e.status !== 'active') continue;
-    if (e.t === 'alias' && !typeOf.has(e.node)) out.push(`operator.jsonl ${e.id}: alias "${e.label}" on ${e.node}, which is not in the graph`);
     if (e.t === 'link') {
       if (!isRelation(e.rel)) { out.push(`operator.jsonl ${e.id}: unknown relation "${String(e.rel)}"`); continue; }
       const ft = typeOf.get(e.from); const tt = typeOf.get(e.to);
       if (ft && tt && (ft !== ALLOWED[e.rel][0] || tt !== ALLOWED[e.rel][1])) out.push(`operator.jsonl ${e.id}: ${e.rel} goes ${pair(e.rel)}, not ${ft} → ${tt} (skipped by the build)`);
     }
   }
-  return { violations: out, checked: { nodes: graph.nodes.length, edges: graph.edges.filter((e) => !e.derived).length, derived: graph.edges.filter((e) => e.derived).length } };
+  return { violations: out, stale: staleEdits(graph.nodes, edits), checked: { nodes: graph.nodes.length, edges: graph.edges.filter((e) => !e.derived).length, derived: graph.edges.filter((e) => e.derived).length } };
+}
+
+/** What `cafe ontology check` prints, and its exit code: 1 on a violation, or on a stale edit with --strict. */
+export function checkReport(r: CheckResult, strict: boolean): { lines: string[]; code: number } {
+  const lines = [...r.violations];
+  lines.push(r.violations.length ? `${r.violations.length} violation${r.violations.length === 1 ? '' : 's'} (nothing was changed)` : `No violations: ${r.checked.nodes} stars, ${r.checked.edges} links and ${r.checked.derived} derived links checked against the ontology.`);
+  if (r.stale.length) {
+    lines.push(`Stale operator edits (${r.stale.length}): they point at stars the graph no longer holds, so the build skips them (nothing was changed):`);
+    lines.push(...r.stale.map(staleLine));
+  }
+  return { lines, code: r.violations.length || (strict && r.stale.length) ? 1 : 0 };
 }

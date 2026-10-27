@@ -206,10 +206,28 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
   };
 }
 
-/** The operator's edits, in order, over what the form and the AI drew. An edit whose stars are gone does nothing. */
+/** Two star ids of one mergeable kind (ids are "type:slug"): only such a merge is ever applied, so only such a merge is followed. */
+const sameKind = (a: string, b: string) => { const t = a.split(':')[0]; return t === b.split(':')[0] && MERGEABLE.some((m) => m.toLowerCase() === t); };
+/** Where a star id ends up once the merges are followed (a merged star's edits go to the star kept, like an alias). */
+const follow = (merged: Map<string, string>, id: string) => { const seen = new Set<string>(); let x = id; while (merged.has(x) && !seen.has(x)) { seen.add(x); x = merged.get(x)!; } return x; };
+/** The same edit, its star ids followed through the merges. */
+function repoint(e: OperatorEdit, merged: Map<string, string>): OperatorEdit {
+  if (!merged.size) return e;
+  const f = (id: string) => follow(merged, id);
+  if (e.t === 'link' || e.t === 'unlink') return { ...e, from: f(e.from), to: f(e.to) };
+  if (e.t === 'rename' || e.t === 'remove' || e.t === 'alias' || e.t === 'add') return { ...e, node: f(e.node) };
+  return e;
+}
+
+/**
+ * The operator's edits, in order, over what the form and the AI drew. An edit made after a merge at the merged star's
+ * id follows the merge to the star kept. An edit whose stars are gone does nothing (staleEdits names it).
+ */
 function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits: OperatorEdit[]): void {
-  for (const e of edits) {
-    if (e.status !== 'active') continue;
+  const merged = new Map<string, string>();
+  for (const raw of edits) {
+    if (raw.status !== 'active') continue;
+    const e = raw.t === 'merge' ? raw : repoint(raw, merged);
     if (e.t === 'add') {
       if (!nodes.has(e.node) && e.label.trim()) nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
     } else if (e.t === 'remove') {
@@ -226,7 +244,8 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
       const id = edgeId(e.from, e.rel, e.to);
       if (!edges.has(id)) edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: 'operator', confidence: 1, confirmed: true, ...(e.idea ? { idea: e.idea } : {}) });
     } else if (e.t === 'merge') {
-      const from = nodes.get(e.from); const into = nodes.get(e.into);
+      if (e.from !== e.into && sameKind(e.from, e.into)) merged.set(e.from, e.into);
+      const from = nodes.get(e.from); const into = nodes.get(follow(merged, e.into));
       if (!from || !into || from.id === into.id || from.type !== into.type || !MERGEABLE.includes(from.type)) continue;
       for (const [id, x] of [...edges]) {
         if (x.from !== from.id && x.to !== from.id) continue;
@@ -240,4 +259,29 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
     }
     // An alias edit is the registry's: it changes no star or link here.
   }
+}
+
+/** An operator edit that points at a star the graph no longer holds: the build skips it; check names it; nothing deletes it. */
+export interface StaleEdit { id: string; what: string; missing: string[] }
+
+/**
+ * The active edits whose stars are not in the graph, each star followed through the merges first (an edit to a merged
+ * star is not stale: it lands on the star kept). Adds and removes are left out: an add makes its star and a remove's
+ * star is meant to be gone; a merge's own star is gone by design, so only the star it merges into must be there.
+ */
+export function staleEdits(graphNodes: { id: string }[], edits: OperatorEdit[]): StaleEdit[] {
+  const have = new Set(graphNodes.map((n) => n.id));
+  const merged = new Map<string, string>();
+  for (const e of edits) if (e.status === 'active' && e.t === 'merge' && e.from !== e.into && sameKind(e.from, e.into)) merged.set(e.from, e.into);
+  const out: StaleEdit[] = [];
+  for (const raw of edits) {
+    if (raw.status !== 'active') continue;
+    const e = raw.t === 'merge' ? { ...raw, into: follow(merged, raw.into) } : repoint(raw, merged);
+    const check = (what: string, ids: string[]) => { const missing = ids.filter((id) => !have.has(id)); if (missing.length) out.push({ id: e.id, what, missing }); };
+    if (e.t === 'link' || e.t === 'unlink') check(`${e.t} ${e.from} ${e.rel} ${e.to}`, [e.from, e.to]);
+    else if (e.t === 'rename') check(`rename ${e.node} to "${e.label}"`, [e.node]);
+    else if (e.t === 'alias') check(`alias "${e.label}" on ${e.node}`, [e.node]);
+    else if (e.t === 'merge') check(`merge ${e.from} into ${e.into}`, [e.into]);
+  }
+  return out;
 }

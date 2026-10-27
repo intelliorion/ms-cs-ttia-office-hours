@@ -86,3 +86,71 @@ describe('a merge records an alias, so the twin cannot come back', () => {
     expect(g).toEqual(buildGraph([a, b], []));
   });
 });
+
+import { staleEdits } from '../src/graph/build';
+import { checkWorkspace } from '../src/graph/check';
+
+describe('edits that follow a merge, and edits that point at stars gone', () => {
+  const merged = [
+    edit({ t: 'add', node: 'system:t-e-policy', type: 'System', label: 'T&E policy' }, 1),
+    edit({ t: 'add', node: 'system:travel-policy', type: 'System', label: 'Travel policy' }, 2),
+    edit({ t: 'merge', from: 'system:t-e-policy', into: 'system:travel-policy' }, 3),
+    // Made after the merge, at the merged star's old id: it follows the merge.
+    edit({ t: 'link', from: 'capability:policy-answers', rel: 'USES_DATA', to: 'system:t-e-policy' }, 4),
+    edit({ t: 'rename', node: 'system:t-e-policy', label: 'Travel & Expense policy' }, 5),
+    // A capability that is not there any more: reported, never applied, never deleted.
+    edit({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:t-e-policy' }, 6),
+    edit({ t: 'alias', node: 'capability:gone', label: 'Gone', of: 'Gone' }, 7),
+  ];
+  const withCap = sampleIdea({ ...a, features: ['Policy answers'] });
+  it('an edit made after a merge at the merged star lands on the star kept', () => {
+    const g = buildGraph([withCap], [], [], merged);
+    expect(rels(g)).toContain('capability:policy-answers USES_DATA system:travel-policy');
+    expect(g.nodes.find((n) => n.id === 'system:travel-policy')?.label).toBe('Travel & Expense policy');
+    expect(g.nodes.some((n) => n.id === 'system:t-e-policy')).toBe(false);
+  });
+  it('the stale ones are named with the star they miss; the merged star is never the reason', () => {
+    const g = buildGraph([withCap], [], [], merged);
+    expect(staleEdits(g.nodes, merged)).toEqual([
+      { id: 'op-6', what: 'link capability:document-parsing USES_DATA system:travel-policy', missing: ['capability:document-parsing'] },
+      { id: 'op-7', what: 'alias "Gone" on capability:gone', missing: ['capability:gone'] },
+    ]);
+  });
+  it('ontology check lists them apart from the violations, and changes nothing', async () => {
+    const root = await tmpWorkspace();
+    await saveIdea(root, withCap);
+    for (const e of merged) await appendEdit(root, e);
+    const r = await checkWorkspace(root);
+    expect(r.violations).toEqual([]);
+    expect(r.stale.map((s) => s.id)).toEqual(['op-6', 'op-7']);
+    expect((await readEdits(root))).toHaveLength(merged.length);
+  });
+});
+
+import { checkReport } from '../src/graph/check';
+import { startServer } from './helpers';
+
+describe('the check report and the graph route name the stale edits', () => {
+  const result = { violations: [], checked: { nodes: 3, edges: 2, derived: 1 }, stale: [{ id: 'op-6', what: 'link capability:document-parsing USES_DATA system:travel-policy', missing: ['capability:document-parsing'] }] };
+  it('stale edits are listed under their own heading; the exit code is 0 unless --strict', () => {
+    const r = checkReport(result, false);
+    expect(r.lines).toEqual([
+      'No violations: 3 stars, 2 links and 1 derived links checked against the ontology.',
+      'Stale operator edits (1): they point at stars the graph no longer holds, so the build skips them (nothing was changed):',
+      'operator.jsonl op-6: link capability:document-parsing USES_DATA system:travel-policy: capability:document-parsing is not in the graph',
+    ]);
+    expect(r.code).toBe(0);
+    expect(checkReport(result, true).code).toBe(1);
+    expect(checkReport({ ...result, stale: [] }, true)).toEqual({ lines: ['No violations: 3 stars, 2 links and 1 derived links checked against the ontology.'], code: 0 });
+  });
+  it('/api/graph lists them as problems', async () => {
+    const s = await startServer();
+    try {
+      await saveIdea(s.root, a);
+      await appendEdit(s.root, edit({ t: 'link', from: 'capability:gone', rel: 'NEEDS', to: 'idea:CAFE-2026-001' } as any, 1));
+      const g = await (await fetch(`${s.base}/api/graph`)).json() as any;
+      expect(g.problems).toContainEqual({ line: 0, message: 'operator.jsonl op-1: link capability:gone NEEDS idea:CAFE-2026-001: capability:gone is not in the graph' });
+      expect(g.stale).toBe(1);
+    } finally { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); }
+  });
+});

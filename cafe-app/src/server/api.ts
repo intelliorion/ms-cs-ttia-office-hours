@@ -20,6 +20,9 @@ import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../revi
 import { overdue, needsE2R } from '../reminders/due';
 import { rebuildGraph, setAiLinkStatus, readAiLinks, appendAiLink, mergeStars } from '../graph/store';
 import { layoutFor } from '../graph/layout';
+import { staleEdits } from '../graph/build';
+import { staleLine } from '../graph/check';
+import { readEdits } from '../graph/operator';
 import { createConnector, defaultProviders, saveAiProvider, type Connector } from '../ai/connector';
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, dataStepTask, type DesignKitOutput } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
@@ -237,8 +240,10 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('GET', '/api/graph', async () => {
     const graph = await rebuildGraph(root);
     const layout = await layoutFor(root, graph);
+    // Operator edits whose stars are gone: skipped by the build, listed with the problems (never deleted).
+    const stale = staleEdits(graph.nodes, await readEdits(root));
     // What waits on the operator: a derived edge waits on its inputs, so it is not counted twice.
-    return { ...graph, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
+    return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
   });
   add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });

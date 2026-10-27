@@ -97,14 +97,20 @@ export type SlashCmd = (typeof SLASH)[number]['cmd'];
 export const slashMatches = (text: string) => (/^\/\w*$/.test(text) ? SLASH.filter((s) => s.cmd.startsWith(text.toLowerCase())) : []);
 
 export type Segment = string | { id: string; label: string };
-/** The text cut into plain runs and star names (longest names first, whole words only), so the names can show as chips. */
-export function chipSegments(text: string, stars: { id: string; label: string }[]): Segment[] {
+const QUOTES: Record<string, string> = { "'": "'", '"': '"', '\u2018': '\u2019', '\u201c': '\u201d' };
+/**
+ * The text cut into plain runs and star names (longest names first, whole words only), so the names can show as chips.
+ * A name in quotes stays text: it is a name being said (a star to add), and a chip would pad the quotes apart.
+ * With mentionsOnly, only names typed with @ are chips: the operator's message as it was sent, whatever became a star since.
+ */
+export function chipSegments(text: string, stars: { id: string; label: string }[], mentionsOnly = false): Segment[] {
   const found: { start: number; end: number; id: string; label: string }[] = [];
   const word = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
   for (const s of [...stars].filter((x) => x.label.length >= 3).sort((a, b) => b.label.length - a.label.length)) {
     for (let i = text.indexOf(s.label); i !== -1; i = text.indexOf(s.label, i + 1)) {
       const end = i + s.label.length;
       if (word(text[i - 1]) || word(text[end])) continue;
+      if (mentionsOnly ? text[i - 1] !== '@' : !!QUOTES[text[i - 1]] && QUOTES[text[i - 1]] === text[end]) continue;
       if (found.some((f) => i < f.end && end > f.start)) continue;
       found.push({ start: i, end, id: s.id, label: s.label });
     }
@@ -115,6 +121,9 @@ export function chipSegments(text: string, stars: { id: string; label: string }[
   if (at < text.length) out.push(text.slice(at));
   return out;
 }
+
+/** The operator's message as it was sent: only the stars picked with @ are chips. */
+export const sentSegments = (text: string, stars: { id: string; label: string }[]): Segment[] => chipSegments(text, stars, true);
 
 /** What to offer on an empty chat, from what is on screen and what is waiting. */
 export function suggestionsFor(ctx: { focusType?: string; waiting?: number }): string[] {

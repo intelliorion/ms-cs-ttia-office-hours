@@ -171,7 +171,7 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
 
   // Upkeep's fields only, lastDecision and stale, patched over the state as it is at the write (the job loop writes
   // status to the same file; a copy read earlier is never written back).
-  const record = async (d: UpkeepDecision, patch: (s: MemoryState) => Pick<Partial<MemoryState>, 'stale' | 'embedder'> = () => ({})) => {
+  const record = async (d: UpkeepDecision, patch: (s: MemoryState) => Pick<Partial<MemoryState>, 'stale' | 'embedder' | 'lastRun' | 'done' | 'total' | 'status'> = () => ({})) => {
     await updateState(root, (s) => ({ ...s, ...patch(s), lastDecision: { act: d.act, ideas: d.ideas, why: d.why, at: clock() } }));
   };
   const refreshLabels = async () => { await labelVectors(root, opts.embedder(), (await opts.nodes()) as GNode[]); };
@@ -206,6 +206,7 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
       return d;
     }
     try {
+      const t0 = Date.now();
       const have = new Set(rows.map((r) => r.hash));
       const todo = d.ideas.flatMap((id) => present.get(id)!.filter((p) => !have.has(p.hash)).map((p) => p.row));
       const emb = opts.embedder();
@@ -221,7 +222,12 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
       await writeIndex(root, next);
       if (d.labels) await refreshLabels();
       // The first read on a workspace with no index records the model it was read with, as a Run would.
-      await record(d, (s) => ({ stale: s.stale.filter((id) => !touchedIds.has(id)), ...(s.embedder ? {} : { embedder: emb.name }) }));
+      // Upkeep's read is the last run the operator sees: when, how long, how much is read now. A run in progress, a pause or a failed run keeps its own state.
+      const lastRun = { at: clock(), ms: Date.now() - t0, chunks: next.length, ideas: new Set(next.map((r) => r.ideaId)).size };
+      await record(d, (s) => ({
+        stale: s.stale.filter((id) => !touchedIds.has(id)), ...(s.embedder ? {} : { embedder: emb.name }),
+        ...(s.status === 'idle' || s.status === 'done' ? { lastRun, status: 'done' as const, done: next.length, total: next.length } : {}),
+      }));
       return d;
     } catch (e) {
       const deferred: UpkeepDecision = { ...d, act: 'defer', why: `could not read ${d.ideas.map((id) => id.replace(/^CAFE-/, '')).join(', ')}: ${(e as Error).message}; will try again at the next change` };

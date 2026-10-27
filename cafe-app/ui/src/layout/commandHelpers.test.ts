@@ -72,3 +72,19 @@ describe('what an answer lights', () => {
     expect(answerLight({ ...base, kind: 'command', actions: [{ id: 'a1', label: 'Merge', status: 'done' }] as any })).toEqual(['team:gss']);
   });
 });
+
+import { sentSegments } from './commandHelpers';
+describe('a message shows as it was sent', () => {
+  const stars = [{ id: 'capability:policy-change-tracking', label: 'Policy change tracking' }, { id: 'idea:6', label: 'Travel helper' }];
+  it('the operator\'s own words chip only the stars they picked with @, never a name a later change made a star', () => {
+    expect(sentSegments('add a new capability Policy change tracking to @Travel helper', stars)).toEqual([
+      'add a new capability Policy change tracking to @', { id: 'idea:6', label: 'Travel helper' },
+    ]);
+  });
+  it('a name the reply quotes stays as quoted text, so no chip pads the quotes', () => {
+    expect(chipSegments("You asked to add a new capability 'Policy change tracking' to Travel helper.", stars)).toEqual([
+      "You asked to add a new capability 'Policy change tracking' to ", { id: 'idea:6', label: 'Travel helper' }, '.',
+    ]);
+    expect(chipSegments('Add "Policy change tracking" now', stars)).toEqual(['Add "Policy change tracking" now']);
+  });
+});

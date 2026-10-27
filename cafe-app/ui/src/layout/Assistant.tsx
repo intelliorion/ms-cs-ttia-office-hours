@@ -5,7 +5,7 @@ import { NODE_COLOURS } from '../universe/graphView';
 import { NODE_LABELS } from '../../../src/graph/ontology';
 import { inboxCount } from '../popouts/inboxHelpers';
 import {
-  KIND_WORD, STATUS_WORD, answerLight, canUndo, chipSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,
+  KIND_WORD, STATUS_WORD, answerLight, canUndo, chipSegments, sentSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,
   type ChatEntryView, type SlashCmd, type StarHit,
 } from './commandHelpers';
 
@@ -83,7 +83,7 @@ export function Assistant() {
   if (!chat.open) return null;
 
   /** Text with every star name as a chip: hover lights the star, click flies to it. */
-  const chips = (text: string) => chipSegments(text, stars).map((s, i) => (typeof s === 'string' ? <span key={i}>{s}</span> : (
+  const chips = (text: string, sent = false) => (sent ? sentSegments(text, stars) : chipSegments(text, stars)).map((s, i) => (typeof s === 'string' ? <span key={i}>{s}</span> : (
     <button key={i} className="star-chip" data-star={s.id} onMouseEnter={() => hover(s.id)} onMouseLeave={() => hover(null)} onClick={() => select(s.id)}>
       <span className="dot" style={{ background: (NODE_COLOURS as Record<string, string>)[typeOf.get(s.id) ?? ''] ?? '#9fb0ae' }} />{s.label}
     </button>
@@ -130,7 +130,7 @@ export function Assistant() {
         ))}
         {chat.running && (
           <div className="as-msg">
-            <div className="cmd-me">{chat.running.about && <span className="cmd-me-about">About {chat.running.about}</span>}{chips(chat.running.text)}</div>
+            <div className="cmd-me">{chat.running.about && <span className="cmd-me-about">About {chat.running.about}</span>}{chips(chat.running.text, true)}</div>
             <div className="cmd-ai who-ai" data-testid="command-thinking">
               <Steps steps={chat.running.steps} />
               <div className="as-live" role="status">
@@ -161,14 +161,14 @@ function Steps({ steps }: { steps?: { kind: 'search' | 'read'; text: string; fou
 }
 
 function Message({ e, chips, busy, onAct, onSend, onRetry, onLight }: {
-  e: ChatEntryView; chips: (text: string) => React.ReactNode; busy: boolean;
+  e: ChatEntryView; chips: (text: string, sent?: boolean) => React.ReactNode; busy: boolean;
   onAct: (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => void; onSend: (t: string) => void; onRetry: () => void; onLight: (ids: string[]) => void;
 }) {
   const { highlight, setHighlight } = useStore();
   const lit = !!highlight && !!e.highlight?.length && highlight.length === e.highlight.length && highlight.every((x, i) => x === e.highlight![i]);
   return (
     <div className="as-msg cmd-entry" data-entry={e.id}>
-      <div className="cmd-me">{e.about && <span className="cmd-me-about">About {e.about}</span>}{chips(e.text)}</div>
+      <div className="cmd-me">{e.about && <span className="cmd-me-about">About {e.about}</span>}{chips(e.text, true)}</div>
       <div className={`cmd-ai k-${e.kind ?? 'command'}`}>
         {e.kind && <div className="cmd-kind">{KIND_WORD[e.kind]}</div>}
         <Steps steps={e.steps} />

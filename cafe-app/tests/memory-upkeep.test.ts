@@ -193,6 +193,10 @@ describe('the upkeep runner', () => {
     expect(d).toMatchObject({ act: 'read', ideas: [ID1, ID2], why: 'read 2026-001 and 2026-002 at start-up · 4 passages' });
     expect(c.texts).toHaveLength(4);
     expect((await readState(root)).lastDecision).toMatchObject({ act: 'read', why: 'read 2026-001 and 2026-002 at start-up · 4 passages' });
+    // The job's own view shows that read as its last run: not idle 0/0 with no last run.
+    const after = await readState(root);
+    expect(after.lastRun).toMatchObject({ at: clock(), chunks: 4, ideas: 2 });
+    expect(after).toMatchObject({ status: 'done', done: 4, total: 4 });
     // Changed while the server was down: only that idea at the next start.
     upkeep.close();
     await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Desks are double booked twice.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));

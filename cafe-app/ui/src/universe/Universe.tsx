@@ -43,6 +43,8 @@ export interface UniverseProps {
   onSlow?: () => void;
   /** 'default' (night sky) or 'frost' (baubles on a light winter morning). */
   theme?: string;
+  /** What a chat change just did: these stars and threads pulse for a moment. No selection, no camera move. */
+  flash?: { nodes: string[]; edges: string[] } | null;
 }
 
 const SPIN = 0.03; // rad/s while idle
@@ -78,11 +80,13 @@ export function Universe(input: UniverseProps) {
   const onHover = (id: string | null) => { setCursor(!!id); props.onHover(id); };
   const quality = props.quality ?? 'full';
   const lite = quality === 'lite';
-  if (!webgl || quality === 'flat') return <div className="universe flat" data-quality={webgl ? 'flat' : 'no-webgl'}><Flat2D {...props} /></div>;
+  const flashAttrs = { 'data-flash-stars': props.flash?.nodes.join(' ') || undefined, 'data-flash-threads': props.flash?.edges.join(' ') || undefined };
+  if (!webgl || quality === 'flat') return <div className="universe flat" data-quality={webgl ? 'flat' : 'no-webgl'} {...flashAttrs}><Flat2D {...props} /></div>;
   if (!probed) return <div className="universe" data-testid="universe" />;
   return (
     <div
       className="universe" data-testid="universe" data-quality={quality} style={{ cursor: cursor ? 'pointer' : 'default' }}
+      {...flashAttrs}
       onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY }; }}
     >
       <Canvas
@@ -105,7 +109,7 @@ export function Universe(input: UniverseProps) {
   );
 }
 
-function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow, theme }: UniverseProps) {
+function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, quality = 'full', watchFps = false, onSlow, theme, flash = null }: UniverseProps) {
   const palette = paletteFor(theme);
   const lite = quality === 'lite';
   const { centre, radius } = useMemo(() => bounds(layout), [layout]);
@@ -126,6 +130,10 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
   // Several stars picked: each with its links, so what they share shows.
   const multi = useMemo(() => (selectedIds.length >= 2 ? new Set(selectedIds.flatMap((id) => [...neighbourhood(graph, id)])) : null), [graph, selectedIds]);
   const hood = useMemo(() => lit ?? multi ?? (selectedId ? neighbourhood(graph, selectedId) : null), [graph, selectedId, lit, multi]);
+  // A chat change: its stars and threads pulse where they are; a changed star stays in view even outside the selection's.
+  const flashStars = useMemo(() => (flash?.nodes.length ? new Set(flash.nodes) : null), [flash]);
+  const flashThreads = useMemo(() => (flash?.edges.length ? new Set(flash.edges) : null), [flash]);
+  const starHood = useMemo(() => (hood && flashStars ? new Set([...hood, ...flashStars]) : hood), [hood, flashStars]);
   // The bottom bar's slider sets how much of the rest is hidden, for either.
   const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
 
@@ -228,8 +236,8 @@ function Scene({ graph, layout, selectedId, selectedIds = [], highlight = null, 
         ? <Snowfall floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} />
         : <><Backdrop floorY={-radius * 1.3} reach={radius * 4.5} lite={lite} /><ambientLight intensity={0.2} /></>}
       <group ref={spin}>
-        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} palette={palette} hood={lit || multi ? null : hood} />
-        <Stars nodes={nodes} pos={pos} deg={deg} hood={hood} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} palette={palette} onSelect={onSelect} onHover={onHover} />
+        <Links edges={graph.edges} pos={pos} selectedId={lit || multi ? null : selectedId} lit={lit ?? multi} dim={dim} lite={lite} palette={palette} hood={lit || multi ? null : hood} flash={flashThreads} />
+        <Stars nodes={nodes} pos={pos} deg={deg} hood={starHood} flash={flashStars} dim={dim} selectedId={selectedId} picked={pickedSet} hoverId={hoverId} labels={labels} focus={focus} lite={lite} palette={palette} onSelect={onSelect} onHover={onHover} />
       </group>
       <OrbitControls
         makeDefault enableDamping dampingFactor={0.08} rotateSpeed={0.55} zoomSpeed={0.7}

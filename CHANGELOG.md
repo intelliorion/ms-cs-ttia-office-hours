@@ -8,6 +8,13 @@
   2026-002 at start-up · 14 passages"); with every idea read start-up does nothing and writes nothing. Still never a
   download on the app's own initiative (the pop-out says "press Run once to download the model"), never a resumed
   pause, never another model's index. The switch is on by default and always shown.
+- **Every chat edit shows in the universe.** Do it and Undo return `changed` (the stars and threads that are new,
+  changed or gone, by comparing the graph before and after, derived links left out) with a line such as "Updated: Alex
+  Wang → Lead on Procurement FAQ bot". The UI fetches the graph again, then pulses those stars and threads for about two
+  seconds, as a selection's, with no change of selection and no camera move, and shows the line. The cause of "it does
+  not update unless I reselect": the data was fresh at once, but a role added between two stars already linked drew a
+  new thread exactly over the old one, in the same colour. Roles now have their own threads: lead gold and thicker,
+  builder blue, sponsor rose, member dotted (per theme, static in Lite), with a legend row in the Show menu.
 
 ## 2026-10-27 (Café app: the assistant keeps both halves of a message, and follows a shared capability home)
 

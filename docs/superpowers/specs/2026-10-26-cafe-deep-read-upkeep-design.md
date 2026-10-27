@@ -199,3 +199,30 @@ run"). The ruling now (made, not a question):
   by upkeep alone (no Run ever pressed), says "Kept current on its own · last read <when>".
 - **Tests** point `CAFE_MODEL_DIR` at a folder that never holds the model (vitest `env`), so a developer's cached model
   is never loaded by a test; the server closes its upkeep timers when it closes.
+
+## 12. Addendum, 2026-10-27: every chat edit is visible in the universe
+
+The operator: "The graph doesn't update after a chat edit unless I reselect Alex Wang". Reproduced in a headless
+browser on the practice server (select Alex Wang, "make Alex Wang lead on @Procurement FAQ bot", Do it): the Do
+response is followed at once by `GET /api/graph` and the panel shows "Lead · Builder" within half a second, so the data
+was never stale; what was missing was anything to see. The new LEADS thread is drawn exactly over the BUILDS thread
+already there, in the same colour, so the picture did not change until a reselect re-ran the selection's pulse. The
+ruling:
+
+- **`changed` on Do and Undo.** `doActions` and `undoChatAction` rebuild the graph before and after and return
+  `changed: { nodes, edges, note }` with the entry (not logged): `graphChanges` (`src/graph/diff.ts`) gives the stated
+  threads that are new or changed (id, confirmation or description), the ends of every thread that came or went, and
+  stars new or renamed; derived links are left out (they follow from the change). The note is "Updated: Alex Wang →
+  Lead on Procurement FAQ bot" for a role (the card's own words for anything else, joined with "; "), "Undone: <card>"
+  for an Undo.
+- **The UI.** After a Do or an Undo the assistant awaits `refresh()` and then `flashChanges(changed)`: the store keeps
+  `flash` for 2.2 s (a newer change replaces it). The universe passes it to Links (the changed threads pulse with the
+  selection's travelling bead, `withFlash` on `edgeStyle`) and Stars (the changed stars beat and are labelled), and in
+  Flat the same lines and stars blink; `selectedId`, the camera and the highlight are never touched. `ChangeNote` shows
+  the line over the universe and fades with it. The universe carries `data-flash-stars` / `data-flash-threads`.
+- **Roles drawn.** `roleStyle(rel, palette)`: LEADS gold, 2.4 wide; BUILDS blue and SPONSORS rose, 1.6; RELATED
+  (member) the link colour, dotted; SUBMITTED and every other link as before; a waiting or derived role thread keeps the
+  amber or violet dashes. Per theme in `ScenePalette.roles`; Lite batches by role (static, one draw call per look);
+  the Show menu's legend has a row for the roles. The derived-link dashed violet is unchanged.
+- **No auto-apply path exists** in the app (every change waits for Do it), so the Do and Undo routes are the only
+  places a chat edit lands.

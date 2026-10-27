@@ -19,6 +19,7 @@ import { DesignPackPopout } from './popouts/DesignPackPopout';
 import { ConfigPopout } from './popouts/ConfigPopout';
 import { DeepReadPopout } from './popouts/DeepReadPopout';
 import { TypeFilter } from './layout/TypeFilter';
+import { ChangeNote } from './layout/ChangeNote';
 import { labelModeText, visibleGraph } from './universe/graphView';
 import { focusLabel, focusKeyApplies, escAction, isNarrow, qualityLabel } from './state/store';
 
@@ -26,7 +27,7 @@ declare global { interface Window { __cafe?: Record<string, (...a: any[]) => voi
 
 export default function App() {
   const { state, graph, popout, openPopout, closePopout, notice, refresh, selectedId, selectedIds, highlight, hideUnlit, hoverId, labels, focus, toggleFocus, viewNonce, select, hover, toggleLabels, setLabels, resetView,
-    leftView, openIdea, backToList, trail, goBack, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice } = useStore();
+    leftView, openIdea, backToList, trail, goBack, clickStar, drawer, setDrawer, quality, qualitySetByHand, setQuality, cycleQuality, autoPickQuality, slowQuality, setNotice, flash } = useStore();
   // A click shows what was clicked, with no card in between (see clickStar).
   const onSelect = clickStar;
   const chatOpen = useChat((c) => c.open);
@@ -76,8 +77,9 @@ export default function App() {
         {shown && (
           <Universe graph={shown} layout={shown.layout ?? {}} selectedId={selectedId} selectedIds={selectedIds} highlight={highlight} hideUnlit={hideUnlit} hoverId={hoverId} labels={labels} focus={focus}
             viewNonce={viewNonce} onSelect={onSelect} onHover={hover}
-            quality={quality} theme={theme} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} />
+            quality={quality} theme={theme} onProbe={autoPickQuality} watchFps={quality === 'full' && !qualitySetByHand} onSlow={slowQuality} flash={flash} />
         )}
+        <ChangeNote />
         <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}

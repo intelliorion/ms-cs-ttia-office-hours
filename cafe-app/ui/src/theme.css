@@ -1354,3 +1354,12 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ai-read.changed{color:var(--text);background:color-mix(in srgb,#f5b36b 12%,transparent)}
 /* Deep read: the one thing to do while the model is not on this machine. */
 .dr-keeps p.dr-download{color:var(--amber);font-weight:500}
+/* A chat change: the changed stars and threads pulse for a moment (Flat), and one line says what changed. */
+@keyframes flat-changed{0%,100%{opacity:1}50%{opacity:.35}}
+.flat2d .flat-changed{animation:flat-changed .5s ease-in-out 4}
+.change-note{position:absolute;left:50%;top:84px;transform:translateX(-50%);z-index:40;max-width:720px;padding:8px 16px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--panel-border);color:var(--text);font-size:14px;backdrop-filter:blur(8px);pointer-events:none;
+  animation:change-note 2.2s ease-out forwards}
+@keyframes change-note{0%{opacity:0;transform:translate(-50%,-6px)}10%,75%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.flat2d .flat-changed,.change-note{animation:none}}
+.tf-legend i.dot-line{border-top-style:dotted}

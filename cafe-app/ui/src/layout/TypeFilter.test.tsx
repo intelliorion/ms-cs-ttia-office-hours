@@ -32,4 +32,20 @@ describe('the Show filter', () => {
     expect(el.querySelector('.tf-menu')).toBeNull();
     root.unmount(); el.remove();
   });
+
+  it('the legend says what the links mean, the roles on an idea included, in the theme\'s colours', async () => {
+    const { NIGHT } = await import('../universe/graphView');
+    useStore.setState({ graph: { nodes: [{ id: 'idea:1', type: 'Idea', label: 'A' }], edges: [] }, hiddenTypes: [], theme: 'default' } as any);
+    const el = document.createElement('div'); document.body.appendChild(el);
+    const root = createRoot(el);
+    await act(async () => root.render(<TypeFilter />));
+    await act(async () => (el.querySelector('[data-action="type-filter"]') as HTMLButtonElement).click());
+    expect([...el.querySelectorAll('[data-testid="link-legend"] span')].map((s) => s.textContent)).toEqual(['stated', 'waits on you', 'derived by a rule']);
+    const roles = [...el.querySelectorAll('[data-testid="role-legend"] span')];
+    expect(roles.map((s) => s.textContent)).toEqual(['lead', 'builder', 'sponsor', 'member']);
+    expect((roles[0].querySelector('i') as HTMLElement).style.borderColor).toBe('rgb(255, 209, 102)');
+    expect(NIGHT.roles.LEADS).toBe('#ffd166');
+    expect(roles[3].querySelector('i')?.className).toBe('dot-line');
+    root.unmount(); el.remove();
+  });
 });

@@ -16,6 +16,8 @@ export interface StarsProps {
   selectedId: string | null;
   /** Every star picked with Ctrl/⌘+click: each glows like the selected one. */
   picked?: Set<string> | null;
+  /** The stars a chat change just touched: they glow like the selected one and pulse for a moment. */
+  flash?: Set<string> | null;
   hoverId: string | null;
   labels: LabelMode;
   /** Focus mode: no side panels, so labels may use the whole stage. */
@@ -65,7 +67,7 @@ interface InstanceSink { setMatrixAt(i: number, m: Matrix4): void; setColorAt(i:
 /** One billboarded halo per star: writes every instance's matrix and colour for this frame (no rendering needed). */
 export function writeHalos(h: InstanceSink, f: {
   nodes: GNode[]; pos: Map<string, Vec3>; sizes: number[]; base: Color[]; bright: number[]; hood: Set<string> | null;
-  selectedId: string | null; hoverIndex: number; lite: boolean; t: number; facing: Quaternion; glint?: InstanceSink | null;
+  selectedId: string | null; flash?: Set<string> | null; hoverIndex: number; lite: boolean; t: number; facing: Quaternion; glint?: InstanceSink | null;
   /** Stars outside the lit set are hidden: their halos take no space. */
   hide?: boolean;
 }): number {
@@ -74,7 +76,7 @@ export function writeHalos(h: InstanceSink, f: {
     const lit = !f.hood || f.hood.has(id);
     const p = f.pos.get(id)!;
     h.setColorAt(i, tmpC.copy(f.base[i]).multiplyScalar(f.bright[i] * (lit ? 0.85 : 0.5)));
-    tmpS.setScalar(f.hide && !lit ? 0 : haloDiameter(f.sizes[i], { lite: f.lite, selected: id === f.selectedId, hovered: i === f.hoverIndex, t: f.t }));
+    tmpS.setScalar(f.hide && !lit ? 0 : haloDiameter(f.sizes[i], { lite: f.lite, selected: id === f.selectedId || !!f.flash?.has(id), hovered: i === f.hoverIndex, t: f.t }));
     h.setMatrixAt(i, tmpM.compose(tmpP.set(p[0], p[1], p[2]), f.facing, tmpS));
     if (f.glint) {
       f.glint.setColorAt(i, tmpC.copy(f.base[i]).lerp(WHITE, 0.4).multiplyScalar(f.bright[i] * (lit ? 0.9 : 0.4)));
@@ -109,7 +111,7 @@ function emissiveByInstance(m: Material) {
 export const CAP = { width: 0.36, height: 0.3, lift: 0.96 };
 /** Blueprint: stars at least this big get the white drafting wireframe. */
 export const WIRE_FROM = 4.5;
-export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverId, labels, focus = false, lite = false, dim = DIM, palette = NIGHT, onSelect, onHover }: StarsProps) {
+export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, flash = null, hoverId, labels, focus = false, lite = false, dim = DIM, palette = NIGHT, onSelect, onHover }: StarsProps) {
   const frost = palette.frost;
   const blueprint = !!palette.blueprint;
   const workshop = !!palette.workshop;
@@ -179,11 +181,13 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       const id = nodes[i].id;
       const lit = !hood || hood.has(id);
       const twinkle = 1 + 0.1 * Math.sin(t * (0.6 + phases[i] * 0.9) + phases[i] * 6.283);
-      b[i] = (lit ? 1 : dim) * (i === hoverIndex || id === selectedId || picked?.has(id) ? 1.4 : 1) * twinkle;
+      // A changed star beats (about twice a second) on top of the selection's glow while the change shows.
+      const beat = flash?.has(id) ? 1.5 + 0.35 * Math.sin(t * 12) : 0;
+      b[i] = (lit ? 1 : dim) * (beat || (i === hoverIndex || id === selectedId || picked?.has(id) ? 1.4 : 1)) * twinkle;
       // Frost: a bauble doesn't glow; out of view it fades toward the snow, picked it catches the light.
       if (workshop) {
         // A painted gear (a hammer for a tool) faces the camera and turns slowly, neighbours the other way.
-        const hot = i === hoverIndex || id === selectedId || picked?.has(id);
+        const hot = i === hoverIndex || id === selectedId || picked?.has(id) || flash?.has(id);
         const gone = hidden(id);
         const isTool = nodes[i].type === 'Tool';
         const p = pos.get(id)!;
@@ -199,12 +203,12 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
           handle.current.setMatrixAt(i, tmpM); head.current.setMatrixAt(i, tmpM);
         }
       } else if (flat) {
-        const hot = i === hoverIndex || id === selectedId || picked?.has(id);
+        const hot = i === hoverIndex || id === selectedId || picked?.has(id) || flash?.has(id);
         c.setColorAt(i, tmpC.copy(base[i]).lerp(bg, lit ? 0 : 1 - dim).lerp(WHITE, hot ? 0.18 : 0));
       } else c.setColorAt(i, tmpC.copy(base[i]).multiplyScalar(b[i]));
     }
     const g = lite ? glint.current : null;
-    writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, hoverIndex, lite, t, facing: tmpQ, glint: g, hide: dim <= 0 });
+    writeHalos(h, { nodes, pos, sizes, base, bright: b, hood, selectedId, flash, hoverIndex, lite, t, facing: tmpQ, glint: g, hide: dim <= 0 });
     c.instanceColor!.needsUpdate = true; h.instanceColor!.needsUpdate = true; h.instanceMatrix.needsUpdate = true;
     if (workshop) {
       c.instanceMatrix.needsUpdate = true;
@@ -219,7 +223,7 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
     const g = root.current; if (!g) return;
     const narrowNow = typeof window !== 'undefined' && window.innerWidth < 1000;
     const rank = (id: string, type: string, i: number) =>
-      (id === selectedId || id === hoverId || picked?.has(id) ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (TYPE_RANK[type] ?? 9) * 10 - sizes[i];
+      (id === selectedId || id === hoverId || picked?.has(id) || flash?.has(id) ? -100 : 0) + (hood?.has(id) ? -50 : 0) + (TYPE_RANK[type] ?? 9) * 10 - sizes[i];
     const order = nodes.map((d, i) => [d, i] as const).filter(([d]) => labelEls.current.has(d.id))
       .sort((a, b) => rank(a[0].id, a[0].type, a[1]) - rank(b[0].id, b[0].type, b[1]));
     type Box = [number, number, number, number];
@@ -325,11 +329,11 @@ export function Stars({ nodes, pos, deg, hood, selectedId, picked = null, hoverI
       ))}
       {nodes.map((d) => {
         const lit = !hood || hood.has(d.id);
-        const show = wantsLabel(labels, d, deg.get(d.id) ?? 0, { hover: d.id === hoverId, picked: d.id === selectedId || !!picked?.has(d.id), inView: hood !== null && hood.has(d.id) });
+        const show = wantsLabel(labels, d, deg.get(d.id) ?? 0, { hover: d.id === hoverId, picked: d.id === selectedId || !!picked?.has(d.id) || !!flash?.has(d.id), inView: hood !== null && hood.has(d.id) });
         if (!show || hidden(d.id)) return null;
         return (
           <Html key={`l-${d.id}`} position={pos.get(d.id)} zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }} {...(lite ? LITE_LABEL : {})}>
-            <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId || picked?.has(d.id) ? ' hot' : ''}`}>
+            <div ref={(el) => { if (el) labelEls.current.set(d.id, el); else { labelEls.current.delete(d.id); labelBox.current.delete(d.id); } }} className={`star-label t-${d.type}${lit ? '' : ' dim'}${d.id === hoverId || d.id === selectedId || picked?.has(d.id) || flash?.has(d.id) ? ' hot' : ''}${flash?.has(d.id) ? ' changed' : ''}`}>
               <div className="l1" title={d.label}>{starLabel(d.label)}</div>
               {d.type === 'Idea' && <div className="l2">{d.attrs?.closed ? `Closed · ${d.attrs.closed}` : String(d.attrs?.stageLabel ?? '')}</div>}
             </div>

@@ -572,3 +572,61 @@ describe('the Café assistant: a two-part message, the question answered and the
     } finally { process.env.CAFE_AI_FAKE = was; }
   });
 });
+
+describe('Do it and Undo say what changed, so the universe can show it', () => {
+  it('a role change: the person, the idea and the new thread, with a one-line note; Undo names the thread that went', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'role', a: 'P1', b: code(d, 'Idea', 'Procurement FAQ bot'), role: 'sponsor' }])({})]);
+    const entry = await runCommand(root, 'Avery Chen sponsors the procurement faq bot', ai, clock);
+    const done = await doActions(root, entry.id, undefined, clock);
+    expect(done.changed).toEqual({
+      nodes: ['idea:CAFE-2026-002', 'person:avery-chen'],
+      edges: ['person:avery-chen|SPONSORS|idea:CAFE-2026-002'],
+      note: 'Updated: Avery Chen → Sponsor on Procurement FAQ bot',
+    });
+    // Not kept in the log: it describes this Do only.
+    expect((await readChat(root)).find((e) => e.id === entry.id)).not.toHaveProperty('changed');
+    const undone = await undoChatAction(root, entry.id, 'a1', clock);
+    expect(undone.changed).toEqual({ nodes: ['idea:CAFE-2026-002', 'person:avery-chen'], edges: [], note: 'Undone: Make Avery Chen sponsor on Procurement FAQ bot' });
+  });
+
+  it('a role swapped between two stars already linked is a new thread (the relation is in the id), never "nothing"', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'role', a: 'P1', b: code(d, 'Idea', 'Procurement FAQ bot'), role: 'builder' }])({})]);
+    const entry = await runCommand(root, 'Zainab Okafor builds the faq bot', ai, clock);
+    const done = await doActions(root, entry.id, undefined, clock);
+    expect(done.changed?.edges).toEqual(['person:zainab-okafor|BUILDS|idea:CAFE-2026-002']);
+    expect(done.changed?.nodes).toEqual(['idea:CAFE-2026-002', 'person:zainab-okafor']);
+    expect(done.changed?.note).toBe('Updated: Zainab Okafor → Builder on Procurement FAQ bot');
+  });
+
+  it('a new star with its link, and a link: the new star and thread are named; derived links are left out', async () => {
+    const { root, ai } = await setup([(d) => propose([
+      { op: 'add_star', type: 'Capability', name: 'Contract clause finding', b: code(d, 'Idea', 'Desk booking assistant') },
+      { op: 'link', a: 'P1', b: code(d, 'Team', 'BSI') },
+    ])({})]);
+    const entry = await runCommand(root, 'add a capability Contract clause finding to the desk booking assistant and put Zainab Okafor in BSI', ai, clock);
+    const done = await doActions(root, entry.id, undefined, clock);
+    expect(done.changed?.nodes).toEqual(['capability:contract-clause-finding', 'idea:CAFE-2026-001', 'person:zainab-okafor', 'team:bsi']);
+    expect(done.changed?.edges).toEqual(['idea:CAFE-2026-001|NEEDS|capability:contract-clause-finding', 'team:bsi|HAS_MEMBER|person:zainab-okafor']);
+    expect(done.changed?.note).toBe('Updated: New capability: Contract clause finding, linked from Desk booking assistant (needs); Link BSI → Zainab Okafor (has the member)');
+  });
+
+  it('a Do that fails changes nothing and says so in no note', async () => {
+    const { root, ai } = await setup([(d) => propose([{ op: 'grow', a: code(d, 'Idea', 'Procurement FAQ bot') }])({})]);
+    const entry = await runCommand(root, 'grow the faq bot', ai, clock);
+    const done = await doActions(root, entry.id, undefined, clock);
+    expect(done.actions[0].status).toBe('failed');
+    expect(done.changed).toEqual({ nodes: [], edges: [], note: '' });
+  });
+});
+
+import { graphChanges } from '../src/graph/diff';
+describe('graphChanges', () => {
+  const n = (id: string, label = id) => ({ id, type: 'Idea' as const, label });
+  const e = (from: string, rel: string, to: string, over: Record<string, unknown> = {}) => ({ id: `${from}|${rel}|${to}`, from, to, rel, description: '', source: 'form', confidence: 1, confirmed: true, ...over }) as any;
+  it('new and changed threads with their ends, renamed stars, gone threads light their ends, derived and gone stars left out', () => {
+    const before = { nodes: [n('a'), n('b'), n('c'), n('d')], edges: [e('a', 'BUILDS', 'b'), e('c', 'RELATED', 'd', { confirmed: false }), e('a', 'RELATED', 'c')] };
+    const after = { nodes: [n('a'), n('b', 'B renamed'), n('c'), n('e')], edges: [e('a', 'LEADS', 'b'), e('a', 'BUILDS', 'b'), e('c', 'RELATED', 'd', { confirmed: true }), e('a', 'SIMILAR_TO', 'c', { derived: { rule: 'x', inputs: [] } })] };
+    expect(graphChanges(before, after)).toEqual({ nodes: ['a', 'b', 'c', 'e'], edges: ['a|LEADS|b', 'c|RELATED|d'] });
+    expect(graphChanges(before, before)).toEqual({ nodes: [], edges: [] });
+  });
+});

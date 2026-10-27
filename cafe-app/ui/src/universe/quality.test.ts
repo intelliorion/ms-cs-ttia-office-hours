@@ -61,4 +61,25 @@ describe('lite links', () => {
     const sel = linkBatches(edges, pts, 'a'); // e1 and e4 touch the selection: drawn on their own, with glow
     expect(sel.reduce((n, b) => n + b.points.length / 2, 0)).toBe(2);
   });
+  it('batches role threads by role (their own colour and width, static) and leaves a changed thread out to pulse', async () => {
+    const { linkBatches } = await import('./Links');
+    const { NIGHT } = await import('./graphView');
+    const edges = [
+      { id: 'r1', from: 'p', to: 'i', confirmed: true, rel: 'LEADS' },
+      { id: 'r2', from: 'q', to: 'i', confirmed: true, rel: 'LEADS' },
+      { id: 'r3', from: 'q', to: 'j', confirmed: true, rel: 'BUILDS' },
+      { id: 'r4', from: 'p', to: 'j', confirmed: true, rel: 'RELATED' },
+      { id: 'e5', from: 'i', to: 'j', confirmed: true, rel: 'NEEDS' },
+    ] as any[];
+    const pts = new Map(edges.map((e) => [e.id, [[0, 0, 0], [1, 1, 1]] as any]));
+    const b = linkBatches(edges, pts, null, null, undefined, null, NIGHT);
+    const by = (role: string | undefined) => b.find((x) => x.role === role)!;
+    expect(by('lead')).toMatchObject({ colour: NIGHT.roles.LEADS, points: expect.any(Array) });
+    expect(by('lead').points).toHaveLength(4);
+    expect(by('lead').width).toBeGreaterThan(by('builder').width);
+    expect(by('member').dash).toBeDefined();
+    expect(by(undefined).points).toHaveLength(2);
+    const flashed = linkBatches(edges, pts, null, null, undefined, null, NIGHT, new Set(['r1']));
+    expect(flashed.find((x) => x.role === 'lead')!.points).toHaveLength(2);
+  });
 });

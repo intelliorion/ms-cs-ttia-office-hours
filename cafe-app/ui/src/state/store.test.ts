@@ -331,3 +331,29 @@ describe('demand from the derived links', () => {
     expect(similarIdeas(graph, 'Z')).toEqual([]);
   });
 });
+
+describe('a chat change shows in the universe', () => {
+  it('flashChanges lights the changed stars and threads for a moment without touching the selection or the camera, then lets go', async () => {
+    vi.useFakeTimers();
+    try {
+      const { useStore, FLASH_MS, flashFrom } = await import('./store');
+      useStore.setState({ selectedId: 'person:alex-wang', selectedIds: [], viewNonce: 4, highlight: null } as any);
+      expect(flashFrom({ nodes: [], edges: [], note: '' }, 1)).toBeNull();
+      useStore.getState().flashChanges({ nodes: ['idea:CAFE-2026-007', 'person:alex-wang'], edges: ['person:alex-wang|LEADS|idea:CAFE-2026-007'], note: 'Updated: Alex Wang → Lead on Procurement FAQ bot' });
+      const s = useStore.getState();
+      expect(s.flash).toMatchObject({ nodes: ['idea:CAFE-2026-007', 'person:alex-wang'], edges: ['person:alex-wang|LEADS|idea:CAFE-2026-007'], note: 'Updated: Alex Wang → Lead on Procurement FAQ bot' });
+      expect(s).toMatchObject({ selectedId: 'person:alex-wang', viewNonce: 4, highlight: null });
+      // A second change within the moment replaces the first and gets its own full moment.
+      vi.advanceTimersByTime(FLASH_MS - 100);
+      useStore.getState().flashChanges({ nodes: ['team:gss'], edges: [], note: 'Updated: Link GSS → Alex Wang' });
+      vi.advanceTimersByTime(200);
+      expect(useStore.getState().flash?.nodes).toEqual(['team:gss']);
+      vi.advanceTimersByTime(FLASH_MS);
+      expect(useStore.getState().flash).toBeNull();
+      expect(useStore.getState().selectedId).toBe('person:alex-wang');
+      // Nothing changed: nothing flashes.
+      useStore.getState().flashChanges({ nodes: [], edges: [], note: '' });
+      expect(useStore.getState().flash).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+});

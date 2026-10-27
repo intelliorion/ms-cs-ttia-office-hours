@@ -5,6 +5,8 @@ export interface ChatEntryView {
   id: string; at: string; text: string; reply: string; actions: ChatActionView[]; problems: string[]; error?: string;
   kind?: 'command' | 'question' | 'unclear'; highlight?: string[]; about?: string; trace?: { text: string; size: number }[][];
   thread?: string; steps?: { kind: 'search' | 'read'; text: string; found?: number }[]; followups?: string[];
+  /** On the reply to a Do or an Undo only: what it changed in the graph, and one line saying so. */
+  changed?: { nodes: string[]; edges: string[]; note: string };
 }
 
 export const STATUS_WORD: Record<ChatActionView['status'], string> = {

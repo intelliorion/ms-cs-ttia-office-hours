@@ -17,7 +17,9 @@ panels, large white titles and pill buttons at the bottom.
   pain points, capabilities, tools and systems orbit the ideas they relate to. Click a star to fly to it and
   see its card; hover to light up its links. A dashed amber link is one the AI found that waits on you (see the graph
   rule below); a dashed violet link is one the rules derived (see Knowledge graph below); every other link is solid.
-  The **Show** menu at the bottom has the legend.
+  A person's role on an idea has its own thread: **lead** gold and thicker, **builder** blue, **sponsor** rose,
+  **member** dotted (each theme has its own shades; still in every quality, nothing animates). The **Show** menu at the
+  bottom has the legend.
   If the browser has no WebGL it falls back to a flat 2D map.
 - **Left: ideas.** The list of ideas, with a coloured ring for the stage. Click one and the universe flies to
   its star (its links lit, the rest dimmed) while the left panel switches to that idea's details, in one column:
@@ -193,7 +195,12 @@ for the answer:** while the AI works, the camera, the star you picked, what is l
 left them; when the answer is in, its stars light and the view glides once to frame them. An answer with nothing from
 the graph, a change waiting for Do it, an error or Stop leave the universe as it was. A change shows one
 card per action, each with **Do it** and **Cancel**. **Nothing changes until you press Do it**, and every done action has
-**Undo** (a team or round that changed since is kept, and the card says so).
+**Undo** (a team or round that changed since is kept, and the card says so). **A done change shows in the universe at
+once:** the graph is fetched again, then the stars and threads it touched pulse for about two seconds, as a selection's
+do, without changing what you have selected or moving the camera, and one line says what it was ("Updated: Alex Wang →
+Lead on Procurement FAQ bot"). The server works out what changed by comparing the graph before and after (a role swapped
+between two stars already linked is a new thread, since the relation is part of a link's identity), so there is never a
+change you cannot see. Undo does the same ("Undone: …").
 
 **Changes and questions.** The panel says how the agent read each message: a change, a question, or not sure. **A question is answered by the knowledge graph, not
 from the AI's memory.** The AI turns it into a query from a fixed set of steps (find stars by kind or name, follow

@@ -104,6 +104,24 @@ describe('the Café assistant', () => {
     act(() => root.unmount()); el.remove();
   });
 
+  it('after Do it the graph is fetched again first, then the changed stars and threads flash, the selection and the camera untouched; a note says what changed', async () => {
+    const proposed = { ...answer, kind: 'command', reply: 'You asked to make Kwame Mensah lead.', highlight: [], trace: [], followups: [], steps: [],
+      actions: [{ id: 'a1', label: 'Make Kwame Mensah lead on Vendor contract summariser', status: 'proposed' }] };
+    const changed = { nodes: ['idea:CAFE-2026-001', 'person:kwame-mensah'], edges: ['person:kwame-mensah|LEADS|idea:CAFE-2026-001'], note: 'Updated: Kwame Mensah → Lead on Vendor contract summariser' };
+    vi.mocked(chatPost).mockResolvedValue({ ...proposed, actions: [{ ...proposed.actions[0], status: 'done', inverse: { t: 'team' } }], changed });
+    const order: string[] = [];
+    refresh.mockImplementation(async () => { order.push(`refresh (flash: ${useStore.getState().flash ? 'on' : 'off'})`); });
+    await act(async () => { useStore.setState({ selectedId: 'person:kwame-mensah', viewNonce: 7, flash: null } as any); });
+    const { el, root } = await mount();
+    await act(async () => { useChat.setState({ open: true, thread: { id: 't1', title: 'x' }, entries: [proposed] as any }); });
+    await act(async () => { (el.querySelector('[data-action="command-do"]') as HTMLButtonElement).click(); });
+    expect(order).toEqual(['refresh (flash: off)']);
+    expect(useStore.getState().flash).toMatchObject(changed);
+    expect(useStore.getState()).toMatchObject({ selectedId: 'person:kwame-mensah', viewNonce: 7 });
+    act(() => root.unmount()); el.remove();
+    useStore.setState({ flash: null } as any);
+  });
+
   it('/ shortcuts keep their names whole: a long hint takes the rest of the row, in plain case', async () => {
     useChat.setState({ open: true, thread: null, entries: [] });
     const { el, root, box } = await mount();

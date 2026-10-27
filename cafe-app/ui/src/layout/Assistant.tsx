@@ -40,7 +40,7 @@ export function AssistantLauncher() {
  */
 export function Assistant() {
   const chat = useChat();
-  const { graph, select, hover, setHighlight, openPopout, refresh, inbox } = useStore();
+  const { graph, select, hover, setHighlight, openPopout, refresh, inbox, flashChanges } = useStore();
   const focus = useFocus();
   const list = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
@@ -62,9 +62,13 @@ export function Assistant() {
     const lit = answerLight(e);
     if (lit) setHighlight(lit);
   };
+  // A Do or an Undo: the graph is fetched again first, then what changed pulses where it is (no new selection, no
+  // camera move) and one line says what it was, so even a role swapped on a thread already there is seen.
   const act = async (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => {
     const e = await chat.act(id, what, actionId);
-    if (e && what !== 'cancel') void refresh();
+    if (!e || what === 'cancel') return;
+    await refresh();
+    flashChanges(e.changed);
   };
   const slash = (cmd: SlashCmd) => {
     if (cmd === '/new') { chat.newChat(); setHighlight(null); }

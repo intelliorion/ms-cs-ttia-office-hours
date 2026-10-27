@@ -3,7 +3,7 @@ import { readFlat, saveFlat } from './viewMemory';
 import { useStageSize } from '../layout/Stage';
 import {
   DIM, dimFromHide, NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, degrees, edgeStyle, extent, fitFlat, labelSpotVisible, litKey, labelsMayOverlap, neighbourhood, ringColour,
-  paletteFor, spreadApart, starSize, wantsLabel, zoomAt, type Graph, type LabelMode, type Vec3,
+  paletteFor, roleStyle, spreadApart, starSize, wantsLabel, withFlash, zoomAt, type Graph, type LabelMode, type Vec3,
 } from './graphView';
 import { GEAR_TEETH, gearPath } from './workshopShapes';
 
@@ -21,6 +21,7 @@ interface Props {
   selectedIds?: string[];
   onHover: (id: string | null) => void;
   theme?: string;
+  flash?: { nodes: string[]; edges: string[] } | null;
 }
 
 // The centre gap of the frame, below the title bar and above the pills; on a 1920×1080 frame x 500..1260, y 100..980.
@@ -31,7 +32,9 @@ const RANK: Record<string, number> = { Idea: 0, Team: 1, Round: 1, Entity: 2, To
 const radius = (n: Graph['nodes'][number], links: number) => starSize(n, links) * 3.2;
 
 /** No WebGL (or Quality: Flat): the same graph drawn flat in SVG, dots pushed apart so none crowd; wheel zooms, drag pans. */
-export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, theme }: Props) {
+export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight = null, hideUnlit, hoverId, labels, focus = false, viewNonce = 0, onSelect, onHover, theme, flash = null }: Props) {
+  const flashEdges = flash?.edges.length ? new Set(flash.edges) : null;
+  const flashNodes = flash?.nodes.length ? new Set(flash.nodes) : null;
   const pal = paletteFor(theme);
   const frost = pal.frost;
   const draft = !!pal.blueprint;
@@ -107,7 +110,7 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
   const litSet = highlight?.length ? new Set(highlight) : selectedIds.length >= 2 ? new Set(selectedIds.flatMap((id) => [...neighbourhood(graph, id)])) : null;
   const hood = litSet ?? (selectedId ? neighbourhood(graph, selectedId) : null);
   const dim = hood && hideUnlit !== undefined ? dimFromHide(hideUnlit) : DIM;
-  const lit = (id: string) => !hood || hood.has(id);
+  const lit = (id: string) => !hood || hood.has(id) || !!flashNodes?.has(id);
   const picked = (id: string) => id === selectedId || selectedIds.includes(id);
   // Smart and None: labels never overlap (placed in priority order, any that would collide is skipped). Full: all of them.
   const shown = new Set<string>();
@@ -160,10 +163,14 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
       <g>
         {graph.edges.map((e) => {
           const a = pts.get(e.from), b = pts.get(e.to); if (!a || !b) return null;
-          const s = edgeStyle(e, litSet ? null : selectedId, litSet, dim, hood);
+          const s = withFlash(edgeStyle(e, litSet ? null : selectedId, litSet, dim, hood), e, flashEdges);
           const hotLink = s.pulse || (!!litSet && litSet.has(e.from) && litSet.has(e.to));
-          const stroke = s.derived ? pal.derived : frost || draft || shop ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
-          return <line key={e.id} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke} strokeOpacity={Math.min(1, (s.pulse ? 0.9 : s.opacity * 1.6) * (frost ? 1.5 : draft ? 1.3 : 1))} strokeWidth={s.pulse ? 1.6 : 1} strokeDasharray={s.dashed ? '5 4' : undefined} />;
+          // A person's role on an idea: its own colour and width (member dotted), still.
+          const r = roleStyle(e.rel, pal, e);
+          const stroke = s.derived ? pal.derived : r && !s.dashed ? r.colour : frost || draft || shop ? (s.dashed ? pal.unconfirmed : hotLink ? pal.linkHot : pal.link) : s.dashed ? UNCONFIRMED_COLOUR : LINK_COLOUR;
+          return <line key={e.id} className={flashEdges?.has(e.id) ? 'flat-changed' : undefined} data-rel={e.rel} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke={stroke}
+            strokeOpacity={Math.min(1, (s.pulse ? 0.9 : s.opacity * 1.6 * (r?.boost ?? 1)) * (frost ? 1.5 : draft ? 1.3 : 1))} strokeWidth={(r?.width ?? 1) * (s.pulse ? 1.6 : 1)}
+            strokeDasharray={s.dashed ? '5 4' : r?.dash ? '1.5 3' : undefined} />;
         })}
       </g>
       {graph.nodes.map((n) => {
@@ -171,12 +178,12 @@ export function Flat2D({ graph, layout, selectedId, selectedIds = [], highlight 
         const r = radius(n, deg.get(n.id) ?? 0);
         const o = lit(n.id) ? 1 : dim;
         if (o <= 0) return null;
-        const hot = n.id === hoverId || n.id === selectedId;
+        const hot = n.id === hoverId || n.id === selectedId || !!flashNodes?.has(n.id);
         // Without a glow around it a bauble needs more body to read.
         const rb = r * 1.7;
         const showLabel = shown.has(n.id);
         return (
-          <g key={n.id} opacity={o} style={{ cursor: 'pointer' }} data-id={n.id}
+          <g key={n.id} opacity={o} style={{ cursor: 'pointer' }} data-id={n.id} className={flashNodes?.has(n.id) ? 'flat-changed' : undefined}
             onMouseEnter={() => onHover(n.id)} onMouseLeave={() => onHover(null)}
             onClick={(e) => { e.stopPropagation(); if (dragged.current) { dragged.current = false; return; } onSelect(n.id, e.ctrlKey || e.metaKey); }}>
             {shop ? (

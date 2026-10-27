@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph, spreadApart, zoomAt, frameOf, fitFlat, litKey, wantsLabel, nextLabelMode, labelModeText, SMART_LINKS } from './graphView';
+import { roleStyle, withFlash, neighbourhood, LINK_IN_VIEW, starSize, labelAlways, edgeStyle, bounds, ringColour, degrees, extent, starLabel, LABEL_MAX, visibleGraph, spreadApart, zoomAt, frameOf, fitFlat, litKey, wantsLabel, nextLabelMode, labelModeText, SMART_LINKS } from './graphView';
 const g: any = { nodes: [{ id: 'a', type: 'Idea', label: 'A' }, { id: 'b', type: 'Person', label: 'B' }, { id: 'c', type: 'Tool', label: 'C' }],
   edges: [{ id: 'b|RELATED|a', from: 'b', to: 'a', confirmed: true, confidence: 1 }, { id: 'a|NEEDS|c', from: 'a', to: 'c', confirmed: false, confidence: 0.6 }] };
 describe('graph view helpers', () => {
@@ -178,5 +178,35 @@ describe('derived links', () => {
     expect(edgeStyle({ from: 'a', to: 'b', confirmed: true }, null)).toMatchObject({ dashed: false, derived: false });
     expect(edgeStyle(d, 'a')).toMatchObject({ dashed: true, derived: true, pulse: true });
     for (const p of [NIGHT, FROST, BLUEPRINT, WORKSHOP]) { expect(p.derived).toMatch(/^#/); expect(p.derived).not.toBe(p.unconfirmed); }
+  });
+});
+
+describe('a person\'s role on an idea, drawn', () => {
+  it('lead, builder, sponsor and member each have their own look; other links have none', () => {
+    const lead = roleStyle('LEADS', NIGHT)!; const builder = roleStyle('BUILDS', NIGHT)!; const sponsor = roleStyle('SPONSORS', NIGHT)!; const member = roleStyle('RELATED', NIGHT)!;
+    expect(lead).toMatchObject({ role: 'lead', colour: NIGHT.roles.LEADS });
+    expect(lead.width).toBeGreaterThan(builder.width);
+    expect(new Set([lead.colour, builder.colour, sponsor.colour, NIGHT.link]).size).toBe(4);
+    expect(member).toMatchObject({ role: 'member', dash: [expect.any(Number), expect.any(Number)] });
+    expect(builder.dash).toBeUndefined();
+    expect(roleStyle('SUBMITTED', NIGHT)).toBeNull();
+    expect(roleStyle('NEEDS', NIGHT)).toBeNull();
+    expect(roleStyle(undefined, NIGHT)).toBeNull();
+    // Each theme has its own colours; the look per role is the same.
+    expect(roleStyle('LEADS', FROST)!.colour).toBe(FROST.roles.LEADS);
+    expect(roleStyle('LEADS', FROST)!.width).toBe(lead.width);
+    // A role thread a rule derived or still waiting keeps the derived or waiting look.
+    expect(roleStyle('LEADS', NIGHT, { derived: true })).toBeNull();
+    expect(roleStyle('LEADS', NIGHT, { confirmed: false })).toBeNull();
+  });
+  it('a changed thread pulses like a selection\'s, at least as bright as a link in view, with nothing selected', () => {
+    const e = { id: 'p|LEADS|i', from: 'p', to: 'i', confirmed: true, rel: 'LEADS' };
+    const quiet = edgeStyle(e, null);
+    expect(withFlash(quiet, e, null)).toEqual(quiet);
+    expect(withFlash(quiet, e, new Set(['other']))).toEqual(quiet);
+    expect(withFlash(quiet, e, new Set([e.id]))).toEqual({ ...quiet, opacity: LINK_IN_VIEW, pulse: true });
+    // Under a selection that already lights it, it stays as it is.
+    const sel = edgeStyle(e, 'p');
+    expect(withFlash(sel, e, new Set([e.id]))).toEqual(sel);
   });
 });

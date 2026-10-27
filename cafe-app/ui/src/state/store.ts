@@ -92,6 +92,17 @@ const writeHiddenTypes = (t: string[]) => { remember(HIDDEN_TYPES_KEY, JSON.stri
 
 export interface Notice { text: string; kind?: 'ok' | 'error' }
 
+/** What a chat Do or Undo changed (the server's `changed`): the stars and threads, and one line for the operator. */
+export interface Changed { nodes: string[]; edges: string[]; note: string }
+/** The changed stars and threads pulse for a moment, like a selection's, and the note shows; key tells two apart. */
+export interface Flash extends Changed { key: number }
+export const FLASH_MS = 2200;
+export function flashFrom(c: Changed | null | undefined, key: number): Flash | null {
+  if (!c || (!c.nodes?.length && !c.edges?.length && !c.note)) return null;
+  return { nodes: c.nodes ?? [], edges: c.edges ?? [], note: c.note ?? '', key };
+}
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
 /** What the left (Ideas) panel shows: the list, or one idea's details with a Back button. */
 export type LeftView = { kind: 'list' } | { kind: 'idea'; id: string };
 export const LIST_VIEW: LeftView = { kind: 'list' };
@@ -202,6 +213,9 @@ export interface AppState {
   closePopout: () => void;
   setNotice: (n: Notice | null) => void;
   setSuggest: (s: Suggest | null) => void;
+  /** A chat change, shown in the universe: never a new selection, never a camera move. */
+  flash: Flash | null;
+  flashChanges: (c: Changed | null | undefined) => void;
 }
 
 /** What a click on a star changes (see clickStar). */
@@ -281,6 +295,14 @@ export const useStore = create<AppState>((set) => ({
   toggleType: (type) => set((s) => ({ hiddenTypes: writeHiddenTypes(s.hiddenTypes.includes(type) ? s.hiddenTypes.filter((t) => t !== type) : [...s.hiddenTypes, type]) })),
   showAllTypes: () => set({ hiddenTypes: writeHiddenTypes([]) }),
   setSuggest: (x) => set({ suggest: x }),
+  flash: null,
+  flashChanges: (c) => {
+    const f = flashFrom(c, Date.now());
+    if (flashTimer) clearTimeout(flashTimer);
+    flashTimer = undefined;
+    set({ flash: f });
+    if (f) flashTimer = setTimeout(() => { flashTimer = undefined; set((s) => (s.flash?.key === f.key ? { flash: null } : {})); }, FLASH_MS);
+  },
 }));
 
 /** Structural sharing for the graph: same content keeps the same object, and an unchanged layout keeps its object. */

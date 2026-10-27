@@ -2,6 +2,7 @@ import path from 'node:path';
 import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from '../graph/store';
+import { loadIdea } from '../ideas/store';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
 import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentStepDone } from '../ai/tasks';
@@ -17,6 +18,7 @@ import { applyAction, resolveSteps, undoAction, type CommandAction, type Command
 import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
 import { loadRegistry } from '../graph/registryFile';
+import { graphChanges } from '../graph/diff';
 
 export interface ChatAction {
   id: string; label: string; action: CommandAction;
@@ -298,17 +300,33 @@ async function entryOf(root: string, id: string): Promise<ChatEntry> {
 }
 
 /** Does one proposed action, or all of them when no action id is given. */
-export async function doActions(root: string, id: string, actionId: string | undefined, clock: Clock, ai?: Connector): Promise<ChatEntry> {
+/** What a Do or an Undo changed in the graph, and one line for the operator. Returned with the entry, never logged. */
+export interface Changed { nodes: string[]; edges: string[]; note: string }
+const ROLE_TITLE: Record<string, string> = { lead: 'Lead', builder: 'Builder', sponsor: 'Sponsor', member: 'Member' };
+/** "Alex Wang → Lead on Procurement FAQ bot" for a role; the card's own words for anything else. */
+async function changeLine(root: string, a: ChatAction): Promise<string> {
+  const x = a.action;
+  if (x.t !== 'role') return a.label;
+  const title = (await loadIdea(root, x.ideaId).catch(() => undefined))?.title ?? x.ideaId;
+  if (x.role === null) return `${x.person} off ${title}`;
+  return x.drop ? `${x.person} no longer ${x.role} on ${title}` : `${x.person} → ${ROLE_TITLE[x.role] ?? x.role} on ${title}`;
+}
+
+export async function doActions(root: string, id: string, actionId: string | undefined, clock: Clock, ai?: Connector): Promise<ChatEntry & { changed: Changed }> {
   const entry = await entryOf(root, id);
+  const before = await rebuildGraph(root);
+  const lines: string[] = [];
   for (const a of entry.actions) {
     if (a.status !== 'proposed' || (actionId && a.id !== actionId)) continue;
     try {
       const r = await applyAction(root, a.action, clock, ai);
       a.status = 'done'; a.inverse = r.inverse; if (r.note) a.note = r.note;
+      lines.push(await changeLine(root, a));
     } catch (e) { a.status = 'failed'; a.note = (e as Error).message; }
   }
-  await rebuildGraph(root);
-  return save(root, entry);
+  const after = await rebuildGraph(root);
+  const saved = await save(root, entry);
+  return { ...saved, changed: { ...graphChanges(before, after), note: lines.length ? `Updated: ${lines.join('; ')}` : '' } };
 }
 
 export async function cancelActions(root: string, id: string, actionId: string | undefined): Promise<ChatEntry> {
@@ -317,13 +335,15 @@ export async function cancelActions(root: string, id: string, actionId: string |
   return save(root, entry);
 }
 
-export async function undoChatAction(root: string, id: string, actionId: string, clock: Clock): Promise<ChatEntry> {
+export async function undoChatAction(root: string, id: string, actionId: string, clock: Clock): Promise<ChatEntry & { changed: Changed }> {
   const entry = await entryOf(root, id);
   const a = entry.actions.find((x) => x.id === actionId);
   if (!a || a.status !== 'done') throw new Error('Only a done action can be undone');
   if (!a.inverse) throw new Error(a.note ?? 'This one cannot be undone here');
+  const before = await rebuildGraph(root);
   const kept = await undoAction(root, a.inverse, clock);
   if (kept) a.note = kept; else a.status = 'undone';
-  await rebuildGraph(root);
-  return save(root, entry);
+  const after = await rebuildGraph(root);
+  const saved = await save(root, entry);
+  return { ...saved, changed: { ...graphChanges(before, after), note: kept ? '' : `Undone: ${a.label}` } };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
-import { NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, DERIVED_COLOUR } from '../universe/graphView';
+import { NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, DERIVED_COLOUR, ROLE_LEGEND, paletteFor, roleStyle } from '../universe/graphView';
 import { NODE_LABELS, NODE_TYPES } from '../../../src/graph/ontology';
 
 /** "Show: All", or how many kinds are on when some are switched off. */
@@ -15,6 +15,7 @@ export function TypeFilter() {
   const hidden = useStore((s) => s.hiddenTypes);
   const toggleType = useStore((s) => s.toggleType);
   const showAllTypes = useStore((s) => s.showAllTypes);
+  const palette = paletteFor(useStore((s) => s.theme));
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const counts = useMemo(() => {
@@ -52,6 +53,13 @@ export function TypeFilter() {
             <span><i style={{ borderColor: LINK_COLOUR }} />stated</span>
             <span><i className="dash" style={{ borderColor: UNCONFIRMED_COLOUR }} />waits on you</span>
             <span><i className="dash" style={{ borderColor: DERIVED_COLOUR }} />derived by a rule</span>
+          </div>
+          {/* A person's role on an idea: lead gold and thick, builder and sponsor their own colours, member dotted. */}
+          <div className="tf-legend" data-testid="role-legend" aria-label="A person's role on an idea">
+            {ROLE_LEGEND.map(({ rel, word }) => {
+              const r = roleStyle(rel, palette)!;
+              return <span key={rel}><i className={r.dash ? 'dot-line' : ''} style={{ borderColor: r.colour, borderTopWidth: Math.max(2, Math.round(r.width * 1.2)) }} />{word}</span>;
+            })}
           </div>
           <div className="tf-foot">
             <span>Picture only: the chat and panels still use every star.</span>

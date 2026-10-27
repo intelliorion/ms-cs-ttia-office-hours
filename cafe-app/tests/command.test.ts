@@ -466,11 +466,20 @@ describe('the Café assistant: adding a star the registry already knows', () => 
   });
 
   it('a system added to an idea with several capabilities: the problem names them, and the reply carries it', async () => {
+    const { root, ai } = await setup([add('Claims ledger')]);
+    await seed(root);
+    const e = await runCommand(root, 'add the system Claims ledger to @Procurement FAQ bot', ai, clock, { mentions: ['idea:CAFE-2026-002'] });
+    expect(e.actions).toEqual([]);
+    expect(e.problems).toEqual(["A system links to a capability, not to an idea. Procurement FAQ bot's capabilities are Claim scoring, Policy Q&A: say which one uses Claims ledger."]);
+    expect(e.reply).toBe(e.problems[0]);
+  });
+
+  it('a system the idea already depends on (by an alias, through one of its capabilities) is said to be there already', async () => {
     const { root, ai } = await setup([add('travel policy')]);
     await seed(root);
     const e = await runCommand(root, 'add the system travel policy to @Procurement FAQ bot', ai, clock, { mentions: ['idea:CAFE-2026-002'] });
     expect(e.actions).toEqual([]);
-    expect(e.problems).toEqual(["A system links to a capability, not to an idea. Procurement FAQ bot's capabilities are Claim scoring, Policy Q&A: say which one uses travel policy."]);
+    expect(e.problems).toEqual(['Already there: Procurement FAQ bot depends on Travel & Expense policy (known as "travel policy") through Policy Q&A.']);
     expect(e.reply).toBe(e.problems[0]);
   });
 
@@ -511,7 +520,7 @@ describe('the Café assistant: a two-part message, the question answered and the
     await appendAiLink(root, link('capability:policy-q-a', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy', 'CAFE-2026-002'));
   }
   const MESSAGE = 'Add a system T&E policy to @Procurement FAQ bot, then tell me which ideas depend on the Travel & Expense policy.';
-  const PROBLEM = "A system links to a capability, not to an idea. Procurement FAQ bot's capabilities are Claim scoring, Policy Q&A: say which one uses T&E policy.";
+  const PROBLEM = 'Already there: Procurement FAQ bot depends on Travel & Expense policy (known as "T&E policy") through Policy Q&A.';
   const DERIVED = 'Procurement FAQ bot depends on Travel & Expense policy: derived by needs+uses_data from Procurement FAQ bot NEEDS Policy Q&A, Policy Q&A USES_DATA Travel & Expense policy';
   /** The AI searches the dependency first, then proposes the add with its claim in reply and the question's answer in answer. */
   const search: Turn = (d) => ({ next: 'search', thought: 'Looking at what depends on the policy', query: { steps: [{ op: 'stars', codes: [code(d, 'System')] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } });

@@ -207,6 +207,21 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       let home = star(s.b);
       if (!home) { problems.push(`Say which idea or star ${name} belongs to, so it is not left floating.`); continue; }
       const notes: string[] = [];
+      // A system the idea already depends on (by its label or an alias): said so, with the capability it goes through, nothing proposed.
+      if (type === 'System' && home.type === 'Idea') {
+        const known = ctx.registry?.resolve('System', name)?.id ?? ctx.graph.nodes.find((n) => n.type === 'System' && n.label.toLowerCase() === name.toLowerCase())?.id;
+        const sys = known ? nodes.get(known) : undefined;
+        if (sys) {
+          const ideaCaps = new Set(ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS').map((e) => e.to));
+          const through = ctx.graph.edges.filter((e) => e.rel === 'USES_DATA' && e.to === sys.id && ideaCaps.has(e.from)).map((e) => nodes.get(e.from)?.label).filter((l): l is string => !!l).sort();
+          const depends = ctx.graph.edges.some((e) => e.rel === 'DEPENDS_ON' && e.from === home!.id && e.to === sys.id);
+          if (through.length || depends) {
+            const aka = sys.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : '';
+            problems.push(`Already there: ${home.label} depends on ${sys.label}${aka}${through.length ? ` through ${through.join(', ')}` : ''}.`);
+            continue;
+          }
+        }
+      }
       // A system on an idea: it links to one of the idea's capabilities, not to the idea. One capability: that one; several: ask which.
       if (type === 'System' && home.type === 'Idea') {
         const caps = ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS' && !e.derived).map((e) => nodes.get(e.to)).filter((n): n is GNode => n?.type === 'Capability')

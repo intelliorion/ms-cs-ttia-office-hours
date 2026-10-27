@@ -140,3 +140,33 @@ describe('shared by two teams, what each submitter said: the fake, with Deep rea
     } finally { delete process.env.CAFE_AI_FAKE; }
   });
 });
+
+import { resolveSteps } from '../src/command/actions';
+import { buildGraph } from '../src/graph/build';
+import { makeRegistry, defaultEntries } from '../src/graph/registry';
+import type { OperatorEdit } from '../src/graph/ontology';
+
+describe('adding a system an idea already depends on says so', () => {
+  const edits: OperatorEdit[] = [
+    { id: 'op-1', at: '2026-10-26', status: 'active', t: 'alias', node: 'system:travel-expense-policy', label: 'T&E policy', of: 'Travel & Expense policy' },
+  ];
+  const links: AiLink[] = [
+    link('idea:CAFE-2026-002', 'NEEDS', 'capability:policy-answers', 'Capability', 'Policy answers'),
+    link('idea:CAFE-2026-002', 'NEEDS', 'capability:record-update', 'Capability', 'Record update'),
+    link('capability:policy-answers', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy'),
+  ];
+  const registry = makeRegistry(defaultEntries(), edits);
+  const graph = buildGraph(IDEAS, links, [], edits, { registry });
+  const codes = new Map([['I2', { id: 'idea:CAFE-2026-002', label: 'Policy bot' }]]) as any;
+  it('by an alias, through the capability that uses it: "Already there", not "which capability"', () => {
+    const r = resolveSteps([{ op: 'add_star', type: 'System', name: 'T&E policy', b: 'I2' } as any], { codes, graph, ideas: IDEAS, rounds: [], registry });
+    expect(r.proposals).toEqual([]);
+    expect(r.problems).toEqual(['Already there: Policy bot depends on Travel & Expense policy (known as "T&E policy") through Policy answers.']);
+  });
+  it('by its own label too; a system the idea does not use still asks which capability', () => {
+    expect(resolveSteps([{ op: 'add_star', type: 'System', name: 'Travel & Expense policy', b: 'I2' } as any], { codes, graph, ideas: IDEAS, rounds: [], registry }).problems)
+      .toEqual(['Already there: Policy bot depends on Travel & Expense policy through Policy answers.']);
+    expect(resolveSteps([{ op: 'add_star', type: 'System', name: 'Desk mailbox', b: 'I2' } as any], { codes, graph, ideas: IDEAS, rounds: [], registry }).problems[0])
+      .toMatch(/^A system links to a capability, not to an idea\./);
+  });
+});

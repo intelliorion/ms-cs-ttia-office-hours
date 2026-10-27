@@ -5,6 +5,11 @@ each idea's 25 steps, drafts the emails, blocks any email that still needs a dat
 that are late. It never sends anything: each email opens in Outlook
 as a new message for you to check and send.
 
+**Start with the X-ray:** [`docs/x-ray.md`](docs/x-ray.md) is one page of diagrams showing how the app is built
+(packages, one Node process, local files), how the AI is connected and how a Firm AI Gateway or Postgres would
+plug in, how the property graph, the knowledge graph and Deep read process an idea and why all three are needed,
+how the decision, design and roadshow stages use them, and why there is no NetworkX.
+
 The design is in `docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md` (the one-screen UI) and
 `docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md` (the core).
 

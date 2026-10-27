@@ -13,7 +13,7 @@ export interface DeepReadIdea {
   kinds: Record<string, { chunks: number; embedded: number }>;
   lastRead?: string;
 }
-export interface DeepReadUpkeep { on: boolean; pending: number; waiting: boolean }
+export interface DeepReadUpkeep { on: boolean; pending: number; waiting: boolean; /** What start-up decided. */ startup?: DeepReadDecision | Omit<DeepReadDecision, 'at'> }
 export interface DeepReadSummary {
   chunks: number; embedded: number; percent: number;
   kinds: Record<string, { chunks: number; embedded: number }>;
@@ -58,9 +58,15 @@ export function statusLine(v: DeepReadView): string {
     case 'paused': return `Paused at ${job.done} of ${job.total}`;
     case 'error': return `Could not finish: ${job.error ?? 'unknown error'}`;
     default: {
-      if (!job.lastRun) return summary.chunks ? 'Not read yet' : 'Nothing to read yet: import some ideas first';
       const changed = summary.ideas.filter((i) => i.status !== 'read').length;
-      return `Read ${whenText(job.lastRun.at)} in ${tookText(job.lastRun.ms)}${changed ? ` · ${changed} idea${changed === 1 ? '' : 's'} changed since` : ''}`;
+      const since = changed ? ` · ${changed} idea${changed === 1 ? '' : 's'} changed since` : '';
+      if (!job.lastRun) {
+        // Read by upkeep alone: it arms itself once the model is here, so a workspace can be read with no Run pressed.
+        if (summary.available && job.lastDecision?.act === 'read') return `Kept current on its own · last read ${whenText(job.lastDecision.at)}${since}`;
+        if (!summary.chunks) return 'Nothing to read yet: import some ideas first';
+        return v.model.cached ? 'Not read yet' : 'Not read yet: press Run once to download the model';
+      }
+      return `Read ${whenText(job.lastRun.at)} in ${tookText(job.lastRun.ms)}${since}`;
     }
   }
 }
@@ -153,4 +159,5 @@ export function attention(v: DeepReadView | null): boolean {
 }
 export const toRead = (v: DeepReadView | null): number => (v ? v.summary.ideas.filter((i) => i.status !== 'read').length : 0);
 
-export const KEEPS_CURRENT = 'Deep read keeps itself current: after an Import or a save it reads only what changed in the ideas that changed, never the whole workspace, never before your first Run, and never while you have it paused. When nothing changed it does nothing, and says so.';
+export const KEEPS_CURRENT = 'Deep read keeps itself current once the model is on this machine: at start-up and after an Import or a save it reads only what is new or changed in the ideas that changed, never the whole workspace, never while you have it paused, and it never downloads the model itself (your first Run does). When nothing changed it does nothing, and says so.';
+export const MODEL_MISSING_LINE = 'The model is not on this machine yet: press Run once to download it. After that Deep read keeps itself current.';

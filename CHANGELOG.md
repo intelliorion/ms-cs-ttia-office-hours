@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-27 (Café app: Deep read arms itself; every chat edit shows in the universe)
+
+- **Deep read arms itself.** Upkeep no longer waits for a first manual Run: once the model is on this machine (or the
+  embedder is the fake one) and the switch is on, a changed idea is read even with no index yet, and at start-up,
+  once the server is listening, the ideas not read yet are read in the background, just those ("read 2026-001 and
+  2026-002 at start-up · 14 passages"); with every idea read start-up does nothing and writes nothing. Still never a
+  download on the app's own initiative (the pop-out says "press Run once to download the model"), never a resumed
+  pause, never another model's index. The switch is on by default and always shown.
+
 ## 2026-10-27 (Café app: the assistant keeps both halves of a message, and follows a shared capability home)
 
 - **A two-part message.** "Add X to [I1], then tell me which ideas depend on [S1]": the agent searches the question

@@ -21,7 +21,8 @@ const view = (over: Partial<DeepReadView['job']> = {}, sum: Partial<DeepReadView
     ...sum,
   },
 });
-const read = (): DeepReadView => view({ status: 'done', done: 40, total: 40, embedder: 'Xenova/all-MiniLM-L6-v2', lastRun: { at: '2026-10-26T09:00:00.000Z', ms: 48_000, chunks: 40, ideas: 2 } },
+const read = (): DeepReadView => ({ ...readNoModel(), model: { id: 'Xenova/all-MiniLM-L6-v2', dir: '/home/me/.cafe-ai/models', cached: true } });
+const readNoModel = (): DeepReadView => view({ status: 'done', done: 40, total: 40, embedder: 'Xenova/all-MiniLM-L6-v2', lastRun: { at: '2026-10-26T09:00:00.000Z', ms: 48_000, chunks: 40, ideas: 2 } },
   { embedded: 40, percent: 100, available: true, kinds: { submission: { chunks: 30, embedded: 30 }, email: { chunks: 10, embedded: 10 } }, ideas: [{ id: 'CAFE-2026-001', title: 'Vendor contract summariser', chunks: 25, embedded: 25, status: 'read', kinds: { submission: { chunks: 20, embedded: 20 }, email: { chunks: 5, embedded: 5 } }, lastRead: '2026-10-26T09:00:00.000Z' }, { id: 'CAFE-2026-002', title: 'Desk booking', chunks: 15, embedded: 15, status: 'read', kinds: { submission: { chunks: 10, embedded: 10 }, email: { chunks: 5, embedded: 5 } }, lastRead: '2026-10-26T09:00:00.000Z' }] });
 /** Five ideas in every state, out of order, for the dashboard. */
 const mixed = (): DeepReadIdea[] => [
@@ -43,7 +44,12 @@ describe('deep read helpers', () => {
     expect(ringShare(view({ status: 'running', done: 0, total: 0 }, { percent: 60, available: true }))).toBeCloseTo(0.6);
   });
   it('the status line says what is happening, when it last read and how long it took, and what changed since', () => {
-    expect(statusLine(view())).toBe('Not read yet');
+    expect(statusLine(view())).toBe('Not read yet: press Run once to download the model');
+    const here = view(); here.model.cached = true;
+    expect(statusLine(here)).toBe('Not read yet');
+    // Read by upkeep alone (no Run ever pressed): when, from its last decision.
+    const kept = read(); delete kept.job.lastRun; kept.job.lastDecision = { act: 'read', ideas: ['CAFE-2026-001'], why: 'read 2026-001 at start-up · 25 passages', at: '2026-10-26T09:00:00.000Z' };
+    expect(statusLine(kept)).toMatch(/^Kept current on its own · last read 26 Oct \d\d:\d\d$/);
     expect(statusLine(view({}, { chunks: 0, ideas: [] }))).toBe('Nothing to read yet: import some ideas first');
     expect(statusLine(view({ status: 'running', done: 12, total: 40 }))).toBe('Reading 12 of 40 passages…');
     expect(statusLine(view({ status: 'paused', done: 16, total: 40 }))).toBe('Paused at 16 of 40');
@@ -81,7 +87,7 @@ describe('the Deep read pop-out', () => {
     await act(async () => root.render(<DeepReadPopout />));
     expect(document.querySelector('.modal-title h2')?.textContent).toBe('What the assistant has read');
     expect(document.querySelector('.dr-big')?.textContent).toBe('0%');
-    expect(document.querySelector('[data-testid="deep-read-status"]')?.textContent).toBe('Not read yet');
+    expect(document.querySelector('[data-testid="deep-read-status"]')?.textContent).toBe('Not read yet: press Run once to download the model');
     expect([...document.querySelectorAll('[data-testid="deep-read-bars"] li .beam-n')].map((n) => n.textContent)).toEqual(['0 / 30', '0 / 10']);
     expect(document.querySelectorAll('[data-testid="deep-read-table"] tbody tr')).toHaveLength(2);
     expect(document.querySelector('[data-testid="deep-read-table"] tbody tr .dr-pill')?.textContent).toBe('not yet');
@@ -171,7 +177,8 @@ describe('the dashboard', () => {
     expect(rows[3].querySelector('.dr-when')?.textContent).toMatch(/26 Oct \d\d:\d\d/);
     expect(rows[0].querySelector('.dr-when')?.textContent).toBe('—');
     expect([...document.querySelectorAll('[data-testid="deep-read-bars"] li')].map((l) => l.querySelector('.beam-n')?.textContent)).toEqual(['30 / 30', '10 / 10']);
-    expect(document.querySelector('[data-testid="deep-read-keeps"] p')?.textContent).toContain('reads only what changed');
+    expect(document.querySelector('[data-testid="deep-read-keeps"] p')?.textContent).toContain('reads only what is new or changed');
+    expect(document.querySelector('[data-testid="deep-read-keeps"] p')?.textContent).toContain('at start-up');
     expect(document.querySelector('[data-action="deep-read-upkeep"]')?.textContent).toBe('Automatic upkeep: on');
     // The chip row narrows the table; the chip is kept in the store.
     await act(async () => (document.querySelector('[data-chip="stale"]') as HTMLButtonElement).click());
@@ -184,7 +191,7 @@ describe('the dashboard', () => {
     expect(useStore.getState().deepReadView.filter).toBe('stale');
   });
 
-  it('the switch posts and takes the reply; the block is hidden before the first run', async () => {
+  it('the switch posts and takes the reply; the block shows before the first run too, with the download line when the model is not here', async () => {
     const v = read();
     const fetch = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/api/memory/upkeep' && init?.method === 'POST') return new Response(JSON.stringify({ ...v, upkeep: { on: false, pending: 0, waiting: false } }), { status: 200 });
@@ -197,11 +204,17 @@ describe('the dashboard', () => {
     await act(async () => (document.querySelector('[data-action="deep-read-upkeep"]') as HTMLButtonElement).click());
     expect(fetch).toHaveBeenCalledWith('/api/memory/upkeep', expect.objectContaining({ method: 'POST', body: JSON.stringify({ on: false }) }));
     expect(document.querySelector('[data-action="deep-read-upkeep"]')?.textContent).toBe('Automatic upkeep: off');
-    // Never run: no switch, no tiles of decisions, the Run button as before.
+    expect(document.querySelector('[data-testid="deep-read-model"]')).toBeNull();
+    // Never run, the model not on this machine: the switch shows (on by default) and the one thing to do is said.
     await act(async () => useStore.setState({ memory: view() } as any));
-    expect(document.querySelector('[data-testid="deep-read-keeps"]')).toBeNull();
-    expect(document.querySelector('[data-action="deep-read-upkeep"]')).toBeNull();
+    expect(document.querySelector('[data-testid="deep-read-keeps"]')).not.toBeNull();
+    expect(document.querySelector('[data-action="deep-read-upkeep"]')?.textContent).toBe('Automatic upkeep: on');
+    expect(document.querySelector('[data-testid="deep-read-model"]')?.textContent).toBe('The model is not on this machine yet: press Run once to download it. After that Deep read keeps itself current.');
     expect(document.querySelector('[data-testid="deep-read-tiles"]')).not.toBeNull();
+    // The model here: no download line.
+    const here = view(); here.model.cached = true;
+    await act(async () => useStore.setState({ memory: here } as any));
+    expect(document.querySelector('[data-testid="deep-read-model"]')).toBeNull();
   });
 
   it('the title-bar pill shows a dot when anything is changed since or not yet', async () => {

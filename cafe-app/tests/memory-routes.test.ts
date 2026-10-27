@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
-import { startServer, sampleIdea } from './helpers';
+import { startServer, sampleIdea, tmpWorkspace } from './helpers';
+import { fixedClock } from '../src/clock';
+import { createApp } from '../src/server/server';
+import type { AddressInfo } from 'node:net';
 import { saveIdea, loadIdea } from '../src/ideas/store';
 import { fullIdea } from './memory-chunks.test';
 import { readFile } from 'node:fs/promises';
@@ -35,9 +38,12 @@ async function untilIdle(base: string) {
   throw new Error('still running');
 }
 
+// The manual controls, with upkeep held back (a quiet time longer than the test), so only the buttons read.
+const manual = () => boot({ upkeep: { quietMs: 60_000, maxMs: 60_000 } });
+
 describe('Deep read routes', () => {
   it('with no index: 0 %, idle, the model named with its folder, and the ideas route says null', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await manual();
     await fullIdea(root);
     const m = await get(base, '/api/memory');
     expect(m.model).toMatchObject({ id: 'fake', cached: true });
@@ -49,7 +55,7 @@ describe('Deep read routes', () => {
   });
 
   it('Run reads everything to 100 %; the ideas route then ranks by meaning; Rerun all reads again', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await manual();
     await fullIdea(root);
     await saveIdea(root, sampleIdea({ id: 'CAFE-2026-002', title: 'Desk booking assistant', challenge: 'Desks are double booked every morning.', dedupe_key: 'b' }));
     const started = await j(await post(base, '/api/memory/run'));
@@ -81,7 +87,7 @@ describe('Deep read routes', () => {
   });
 
   it('a chat question only the index can answer: hits with a trace, the ideas lit; without the index the graph answers as before', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await manual();
     await fullIdea(root);
     // Before Deep read: the fake answers from the graph alone, as it always did, and nothing is searched.
     const before = await j(await post(base, '/api/chat', { text: 'what did teams say about data access?' }));
@@ -115,10 +121,12 @@ describe('Deep read upkeep through the routes', () => {
   it('after a run, an Import re-reads only the new ideas ("after Import"); a save with no text change is skipped; the view says where upkeep stands', async () => {
     const { base, root } = await boot();
     await fullIdea(root);
-    const before = await get(base, '/api/memory');
-    // The idea was just written, so a touch may be pending; before the first run it will be looked at and nothing written.
-    expect(before.upkeep).toMatchObject({ on: true });
-    expect(before.job.lastDecision).toBeUndefined();
+    // The model is here (the fake one): the new idea is read on its own, no Run pressed.
+    const auto = await untilDecided(base, (d) => d?.act === 'read');
+    expect(auto.upkeep).toMatchObject({ on: true });
+    expect(auto.job.lastDecision.why).toBe('read 2026-001 after a save · 17 passages');
+    expect(auto.summary.percent).toBe(100);
+    // A Run now has nothing left to read.
     await post(base, '/api/memory/run');
     await untilIdle(base);
     const rows0 = (await fs.readFile(path.join(root, 'data', 'memory', 'index.jsonl'), 'utf8')).trim().split('\n');
@@ -163,16 +171,38 @@ describe('Deep read upkeep through the routes', () => {
     expect(r.summary.ideas[0].status).toBe('read');
   });
 
-  it('nothing changes when Deep read was never run: an Import and a save write no memory files, and the view has no decision', async () => {
-    const { base, root } = await boot();
+  it('a fresh workspace with the model here: an Import ends with the new ideas read, no click; the view says the model is here', async () => {
+    const { base } = await boot();
+    const res = await j(await importFixture(base));
+    expect(res.created.length).toBeGreaterThan(0);
+    const m = await untilDecided(base, (d) => d?.act === 'read' && d.why.includes('after Import'));
+    expect(m.model.cached).toBe(true);
+    expect(m.job.embedder).toBe('fake');
+    expect(m.job.lastDecision.ideas).toEqual(res.created.map((c: { id: string }) => c.id));
+    expect(m.summary).toMatchObject({ percent: 100, available: true });
+    expect(m.summary.ideas.every((i: { status: string }) => i.status === 'read')).toBe(true);
+  });
+
+  it('start-up: a server that comes up with unread ideas reads just those in the background; a second start reads nothing', async () => {
+    const root = await tmpWorkspace('2026-10-19');
     await fullIdea(root);
-    await importFixture(base);
-    await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Vendor contract summariser', challenge: 'Contracts changed.', dedupe_key: 'a' }));
-    await new Promise((r) => setTimeout(r, 250));
-    const m = await get(base, '/api/memory');
-    expect(m.job).toMatchObject({ status: 'idle' });
-    expect(m.job.lastDecision).toBeUndefined();
-    expect(m.upkeep).toEqual({ on: true, pending: 0, waiting: false });
-    expect(await fs.readdir(path.join(root, 'data', 'memory')).catch(() => [])).toEqual([]);
+    const up = async () => {
+      const server = createApp({ root, clock: fixedClock('2026-10-19'), upkeep: { quietMs: 60_000, maxMs: 60_000 } });
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+      close = () => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+      return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    };
+    const base = await up();
+    const m = await untilDecided(base, (d) => d?.act === 'read');
+    expect(m.job.lastDecision).toMatchObject({ act: 'read', ideas: ['CAFE-2026-001'], why: 'read 2026-001 at start-up · 17 passages' });
+    expect(m.upkeep.startup).toMatchObject({ act: 'read', why: 'read 2026-001 at start-up · 17 passages' });
+    expect(m.summary.percent).toBe(100);
+    await close!(); close = undefined;
+    const base2 = await up();
+    let v = await get(base2, '/api/memory');
+    for (let i = 0; i < 100 && !v.upkeep.startup; i++) { await new Promise((r) => setTimeout(r, 20)); v = await get(base2, '/api/memory'); }
+    expect(v.upkeep.startup).toMatchObject({ act: 'skip', ideas: [], why: 'every idea is already read' });
+    // The decision on disk is still the first start's: a start with nothing to do writes nothing.
+    expect(v.job.lastDecision.why).toBe('read 2026-001 at start-up · 17 passages');
   });
 });

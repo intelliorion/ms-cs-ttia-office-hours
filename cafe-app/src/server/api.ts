@@ -70,7 +70,10 @@ export function fileNameOf(header: unknown): string {
 /** The files the design pack may show: the design, the approach, the plan, the kit and the roadshow's script and run of show. */
 const DESIGN_FILE = /^(design\.md|design-diagram\.html|approach\.md|plan\.md|roadshow\/(script|run-of-show)\.md|kit\/[\w .()-]+(\/[\w .()-]+)*\.(md|txt|json|yaml|csv|html|js|css))$/;
 
-export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upkeepTimes }: { root: string; clock: Clock; connector?: Connector; upkeep?: { quietMs?: number; maxMs?: number } }): void {
+/** What the server calls once it is listening, and when it closes. */
+export interface ApiHooks { listening(): void; close(): void }
+
+export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upkeepTimes }: { root: string; clock: Clock; connector?: Connector; upkeep?: { quietMs?: number; maxMs?: number } }): ApiHooks {
   const steps = () => loadSteps(root);
   const ai = connector ?? createConnector({ providers: defaultProviders(), settings: () => loadSettings(root) });
   /** AI failures never change anything; they tell the operator to carry on by hand. */
@@ -124,14 +127,17 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
 
   // Deep read: the reading index. One background job per server; it runs on after the request and the pop-out polls.
   const deepRead = createDeepRead(root, () => getEmbedder(), () => new Date().toISOString());
-  // Upkeep: after an Import or a save, decides what (if anything) to re-read; never before the operator's first Run.
+  // Upkeep: after an Import or a save, decides what (if anything) to re-read; it arms itself once the model is on this
+  // machine (never downloads it), and at start-up reads the ideas not read yet.
+  const modelReady = async () => embedderName() === 'fake' || modelCached();
   const upkeep = createUpkeep(root, {
-    job: deepRead, embedder: () => getEmbedder(), ...upkeepTimes,
+    job: deepRead, embedder: () => getEmbedder(), ...upkeepTimes, modelReady,
     on: async () => upkeepOn(await loadSettings(root)), nodes: async () => (await rebuildGraph(root)).nodes,
   });
+  const startup = upkeep.startupDecision;
   const memoryView = async () => ({
-    upkeep: { on: upkeepOn(await loadSettings(root)), pending: upkeep.pending(), waiting: upkeep.waiting() },
-    model: { id: embedderName(), dir: modelDir(), cached: embedderName() === 'fake' || await modelCached() },
+    upkeep: { on: upkeepOn(await loadSettings(root)), pending: upkeep.pending(), waiting: upkeep.waiting(), ...(startup() ? { startup: startup() } : {}) },
+    model: { id: embedderName(), dir: modelDir(), cached: await modelReady() },
     job: await deepRead.status(), summary: await memorySummary(root),
   });
   add('GET', '/api/memory', memoryView);
@@ -545,4 +551,9 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('POST', '/api/inbox/:id/draft-held-reply', async ({ params, body }) =>
     draftHeldReply(root, params.id, clock, typeof body.ideaId === 'string' ? body.ideaId : undefined));
 
+  return {
+    // Once the server is listening: the start-up read, in the background (never blocks start-up; errors stay in the state).
+    listening: () => { void upkeep.startup().catch(() => undefined); },
+    close: () => upkeep.close(),
+  };
 }

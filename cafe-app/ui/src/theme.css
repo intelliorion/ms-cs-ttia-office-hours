@@ -1352,3 +1352,5 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .tf-legend i.dash{border-top-style:dashed}
 .ai-read{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:2px 0 10px;padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--text) 5%,transparent);font-size:12px;color:var(--muted)}
 .ai-read.changed{color:var(--text);background:color-mix(in srgb,#f5b36b 12%,transparent)}
+/* Deep read: the one thing to do while the model is not on this machine. */
+.dr-keeps p.dr-download{color:var(--amber);font-weight:500}

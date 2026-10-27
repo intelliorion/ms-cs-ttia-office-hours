@@ -4,9 +4,11 @@ import type { JobStatus } from './index';
 /**
  * Upkeep: Deep read keeps its index current by itself, piece by piece, and knows when not to. Every trigger goes
  * through one pure `decide`, whose reason is kept in the memory state and shown in the pop-out. The rules, in order:
- * never before the operator's first run; never when the switch is off; never over an index built with another model;
- * never resume a pause; queue behind a running read; a renamed or merged star refreshes labels only; nothing changed →
- * nothing done; else read just the changed passages of just the touched ideas. Never the whole workspace.
+ * never while the model is not on this machine (the app never downloads it on its own: the operator's first Run does);
+ * never when the switch is off; never over an index built with another model; never resume a pause; queue behind a
+ * running read; a renamed or merged star refreshes labels only; nothing changed → nothing done; else read just the
+ * changed passages of just the touched ideas. With the model here and no index yet, a touched idea is simply read (all
+ * its passages are fresh) and the index is created. Never the whole workspace.
  */
 export interface UpkeepTrigger { sources: TouchSource[]; ideas: string[]; at: string }
 export interface UpkeepIdea {
@@ -22,6 +24,8 @@ export interface UpkeepState {
   indexEmbedder?: string;
   /** The embedder this process would use. */
   embedder: string;
+  /** The model is on this machine (or the embedder is the fake one): reading needs no download. */
+  modelReady: boolean;
   /** The per-workspace switch. */
   on: boolean;
   status: JobStatus;
@@ -44,22 +48,26 @@ const list = (ids: string[]) => {
   return s.length <= 1 ? (s[0] ?? '') : `${s.slice(0, -1).join(', ')} and ${s[s.length - 1]}`;
 };
 
-const SOURCE_WORDS: Record<Exclude<TouchSource, 'import' | 'stars'>, string> = {
+const SOURCE_WORDS: Record<Exclude<TouchSource, 'import' | 'stars' | 'startup'>, string> = {
   save: 'a save', design: 'the design was saved', email: 'an email', roadshow: 'the roadshow', handoff: 'the hand-off', history: 'the history', file: 'a file',
 };
 /** "after Import", "after a save", "after the design was saved and an email". */
 export function sourceWords(sources: TouchSource[]): string {
+  if (sources.includes('startup')) return 'at start-up';
   if (sources.includes('import')) return 'after Import';
   const words = [...new Set(sources.filter((s): s is keyof typeof SOURCE_WORDS => s in SOURCE_WORDS).map((s) => SOURCE_WORDS[s]))];
   return words.length ? `after ${list(words)}` : 'after a change';
 }
 
+export const MODEL_MISSING = 'the model is not on this machine yet: press Run once to download it';
+export const ALL_READ = 'every idea is already read';
+
 export function decide(trigger: UpkeepTrigger, state: UpkeepState): UpkeepDecision {
   const ideas = trigger.ideas;
   const skip = (why: string, extra: Partial<UpkeepDecision> = {}): UpkeepDecision => ({ act: 'skip', ideas, why, passages: 0, ...extra });
-  if (!state.hasIndex || !state.indexEmbedder) return skip('Deep read has not been run yet');
+  if (!state.modelReady) return skip(MODEL_MISSING);
   if (!state.on) return skip('automatic upkeep is off');
-  if (state.indexEmbedder !== state.embedder) return skip(`the index was built with another model (${state.indexEmbedder}): Rerun all to read with this one`);
+  if (state.hasIndex && state.indexEmbedder && state.indexEmbedder !== state.embedder) return skip(`the index was built with another model (${state.indexEmbedder}): Rerun all to read with this one`);
   if (state.status === 'paused') return skip(`paused by you: ${list(ideas)} will be read at Continue`);
   if (state.status === 'running') return { act: 'queue', ideas, why: `a read is running: ${list(ideas)} will be checked when it ends`, passages: 0 };
   const labels = trigger.sources.includes('stars') ? { labels: true as const } : {};
@@ -87,8 +95,8 @@ export function decide(trigger: UpkeepTrigger, state: UpkeepState): UpkeepDecisi
 
 import { chunkIdea } from './chunks';
 import { loadIdea, ideaDir } from '../ideas/store';
-import { labelVectors, readIndex, readState, updateState, writeIndex, type IndexRow, type MemoryState } from './index';
-import { embedderName, type Embedder } from './embed';
+import { labelVectors, readIndex, readState, summary, updateState, writeIndex, type IndexRow, type MemoryState } from './index';
+import { embedderName, fakeEnabled, modelCached, type Embedder } from './embed';
 import { onTouched } from './touch';
 import type { DeepRead } from './job';
 import type { GNode } from '../graph/ontology';
@@ -105,14 +113,24 @@ export interface UpkeepOptions {
   on: () => Promise<boolean>;
   /** The stars, for the label refresh after a rename or merge. */
   nodes: () => Promise<Pick<GNode, 'id' | 'type' | 'label'>[]>;
+  /** Is the model on this machine? Default: the fake embedder, or the model files in the cache folder. Never downloads. */
+  modelReady?: () => Promise<boolean>;
 }
 export interface Upkeep {
   touch(ideas: string[], source: TouchSource): void;
   /** Touches are pending and the timer is set ("waiting for changes to settle"). */
   waiting(): boolean;
   pending(): number;
-  /** The last decision this process made, on disk or not (before the first run nothing is written). */
+  /** The last decision this process made, on disk or not (with the model not on this machine nothing is written). */
   last(): UpkeepDecision | undefined;
+  /**
+   * Once, after the server is listening: with the model here and the switch on, read the ideas not read yet (never
+   * read, or changed while the server was down), in the background behind the same flush as a touch. Settles with the
+   * decision; nothing is written when there is nothing to read or the model is not here.
+   */
+  startup(): Promise<UpkeepDecision>;
+  /** What start-up decided (undefined until it has). */
+  startupDecision(): UpkeepDecision | undefined;
   /** Settles when nothing is pending or running. The run and rerun routes wait on it so two writers never meet. */
   settle(): Promise<void>;
   idle(): Promise<void>;
@@ -134,6 +152,8 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
   let firstAt: number | undefined;
   let working: Promise<void> | null = null;
   let last: UpkeepDecision | undefined;
+  let started: UpkeepDecision | undefined;
+  const modelReady = opts.modelReady ?? (async () => fakeEnabled(env) || modelCached(env));
 
   const schedule = () => {
     firstAt ??= Date.now();
@@ -146,18 +166,18 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
     if (working) { schedule(); return; }
     const take = new Map(pending); const withStars = stars;
     pending.clear(); stars = false; firstAt = undefined;
-    working = flush(take, withStars).catch(() => undefined).finally(() => { working = null; if (pending.size || stars) schedule(); });
+    working = flush(take, withStars).then(() => undefined, () => undefined).finally(() => { working = null; if (pending.size || stars) schedule(); });
   };
 
   // Upkeep's fields only, lastDecision and stale, patched over the state as it is at the write (the job loop writes
   // status to the same file; a copy read earlier is never written back).
-  const record = async (d: UpkeepDecision, patch: (s: MemoryState) => Pick<Partial<MemoryState>, 'stale'> = () => ({})) => {
+  const record = async (d: UpkeepDecision, patch: (s: MemoryState) => Pick<Partial<MemoryState>, 'stale' | 'embedder'> = () => ({})) => {
     await updateState(root, (s) => ({ ...s, ...patch(s), lastDecision: { act: d.act, ideas: d.ideas, why: d.why, at: clock() } }));
   };
   const refreshLabels = async () => { await labelVectors(root, opts.embedder(), (await opts.nodes()) as GNode[]); };
 
-  const flush = async (take: Map<string, Set<TouchSource>>, withStars: boolean, folded = false): Promise<void> => {
-    const [state, rows, on] = await Promise.all([readState(root), readIndex(root), opts.on()]);
+  const flush = async (take: Map<string, Set<TouchSource>>, withStars: boolean, folded = false): Promise<UpkeepDecision> => {
+    const [state, rows, on, ready] = await Promise.all([readState(root), readIndex(root), opts.on(), modelReady()]);
     const sources = [...new Set([...withStars ? ['stars' as const] : [], ...[...take.values()].flatMap((s) => [...s])])];
     const ids = [...take.keys()];
     // Only the touched ideas are chunked (file reads only); the index rows of each give what is already read.
@@ -169,21 +189,21 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
     }
     const d = decide(
       { sources, ideas: ids, at: clock() },
-      { hasIndex: rows.length > 0, indexEmbedder: state.embedder, embedder: embedderName(env), on, status: state.status, ideas: ids.map((id) => ({ id, present: present.get(id)!.map((p) => p.hash), indexed: rows.filter((r) => r.ideaId === id).map((r) => r.hash) })) },
+      { hasIndex: rows.length > 0, indexEmbedder: state.embedder, embedder: embedderName(env), modelReady: ready, on, status: state.status, ideas: ids.map((id) => ({ id, present: present.get(id)!.map((p) => p.hash), indexed: rows.filter((r) => r.ideaId === id).map((r) => r.hash) })) },
     );
     last = d;
-    // Before the first run nothing is written: an operator who never uses Deep read has no memory folder at all.
-    if (!rows.length || !state.embedder) return;
+    // With the model not on this machine nothing is written: an operator who never uses Deep read has no memory folder.
+    if (!ready) return d;
     if (d.act === 'queue') {
       await record(d);
       await opts.job.idle();
-      if (!folded) await flush(take, withStars, true);
-      return;
+      if (!folded) return flush(take, withStars, true);
+      return d;
     }
     if (d.act === 'skip') {
       if (d.labels) await refreshLabels();
       await record(d, (s) => (state.status === 'paused' ? { stale: [...new Set([...s.stale, ...d.ideas])] } : {}));
-      return;
+      return d;
     }
     try {
       const have = new Set(rows.map((r) => r.hash));
@@ -200,9 +220,14 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
       const next = [...rows.filter((r) => !touchedIds.has(r.ideaId) || keep.has(r.hash)), ...fresh];
       await writeIndex(root, next);
       if (d.labels) await refreshLabels();
-      await record(d, (s) => ({ stale: s.stale.filter((id) => !touchedIds.has(id)) }));
+      // The first read on a workspace with no index records the model it was read with, as a Run would.
+      await record(d, (s) => ({ stale: s.stale.filter((id) => !touchedIds.has(id)), ...(s.embedder ? {} : { embedder: emb.name }) }));
+      return d;
     } catch (e) {
-      await record({ ...d, act: 'defer', why: `could not read ${d.ideas.map((id) => id.replace(/^CAFE-/, '')).join(', ')}: ${(e as Error).message}; will try again at the next change` });
+      const deferred: UpkeepDecision = { ...d, act: 'defer', why: `could not read ${d.ideas.map((id) => id.replace(/^CAFE-/, '')).join(', ')}: ${(e as Error).message}; will try again at the next change` };
+      last = deferred;
+      await record(deferred);
+      return deferred;
     }
   };
 
@@ -220,7 +245,29 @@ export function createUpkeep(root: string, opts: UpkeepOptions): Upkeep {
       await new Promise((r) => setTimeout(r, 2));
     }
   };
+  const startup = async (): Promise<UpkeepDecision> => {
+    const note = (d: UpkeepDecision) => { started = d; last ??= d; return d; };
+    const none = (why: string): UpkeepDecision => ({ act: 'skip', ideas: [], why, passages: 0 });
+    if (!(await modelReady())) return note(none(MODEL_MISSING));
+    if (!(await opts.on())) return note(none('automatic upkeep is off'));
+    // Only the ideas with passages not read yet (never read, or changed while the server was down). File reads only.
+    const ideas = (await summary(root, env)).ideas;
+    const unread = ideas.filter((i) => i.chunks > 0 && i.embedded < i.chunks).map((i) => i.id);
+    if (!unread.length) return note(none(ideas.length ? ALL_READ : 'no ideas to read yet'));
+    // Behind any flush already going; then one flush of just these ideas, through decide like any touch.
+    while (working) await working;
+    for (const id of unread) { const s = pending.get(id); if (s) s.add('startup'); else pending.set(id, new Set(['startup'])); }
+    const take = new Map(pending); const withStars = stars;
+    pending.clear(); stars = false; firstAt = undefined;
+    if (timer) { clearTimeout(timer); timer = undefined; }
+    let out!: UpkeepDecision;
+    working = flush(take, withStars).then((d) => { out = d; }, () => { out = none('start-up could not read'); }).finally(() => { working = null; if (pending.size || stars) schedule(); });
+    await working;
+    return note(out);
+  };
   return {
+    startup,
+    startupDecision: () => started,
     touch,
     waiting: () => !!timer || !!working || pending.size > 0,
     pending: () => pending.size,

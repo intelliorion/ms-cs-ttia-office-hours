@@ -4,7 +4,7 @@ import { memoryPost, memoryUpkeep } from '../api';
 import { Modal } from './Modal';
 import { Ring } from '../layout/DeepReadButton';
 import {
-  buttonsFor, COPY, dashboard, decisionLine, FILTERS, filterIdeas, IDEA_STATUS, KEEPS_CURRENT, kindBars, ringShare, staleKinds, statusLine, whenText,
+  buttonsFor, COPY, dashboard, decisionLine, FILTERS, filterIdeas, IDEA_STATUS, KEEPS_CURRENT, MODEL_MISSING_LINE, kindBars, ringShare, staleKinds, statusLine, whenText,
   type DeepReadButton as Control,
 } from './deepReadHelpers';
 
@@ -40,7 +40,6 @@ export function DeepReadPopout() {
   const v = memory;
   const pct = v ? (running ? Math.floor(ringShare(v) * 100) : v.summary.percent) : 0;
   const d = v ? dashboard(v.summary) : null;
-  const hasRun = !!v?.job.embedder;
   const rows = v ? filterIdeas(v.summary.ideas, deepReadView.filter, deepReadView.q) : [];
   const last = decisionLine(v?.job.lastDecision);
   return (
@@ -69,10 +68,10 @@ export function DeepReadPopout() {
               </div>
             </section>
 
-            {hasRun && (
               <section className="sec dr-keeps" data-testid="deep-read-keeps">
                 <h3>Keeps itself current</h3>
                 <p>{KEEPS_CURRENT}</p>
+                {!v.model.cached && <p className="dr-download" data-testid="deep-read-model">{MODEL_MISSING_LINE}</p>}
                 <div className="dr-keeps-row">
                   <button className={`pill dr-switch${v.upkeep.on ? ' on' : ''}`} data-action="deep-read-upkeep" aria-pressed={v.upkeep.on} disabled={busy} onClick={() => void flip(!v.upkeep.on)}>
                     Automatic upkeep: {v.upkeep.on ? 'on' : 'off'}
@@ -81,7 +80,6 @@ export function DeepReadPopout() {
                   {last && <span className={`dr-last a-${v.job.lastDecision?.act}`} data-testid="deep-read-last">{last}</span>}
                 </div>
               </section>
-            )}
 
             {kindBars(v.summary).length > 0 && (
               <section className="sec dr-bykind">

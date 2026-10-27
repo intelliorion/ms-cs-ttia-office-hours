@@ -3,7 +3,8 @@
  * module that writes an idea calls `touched` (or, for every file written into an idea folder, the workspace files layer
  * does it from the path) and the upkeep runner listens. With no listener a touch goes nowhere.
  */
-export type TouchSource = 'import' | 'save' | 'design' | 'email' | 'roadshow' | 'handoff' | 'history' | 'file' | 'stars';
+/** `startup` is upkeep's own: the server came up with ideas not read yet. */
+export type TouchSource = 'import' | 'save' | 'design' | 'email' | 'roadshow' | 'handoff' | 'history' | 'file' | 'stars' | 'startup';
 export interface Touch { root: string; ideas: string[]; source: TouchSource }
 
 const listeners = new Set<(t: Touch) => void>();

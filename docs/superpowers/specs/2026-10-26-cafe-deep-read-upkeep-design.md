@@ -174,3 +174,28 @@ written before this change have none). The GET view gains `upkeep: { on, pending
 
 No model download on the app's own initiative; no full rebuild except the operator's Rerun all; no approval steps; no
 change to AI providers; no push.
+
+## 11. Addendum, 2026-10-27: upkeep arms itself when it can do so safely
+
+The operator, in their words: "Deep read does not auto-trigger unless I click it". That was rule 1 ("never the first
+run"). The ruling now (made, not a question):
+
+- **Kept:** the app never downloads the embedding model on its own; never resumes a pause; never reads over an index
+  built with another model; the switch still turns everything off.
+- **Changed:** rule 1 becomes **"the model is not on this machine yet"**. `UpkeepState` gains `modelReady`
+  (`modelCached()`, or the fake embedder); with it false, `decide` skips with `the model is not on this machine yet:
+  press Run once to download it`, and nothing is written (no `data/memory/` for an operator who never uses Deep read).
+  With the model ready and **no index**, a touched idea is simply read (every passage fresh); the first such read
+  records `state.embedder`, as a Run would. The mismatch rule applies only when an index exists.
+- **Start-up:** `Upkeep.startup()`, called once from the server's `listening` event (never blocking start-up): with
+  the model ready and the switch on, the ideas with passages not in the index (never read, or changed while the server
+  was down) are flushed through `decide` like any touch, with the source `startup` ("read 2026-001 and 2026-002 at
+  start-up · 14 passages"). Every idea read: `skip`, `every idea is already read`, kept in memory only (nothing written,
+  so the last decision on disk stays meaningful) and shown in the view as `upkeep.startup`.
+- **Order of the rules:** model missing → switch off → another model's index → paused → running → stars only → nothing
+  changed → read.
+- **The switch** is on by default (as before) and the pop-out always shows it; while the model is missing the block
+  says "The model is not on this machine yet: press Run once to download it." The status line, for a workspace read
+  by upkeep alone (no Run ever pressed), says "Kept current on its own · last read <when>".
+- **Tests** point `CAFE_MODEL_DIR` at a folder that never holds the model (vitest `env`), so a developer's cached model
+  is never loaded by a test; the server closes its upkeep timers when it closes.

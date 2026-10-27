@@ -83,7 +83,7 @@ export function createApp({ root, clock, connector, upkeep }: ServerOptions): ht
     const pattern = new RegExp(`^${route.replace(/:(\w+)/g, (_m, k: string) => { keys.push(k); return '([^/]+)'; })}$`);
     routes.push({ method, pattern, keys, handler });
   };
-  registerApi(add, { root, clock, connector, upkeep });
+  const hooks = registerApi(add, { root, clock, connector, upkeep });
   // Every POST waits for the one before it, so two clicks cannot interleave their file writes.
   let lock: Promise<unknown> = Promise.resolve();
   const exclusive = <T>(fn: () => Promise<T>): Promise<T> => {
@@ -92,7 +92,7 @@ export function createApp({ root, clock, connector, upkeep }: ServerOptions): ht
     return run;
   };
 
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     try {
       const origin = req.headers.origin;
       if (!LOCAL_HOST.test(req.headers.host ?? '') || (origin !== undefined && !LOCAL_ORIGIN.test(origin))) return send(res, 403, { error: 'This app only answers on localhost' });
@@ -143,4 +143,8 @@ export function createApp({ root, clock, connector, upkeep }: ServerOptions): ht
       return send(res, 400, { error: err.message, ...(err instanceof MissingSettingsError ? { missing: err.labels } : err instanceof DesignNotReadyError ? { missing: err.missing } : {}) });
     }
   });
+  // Deep read's start-up read waits until the server is listening, so start-up never waits on it.
+  server.once('listening', () => hooks.listening());
+  server.once('close', () => hooks.close());
+  return server;
 }

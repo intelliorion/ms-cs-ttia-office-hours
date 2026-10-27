@@ -412,12 +412,17 @@ closes (Esc or ✕). **Pause** stops at the next batch (16 passages); **Continue
 the index first. The title-bar pill keeps the ring and the percentage and shows a small dot when anything is changed
 since or not yet, so you know at a glance.
 
-**Keeps itself current, and knows when not to.** After the first Run, Deep read keeps the index current by itself,
-piece by piece, and deliberately. Every change goes through one decision (`src/memory/upkeep.ts`, `decide()`), whose
+**Keeps itself current, and knows when not to.** Once the model is on this machine, Deep read keeps the index current
+by itself, piece by piece, and deliberately, with no Run needed. Every change goes through one decision (`src/memory/upkeep.ts`, `decide()`), whose
 reason is kept and shown in the pop-out ("Last: read 2026-003 after Import · 3 passages · 26 Oct 14:02", "Last:
 skipped, nothing changed in 2026-003"). The rules, in order:
 
-1. **Never before your first Run.** With no index the app never downloads the model or builds one on its own.
+1. **Never downloads the model on its own.** Until the model is on this machine (your first **Run** downloads it once),
+   upkeep does nothing and the pop-out says "press Run once to download the model". Once it is there, upkeep arms
+   itself: a changed idea is read even when there is no index yet (its passages are all new, and the index is made).
+   **At start-up**, once the server is listening, the ideas not read yet (never read, or changed while the app was
+   closed) are read in the background, just those ("Last: read 2026-001 and 2026-002 at start-up · 14 passages");
+   with every idea read it does nothing and writes nothing. The **Not yet** tile drains by itself.
 2. **Never while paused** (a change while paused is marked changed since and read at Continue); **queued** behind a
    running read and checked once when it ends.
 3. **Only what changed, and only if it changed.** An Import or a save names the ideas it touched; only their passages
@@ -434,8 +439,8 @@ skipped, nothing changed in 2026-003"). The rules, in order:
 
 What counts as a change: anything written into an idea's folder (the record, the design and approach, an email drafted,
 sent or filed, the roadshow, the CSIC hand-off, a history line). **Automatic upkeep: on/off** in the pop-out (kept in
-`rules/settings.yaml` as `deepRead.upkeep`; shown once you have run Deep read) turns it off for fully manual reading
-as before. It is a setting, not an approval: nothing asks Yes or No.
+`rules/settings.yaml` as `deepRead.upkeep`; on unless you turn it off, and always shown) turns it off for fully manual
+reading, start-up included. It is a setting, not an approval: nothing asks Yes or No.
 
 **The assistant knows where Deep read stands.** It is told whether the index is on, how much is read, how many ideas
 changed since, and when it last read; it uses `search` and `similar` only for what people wrote (challenge text,

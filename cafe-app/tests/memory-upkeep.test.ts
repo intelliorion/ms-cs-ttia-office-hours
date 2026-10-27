@@ -41,15 +41,28 @@ describe('the touch bus', () => {
 const trig = (over: Partial<UpkeepTrigger> = {}): UpkeepTrigger => ({ sources: ['save'], ideas: ['CAFE-2026-003'], at: '2026-10-26T09:00:00.000Z', ...over });
 const idea = (id: string, present: string[], indexed: string[]) => ({ id, present, indexed });
 const ready = (over: Partial<UpkeepState> = {}): UpkeepState => ({
-  hasIndex: true, indexEmbedder: 'fake', embedder: 'fake', on: true, status: 'done',
+  hasIndex: true, indexEmbedder: 'fake', embedder: 'fake', modelReady: true, on: true, status: 'done',
   ideas: [idea('CAFE-2026-003', ['a', 'b', 'c'], ['a', 'b'])],
   ...over,
 });
 
 describe('decide()', () => {
-  it('1. never the first run: no index, or no embedder recorded', () => {
-    expect(decide(trig(), ready({ hasIndex: false }))).toEqual({ act: 'skip', ideas: ['CAFE-2026-003'], why: 'Deep read has not been run yet', passages: 0 });
-    expect(decide(trig(), ready({ indexEmbedder: undefined })).why).toBe('Deep read has not been run yet');
+  it('1. the model is not on this machine yet: never downloaded on the app\'s own initiative', () => {
+    expect(decide(trig(), ready({ modelReady: false }))).toEqual({ act: 'skip', ideas: ['CAFE-2026-003'], why: 'the model is not on this machine yet: press Run once to download it', passages: 0 });
+    // Even with no index at all.
+    expect(decide(trig(), ready({ modelReady: false, hasIndex: false, indexEmbedder: undefined })).why).toBe('the model is not on this machine yet: press Run once to download it');
+  });
+  it('1b. the model is here and there is no index yet: a touched idea is simply read, every passage fresh', () => {
+    const s = ready({ hasIndex: false, indexEmbedder: undefined, ideas: [idea('CAFE-2026-003', ['a', 'b', 'c'], [])] });
+    expect(decide(trig({ sources: ['import'] }), s)).toEqual({ act: 'read', ideas: ['CAFE-2026-003'], why: 'read 2026-003 after Import · 3 passages', passages: 3 });
+    // The switch off, a pause or a running read still win with no index.
+    expect(decide(trig(), { ...s, on: false })).toMatchObject({ act: 'skip', why: 'automatic upkeep is off' });
+    expect(decide(trig(), { ...s, status: 'paused' })).toMatchObject({ act: 'skip', why: 'paused by you: 2026-003 will be read at Continue' });
+    expect(decide(trig(), { ...s, status: 'running' })).toMatchObject({ act: 'queue' });
+  });
+  it('1c. start-up: the ideas never read are read, and the reason says so', () => {
+    const s = ready({ hasIndex: false, indexEmbedder: undefined, ideas: [idea('CAFE-2026-001', ['a', 'b'], []), idea('CAFE-2026-002', ['c'], [])] });
+    expect(decide(trig({ sources: ['startup'], ideas: ['CAFE-2026-001', 'CAFE-2026-002'] }), s)).toEqual({ act: 'read', ideas: ['CAFE-2026-001', 'CAFE-2026-002'], why: 'read 2026-001 and 2026-002 at start-up · 3 passages', passages: 3 });
   });
   it('2. the switch is off: fully manual', () => {
     expect(decide(trig(), ready({ on: false }))).toMatchObject({ act: 'skip', why: 'automatic upkeep is off' });
@@ -82,8 +95,8 @@ describe('decide()', () => {
     // An idea whose folder is gone.
     expect(decide(trig(), ready({ ideas: [idea('CAFE-2026-003', [], ['a', 'b'])] }))).toEqual({ act: 'read', ideas: ['CAFE-2026-003'], why: '2026-003 removed: its passages dropped', passages: 0 });
   });
-  it('the rules hold in order: the first run wins over the switch, the model over the pause, the pause over the run', () => {
-    expect(decide(trig(), ready({ hasIndex: false, on: false, status: 'running' })).why).toBe('Deep read has not been run yet');
+  it('the rules hold in order: a missing model wins over the switch, the switch over the model mismatch, the mismatch over the pause, the pause over the run', () => {
+    expect(decide(trig(), ready({ modelReady: false, on: false, status: 'running' })).why).toBe('the model is not on this machine yet: press Run once to download it');
     expect(decide(trig(), ready({ on: false, status: 'running' })).why).toBe('automatic upkeep is off');
     expect(decide(trig(), ready({ indexEmbedder: 'other', status: 'paused' })).why).toMatch(/another model/);
     expect(decide(trig(), ready({ status: 'paused' })).act).toBe('skip');
@@ -97,6 +110,7 @@ describe('decide()', () => {
     expect(sourceWords(['history'])).toBe('after the history');
     expect(sourceWords(['file'])).toBe('after a file');
     expect(sourceWords([])).toBe('after a change');
+    expect(sourceWords(['startup'])).toBe('at start-up');
   });
 });
 
@@ -126,25 +140,92 @@ async function twoIdeas(root: string) {
   await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Contracts are read by hand.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
   await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Desks are double booked.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));
 }
-function setup(root: string, opts: { embedder?: () => Embedder; on?: boolean; quietMs?: number; maxMs?: number; nodes?: () => Promise<{ id: string; type: 'Capability' | 'Person'; label: string }[]> } = {}) {
+function setup(root: string, opts: { embedder?: () => Embedder; on?: boolean; modelReady?: boolean; quietMs?: number; maxMs?: number; nodes?: () => Promise<{ id: string; type: 'Capability' | 'Person'; label: string }[]> } = {}) {
   const emb = opts.embedder ?? fakeEmbedder;
   const job = createDeepRead(root, emb, clock);
-  const upkeep = createUpkeep(root, { job, embedder: emb, env: FAKE, clock, quietMs: opts.quietMs ?? 20, maxMs: opts.maxMs ?? 200, on: async () => opts.on ?? true, nodes: opts.nodes ?? (async () => []) });
+  const upkeep = createUpkeep(root, { job, embedder: emb, env: FAKE, clock, quietMs: opts.quietMs ?? 20, maxMs: opts.maxMs ?? 200, on: async () => opts.on ?? true, nodes: opts.nodes ?? (async () => []), ...(opts.modelReady === undefined ? {} : { modelReady: async () => opts.modelReady! }) });
   return { job, upkeep };
 }
 
 describe('the upkeep runner', () => {
-  it('does nothing before the first run: no decision, no memory folder', async () => {
+  it('does nothing while the model is not on this machine: the decision is kept in memory only, no memory folder', async () => {
     const root = await tmpWorkspace();
     await twoIdeas(root);
-    const { upkeep } = setup(root);
+    const c = counting();
+    const { upkeep } = setup(root, { embedder: c.embedder, modelReady: false });
     await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed.', dedupe_key: 'a' }));
     upkeep.touch([ID1], 'save');
     await upkeep.idle();
-    expect(upkeep.last()).toMatchObject({ act: 'skip', why: 'Deep read has not been run yet' });
+    expect(upkeep.last()).toMatchObject({ act: 'skip', why: 'the model is not on this machine yet: press Run once to download it' });
+    expect(c.texts).toEqual([]);
     await expect(fs.stat(path.join(memoryDir(root), 'state.json'))).rejects.toThrow();
     await expect(fs.stat(path.join(memoryDir(root), 'index.jsonl'))).rejects.toThrow();
+    // Start-up does nothing either, and says why.
+    expect(await upkeep.startup()).toMatchObject({ act: 'skip', why: 'the model is not on this machine yet: press Run once to download it' });
+    expect(c.texts).toEqual([]);
     upkeep.close();
+  });
+
+  it('with the model on this machine and no index yet, a touched idea is read without a Run: the index is created and the model recorded', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { upkeep } = setup(root, { embedder: c.embedder });
+    await saveIdea(root, sampleIdea({ id: ID1, title: 'Vendor contracts', challenge: 'Changed.', current_process: 'A lawyer reads each one.', dedupe_key: 'a' }));
+    upkeep.touch([ID1], 'save');
+    await upkeep.idle();
+    expect(c.texts).toHaveLength(2);
+    const rows = await readIndex(root);
+    expect(rows.map((r) => r.ideaId)).toEqual([ID1, ID1]);
+    const state = await readState(root);
+    expect(state.embedder).toBe('fake');
+    expect(state.lastDecision).toEqual({ act: 'read', ideas: [ID1], why: 'read 2026-001 after a save · 2 passages', at: clock() });
+    upkeep.close();
+  });
+
+  it('start-up reads only the ideas not read yet, in the background, and records the reason; with every idea read it reads nothing', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { job, upkeep } = setup(root, { embedder: c.embedder });
+    // A fresh workspace: both ideas are unread.
+    const d = await upkeep.startup();
+    expect(d).toMatchObject({ act: 'read', ideas: [ID1, ID2], why: 'read 2026-001 and 2026-002 at start-up · 4 passages' });
+    expect(c.texts).toHaveLength(4);
+    expect((await readState(root)).lastDecision).toMatchObject({ act: 'read', why: 'read 2026-001 and 2026-002 at start-up · 4 passages' });
+    // Changed while the server was down: only that idea at the next start.
+    upkeep.close();
+    await saveIdea(root, sampleIdea({ id: ID2, title: 'Desk booking', challenge: 'Desks are double booked twice.', current_process: 'A spreadsheet.', dedupe_key: 'b' }));
+    c.texts.length = 0;
+    const up2 = createUpkeep(root, { job, embedder: c.embedder, env: FAKE, clock, quietMs: 20, maxMs: 200, on: async () => true, nodes: async () => [] });
+    expect(await up2.startup()).toMatchObject({ act: 'read', ideas: [ID2], why: 'read 2026-002 at start-up · 1 passage' });
+    expect(c.texts).toEqual(['Desk booking\nDesks are double booked twice.']);
+    // Everything read: nothing done, nothing written, and said.
+    c.texts.length = 0;
+    const before = await readState(root);
+    expect(await up2.startup()).toMatchObject({ act: 'skip', ideas: [], why: 'every idea is already read' });
+    expect(c.texts).toEqual([]);
+    expect(await readState(root)).toEqual(before);
+    expect(up2.startupDecision()).toMatchObject({ why: 'every idea is already read' });
+    up2.close();
+  });
+
+  it('start-up never resumes a pause and never reads with the switch off', async () => {
+    const root = await tmpWorkspace();
+    await twoIdeas(root);
+    const c = counting();
+    const { upkeep } = setup(root, { embedder: c.embedder, on: false });
+    expect(await upkeep.startup()).toMatchObject({ act: 'skip', why: 'automatic upkeep is off' });
+    expect(c.texts).toEqual([]);
+    upkeep.close();
+    // Paused before its first batch: start-up leaves it paused and reads nothing.
+    const p = setup(root, { embedder: c.embedder });
+    await p.job.run(); await p.job.pause(); await p.job.idle();
+    expect((await readState(root)).status).toBe('paused');
+    expect(await p.upkeep.startup()).toMatchObject({ act: 'skip', why: 'paused by you: 2026-001 and 2026-002 will be read at Continue' });
+    expect(c.texts).toEqual([]);
+    expect((await readState(root)).status).toBe('paused');
+    p.upkeep.close();
   });
 
   it('after a run, a changed idea is re-read: only its changed passages, the rows replaced and stamped, the reason kept', async () => {

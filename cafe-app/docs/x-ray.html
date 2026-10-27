@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café X-ray</title>
+<meta name="description" content="How the Creators' Café operator app is built: one Node process on one laptop, the IDE's AI behind a connector, three layers over the ideas, three stages that use them, and where a Firm AI Gateway and Postgres or Snowflake would plug in.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap">
+<style>
+/* Layout: one column of running text at 68ch, with full-width figures and tables breaking out of it. Same tokens as the
+   knowledge-graph reference page; four lane colours: property graph, knowledge graph, Deep read, and future (dashed). */
+:root {
+  --bg: #f7f6f3;
+  --fg: #1d1f23;
+  --muted: #5d6169;
+  --rule: #d9d6cf;
+  --panel: #ffffff;
+  --pg: #1f7a63;       /* property graph */
+  --pg-soft: #e2f1ec;
+  --kg: #6b4fc4;       /* knowledge graph (the app draws derived links in violet) */
+  --kg-soft: #ece7f8;
+  --dr: #2457a6;       /* Deep read */
+  --dr-soft: #e3ebf8;
+  --fut: #8a5a1d;      /* future, not built */
+  --fut-soft: #f4e9d8;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171b; --fg: #e8e6e1; --muted: #a2a6ae; --rule: #33373e; --panel: #1d2026;
+    --pg: #5fc4a4; --pg-soft: #1a2e29; --kg: #a99bf0; --kg-soft: #262038; --dr: #7fa8ea; --dr-soft: #1b2638;
+    --fut: #d6a35c; --fut-soft: #2e2619;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171b; --fg: #e8e6e1; --muted: #a2a6ae; --rule: #33373e; --panel: #1d2026;
+  --pg: #5fc4a4; --pg-soft: #1a2e29; --kg: #a99bf0; --kg-soft: #262038; --dr: #7fa8ea; --dr-soft: #1b2638;
+  --fut: #d6a35c; --fut-soft: #2e2619;
+  color-scheme: dark;
+}
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 72px; }
+main { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+main > * { min-width: 0; width: 100%; max-width: 68ch; justify-self: center; box-sizing: border-box; }
+main > .wide { max-width: 1100px; }
+section[id] { scroll-margin-top: 64px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 0 0 10px; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 26px; margin: 8px 0 4px; text-wrap: balance; }
+h3 { font-size: 17px; font-weight: 600; margin: 14px 0 4px; }
+p { margin: 0 0 10px; }
+.lede { color: var(--muted); font-size: 18px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.talk { font-family: var(--display); font-size: 21px; font-weight: 600; line-height: 1.3; border-left: 4px solid var(--fg); padding: 2px 0 2px 14px; margin: 10px 0 16px; text-wrap: balance; }
+.lane-tag { display: inline-block; font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 3px; margin-right: 6px; white-space: nowrap; }
+.lane-tag.pg { background: var(--pg-soft); color: var(--pg); }
+.lane-tag.kg { background: var(--kg-soft); color: var(--kg); }
+.lane-tag.dr { background: var(--dr-soft); color: var(--dr); }
+.lane-tag.fut { background: var(--fut-soft); color: var(--fut); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 20px; height: 11px; border: 2px solid currentColor; border-radius: 2px; box-sizing: border-box; }
+.sw.pg { color: var(--pg); background: var(--pg-soft); }
+.sw.kg { color: var(--kg); background: var(--kg-soft); }
+.sw.dr { color: var(--dr); background: var(--dr-soft); }
+.sw.fut { color: var(--fut); border-style: dashed; background: transparent; }
+.sw.plain { color: var(--fg); background: var(--panel); }
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 12px; }
+.verdict > div { min-width: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
+.verdict .k { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.verdict .good .k { color: var(--pg); }
+.verdict .bad .k { color: var(--kg); }
+.verdict .next .k { color: var(--fut); }
+.verdict ul, .verdict ol { padding-left: 18px; margin: 0; font-size: 15px; }
+figure { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 18px 18px 12px; }
+.scroll { overflow-x: auto; }
+svg { display: block; width: 100%; min-width: 760px; height: auto; max-width: 100%; color: var(--fg); }
+figcaption { font-size: 14px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+figcaption b { color: var(--fg); font-weight: 600; }
+ol, ul { padding-left: 22px; margin: 0 0 10px; }
+li { margin-bottom: 6px; }
+li strong { font-weight: 600; }
+code { font-family: var(--mono); font-size: 0.92em; background: var(--panel); border: 1px solid var(--rule); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+th { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td:first-child { font-weight: 600; width: 22%; }
+th.pg { border-top: 3px solid var(--pg); color: var(--pg); }
+th.kg { border-top: 3px solid var(--kg); color: var(--kg); }
+th.dr { border-top: 3px solid var(--dr); color: var(--dr); }
+.callout { background: var(--fut-soft); border-left: 4px solid var(--fut); padding: 12px 16px; border-radius: 4px; }
+.callout p:last-child { margin-bottom: 0; }
+.story { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 18px 20px; font-size: 17px; line-height: 1.6; }
+.story p:last-child { margin-bottom: 0; }
+.procon { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 16px; }
+.procon > div { min-width: 0; border-top: 3px solid var(--rule); padding-top: 10px; }
+.procon > div.pg { border-top-color: var(--pg); }
+.procon > div.kg { border-top-color: var(--kg); }
+.procon > div.dr { border-top-color: var(--dr); }
+.procon > div.fut { border-top-color: var(--fut); }
+.procon h3 { margin-top: 0; }
+.procon .k { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+.procon ul { padding-left: 18px; }
+/* The table of contents: sticky at the top, one row that scrolls sideways on a phone. */
+nav.toc { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--rule); padding: 10px 0; margin-bottom: 8px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+nav.toc li { margin: 0; }
+nav.toc a { font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; color: var(--muted); text-decoration: none; padding: 4px 9px; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel); display: inline-block; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(--fg); }
+.walk { display: grid; gap: 12px; }
+.walk > div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
+.walk .q { font-weight: 600; margin-bottom: 6px; }
+.walk ol { margin: 0; padding-left: 20px; font-size: 15px; }
+/* SVG lane classes: inline SVG reads the page's tokens, so the figures follow light and dark. */
+.l-pg { stroke: var(--pg); } .f-pg { fill: var(--pg-soft); } .t-pg { fill: var(--pg); }
+.l-kg { stroke: var(--kg); } .f-kg { fill: var(--kg-soft); } .t-kg { fill: var(--kg); }
+.l-dr { stroke: var(--dr); } .f-dr { fill: var(--dr-soft); } .t-dr { fill: var(--dr); }
+.l-fut { stroke: var(--fut); stroke-dasharray: 5 4; } .f-fut { fill: var(--fut-soft); } .t-fut { fill: var(--fut); }
+.f-panel { fill: var(--panel); } .f-bg { fill: var(--bg); }
+.m-fut { fill: var(--fut); } .m-kg { fill: var(--kg); } .m-dr { fill: var(--dr); } .m-pg { fill: var(--pg); }
+</style>
+</head>
+<body>
+<main>
+  <nav class="toc wide" aria-label="Sections">
+    <ol>
+      <li><a href="#story">0 · One minute</a></li>
+      <li><a href="#s1">1 · X-ray</a></li>
+      <li><a href="#s2">2 · Built from</a></li>
+      <li><a href="#s3">3 · The AI</a></li>
+      <li><a href="#s4">4 · The data</a></li>
+      <li><a href="#s5">5 · Three layers</a></li>
+      <li><a href="#s6">6 · Three stages</a></li>
+      <li><a href="#s7">7 · Why not RAG</a></li>
+      <li><a href="#s8">8 · Why not NetworkX</a></li>
+      <li><a href="#s9">9 · Where it goes next</a></li>
+      <li><a href="#remember">Remember</a></li>
+    </ol>
+  </nav>
+
+  <header>
+    <div class="eyebrow">Creators' Café · the operator app · architecture</div>
+    <h1>An X-ray of the Café app</h1>
+    <p class="lede">One local app on one laptop, the IDE's AI behind a connector, three layers of understanding over the ideas, and three stages that use them. Every claim here is drawn from the code as it stands; the paths are real so each one can be checked.</p>
+  </header>
+
+  <section id="story">
+    <div class="eyebrow">0 · The story in one minute</div>
+    <h2>What this is, and why it is built this way</h2>
+    <div class="story">
+      <p>Ideas arrive at the Café as emails, spreadsheets and PDFs, and once they are in, nobody can answer the questions that matter: who else is doing this, what does it depend on, and what breaks if a system or a tool changes. The answer is one local app that runs on the operator's own laptop, uses the AI the operator already has in their IDE, and keeps everything as files in one folder. Over the ideas it builds three layers of understanding. The property graph holds the facts as stated on the forms. The knowledge graph gives every thing one name, derives the links nobody typed, and says where each link came from. Deep read embeds what people actually wrote, so the app can quote it. Three stages, the decision, the design series and the roadshow, read those layers and write back to the record, and the AI never changes anything without a click. When the Café outgrows one laptop, the AI connector points at a Firm AI Gateway and the file writers point at Postgres or Snowflake, and everything in between stays as it is.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== 1 ===================================================== -->
+  <section id="s1">
+    <div class="eyebrow">1 · The X-ray</div>
+    <h2>Everything runs on the operator's laptop, in one process, from one folder</h2>
+    <p class="talk">There is no server, no database and no service: one Node process, one workspace folder, and the AI that is already on the machine.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 730" role="img" aria-label="Figure 1. Everything runs on the operator's laptop. The browser shows the universe and talks only to a local HTTP server over JSON. One Node process holds the server, the CLI, the AI connector, the assistant, the graph build, Deep read and the three stages. The process reads and writes a workspace folder of YAML, markdown and JSON-lines files, and spawns the AI already on the machine: Claude Code, the Copilot CLI or a VS Code helper, plus a sentence embedder that runs in-process. Two dashed boxes outside the laptop are not built: a Firm AI Gateway as one more provider file, and Postgres or Snowflake behind a store adapter." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="a1f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-fut"/></marker>
+        </defs>
+        <!-- the laptop -->
+        <rect x="20" y="24" width="1060" height="580" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+        <text x="36" y="46" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" fill="currentColor" opacity="0.65">THE OPERATOR'S LAPTOP</text>
+
+        <!-- browser -->
+        <rect x="40" y="60" width="1020" height="64" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="56" y="86" font-weight="600" font-size="14" fill="currentColor">Browser: the universe (ui/)</text>
+        <text x="56" y="108" fill="currentColor" opacity="0.8">React 19 · Vite · three.js through react-three-fiber · zustand state · gsap motion · built once into web/, served by the same process</text>
+
+        <!-- browser <-> server -->
+        <path d="M550,124 L550,160" stroke="currentColor" stroke-width="1.5" fill="none" marker-start="url(#a1)" marker-end="url(#a1)"/>
+        <text x="564" y="146" fill="currentColor" opacity="0.8">/api/* JSON, on 127.0.0.1 only</text>
+
+        <!-- node process -->
+        <rect x="40" y="160" width="1020" height="190" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="56" y="184" font-weight="600" font-size="14" fill="currentColor">One Node 20 process (src/), one TypeScript codebase</text>
+        <g fill="currentColor">
+          <rect x="56" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="175" y="219" text-anchor="middle" font-weight="600">HTTP server</text>
+          <text x="175" y="238" text-anchor="middle" opacity="0.8">node:http · 98 JSON routes · src/server</text>
+
+          <rect x="310" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="429" y="219" text-anchor="middle" font-weight="600">CLI</text>
+          <text x="429" y="238" text-anchor="middle" opacity="0.8">import · ontology check · export</text>
+
+          <rect x="564" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="683" y="219" text-anchor="middle" font-weight="600">AI connector</text>
+          <text x="683" y="238" text-anchor="middle" opacity="0.8">tasks · schema check · providers · src/ai</text>
+
+          <rect x="818" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="937" y="219" text-anchor="middle" font-weight="600">Assistant</text>
+          <text x="937" y="238" text-anchor="middle" opacity="0.8">query steps · chat · actions · src/command</text>
+
+          <rect x="56" y="270" width="322" height="64" rx="5" class="f-kg l-kg" stroke-width="1.5"/>
+          <text x="217" y="294" text-anchor="middle" font-weight="600" class="t-kg">Graph build</text>
+          <text x="217" y="314" text-anchor="middle" opacity="0.85">ontology · registry · rules · build · src/graph</text>
+
+          <rect x="394" y="270" width="322" height="64" rx="5" class="f-dr l-dr" stroke-width="1.5"/>
+          <text x="555" y="294" text-anchor="middle" font-weight="600" class="t-dr">Deep read</text>
+          <text x="555" y="314" text-anchor="middle" opacity="0.85">chunks · embed · index · upkeep · src/memory</text>
+
+          <rect x="732" y="270" width="324" height="64" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="894" y="294" text-anchor="middle" font-weight="600">The three stages</text>
+          <text x="894" y="314" text-anchor="middle" opacity="0.8">src/review · src/design · src/roadshow</text>
+        </g>
+
+        <!-- arrows down -->
+        <path d="M300,350 L300,400" stroke="currentColor" stroke-width="1.5" fill="none" marker-start="url(#a1)" marker-end="url(#a1)"/>
+        <text x="312" y="372" fill="currentColor" opacity="0.8">read a whole file, write it back</text>
+        <text x="312" y="390" fill="currentColor" opacity="0.8">or append a line</text>
+        <path d="M870,350 L870,400" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a1)"/>
+        <text x="882" y="372" fill="currentColor" opacity="0.8">spawn, prompt on stdin</text>
+        <text x="882" y="390" fill="currentColor" opacity="0.8">names coded [P1] [I1]</text>
+
+        <!-- workspace -->
+        <rect x="40" y="400" width="600" height="180" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="56" y="424" font-weight="600" font-size="14" fill="currentColor">Workspace folder: all the state, all local files</text>
+        <g fill="currentColor" font-family="IBM Plex Mono, Menlo, monospace" font-size="12">
+          <text x="56" y="450">rules/      entities.yaml · inference.yaml · ontology.yaml · stages · settings</text>
+          <text x="56" y="474">data/ideas/ CAFE-2026-006-…/ idea.yaml · emails/ · design · plan.md · kit/ · roadshow/</text>
+          <text x="56" y="498">data/graph/ ai-links.jsonl · operator.jsonl · nodes + edges snapshot</text>
+          <text x="56" y="522">data/memory/ index.jsonl · state.json · labels.jsonl</text>
+          <text x="56" y="546">data/exports/*.jsonld</text>
+        </g>
+        <text x="56" y="568" fill="currentColor" opacity="0.7">data/ can be deleted and rebuilt from the imports and the operator log</text>
+
+        <!-- AI on the machine -->
+        <rect x="680" y="400" width="380" height="180" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="696" y="424" font-weight="600" font-size="14" fill="currentColor">AI on the same machine</text>
+        <g fill="currentColor">
+          <rect x="696" y="438" width="200" height="30" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="796" y="458" text-anchor="middle">1 Claude Code CLI, headless</text>
+          <rect x="696" y="476" width="200" height="30" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="796" y="496" text-anchor="middle">2 GitHub Copilot CLI</text>
+          <rect x="696" y="514" width="200" height="30" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
+          <text x="796" y="534" text-anchor="middle">3 VS Code helper</text>
+          <text x="796" y="566" text-anchor="middle" opacity="0.7">the first one found is used</text>
+
+          <rect x="912" y="438" width="132" height="106" rx="4" class="f-dr l-dr"/>
+          <text x="978" y="462" text-anchor="middle" font-weight="600" class="t-dr">Sentence</text>
+          <text x="978" y="480" text-anchor="middle" font-weight="600" class="t-dr">embedder</text>
+          <text x="978" y="502" text-anchor="middle" opacity="0.85">MiniLM, ONNX</text>
+          <text x="978" y="520" text-anchor="middle" opacity="0.85">on the CPU</text>
+          <text x="978" y="538" text-anchor="middle" opacity="0.85">in-process</text>
+          <text x="978" y="566" text-anchor="middle" opacity="0.7">~/.cafe-ai/models</text>
+        </g>
+
+        <!-- future -->
+        <path d="M230,580 L230,640" class="l-fut" stroke-width="1.5" fill="none" marker-end="url(#a1f)"/>
+        <rect x="40" y="640" width="380" height="70" rx="8" fill="none" class="l-fut" stroke-width="1.5"/>
+        <text x="230" y="668" text-anchor="middle" font-weight="600" class="t-fut">Postgres or Snowflake (not built)</text>
+        <text x="230" y="690" text-anchor="middle" fill="currentColor" opacity="0.8">a store adapter behind the four file writers</text>
+
+        <path d="M870,580 L870,640" class="l-fut" stroke-width="1.5" fill="none" marker-end="url(#a1f)"/>
+        <rect x="680" y="640" width="380" height="70" rx="8" fill="none" class="l-fut" stroke-width="1.5"/>
+        <text x="870" y="668" text-anchor="middle" font-weight="600" class="t-fut">Firm AI Gateway (not built)</text>
+        <text x="870" y="690" text-anchor="middle" fill="currentColor" opacity="0.8">one more provider file, same interface</text>
+      </svg>
+      </div>
+      <figcaption><b>Figure 1. The X-ray.</b> Everything inside the laptop outline exists today. The browser talks only to the local server over JSON. The server, the CLI, the graph build, Deep read, the AI connector, the assistant and the three stages are one process compiled from one TypeScript tree. The workspace folder is the only state. The AI is a program already on the machine, started on demand. The two dashed boxes are where the firm's gateway and warehouse would attach.</figcaption>
+      <div class="legend">
+        <span><i class="sw plain"></i> built, neutral</span>
+        <span><i class="sw kg"></i> knowledge graph layer</span>
+        <span><i class="sw dr"></i> Deep read layer</span>
+        <span><i class="sw fut"></i> future, not built</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <h3>What it is</h3>
+    <p>The app is a single Node process started with <code>npm run cafe start</code>. It listens on <code>127.0.0.1</code> only, so nothing on the network can reach it. The same process serves the built user interface from <code>web/</code>, answers the JSON routes the interface calls, rebuilds the graph, runs Deep read's index, spawns the AI, and runs the three stages. The same TypeScript tree also builds the command-line tool, which imports a submission export, checks the ontology and writes the JSON-LD export without starting the server.</p>
+    <h3>Why it is built this way</h3>
+    <p>One operator runs the Café. The constraint was never scale; it was that nothing may be installed on a server and nothing may leave the machine. So the whole state is one folder the operator can zip, copy or delete, and the AI is whichever assistant is already approved for their IDE. A change to the ontology in <code>src/graph/ontology.ts</code> is seen by the server, the interface, the CLI and the tests at once, because they are the same code. There is no second runtime, no migration, and no deployment step beyond <code>npm install</code>.</p>
+    <h3>How it works, in steps</h3>
+    <ol>
+      <li>The operator starts the app. It creates the workspace folders that are missing, loads <code>rules/</code>, and serves the interface on port 4100.</li>
+      <li>The browser asks for the state. The server reads every idea folder, rebuilds the graph in memory, and returns stars, links and charts as JSON. The interface draws them as a star field.</li>
+      <li>Anything the operator does that needs the AI, such as "suggest a decision", becomes one task. The connector codes the names, spawns the AI with the prompt on standard input, checks the reply against a schema, decodes the names, and shows a card.</li>
+      <li>A click on the card writes the result into the idea folder. Writing a file touches Deep read's upkeep, which re-reads only the passages that changed, and the next graph read includes the new fact.</li>
+    </ol>
+    <h3>What changes when it scales</h3>
+    <p>Only the two dashed boxes. The connector would gain a provider file for a Firm AI Gateway, and the four file writers would sit behind a store adapter for Postgres or Snowflake. The browser, the routes, the graph build, the inference rules and the stages would not change. Section 9 walks through both paths.</p>
+  </section>
+
+  <!-- ===================================================== 2 ===================================================== -->
+  <section id="s2">
+    <div class="eyebrow">2 · What it is built from</div>
+    <h2>Few packages, each with one job</h2>
+    <p class="talk">The app is about 29,000 lines of TypeScript and nine runtime packages, and the only graph library in it does layout.</p>
+    <p>The table below is the dependency list from <code>package.json</code> and <code>ui/package.json</code>, grouped by what each package is for. Read the third column as the test for each row: if the reason no longer holds, the package should go. The point it proves is that the app carries no framework, no database driver and no graph engine; each dependency reads a file format, draws the universe, or runs the embedding model.</p>
+  </section>
+  <section class="wide">
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Part</th><th>Package</th><th>Why this one</th></tr></thead>
+      <tbody>
+        <tr><td>Language, everywhere</td><td>TypeScript on Node 20</td><td>One language for server, CLI, UI and tests; no second runtime to install on a locked-down PC</td></tr>
+        <tr><td>Server</td><td><code>node:http</code> (no framework)</td><td>98 JSON routes registered in one file and static files; a framework would add more than it removes</td></tr>
+        <tr><td>UI</td><td>React 19, Vite</td><td>Built once into <code>web/</code>, served by the same process</td></tr>
+        <tr><td>The universe</td><td>three.js, <code>@react-three/fiber</code>, <code>@react-three/drei</code>, <code>@react-three/postprocessing</code>, gsap</td><td>The 3D star field, the glow, the pulses</td></tr>
+        <tr><td>UI state</td><td>zustand</td><td>Small store, no boilerplate</td></tr>
+        <tr><td>Layout</td><td><code>d3-force-3d</code></td><td>Places the stars; the only graph library in the app, and it only does layout</td></tr>
+        <tr><td>Rules</td><td><code>yaml</code></td><td>The registry, inference rules, ontology, stages and settings are files the operator can read and edit</td></tr>
+        <tr><td>Import readers</td><td><code>pdfjs-dist</code>, <code>exceljs</code>, <code>csv-parse</code>, <code>@kenjiuno/msgreader</code>, <code>fflate</code></td><td>Read what people drop in: PDF, Excel, CSV, Outlook <code>.msg</code>, zips</td></tr>
+        <tr><td>Deck writer</td><td><code>pptxgenjs</code></td><td>Writes the roadshow deck as PowerPoint beside the HTML version</td></tr>
+        <tr><td>Embeddings</td><td><code>@huggingface/transformers</code> (ONNX runtime, CPU)</td><td>Deep read's model runs in-process, downloaded once on the first Run, cached outside the workspace</td></tr>
+        <tr><td>Tests</td><td>vitest, jsdom, playwright-core</td><td>About 860 server tests and about 370 UI tests; the browser is driven headless for acceptance</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section>
+    <p>Two things follow from the table. First, every dependency can be explained in one line to the person who approves software, which matters on a locked-down PC. Second, the knowledge graph in section 5 is not a package at all: it is plain arrays and maps in <code>src/graph/build.ts</code> plus three YAML files, which is why section 8 can argue against adding a graph library.</p>
+    <h3>How it is laid out</h3>
+    <p>The server code under <code>src/</code> is about 20,000 lines without tests and the interface under <code>ui/src/</code> about 9,000, which together is the 29,000 above. The folders under <code>src/</code> follow the nouns in this document: <code>ai</code>, <code>graph</code>, <code>memory</code>, <code>command</code>, <code>review</code>, <code>design</code>, <code>roadshow</code>, <code>ideas</code>, <code>import</code>, <code>inbox</code>, <code>comms</code>, <code>server</code>, <code>workspace</code>. The tests live in <code>tests/</code> and next to the UI components, and the acceptance script drives the real browser against a fake AI (<code>CAFE_AI_FAKE=1</code>) so a whole round can be run end to end without a model.</p>
+    <h3>What changes when it scales</h3>
+    <p>Nothing in this table. A gateway provider would use Node's built-in <code>fetch</code>, as the VS Code helper already does, and a Postgres or Snowflake adapter would add one driver package. The readers, the universe and the tests stay.</p>
+  </section>
+
+  <!-- ===================================================== 3 ===================================================== -->
+  <section id="s3">
+    <div class="eyebrow">3 · How the AI is connected</div>
+    <h2>The AI reads a coded prompt and returns a checked structure; the operator clicks</h2>
+    <p class="talk">The AI never sees a name, never touches a file, and never changes the graph by itself: it answers a question in JSON, and Do it is a human click.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 470" role="img" aria-label="Figure 2. How the AI is connected. A task becomes a prompt. The names in it are replaced by codes such as P1 for a person and I1 for an idea. The connector picks the first provider available on the machine: Claude Code CLI, then Copilot CLI, then the VS Code helper; a fake provider is used when CAFE_AI_FAKE is 1, for tests and tours. The reply is checked against a JSON schema and sent back once if it fails. The codes are decoded back to names. The result is shown as a card or fills a form, and Do it is the operator's click. A dashed Firm AI Gateway is one more provider file, not built." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="a2f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-fut"/></marker>
+        </defs>
+        <g fill="currentColor">
+          <!-- task -->
+          <rect x="20" y="180" width="130" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="85" y="206" text-anchor="middle" font-weight="600" font-size="14">A task</text>
+          <text x="85" y="226" text-anchor="middle" opacity="0.8">extract, decide,</text>
+          <text x="85" y="244" text-anchor="middle" opacity="0.8">design, deck,</text>
+          <text x="85" y="262" text-anchor="middle" opacity="0.8">answer</text>
+          <path d="M150,225 L170,225" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+          <!-- code names -->
+          <rect x="170" y="180" width="130" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="235" y="206" text-anchor="middle" font-weight="600" font-size="14">Code the names</text>
+          <text x="235" y="228" text-anchor="middle" opacity="0.8">a person → [P1]</text>
+          <text x="235" y="246" text-anchor="middle" opacity="0.8">an idea → [I1]</text>
+          <text x="235" y="264" text-anchor="middle" opacity="0.6" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">command/names.ts</text>
+          <path d="M300,225 L320,225" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+          <!-- connector -->
+          <rect x="320" y="180" width="130" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="385" y="206" text-anchor="middle" font-weight="600" font-size="14">Connector</text>
+          <text x="385" y="228" text-anchor="middle" opacity="0.8">first provider</text>
+          <text x="385" y="246" text-anchor="middle" opacity="0.8">found on the PC</text>
+          <text x="385" y="264" text-anchor="middle" opacity="0.6" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">ai/connector.ts</text>
+
+          <!-- providers -->
+          <rect x="480" y="30" width="170" height="44" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="565" y="48" text-anchor="middle" font-weight="600">claude.ts</text>
+          <text x="565" y="66" text-anchor="middle" opacity="0.8">Claude Code CLI, headless</text>
+          <rect x="480" y="92" width="170" height="44" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="565" y="110" text-anchor="middle" font-weight="600">copilot.ts</text>
+          <text x="565" y="128" text-anchor="middle" opacity="0.8">Copilot CLI</text>
+          <rect x="480" y="154" width="170" height="44" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="565" y="172" text-anchor="middle" font-weight="600">vscode.ts</text>
+          <text x="565" y="190" text-anchor="middle" opacity="0.8">VS Code helper, local HTTP</text>
+          <rect x="480" y="216" width="170" height="44" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="565" y="234" text-anchor="middle" font-weight="600">fake.ts</text>
+          <text x="565" y="252" text-anchor="middle" opacity="0.8">CAFE_AI_FAKE=1 · tests, tours</text>
+          <rect x="480" y="300" width="170" height="60" rx="5" fill="none" class="l-fut" stroke-width="1.5"/>
+          <text x="565" y="322" text-anchor="middle" font-weight="600" class="t-fut">gateway.ts</text>
+          <text x="565" y="340" text-anchor="middle" opacity="0.8">Firm AI Gateway, HTTPS</text>
+          <text x="565" y="354" text-anchor="middle" opacity="0.6" font-size="11">not built, same interface</text>
+          <text x="565" y="282" text-anchor="middle" opacity="0.6" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">tried in this order</text>
+
+          <!-- connector -> providers -->
+          <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+            <path d="M450,215 C465,215 465,52 478,52"/>
+            <path d="M450,220 C465,220 465,114 478,114"/>
+            <path d="M450,225 C465,225 465,176 478,176"/>
+            <path d="M450,232 C465,232 465,238 478,238"/>
+          </g>
+          <path d="M450,240 C465,240 465,330 478,330" class="l-fut" stroke-width="1.5" fill="none" marker-end="url(#a2f)"/>
+
+          <!-- providers -> check -->
+          <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+            <path d="M650,52 C665,52 665,215 678,215"/>
+            <path d="M650,114 C665,114 665,220 678,220"/>
+            <path d="M650,176 C665,176 665,225 678,225"/>
+            <path d="M650,238 C665,238 665,232 678,232"/>
+          </g>
+          <path d="M650,330 C665,330 665,240 678,240" class="l-fut" stroke-width="1.5" fill="none" marker-end="url(#a2f)"/>
+
+          <!-- check schema -->
+          <rect x="680" y="180" width="130" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="745" y="206" text-anchor="middle" font-weight="600" font-size="14">Check the shape</text>
+          <text x="745" y="228" text-anchor="middle" opacity="0.8">one JSON schema</text>
+          <text x="745" y="246" text-anchor="middle" opacity="0.8">sent back once</text>
+          <text x="745" y="264" text-anchor="middle" opacity="0.6" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">ai/schema.ts</text>
+          <path d="M810,225 L830,225" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+          <!-- decode -->
+          <rect x="830" y="180" width="120" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="890" y="206" text-anchor="middle" font-weight="600" font-size="14">Decode</text>
+          <text x="890" y="228" text-anchor="middle" opacity="0.8">[P1] → the person</text>
+          <text x="890" y="246" text-anchor="middle" opacity="0.8">inside the app</text>
+          <path d="M950,225 L970,225" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+          <!-- do it -->
+          <rect x="970" y="180" width="110" height="90" rx="6" class="f-pg l-pg" stroke-width="1.5"/>
+          <text x="1025" y="206" text-anchor="middle" font-weight="600" font-size="14" class="t-pg">A card</text>
+          <text x="1025" y="228" text-anchor="middle" opacity="0.85">or a form</text>
+          <text x="1025" y="246" text-anchor="middle" opacity="0.85">Do it is the</text>
+          <text x="1025" y="264" text-anchor="middle" opacity="0.85">operator's click</text>
+
+          <!-- footnote -->
+          <text x="20" y="412" opacity="0.8">Each CLI call: a child process in an empty temp folder, a scrubbed environment, every built-in tool off, no MCP servers,</text>
+          <text x="20" y="432" opacity="0.8">no saved session, one turn, the prompt on stdin, a hard timeout (90 s by default, 300 s at most) and a 1 MB cap on the reply.</text>
+          <text x="20" y="456" opacity="0.8">A reply the checker refuses is asked for once more, with what was wrong. A timeout is never asked again.</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption><b>Figure 2. How the AI is connected.</b> One pipe for every task. The names are coded before the prompt exists and decoded after the reply is checked, so a name never leaves the process. The provider is the first one found; the rest of the app does not know which answered. A Firm AI Gateway would be a fifth file on the same interface.</figcaption>
+      <div class="legend">
+        <span><i class="sw plain"></i> built today</span>
+        <span><i class="sw pg"></i> the human gate</span>
+        <span><i class="sw fut"></i> future, not built</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <h3>What it is</h3>
+    <p>The app does not have an AI of its own. It uses the assistant the operator already has for their IDE, in the order Claude Code, then the GitHub Copilot CLI, then a VS Code helper, and uses the first one that is present on the machine. The operator can pin one of them, or "No AI", in <code>rules/settings.yaml</code>. A fourth provider, the fake, is put first only when the environment says <code>CAFE_AI_FAKE=1</code>; the tests and the guided tour run on it, so a whole round can be exercised without a model.</p>
+    <h3>Why it is built this way</h3>
+    <p>Three reasons. The assistant is already approved, so no new AI service needs approval. The prompt and the reply stay on the machine, so no data leaves. And every call is bounded: a child process in an empty temporary folder, the environment stripped of every <code>CAFE_*</code> variable, every built-in tool disabled, no MCP servers, no saved session, one turn, a hard timeout and a cap on the reply. The AI can read the prompt and nothing else. The VS Code helper is the one provider that is not a child process: it is an HTTP call to a helper on the local machine, found through a port and token in the operator's home folder, with the same cap on the reply.</p>
+    <h3>How a call works, in steps</h3>
+    <ol>
+      <li><strong>A task is chosen.</strong> There are about fifteen named tasks in <code>src/ai/tasks.ts</code>: extract, review-suggest, feature-list, tool-pick, design-step, design-diagram, design-plan, design-kit, roadshow-prep, roadshow-deck, data-understand, data-step, understand, agent, look and ping. Each one has a prompt builder, a JSON schema and a timeout.</li>
+      <li><strong>The names are coded.</strong> Every star the text names is replaced by a code, longest name first, whole words only: a person becomes <code>[P1]</code>, a team <code>[T1]</code>, an idea <code>[I1]</code>, a system <code>[S1]</code>. The AI is given the legend for everything except people, who are listed by type alone. A conversation keeps its codes, so <code>[P1]</code> in the first message is still <code>[P1]</code> in the tenth.</li>
+      <li><strong>The provider runs.</strong> The prompt goes on standard input, never on the command line. For a picture, Claude Code is allowed a single Read on a single file in an otherwise empty folder, and nothing else.</li>
+      <li><strong>The reply is checked.</strong> The first balanced JSON object in the text is parsed and validated against the task's schema by a small local validator: type, required keys, no extra keys, enumerations, lengths, item counts. A reply that fails is sent back once, headed by what was wrong, if at least fifteen seconds of the task's time remain. Nothing from the refused reply is used.</li>
+      <li><strong>The names are put back</strong> and the result is shown as a card, or fills a form. It is written into the record only when the operator clicks Do it, or saves the form.</li>
+    </ol>
+    <h3>What changes when it scales</h3>
+    <p>A provider is one file that implements the <code>Provider</code> interface in <code>src/ai/connector.ts</code>: an id and label, <code>available()</code>, and <code>complete(prompt, { timeoutMs })</code>, with an optional <code>look()</code> for pictures. A Firm AI Gateway provider is that file plus an HTTPS call with the firm's token, built the way the VS Code helper already is. The coding of names, the schema check, the retry and the cards stay exactly as they are, because they sit on either side of the provider and never inside it.</p>
+  </section>
+
+  <!-- ===================================================== 4 ===================================================== -->
+  <section id="s4">
+    <div class="eyebrow">4 · Where the data lives</div>
+    <h2>Everything is a file in one folder, and every fact says which line put it there</h2>
+    <p class="talk">Delete the data folder and the app rebuilds it from the imports and the operator's own log; there is nothing a database would have to protect that a file does not already hold.</p>
+    <h3>What it is</h3>
+    <p>The workspace has two halves. <code>rules/</code> is the operator's configuration: settings, the stage definitions, and the three knowledge-graph files, <code>entities.yaml</code>, <code>inference.yaml</code> and <code>ontology.yaml</code>. <code>data/</code> is everything the Café made or was given, and it is safe to delete in whole or in part, even while the app runs.</p>
+    <p>Under <code>data/ideas/</code> there is one folder per idea, named by its Café id and a slug. The record itself is <code>idea.yaml</code>. Beside it sit the emails as they came in, a <code>history.log</code> of every action, and, as the idea moves on, <code>approach.md</code> and <code>design.yaml</code> from the design series, <code>plan.md</code> and a <code>kit/</code> folder, a <code>roadshow/</code> folder with the deck, and <code>csic-handoff.md</code> when it is routed to CSIC. Under <code>data/graph/</code> the AI's reading is <code>ai-links.jsonl</code>, one link per line with its source, confidence, status and the idea it was read for, and the operator's changes are <code>operator.jsonl</code>, one dated edit per line: link, unlink, rename, merge, add, remove or alias, each with an id and a status that an undo flips rather than deletes. Deep read's index is three files under <code>data/memory/</code>. Exports go to <code>data/exports/</code>.</p>
+    <h3>Why it is built this way</h3>
+    <p>Two properties follow from files, and they are the two properties a database would have to keep. The first is that <code>data/</code> can be rebuilt: the graph is never read from disk but recomputed from the idea folders, the AI links and the operator log on every read, and the index is rebuilt from the idea folders by a Run. The second is provenance: every link in the graph carries a <code>source</code> such as <code>form:CAFE-2026-006:Submitter Name</code>, <code>ai:claude:challenge</code>, <code>operator</code> or <code>rule:needs+uses_data</code>, so the answer to "why does the app believe that" is a line in a file the operator can open.</p>
+    <h3>How a write works, in steps</h3>
+    <ol>
+      <li>The writers are few and named: <code>src/ideas/store.ts</code> writes <code>idea.yaml</code>; <code>src/graph/store.ts</code> rewrites <code>ai-links.jsonl</code>; <code>src/graph/operator.ts</code> rewrites <code>operator.jsonl</code>; <code>src/memory/index.ts</code> writes the index, its state and the label vectors.</li>
+      <li>Each one reads the whole file and writes it back through an atomic write, so a file is never torn, even if the process dies halfway.</li>
+      <li>Every write into an idea folder goes through the workspace files layer, which names the idea and the kind of write on a touch bus. Deep read's upkeep listens there; so does the graph's per-idea cache, which drops that idea's bundle.</li>
+      <li>After each rebuild the graph also writes <code>nodes.jsonl</code> and <code>edges.jsonl</code> as a snapshot for other tools to read. The app itself never reads that snapshot back.</li>
+    </ol>
+    <h3>What changes when it scales</h3>
+    <p>Scaling the storage is a store adapter behind those four writers. A Postgres adapter replaces each read-and-rewrite with a table; Snowflake fits the same seam for the read-mostly analytics copy. The JSON-LD export, <code>cafe export</code> from the command line, already gives the graph with every link's provenance in a form a graph database or a warehouse can load today, without the adapter. Section 9 gives the table shape and the decisions that come first.</p>
+  </section>
+
+  <!-- ===================================================== 5 ===================================================== -->
+  <section id="s5">
+    <div class="eyebrow">5 · How the AI processes an idea</div>
+    <h2>Three layers over one idea: the facts, the meaning, and the words</h2>
+    <p class="talk">The property graph says what the form said, the knowledge graph says what follows from it and why, and Deep read says what people actually wrote.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 760" role="img" aria-label="Figure 3. The three layers. An import becomes an idea record in a folder. Layer 1, the property graph, holds the facts as stated on the forms and by the operator: who submitted which idea, which round, which team, stages, roles and dates. Layer 2, the knowledge graph, starts with one AI extraction per idea that writes pain points, capabilities and systems to ai-links.jsonl with source and confidence; the registry gives each thing one star and its aliases, the inference rules derive links such as DEPENDS_ON and SIMILAR_TO, and the ontology says what may link to what; buildGraph combines forms, AI links, operator edits and rules on every read, with a per-idea cache. Layer 3, Deep read, chunks the records, emails and designs, embeds them on the CPU with MiniLM, and keeps an index current through upkeep. The assistant plans graph steps first and searches the text last, and shows the result in the universe with a trace." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="a3k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-kg"/></marker>
+          <marker id="a3d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-dr"/></marker>
+        </defs>
+        <g fill="currentColor">
+          <!-- import and record -->
+          <rect x="60" y="20" width="300" height="60" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="210" y="45" text-anchor="middle" font-weight="600" font-size="14">Import</text>
+          <text x="210" y="65" text-anchor="middle" opacity="0.8">a submission, a PDF, an email, a spreadsheet</text>
+          <path d="M360,50 L400,50" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+          <rect x="400" y="20" width="300" height="60" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="550" y="45" text-anchor="middle" font-weight="600" font-size="14">Idea record</text>
+          <text x="550" y="65" text-anchor="middle" opacity="0.8" font-family="IBM Plex Mono, Menlo, monospace" font-size="12">data/ideas/CAFE-2026-006-…/</text>
+
+          <!-- the record spine on the left -->
+          <path d="M400,50 L30,50 L30,553" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <g stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a3)">
+            <path d="M30,188 L78,188"/>
+            <path d="M30,325 L78,325"/>
+            <path d="M30,553 L78,553"/>
+          </g>
+
+          <!-- LAYER 1 -->
+          <rect x="60" y="130" width="1020" height="100" rx="8" class="f-pg l-pg" fill-opacity="0.55"/>
+          <text x="76" y="150" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" class="t-pg" font-weight="600">LAYER 1 · PROPERTY GRAPH · the facts as stated</text>
+          <rect x="80" y="160" width="620" height="56" rx="5" class="f-panel l-pg"/>
+          <text x="390" y="182" text-anchor="middle" font-weight="600">From the forms and the operator</text>
+          <text x="390" y="202" text-anchor="middle" opacity="0.8">Person SUBMITTED Idea · Idea IN_ROUND · Team HAS_MEMBER · stage, roles, dates</text>
+          <rect x="740" y="160" width="320" height="56" rx="5" class="f-panel l-pg"/>
+          <text x="900" y="182" text-anchor="middle" font-weight="600">Cheap and certain</text>
+          <text x="900" y="202" text-anchor="middle" opacity="0.8">counts, lists, "who is", "which stage"</text>
+
+          <!-- LAYER 2 -->
+          <rect x="60" y="260" width="1020" height="200" rx="8" class="f-kg l-kg" fill-opacity="0.55"/>
+          <text x="76" y="280" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" class="t-kg" font-weight="600">LAYER 2 · KNOWLEDGE GRAPH · meaning, kept as data</text>
+          <rect x="80" y="290" width="230" height="70" rx="5" class="f-panel l-kg"/>
+          <text x="195" y="312" text-anchor="middle" font-weight="600">AI extract, one call per idea</text>
+          <text x="195" y="331" text-anchor="middle" opacity="0.8">pain points · capabilities · systems</text>
+          <text x="195" y="349" text-anchor="middle" opacity="0.8">named at a reusable level</text>
+          <path d="M195,360 L195,380" class="l-kg" stroke-width="1.5" fill="none" marker-end="url(#a3k)"/>
+          <rect x="80" y="380" width="230" height="56" rx="5" class="f-panel l-kg"/>
+          <text x="195" y="402" text-anchor="middle" font-weight="600">ai-links.jsonl</text>
+          <text x="195" y="421" text-anchor="middle" opacity="0.8">source · confidence · idea · status</text>
+
+          <rect x="340" y="290" width="220" height="70" rx="5" class="f-panel l-kg"/>
+          <text x="450" y="312" text-anchor="middle" font-weight="600">Registry</text>
+          <text x="450" y="331" text-anchor="middle" opacity="0.8">rules/entities.yaml</text>
+          <text x="450" y="349" text-anchor="middle" opacity="0.8">one star per thing, its aliases</text>
+          <rect x="590" y="290" width="230" height="70" rx="5" class="f-panel l-kg"/>
+          <text x="705" y="312" text-anchor="middle" font-weight="600">Inference rules</text>
+          <text x="705" y="331" text-anchor="middle" opacity="0.8">rules/inference.yaml</text>
+          <text x="705" y="349" text-anchor="middle" opacity="0.8">NEEDS + USES_DATA ⇒ DEPENDS_ON</text>
+          <rect x="850" y="290" width="210" height="70" rx="5" class="f-panel l-kg"/>
+          <text x="955" y="312" text-anchor="middle" font-weight="600">Ontology</text>
+          <text x="955" y="331" text-anchor="middle" opacity="0.8">rules/ontology.yaml</text>
+          <text x="955" y="349" text-anchor="middle" opacity="0.8">what may link to what</text>
+          <g class="l-kg" stroke-width="1.5" fill="none" marker-end="url(#a3k)">
+            <path d="M450,360 L450,380"/>
+            <path d="M705,360 L705,380"/>
+            <path d="M955,360 L955,380"/>
+            <path d="M310,408 L320,408"/>
+          </g>
+          <rect x="320" y="380" width="740" height="56" rx="5" class="f-panel l-kg" stroke-width="1.5"/>
+          <text x="690" y="402" text-anchor="middle" font-weight="600">buildGraph: forms → AI links → operator edits → rules, on every read, per-idea cache</text>
+          <text x="690" y="421" text-anchor="middle" opacity="0.8">a derived link carries its rule and its two input links; it is never read from disk</text>
+          <path d="M330,216 L330,380" class="l-pg" stroke-width="1.5" fill="none" marker-end="url(#a3k)"/>
+
+          <!-- LAYER 3 -->
+          <rect x="60" y="490" width="700" height="110" rx="8" class="f-dr l-dr" fill-opacity="0.55"/>
+          <text x="76" y="510" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" class="t-dr" font-weight="600">LAYER 3 · DEEP READ · what people wrote</text>
+          <rect x="80" y="525" width="200" height="56" rx="5" class="f-panel l-dr"/>
+          <text x="180" y="547" text-anchor="middle" font-weight="600">Chunk the text</text>
+          <text x="180" y="566" text-anchor="middle" opacity="0.8">forms, emails, designs</text>
+          <path d="M280,553 L300,553" class="l-dr" stroke-width="1.5" fill="none" marker-end="url(#a3d)"/>
+          <rect x="300" y="525" width="200" height="56" rx="5" class="f-panel l-dr"/>
+          <text x="400" y="547" text-anchor="middle" font-weight="600">Embed on the CPU</text>
+          <text x="400" y="566" text-anchor="middle" opacity="0.8">MiniLM, in-process</text>
+          <path d="M500,553 L520,553" class="l-dr" stroke-width="1.5" fill="none" marker-end="url(#a3d)"/>
+          <rect x="520" y="525" width="220" height="56" rx="5" class="f-panel l-dr"/>
+          <text x="630" y="547" text-anchor="middle" font-weight="600">index.jsonl</text>
+          <text x="630" y="566" text-anchor="middle" opacity="0.8">upkeep re-reads only what changed</text>
+
+          <!-- build -> assistant, index -> assistant -->
+          <path d="M900,436 L900,650" class="l-kg" stroke-width="1.5" fill="none" marker-end="url(#a3k)"/>
+          <text x="912" y="540" class="t-kg">derived links, dashed violet:</text>
+          <text x="912" y="558" class="t-kg">rule and inputs shown</text>
+          <path d="M630,581 L630,690 L740,690" class="l-dr" stroke-width="1.5" fill="none" marker-end="url(#a3d)"/>
+          <text x="642" y="640" class="t-dr">readings, with a score</text>
+
+          <!-- assistant and universe -->
+          <rect x="740" y="650" width="340" height="80" rx="6" class="f-panel" stroke="currentColor" stroke-width="1.5"/>
+          <text x="910" y="674" text-anchor="middle" font-weight="600" font-size="14">Assistant · src/command</text>
+          <text x="910" y="694" text-anchor="middle" opacity="0.8">graph steps first, text search last</text>
+          <text x="910" y="712" text-anchor="middle" opacity="0.8">every derived claim names its rule</text>
+          <path d="M740,670 L380,670" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+          <rect x="80" y="650" width="300" height="80" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="230" y="680" text-anchor="middle" font-weight="600" font-size="14">Universe, cards, trace</text>
+          <text x="230" y="702" text-anchor="middle" opacity="0.8">stars lit, links drawn, steps listed</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption><b>Figure 3. The three layers.</b> One idea record on the left feeds all three. The property graph is the forms as stated. The knowledge graph adds what the AI read, what the operator changed, one name per thing, and the links the rules derive, each with its provenance. Deep read embeds the prose. The assistant builds an answer from the graph and decorates it with quotes, not the other way round.</figcaption>
+      <div class="legend">
+        <span><i class="sw pg"></i> property graph</span>
+        <span><i class="sw kg"></i> knowledge graph</span>
+        <span><i class="sw dr"></i> Deep read</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <h3><span class="lane-tag pg">Layer 1</span> The property graph: facts as stated</h3>
+    <p>Every idea folder contributes a bundle of stars and links that is a pure function of its record: the idea star with its stage, function and region; a star for the submitter with a <code>SUBMITTED</code> link; one link per role for each team member (<code>LEADS</code>, <code>SPONSORS</code>, <code>BUILDS</code>, or plain <code>RELATED</code>); the team and division; the support asked for; and the form's choice columns, so two ideas that picked the same desired outcome share one star. There are thirteen kinds of star and twenty kinds of link in the ontology, of which four are derived. Each form link has confidence 1, is confirmed, and names the form column it came from. This layer is cheap and certain, and it is already enough for counts, lists, "who leads this" and "which stage is it at".</p>
+    <h3><span class="lane-tag kg">Layer 2</span> The knowledge graph: meaning, kept as data</h3>
+    <p>Three small files turn those facts into something the app can reason over, and one AI call per idea feeds them.</p>
+    <ol>
+      <li><strong>Extraction.</strong> When the operator asks to grow the universe for an idea, the AI reads the record, with names coded, and returns pain points, capabilities and systems named at a reusable level, each linked to the idea with a confidence and a description. The app keeps them in <code>ai-links.jsonl</code> with the provider as source and the idea's id. A link whose confidence is at least 0.7 and that brings no new star is confirmed; a link that proposes a new star waits for the operator, whatever its confidence. Before anything is saved, Deep read's label vectors are used, when they exist, to reuse a star that only differs in wording and to hold a near one for the operator.</li>
+      <li><strong>The registry.</strong> <code>rules/entities.yaml</code> gives the stars that keep coming back under other words a stable id, a label, its aliases, and sometimes a reference such as a catalogue id. When a star is born from a label, the registry resolves it first, by the slug of the label or any alias, so "T&amp;E policy" and "Travel &amp; Expense policy" are one system and no twin is made. A merge the operator does records the merged label as an alias, so the twin cannot come back at the next import.</li>
+      <li><strong>The inference rules.</strong> <code>rules/inference.yaml</code> holds four rules by default. Three are chains: an idea <code>NEEDS</code> a capability and that capability <code>USES_DATA</code> from a system, so the idea <code>DEPENDS_ON</code> the system, scoped to the idea the AI read it for; <code>NEEDS</code> plus <code>BUILT_WITH</code> gives <code>USES</code>; <code>HAS_MEMBER</code> plus <code>SUBMITTED</code> gives <code>OWNS</code>. The fourth links two ideas <code>SIMILAR_TO</code> each other when they share at least two capabilities, pain points or categories, naming the shared stars. A derived link takes the lower confidence of its inputs, is confirmed only when both inputs are, and carries <code>source: rule:&lt;name&gt;</code> and the ids of its two inputs. Each rule can be switched off in the file.</li>
+      <li><strong>The ontology.</strong> <code>rules/ontology.yaml</code> says what each kind of star means, what colour it has in the universe, and which pair of types each link may join. It is applied over the built-in ontology, so the operator can rename "Division" without touching code. <code>cafe ontology check</code> reads the three files and the graph, reports a duplicate alias, a chain whose types do not line up, or a link whose ends are of the wrong type, and lists any operator edit whose stars are gone, but never fixes anything.</li>
+    </ol>
+    <p><code>buildGraph</code> in <code>src/graph/build.ts</code> puts the layers in order on every read: the form bundles, then the AI links that pass the ontology, then the operator's edits in the order they were made, with a merge followed by any later edit at the merged star's id, then the rules last. Nothing derived is ever read from disk. A per-idea cache keyed on the record's hash and the registry's version means a rebuild recomputes only the ideas that changed.</p>
+    <h3><span class="lane-tag dr">Layer 3</span> Deep read: what people wrote</h3>
+    <p>Neither graph can read prose. Deep read takes everything long in an idea folder that never becomes a star, the challenge, the current process, the email answers, the design, cuts it into passages of at most 1,200 characters with a 150-character overlap so a sentence on a seam is in both halves, and embeds each one on the CPU with a small sentence model, <code>all-MiniLM-L6-v2</code> through the ONNX runtime. The model is downloaded once, on the operator's first Run, into <code>~/.cafe-ai/models</code>, outside the workspace, and the app never downloads it on its own.</p>
+    <p>The index keeps itself current. Each passage has a hash of its section and text. Every write into an idea folder names the idea on a touch bus; upkeep waits for five seconds of quiet, or thirty at most, then compares the touched ideas' passages on disk with the ones in the index and embeds only the fresh ones. A rename or merge refreshes the star labels and nothing else. The rule list is one pure function, <code>decide</code> in <code>src/memory/upkeep.ts</code>, and its reason is shown in the pop-out: never while the model is not on the machine, never when the switch is off, never over an index built with another model, never the whole workspace.</p>
+    <h3>How the assistant uses all three</h3>
+    <p>A question in the command bar is not answered by the AI. The AI writes a plan: a list of at most eight steps over the graph, from a fixed set, <code>stars</code>, <code>follow</code>, <code>filter</code>, <code>role</code>, <code>intersect</code>, <code>path</code>, <code>rank</code>, <code>count_by</code>, <code>search</code> and <code>similar</code>. The app runs the steps, so every count, name and lit star comes from the graph itself, and the trace shows each step with what it left. The guide the AI reads tells it to walk the graph first and to search the text afterwards, kept apart as "a reading", so an answer is built from facts and decorated with quotes. When a step uses a derived link, the reply says the rule: "derived by needs+uses_data", not "it seems".</p>
+    <h3>What changes when it scales</h3>
+    <p>The three rule files and the build are pure functions of their inputs, so they do not care whether the inputs came from files or from tables. The one open question is where the embeddings run: on each operator's CPU, as now, or once in the firm. Section 9 lists it as a decision.</p>
+  </section>
+
+  <!-- ===================================================== 6 ===================================================== -->
+  <section id="s6">
+    <div class="eyebrow">6 · The three stages</div>
+    <h2>Decision, design, roadshow: the same pattern three times</h2>
+    <p class="talk">At every stage the AI reads the whole record and suggests, the people decide, the record grows, and the graph and Deep read see the growth before the next question is asked.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 620" role="img" aria-label="Figure 4. The three stages. Review and Select: the AI suggests a decision from the form, every email answer, the builder, attendance, flags and the idea's stars; five criteria are suggested and ticked; the decision card offers Select, Reuse, CSIC, Not now or Ask, and a CSIC route writes a hand-off markdown and a JSON-LD subgraph. The design series: understand the data with masked columns kept masked, features and a tool where the pick writes BUILT_WITH links and USES is derived, a brainstorm whose answers are saved, and plan.md with starter kits but never application code. Launch and Learn: photos never sent to the AI, a to-do list of only what the record lacks, and a deck written as a checked structure of six to sixteen slides from which code removes value claims and unknown figures. Below them, the knowledge graph and Deep read: the decision reads the idea's stars and how many other ideas need each; the design writes tool picks into the graph; the roadshow writes answers into the record, which upkeep re-reads." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="a4k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-kg"/></marker>
+          <marker id="a4d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-dr"/></marker>
+        </defs>
+        <g fill="currentColor">
+          <!-- lane 1 -->
+          <rect x="20" y="30" width="320" height="410" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="36" y="54" font-weight="600" font-size="14">1 · Review and Select</text>
+          <text x="36" y="72" opacity="0.65" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">src/review</text>
+          <rect x="40" y="86" width="280" height="76" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="180" y="106" text-anchor="middle" font-weight="600">Suggest a decision</text>
+          <text x="180" y="124" text-anchor="middle" opacity="0.8">reads the form, every email answer,</text>
+          <text x="180" y="140" text-anchor="middle" opacity="0.8">builder, attendance, flags, and the</text>
+          <text x="180" y="156" text-anchor="middle" opacity="0.8">idea's stars</text>
+          <path d="M180,162 L180,180" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="40" y="180" width="280" height="58" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="180" y="200" text-anchor="middle" font-weight="600">Five criteria</text>
+          <text x="180" y="218" text-anchor="middle" opacity="0.8">feasible · builder · data · theme · reuse</text>
+          <text x="180" y="232" text-anchor="middle" opacity="0.65" font-size="12">suggested by the AI, ticked by the operator</text>
+          <path d="M180,238 L180,256" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="40" y="256" width="280" height="76" rx="5" class="f-pg l-pg" stroke-width="1.5"/>
+          <text x="180" y="276" text-anchor="middle" font-weight="600" class="t-pg">Decision card</text>
+          <text x="180" y="294" text-anchor="middle" opacity="0.85">Select · Reuse · CSIC · Not now · Ask</text>
+          <text x="180" y="310" text-anchor="middle" opacity="0.85">"basis" says what it was based on</text>
+          <text x="180" y="326" text-anchor="middle" opacity="0.85">saved on a click, with a reason</text>
+          <path d="M180,332 L180,350" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="40" y="350" width="280" height="58" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="180" y="370" text-anchor="middle" font-weight="600">CSIC route</text>
+          <text x="180" y="388" text-anchor="middle" opacity="0.8">csic-handoff.md + .jsonld</text>
+          <text x="180" y="402" text-anchor="middle" opacity="0.65" font-size="12">the idea's subgraph, derived links included</text>
+
+          <!-- lane 2 -->
+          <rect x="390" y="30" width="320" height="410" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="406" y="54" font-weight="600" font-size="14">2 · Design series</text>
+          <text x="406" y="72" opacity="0.65" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">src/design · src/data</text>
+          <rect x="410" y="86" width="280" height="58" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="550" y="106" text-anchor="middle" font-weight="600">Understand the data</text>
+          <text x="550" y="124" text-anchor="middle" opacity="0.8">files profiled in code first;</text>
+          <text x="550" y="138" text-anchor="middle" opacity="0.8">masked columns stay masked</text>
+          <path d="M550,144 L550,162" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="410" y="162" width="280" height="76" rx="5" class="f-kg l-kg" stroke-width="1.5"/>
+          <text x="550" y="182" text-anchor="middle" font-weight="600" class="t-kg">Features and tool</text>
+          <text x="550" y="200" text-anchor="middle" opacity="0.85">AI evaluates the approved tools;</text>
+          <text x="550" y="216" text-anchor="middle" opacity="0.85">the pick writes BUILT_WITH links</text>
+          <text x="550" y="232" text-anchor="middle" opacity="0.85">⇒ USES derived for the idea</text>
+          <path d="M550,238 L550,256" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="410" y="256" width="280" height="58" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="550" y="276" text-anchor="middle" font-weight="600">Design brainstorm</text>
+          <text x="550" y="294" text-anchor="middle" opacity="0.8">questions to the team, answers saved;</text>
+          <text x="550" y="308" text-anchor="middle" opacity="0.8">the diagram is drawn by the app</text>
+          <path d="M550,314 L550,332" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="410" y="332" width="280" height="76" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="550" y="352" text-anchor="middle" font-weight="600">plan.md and starter kits</text>
+          <text x="550" y="370" text-anchor="middle" opacity="0.8">synthetic sample, the tool's files,</text>
+          <text x="550" y="386" text-anchor="middle" opacity="0.8">a test checklist;</text>
+          <text x="550" y="402" text-anchor="middle" opacity="0.8">never application code</text>
+
+          <!-- lane 3 -->
+          <rect x="760" y="30" width="320" height="410" rx="8" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+          <text x="776" y="54" font-weight="600" font-size="14">3 · Launch and Learn</text>
+          <text x="776" y="72" opacity="0.65" font-family="IBM Plex Mono, Menlo, monospace" font-size="11">src/roadshow</text>
+          <rect x="780" y="86" width="280" height="58" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="920" y="106" text-anchor="middle" font-weight="600">Photos</text>
+          <text x="920" y="124" text-anchor="middle" opacity="0.8">checked and copied into the folder;</text>
+          <text x="920" y="138" text-anchor="middle" opacity="0.8">never sent to the AI</text>
+          <path d="M920,144 L920,162" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="780" y="162" width="280" height="76" rx="5" class="f-panel" stroke="currentColor"/>
+          <text x="920" y="182" text-anchor="middle" font-weight="600">What the story needs</text>
+          <text x="920" y="200" text-anchor="middle" opacity="0.8">the AI lists only what the record</text>
+          <text x="920" y="216" text-anchor="middle" opacity="0.8">lacks; answers are saved on the</text>
+          <text x="920" y="232" text-anchor="middle" opacity="0.8">idea as they are pasted</text>
+          <path d="M920,238 L920,256" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <rect x="780" y="256" width="280" height="110" rx="5" class="f-pg l-pg" stroke-width="1.5"/>
+          <text x="920" y="276" text-anchor="middle" font-weight="600" class="t-pg">The deck and the script</text>
+          <text x="920" y="294" text-anchor="middle" opacity="0.85">AI writes 6 to 16 slides as a</text>
+          <text x="920" y="310" text-anchor="middle" opacity="0.85">checked structure; code removes any</text>
+          <text x="920" y="326" text-anchor="middle" opacity="0.85">value claim or figure the record</text>
+          <text x="920" y="342" text-anchor="middle" opacity="0.85">does not hold; the app draws</text>
+          <text x="920" y="358" text-anchor="middle" opacity="0.85">deck.html · deck.pptx · script.md</text>
+
+          <!-- stage arrows -->
+          <path d="M340,200 L390,200" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <text x="365" y="190" text-anchor="middle" opacity="0.7" font-size="12">Select</text>
+          <path d="M710,200 L760,200" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+          <text x="735" y="190" text-anchor="middle" opacity="0.7" font-size="12">approved</text>
+
+          <!-- the graph band -->
+          <rect x="20" y="500" width="1060" height="100" rx="8" class="f-kg l-kg" fill-opacity="0.55" stroke-width="1.5"/>
+          <text x="550" y="530" text-anchor="middle" font-weight="600" font-size="14" class="t-kg">Knowledge graph + Deep read, over the idea record</text>
+          <text x="550" y="552" text-anchor="middle" opacity="0.85">each stage adds to the record; upkeep re-reads only that idea; the next graph read includes it</text>
+          <text x="550" y="574" text-anchor="middle" opacity="0.85">the next question the operator asks sees it</text>
+
+          <!-- stage <-> graph -->
+          <path d="M100,500 L100,440" class="l-kg" stroke-width="1.5" fill="none" marker-end="url(#a4k)"/>
+          <text x="110" y="462" class="t-kg">reads: pain points, capabilities,</text>
+          <text x="110" y="478" class="t-kg">systems, "also needed by N ideas"</text>
+          <path d="M470,440 L470,500" class="l-kg" stroke-width="1.5" fill="none" marker-end="url(#a4k)"/>
+          <text x="480" y="462" class="t-kg">writes: BUILT_WITH from the pick,</text>
+          <text x="480" y="478" class="t-kg">USES derived for every idea</text>
+          <path d="M840,440 L840,500" class="l-dr" stroke-width="1.5" fill="none" marker-end="url(#a4d)"/>
+          <text x="850" y="462" class="t-dr">writes: answers, "learned since</text>
+          <text x="850" y="478" class="t-dr">the form"; Deep read re-reads them</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption><b>Figure 4. Decision, design, roadshow.</b> Three columns, one pattern: gather, code the names, ask, check in code, show, save on a click. The decision reads the graph. The design writes to it. The roadshow writes to the record, which Deep read reads. The CSIC hand-off, written at the decision, is the idea's subgraph in JSON-LD.</figcaption>
+      <div class="legend">
+        <span><i class="sw plain"></i> a step</span>
+        <span><i class="sw pg"></i> the human decides</span>
+        <span><i class="sw kg"></i> reads or writes the graph</span>
+        <span><i class="sw dr"></i> Deep read</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <h3>What it is</h3>
+    <p>An idea moves through Review and Select, the Design series, and Launch and Learn. Each stage is a module under <code>src/</code> with its own AI tasks, its own files in the idea folder, and the same shape: gather everything the idea holds, code the names, ask one question, check the reply in code, show it, and save on a click. Three stages means the pattern was written once and reused, not three different integrations.</p>
+    <h3>Decision</h3>
+    <p>"Suggest a decision" reads more than the form. The input in <code>src/review/suggestInput.ts</code> holds the form's answers, every email answer so far, whether a builder is named and whether attendance is confirmed, the flags, and what the knowledge graph holds for the idea: its pain points, its capabilities, the systems those capabilities use, and for each one how many other ideas need it. That last number is what lets the AI suggest Reuse when another idea already needs the same capability, and CSIC when the idea depends on a live system no approved tool may touch. The reply is a decision, a reason, the five criteria as true or false with the instruction to tick each only if the data supports it, at most five open questions, and any updates the answers justify. The operator sees the criteria as boxes they can change, the decision as one card, and a basis line that says "Based on the form, 3 answers and 4 graph links", so a new email visibly changes it. Saving writes <code>review.md</code> and never moves the idea by itself; it suggests the move. A CSIC route also writes <code>csic-handoff.md</code> with a source line under every field, and <code>csic-handoff.jsonld</code>, the idea's subgraph with its derived links, so the next level starts from the graph and not from a retelling.</p>
+    <h3>Design</h3>
+    <p>The design series is where the knowledge graph gains facts rather than only serving them. The data step profiles the team's files in code before the AI sees anything, and a column the check marks as masked stays masked in everything the AI is shown and on the page. The tool picker asks the AI to evaluate the approved tools, Microsoft Copilot, Copilot Studio, Power Apps, Dataiku, or a custom app that routes to CSIC, against the features; when the team picks one, the pick is saved on the idea and the next build writes a <code>BUILT_WITH</code> link from each covered capability to the tool, from which the rule derives <code>USES</code> for every idea that needs that capability. That is what later answers "what breaks if a tool leaves the approved list". The brainstorm asks the team one question at a time and saves each answer on the idea at once; the diagram is drawn by the app from a checked specification, never by the AI. <code>plan.md</code> lists three to twelve tasks under the picked tool, and the starter kits hold a synthetic sample, the tool's own files and a test checklist. The app never writes application code.</p>
+    <h3>Roadshow</h3>
+    <p>The roadshow reads the record alone: the form, the decision, every answer, the features, the tool, the design, the plan and the dates. It does not query the graph. "Suggest" lists only what the deck still needs from the team; each answer the operator pastes is saved on the idea with the source "roadshow" and rewrites the "learned since the form" brief, and that write is what Deep read picks up. "Build the deck" asks the AI for a structure, not slides: a title, six to sixteen slides each with a kind from a fixed list, points, a visual from a fixed list, speaker notes and minutes. The code then checks it. A point that contains a value word, ROI, savings, KPI, payback, business case, a currency amount, is removed, because the Café has no value story, CSIC does. A figure the record does not hold is removed. A missing title or team slide is added, and timings are scaled to about ten minutes. Only then does the app draw <code>deck.html</code>, <code>deck.pptx</code>, <code>script.md</code> and <code>run-of-show.md</code>. Photos are checked by their bytes, copied into the folder, and never sent to the AI.</p>
+    <h3>What the graph and Deep read add at each stage</h3>
+    <p>Decision: shared capabilities and systems, with how many other ideas need them, which the form alone cannot show. Design: the tool pick becomes a fact every other idea inherits by rule. Roadshow: the team's answers become passages Deep read can quote, so the next operator question, "what did the team say was hard", finds them. Each stage adds to the record, upkeep re-reads only that idea, and the next graph read includes the growth.</p>
+    <h3>What changes when it scales</h3>
+    <p>Nothing in the stages. They call the connector and the stores and never a provider or a file path directly, which is the whole reason the two seams in section 9 are enough.</p>
+  </section>
+
+  <!-- ===================================================== 7 ===================================================== -->
+  <section id="s7">
+    <div class="eyebrow">7 · Why three layers</div>
+    <h2>What plain RAG cannot give, and which layer answers which part</h2>
+    <p class="talk">A passage is not a fact: retrieval can quote what someone wrote, but it cannot count, cannot follow a dependency, and cannot say why it believes something.</p>
+    <p>Plain RAG is retrieval: cut the documents into passages, embed them, fetch the nearest few, and let the model write an answer from them. It is Deep read alone. It is good at "what did the travel desk say about emails" and poor at everything below, because a passage is not a fact. The table lists questions operators actually ask in the command bar. Read each row left to right: what retrieval alone would do, what the app does, and which layer did the work. The point it proves is that the rows are not interchangeable; each layer answers a kind of question the others cannot, and the last row is the one that makes the answers trustworthy.</p>
+  </section>
+  <section class="wide">
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Question the operator actually asks</th><th>Plain RAG</th><th>This app</th><th>Which layer</th></tr></thead>
+      <tbody>
+        <tr><td>Who submitted the Procurement FAQ bot, and what stage is it at?</td><td>Guesses from whichever passage mentions it</td><td>Reads the <code>SUBMITTED</code> link and the record</td><td><span class="lane-tag pg">Property graph</span></td></tr>
+        <tr><td>Which ideas would need rework if the travel policy is rewritten?</td><td>Finds passages that mention "policy"; cannot tell dependency from mention</td><td>Follows <code>NEEDS</code> then <code>USES_DATA</code>, derived by rule into <code>DEPENDS_ON</code>, each hop shown</td><td><span class="lane-tag kg">Knowledge graph</span></td></tr>
+        <tr><td>Is "T&amp;E policy" the same thing as "Travel &amp; Expense policy"?</td><td>Two strings, two retrievals, maybe two answers</td><td>One star, by the registry, so one answer</td><td><span class="lane-tag kg">Knowledge graph</span></td></tr>
+        <tr><td>Which pain point is replaced most often, and does any of those ideas lack a lead?</td><td>Cannot count or rank across documents</td><td>Rank step over <code>REPLACES</code>, then the role step from the records</td><td><span class="lane-tag pg">Property graph</span></td></tr>
+        <tr><td>Which team owns an idea that has no lead yet?</td><td>Nothing to retrieve: it is not written anywhere</td><td><code>OWNS</code> derived from membership plus submission</td><td><span class="lane-tag kg">Knowledge graph</span></td></tr>
+        <tr><td>Which two ideas are really the same solution?</td><td>Similar wording, which is not the same as a shared capability</td><td><code>SIMILAR_TO</code> by shared stars, with the stars named</td><td><span class="lane-tag kg">Knowledge graph</span></td></tr>
+        <tr><td>What did each submitter say their current process is?</td><td>This it does well</td><td>Deep read, scoped to the ideas the graph found</td><td><span class="lane-tag dr">Deep read</span></td></tr>
+        <tr><td>Why does the app believe that?</td><td>The passages it fetched</td><td>The rule, the input links, and the line in the file that made them</td><td>All three, by provenance</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section>
+    <p>What the table proves: the property graph is certain but literal; the knowledge graph adds identity and inference, with provenance; Deep read reads prose, which neither graph can. Take away any one and a row goes blank.</p>
+    <h3>Three questions, end to end</h3>
+    <div class="walk">
+      <div>
+        <div class="q">"Which ideas would need rework if the expense system changes, and what did their teams say about data access?"</div>
+        <ol>
+          <li><span class="lane-tag kg">KG</span> The registry resolves "the expense system" to one star, whatever the form called it.</li>
+          <li><span class="lane-tag kg">KG</span> The plan follows <code>DEPENDS_ON</code> inwards to the ideas. Each hit is a derived link, so the reply says "derived by needs+uses_data via Expense extraction" and names the capability in between.</li>
+          <li><span class="lane-tag pg">PG</span> A role step lists the lead and builder of each idea from the records.</li>
+          <li><span class="lane-tag dr">DR</span> A second query searches "data access" with <code>last: true</code>, so only those ideas' passages are read; the quotes come back per idea, kept apart as a reading with a score.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">"Which capabilities do GSS and BSI both need, and which ideas need each?"</div>
+        <ol>
+          <li><span class="lane-tag pg">PG</span> Start from the ideas whose function is GSS, follow <code>NEEDS</code> to their capabilities.</li>
+          <li><span class="lane-tag pg">PG</span> Intersect with the same two steps for BSI.</li>
+          <li><span class="lane-tag kg">KG</span> The capabilities are shared only because the registry and the AI's "reusable level" instruction made "parse a PDF" one star across both teams' ideas.</li>
+          <li><span class="lane-tag pg">PG</span> Follow <code>NEEDS</code> back to ideas with <code>group: true</code>, so the answer reads "Document parsing: I1, I3; Workflow routing: I2, I4". Retrieval has no step that can do this.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">"Is the travel bot the same thing as the expense assistant?"</div>
+        <ol>
+          <li><span class="lane-tag kg">KG</span> Follow <code>SIMILAR_TO</code> from the first idea. A hit names the shared stars: "by shared stars: Document parsing, Policy lookup".</li>
+          <li><span class="lane-tag dr">DR</span> If Deep read has run, a similar step adds ideas whose prose reads alike, with a score, listed after the fact-based hits as "by reading, also".</li>
+          <li><span class="lane-tag pg">PG</span> The decision stage uses the same shared stars: "also needed by 2 ideas" is what makes it suggest Reuse.</li>
+        </ol>
+      </div>
+    </div>
+    <h3>Why not one bigger layer</h3>
+    <p>Each layer is small, separately testable, and deletable. The AI links can be re-read. The index can be rebuilt. The rules can be edited by hand and switched off one at a time. None of them blocks the others: with no index, every search step is simply absent from the plan and the graph answers as before. A single store that did all three would be harder to trust and impossible to explain line by line, and "explain line by line" is the Café's whole promise to the people whose ideas it holds.</p>
+  </section>
+
+  <!-- ===================================================== 8 ===================================================== -->
+  <section id="s8">
+    <div class="eyebrow">8 · Why not NetworkX</div>
+    <h2>A fair comparison with the standard graph library</h2>
+    <p class="talk">NetworkX is the right tool for graph algorithms; this app does not run any, it runs rules with provenance, and it would pay for NetworkX with a second runtime.</p>
+    <p>A fair challenge: NetworkX is the standard graph library in Python, well tested, well documented, and the first thing most people reach for when they hear "graph". The answer is fit, not fashion, so it is worth stating what NetworkX is good at before saying why it is the wrong fit here.</p>
+    <div class="procon">
+      <div class="pg">
+        <h3>What NetworkX is good at</h3>
+        <div class="k">Strengths</div>
+        <ul>
+          <li>Algorithms over large graphs: centrality, communities, shortest paths, flows, matchings, hundreds of them, each with a paper behind it.</li>
+          <li>A rich node and edge attribute model and many readers and writers, so an analyst can load almost anything and explore it in a notebook.</li>
+          <li>A community that has already answered most questions about it.</li>
+        </ul>
+      </div>
+      <div class="kg">
+        <h3>Why it is the wrong fit here</h3>
+        <div class="k">Mismatch</div>
+        <ul>
+          <li><strong>One runtime.</strong> The app is one TypeScript codebase on Node: server, CLI, UI and tests. NetworkX would add a Python install and a process boundary, with the graph serialised across it on every call. On a locked-down PC that is a second thing to get approved.</li>
+          <li><strong>The graph is small and rebuilt, not stored.</strong> A round is hundreds of stars and a few hundred links, rebuilt from files on every read with a per-idea cache. The app needs typed nodes and edges, provenance on every link, rules applied in a fixed order, incremental rebuild, and layout. That is <code>src/graph/build.ts</code> with plain arrays and maps plus three YAML files. The app runs none of NetworkX's algorithms today.</li>
+          <li><strong>Provenance is the point.</strong> Every link carries who said it, with what confidence, from which idea; every derived link carries its rule and inputs. A general graph library would hold that as an attribute bag, and the four rules would still have to be written by hand.</li>
+          <li><strong>The one graph library in use does one job.</strong> <code>d3-force-3d</code> places the stars in the universe. Layout is the only place an algorithm was needed, so that is the only place a library was added.</li>
+        </ul>
+      </div>
+      <div class="fut">
+        <h3>When it would become the right fit</h3>
+        <div class="k">The door is open</div>
+        <ul>
+          <li>The day a question needs an algorithm: "which capability is the hub of this round", "which cluster of ideas forms a programme", "what is the shortest chain from this team to that system across every idea".</li>
+          <li>The day a round reaches thousands of ideas and the rebuild on every read stops being cheap.</li>
+          <li>Either way the path exists today: <code>cafe export</code> writes JSON-LD that NetworkX, Neo4j or a warehouse can load for analysis without touching the app. For algorithms inside the app the honest answer is a JavaScript library such as graphology; for a graph that must persist, Neo4j behind the store adapter. Both chosen when the question exists, not before.</li>
+        </ul>
+      </div>
+    </div>
+    <p>So: not a better NetworkX, but a smaller thing that does what this app needs, explains itself, and exports to NetworkX the day someone needs it.</p>
+  </section>
+
+  <!-- ===================================================== 9 ===================================================== -->
+  <section id="s9">
+    <div class="eyebrow">9 · Where it goes next</div>
+    <h2>The Firm AI Gateway and Postgres or Snowflake</h2>
+    <p class="talk">Two arrows change and nothing in between: the AI connector points at the firm's gateway, the file writers point at the firm's warehouse, and the names, the checks, the rules and the universe stay as they are.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 5. Today and at firm scale, side by side. On the left, the laptop: the browser, the Node process with the AI connector, name coding, schema check, Do it, graph build, registry, rules, ontology check, Deep read, assistant and three stages, then the workspace files behind four writers and the local AI command lines. On the right, the firm version: the same browser and the same Node process, marked unchanged; one arrow now goes from the four writers through a store adapter to Postgres or Snowflake, and one arrow goes from the connector through a new provider file to the Firm AI Gateway over HTTPS. Only those two arrows are labelled as changes." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="a5f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-fut"/></marker>
+        </defs>
+        <g fill="currentColor">
+          <!-- TODAY -->
+          <rect x="20" y="20" width="500" height="520" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+          <text x="36" y="44" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" opacity="0.65">TODAY · ONE LAPTOP</text>
+
+          <rect x="40" y="60" width="460" height="50" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="270" y="90" text-anchor="middle" font-weight="600" font-size="14">Browser: the universe</text>
+          <path d="M270,110 L270,140" stroke="currentColor" stroke-width="1.5" fill="none" marker-start="url(#a5)" marker-end="url(#a5)"/>
+
+          <rect x="40" y="140" width="460" height="170" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="270" y="166" text-anchor="middle" font-weight="600" font-size="14">One Node process</text>
+          <text x="270" y="192" text-anchor="middle" opacity="0.85">AI connector · name coding · schema check · Do it</text>
+          <text x="270" y="214" text-anchor="middle" opacity="0.85">graph build · registry · inference rules · ontology check</text>
+          <text x="270" y="236" text-anchor="middle" opacity="0.85">Deep read · assistant · decision · design · roadshow</text>
+          <text x="270" y="266" text-anchor="middle" opacity="0.85">four writers: ideas, ai-links, operator log, index</text>
+          <text x="270" y="288" text-anchor="middle" opacity="0.85">one Provider interface: available(), complete()</text>
+
+          <path d="M150,310 L150,370" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+          <text x="160" y="344" opacity="0.75">files</text>
+          <path d="M390,310 L390,370" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+          <text x="400" y="344" opacity="0.75">spawn</text>
+
+          <rect x="40" y="370" width="220" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="150" y="396" text-anchor="middle" font-weight="600">Workspace files</text>
+          <text x="150" y="416" text-anchor="middle" opacity="0.8">idea.yaml · *.jsonl</text>
+          <text x="150" y="434" text-anchor="middle" opacity="0.8">index.jsonl · rules/*.yaml</text>
+          <rect x="280" y="370" width="220" height="90" rx="6" class="f-panel" stroke="currentColor"/>
+          <text x="390" y="396" text-anchor="middle" font-weight="600">AI on the laptop</text>
+          <text x="390" y="416" text-anchor="middle" opacity="0.8">Claude Code · Copilot CLI</text>
+          <text x="390" y="434" text-anchor="middle" opacity="0.8">VS Code helper</text>
+
+          <text x="270" y="500" text-anchor="middle" opacity="0.7">one operator, one graph, one folder</text>
+
+          <!-- between -->
+          <path d="M520,280 L580,280" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+          <text x="550" y="268" text-anchor="middle" opacity="0.7" font-size="12">same code</text>
+
+          <!-- FIRM -->
+          <rect x="580" y="20" width="500" height="520" rx="10" fill="none" class="l-fut" stroke-width="1.5"/>
+          <text x="596" y="44" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" letter-spacing="1" class="t-fut" font-weight="600">AT FIRM SCALE · NOT BUILT</text>
+
+          <rect x="600" y="60" width="460" height="50" rx="6" class="f-pg l-pg"/>
+          <text x="830" y="90" text-anchor="middle" font-weight="600" font-size="14">Browser: the universe</text>
+          <text x="1046" y="78" text-anchor="end" font-family="IBM Plex Mono, Menlo, monospace" font-size="10" letter-spacing="1" class="t-pg">UNCHANGED</text>
+          <path d="M830,110 L830,140" stroke="currentColor" stroke-width="1.5" fill="none" marker-start="url(#a5)" marker-end="url(#a5)"/>
+
+          <rect x="600" y="140" width="460" height="170" rx="6" class="f-pg l-pg"/>
+          <text x="830" y="166" text-anchor="middle" font-weight="600" font-size="14">One Node process</text>
+          <text x="1046" y="158" text-anchor="end" font-family="IBM Plex Mono, Menlo, monospace" font-size="10" letter-spacing="1" class="t-pg">UNCHANGED</text>
+          <text x="830" y="192" text-anchor="middle" opacity="0.85">AI connector · name coding · schema check · Do it</text>
+          <text x="830" y="214" text-anchor="middle" opacity="0.85">graph build · registry · inference rules · ontology check</text>
+          <text x="830" y="236" text-anchor="middle" opacity="0.85">Deep read · assistant · decision · design · roadshow</text>
+          <text x="830" y="266" text-anchor="middle" opacity="0.85">four writers, behind a store adapter</text>
+          <text x="830" y="288" text-anchor="middle" opacity="0.85">one Provider interface, one more file</text>
+
+          <path d="M710,310 L710,370" class="l-fut" stroke-width="2" fill="none" marker-end="url(#a5f)"/>
+          <text x="720" y="336" font-weight="600" class="t-fut">change 1</text>
+          <text x="720" y="352" class="t-fut">a store adapter</text>
+          <path d="M950,310 L950,370" class="l-fut" stroke-width="2" fill="none" marker-end="url(#a5f)"/>
+          <text x="960" y="336" font-weight="600" class="t-fut">change 2</text>
+          <text x="960" y="352" class="t-fut">gateway.ts</text>
+
+          <rect x="600" y="370" width="220" height="90" rx="6" fill="none" class="l-fut" stroke-width="1.5"/>
+          <text x="710" y="396" text-anchor="middle" font-weight="600" class="t-fut">Postgres or Snowflake</text>
+          <text x="710" y="416" text-anchor="middle" opacity="0.8">many operators, one graph</text>
+          <text x="710" y="434" text-anchor="middle" opacity="0.8">firm reporting, joins to firm data</text>
+          <rect x="840" y="370" width="220" height="90" rx="6" fill="none" class="l-fut" stroke-width="1.5"/>
+          <text x="950" y="396" text-anchor="middle" font-weight="600" class="t-fut">Firm AI Gateway</text>
+          <text x="950" y="416" text-anchor="middle" opacity="0.8">HTTPS, firm token</text>
+          <text x="950" y="434" text-anchor="middle" opacity="0.8">auth · audit · model choice · limits</text>
+
+          <text x="830" y="500" text-anchor="middle" opacity="0.7">many operators, one graph, one gateway</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption><b>Figure 5. Today and at firm scale.</b> The right-hand stack is the left-hand stack. The browser and the process are marked unchanged because they are: the stages call the connector and the stores, never a provider or a file path. The two arrows that change are a store adapter behind the four writers and one more provider file on the existing interface.</figcaption>
+      <div class="legend">
+        <span><i class="sw plain"></i> built today</span>
+        <span><i class="sw pg"></i> unchanged at firm scale</span>
+        <span><i class="sw fut"></i> future, not built</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <h3>Path one: the Firm AI Gateway</h3>
+    <p><strong>What exists today.</strong> The connector in <code>src/ai/connector.ts</code> holds an ordered list of providers and asks each whether it is available. A provider is one file under <code>src/ai/providers/</code>: <code>claude.ts</code>, <code>copilot.ts</code>, <code>vscode.ts</code>, <code>fake.ts</code>. The interface is small: an id and a label, <code>available()</code>, <code>complete(prompt, { timeoutMs })</code> returning text, and an optional <code>look(file, prompt)</code> for a picture. Everything the app cares about, coding the names, the schema check, the one retry, the timeout ceiling, the card, happens around the provider, never inside it. The VS Code helper is already an HTTP provider: it reads a port and a token from a file in the operator's home folder, posts the prompt, and caps the reply.</p>
+    <p><strong>What the change is.</strong> One new file, <code>gateway.ts</code>, implementing the same interface: <code>available()</code> checks the firm token and the gateway's health, <code>complete()</code> posts the coded prompt over HTTPS with that token and returns the text. Add it to the provider list, add <code>gateway</code> to the choices the settings accept, and the rest of the app does not know it happened. What the firm gains is what a gateway is for: authentication with the firm's identity rather than a personal CLI login, an audit record of every call, a choice of models made centrally, and rate limits the firm sets.</p>
+    <p><strong>What stays the same.</strong> The name coding, because it runs before the prompt exists. The schema check and the retry, because they run on the text that comes back. Do it, because a reply is still a card until the operator clicks. The inference rules, the ontology check and the universe, because they never see a prompt.</p>
+    <h3>Path two: Postgres or Snowflake</h3>
+    <p><strong>What exists today.</strong> Four files write the Café's state: <code>src/ideas/store.ts</code> (one <code>idea.yaml</code> per folder), <code>src/graph/store.ts</code> (<code>ai-links.jsonl</code>), <code>src/graph/operator.ts</code> (<code>operator.jsonl</code>) and <code>src/memory/index.ts</code> (<code>index.jsonl</code>, <code>state.json</code>, <code>labels.jsonl</code>). Each reads a whole file and writes it back atomically. The graph is never stored as such; it is rebuilt from those inputs on every read. And <code>cafe export</code> already writes the whole graph as JSON-LD, with every link's source, confidence, status and derivation, which a warehouse can load today with no adapter at all.</p>
+    <p><strong>What the change is.</strong> A store adapter: the same four read-and-write functions, backed by tables instead of files, chosen by a setting. The table shape falls out of the files, and the provenance columns are not optional, because they are what the trace and the ontology check read:</p>
+    <ul>
+      <li><strong>ideas</strong>: id, title, stage, function, region, round, the record as a document column, updated at.</li>
+      <li><strong>people</strong>: name and the role per idea, from the record's team list.</li>
+      <li><strong>stars</strong>: id, type, label, aliases, reference; the registry's rows plus the stars born from forms and extraction.</li>
+      <li><strong>links</strong>: from, relation, to, description, source, confidence, confirmed, idea, status, and for a derived link its rule and the two input link ids.</li>
+      <li><strong>operator_edits</strong>: id, at, status, kind, and the edit's fields; never deleted, undone by status, applied in order.</li>
+      <li><strong>passages</strong>: id, idea, file, section, kind, text, hash, embedded at, and an embedding column of the model's dimension.</li>
+    </ul>
+    <p>Postgres fits the writing side: many operators, one graph, row-level writes, and an embedding column through its vector extension. Snowflake fits the reading side: firm reporting over every round, joins to other firm data such as the system catalogue or the team directory, and a place the JSON-LD export can land unchanged. The two are not exclusive; the usual shape is Postgres behind the app and Snowflake as the analytics copy.</p>
+    <p><strong>What stays the same.</strong> The build: <code>buildGraph</code> takes ideas, AI links, rounds, operator edits, a registry and rules as plain values, and does not know where they were read from. The inference rules and the ontology check, for the same reason. Deep read's chunking and upkeep logic, which compare hashes, not files. The universe, which reads the graph over the same JSON routes.</p>
+    <h3>What would need deciding before doing either</h3>
+    <ol>
+      <li><strong>Who owns the graph when there are many operators.</strong> Today one operator's edits are the last word. With several, a star merged by one and renamed by another needs a rule: last write wins, a review queue, or edits scoped to the round.</li>
+      <li><strong>How operator edits merge.</strong> The log is applied in order, and a merge re-points later edits. With two logs the order has to be defined, or the log has to become one shared, ordered table from the start.</li>
+      <li><strong>Where Deep read's embeddings run.</strong> On each operator's CPU, as now, with the index per operator; or once in the firm, with one index, which puts the passages, the words people wrote, into the warehouse. The gateway path does not decide this; it is a separate choice.</li>
+      <li><strong>Which warehouse, and for what.</strong> Postgres for the app's writes, Snowflake for the firm's reads, or one of them for both. The Neo4j and Snowflake comparison exists as a separate reference page and is the next read for that choice.</li>
+      <li><strong>When a graph database enters.</strong> NetworkX, graphology or Neo4j come in only if a graph outgrows an in-process rebuild or a question needs an algorithm, as section 8 says. The adapter seam is where Neo4j would sit if it ever does.</li>
+    </ol>
+    <div class="callout">
+      <p><strong>The honest summary.</strong> Both paths are real because the seams are already in the code: one interface for providers, four named writers for state, and an export that carries provenance. Neither path is built, and neither should be until the Café has more than one operator or more than one laptop's worth of ideas. The decisions above come before the code.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== remember ===================================================== -->
+  <section id="remember">
+    <div class="eyebrow">What to remember</div>
+    <h2>Five points</h2>
+    <div class="verdict">
+      <div class="good">
+        <div class="k">The shape</div>
+        <ol>
+          <li><strong>One process, one folder, one laptop.</strong> Nothing installed on a server, nothing sent anywhere, and the whole state can be zipped or deleted.</li>
+          <li><strong>The AI answers; the operator decides.</strong> Names are coded before the prompt, the reply is checked against a schema, and nothing changes until Do it.</li>
+        </ol>
+      </div>
+      <div class="bad">
+        <div class="k">The understanding</div>
+        <ol start="3">
+          <li><strong>Three layers, each for a kind of question.</strong> Facts as stated, meaning derived by rules with provenance, and the words people wrote.</li>
+          <li><strong>Every answer shows its working.</strong> A derived link names its rule and its inputs; a stated link names the form column, the AI read, or the operator's edit.</li>
+        </ol>
+      </div>
+      <div class="next">
+        <div class="k">The future</div>
+        <ol start="5">
+          <li><strong>Two seams, already there.</strong> A gateway is one more provider file; a warehouse is a store adapter behind four writers. Everything between them stays.</li>
+        </ol>
+      </div>
+    </div>
+    <p style="margin-top:16px; color: var(--muted); font-size: 14px;">The short GitHub-rendered version of this page is <code>docs/x-ray.md</code>. Every path named here exists in <code>cafe-app/</code>.</p>
+  </section>
+</main>
+</body>
+</html>

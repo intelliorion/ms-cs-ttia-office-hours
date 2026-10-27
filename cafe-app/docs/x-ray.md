@@ -1,5 +1,8 @@
 # Creators' Café: an X-ray of the app
 
+**The full illustrated and explained version is [`docs/x-ray.html`](x-ray.html): open it in a browser.** This page is the
+short GitHub-rendered view of the same eight sections.
+
 One picture of how the app is built, what it is made of, how the AI is wired in, where the data lives, how the
 three stages of an idea use the AI and the graph, and why there are three layers of understanding instead of one.
 Everything here is drawn from the code as it stands; the file paths are real so each claim can be checked.

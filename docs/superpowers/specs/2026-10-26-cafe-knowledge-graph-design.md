@@ -163,3 +163,29 @@ decided, not re-opened:
 3. **Counts.** `growIdea` reports `capabilities: { reused, new }`; the idea panel's Read again line says
    "Read again: 3 capabilities reused, 1 new."
 4. **No change to the fake provider.** Its two generic capabilities already read as reusable.
+
+## 10. Addendum (2026-10-27): what the full re-test found (7.6/10), decided
+
+1. **Reply.** `reply` is required with answer, propose and clarify (stated in the prompt; the JSON-schema subset has
+   no conditionals, so the app enforces it). An empty reply is asked for once more with `note` and `stepsLeft: 1`;
+   still empty, `plainReply` writes "From the graph: …" from the results (groups, ranked list, people, counts or the
+   set; then records and passages). The thought is never shown as the answer.
+2. **Budget.** `stepsLine(left)` says the step number of 5 and how many remain after it; `stepsLeft` is in DATA. An
+   answer claiming a step limit with steps left is sent back once ("Asked again: …" in the trace).
+3. **Scope.** `search last: true` scopes to the ideas of the set before it, else of the previous answer (ideas, or
+   the ideas linked to its stars), searching wide (50) before cutting to `limit`. With a field-shaped match (current
+   process, challenge, impact) every scoped idea with no passage of that section is read from its record
+   (`records`), Deep read on or off. An intersect removes what it dropped from `touched`.
+4. **Rank.** Distinct linked stars, of `type` when given; every star tied with the last kept is kept.
+5. **Exact.** A match equal (by slug) to a label or an alias in `attrs.aliases` starts from those stars only, before
+   containment and before the nearest labels; the trace says "exactly: X, known as "m"".
+6. **Already there.** System → Idea: if the registry resolves the name and one of the idea's capabilities USES_DATA
+   it (or the idea DEPENDS_ON it), the resolver reports it and proposes nothing.
+7. **Stale edits.** `staleEdits(nodes, edits)` follows active merges first, then names link, unlink, rename, alias and
+   merge (target) edits whose stars are missing. `applyEdits` re-points an edit made after a merge. On the practice
+   workspace op-2, op-3 and op-6 stay stale: their capability (Document parsing, Workflow routing) was renamed by the
+   re-extraction, which is not a merge; op-6's merged system is no longer the reason.
+8. **Trace.** Lines past the derived cut are kept aside (`aside`) with their ends and come back when the reply names
+   both; a team named in the reply must have come from a step (sent back once, else a "Not from a step" line).
+9. **Small.** Upkeep's read writes `lastRun`/`done`/`total` when the job is idle or done; the operator's message chips
+   only @-picked stars; a quoted name is not chipped.

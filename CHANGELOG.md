@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-10-27 (Café app: what the 7.6/10 re-test found, fixed)
+
+- **The reply is words from the steps, never the planner's note.** An answer with no reply is asked once more for the
+  reply alone (no new steps); still empty, the app writes a plain reply from what the steps found, "From the graph:"
+  in front. The step budget is said exactly ("This is step 2 of 5. After it you have 3 more steps"), and an answer
+  that claims a step limit with steps left is sent back once. A reply naming a team no step returned is sent back once
+  to follow OWNS. Steps not run (malformed, repeated, sent back) are in the trace with their words.
+- **Queries.** `rank` counts distinct linked stars (of `type` when given) and keeps every star tied at the cut-off,
+  so "who is on the most ideas" counts ideas, not links. An exact label or registry alias wins: "travel policy" starts
+  from Travel & Expense policy only. `search … last: true` keeps to the ideas of the previous answer (past the global
+  top), and for current process, challenge or impact reads each of those ideas' records, so every submitter is quoted
+  (Deep read on or off). An intersect un-lights what it dropped. A derived link the reply names at both ends is never
+  hidden behind "and N more".
+- **Already there.** "Add a system T&E policy to Procurement FAQ bot" says "Already there: … depends on Travel &
+  Expense policy (known as "T&E policy") through Policy question answering" when a capability of the idea already
+  uses it.
+- **Stale operator edits.** `cafe ontology check` lists edits pointing at stars the graph no longer holds under their
+  own heading (exit 1 only with `--strict`), `/api/graph` lists them in `problems`; nothing is deleted. An edit made at
+  a merged star's id follows the merge to the star kept.
+- **Small.** An upkeep read shows as the last run in `/api/memory`; the operator's message shows as it was sent (only
+  @-picked stars are chips), and a quoted name in a reply is not chipped.
+
 ## 2026-10-27 (Café app: Deep read arms itself; every chat edit shows in the universe)
 
 - **Deep read arms itself.** Upkeep no longer waits for a first manual Run: once the model is on this machine (or the

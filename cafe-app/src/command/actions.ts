@@ -48,7 +48,11 @@ export type CommandInverse =
   | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
 
-export interface Proposal { label: string; action: CommandAction }
+export interface Proposal {
+  label: string; action: CommandAction;
+  /** Said to the operator when the resolver changed what the AI asked for (an add became a link; a system went to the idea's capability). */
+  note?: string;
+}
 
 const REL_WORD: Partial<Record<Relation, string>> = {
   HAS_TEAM: 'has the team', HAS_MEMBER: 'has the member', REPLACES: 'replaces', NEEDS: 'needs', USES_DATA: 'uses the data', ASKS_FOR: 'asks for',
@@ -202,6 +206,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       }
       let home = star(s.b);
       if (!home) { problems.push(`Say which idea or star ${name} belongs to, so it is not left floating.`); continue; }
+      const notes: string[] = [];
       // A system on an idea: it links to one of the idea's capabilities, not to the idea. One capability: that one; several: ask which.
       if (type === 'System' && home.type === 'Idea') {
         const caps = ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS' && !e.derived).map((e) => nodes.get(e.to)).filter((n): n is GNode => n?.type === 'Capability')
@@ -213,6 +218,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
           continue;
         }
         home = caps[0];
+        notes.push(`A system links to a capability: this goes to ${home.label}.`);
       }
       const hit = ctx.registry?.resolve(type, name);
       const same = ctx.graph.nodes.find((n) => n.type === type && n.label.toLowerCase() === name.toLowerCase()) ?? (hit ? nodes.get(hit.id) : undefined);
@@ -227,11 +233,12 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         // The star is there already: the add becomes the link, under the name the operator used.
         const known = same.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : '';
         if (ctx.graph.edges.some((e) => e.id === edgeId(from, rel, to))) { problems.push(`${nodes.get(from)!.label} already ${REL_WORD[rel] ?? 'is linked to'} ${nodes.get(to)!.label}.`); continue; }
-        proposals.push({ label: `Link ${same.label}${known} to ${home.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from, rel, to, ...(onIdea ? { idea: onIdea } : {}) } });
+        notes.push(`${same.label} already exists${known ? `, known as "${name}"` : ''}: this links it instead of adding a new one.`);
+        proposals.push({ label: `Link ${same.label}${known} to ${home.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from, rel, to, ...(onIdea ? { idea: onIdea } : {}) }, note: notes.join(' ') });
         continue;
       }
       const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
-      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) } });
+      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) }, ...(notes.length ? { note: notes.join(' ') } : {}) });
     } else if (s.op === 'remove_star') {
       const a = star(s.a);
       if (!a) { missing(s); continue; }

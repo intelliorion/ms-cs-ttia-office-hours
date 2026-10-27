@@ -257,6 +257,9 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
           entry.problems.push(...problems);
           // Nothing to apply: the reply is what stood in the way, never the AI's sentence claiming a change it did not propose.
           if (!proposals.length && problems.length) entry.reply = problems.join(' ');
+          // The resolver changed what the AI asked for (an add became a link): said after the AI's words, so the cards never contradict them.
+          const notes = proposals.map((p) => p.note).filter((n): n is string => !!n);
+          if (notes.length) entry.reply = [entry.reply.trim(), ...notes].filter(Boolean).join(' ');
         } else {
           entry.kind = 'unclear';
         }

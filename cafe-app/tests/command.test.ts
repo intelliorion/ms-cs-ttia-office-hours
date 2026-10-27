@@ -439,7 +439,8 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     expect(e.problems).toEqual([]);
     expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
     expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
-    expect(e.reply).toBe('This links it to the system as the data it uses.');
+    // The AI asked to add; the resolver linked instead: the reply says so after the AI's sentence, so the card never contradicts it.
+    expect(e.reply).toBe('This links it to the system as the data it uses. Travel & Expense policy already exists, known as "T&E policy": this links it instead of adding a new one.');
     await doActions(root, e.id, undefined, clock);
     expect(await rels(root)).toContain('capability:document-parsing USES_DATA system:travel-expense-policy');
   });
@@ -460,6 +461,7 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     expect(e.problems).toEqual([]);
     expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "travel policy") to Document parsing (uses the data)']);
     expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
+    expect(e.reply).toBe('This links it to the system as the data it uses. A system links to a capability: this goes to Document parsing. Travel & Expense policy already exists, known as "travel policy": this links it instead of adding a new one.');
   });
 
   it('a system added to an idea with several capabilities: the problem names them, and the reply carries it', async () => {
@@ -477,6 +479,7 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     const e = await runCommand(root, 'add the system Floor plan system to @Desk booking assistant', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
     expect(e.problems).toEqual([]);
     expect(e.actions.map((a) => a.label)).toEqual(['New system or data: Floor plan system, linked from Document parsing (uses the data)']);
+    expect(e.reply).toBe('This links it to the system as the data it uses. A system links to a capability: this goes to Document parsing.');
   });
 
   it('the fake provider plans the add, and the practice flow shows the link proposal', async () => {

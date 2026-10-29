@@ -3,7 +3,8 @@ import { EMBED_MODEL, isWaysIn, libraryEnv, modelCached, modelDir, modelOptions,
 /**
  * Deep read's second, local model: a small sentence-embedding model run in this process on the CPU. The AI connector
  * is untouched; nothing here talks to it. The library is loaded only when a real embedding is first needed, so
- * `npm start` and the tests never load it, and the model is downloaded once, on the first Run, into the cache folder.
+ * `npm start` and the tests never load it. The model ships with the repo; a download happens only when that folder is
+ * gone and the model is in no other place, once, on the first Run, into ~/.cafe-ai/models.
  */
 export interface Embedder {
   /** Recorded in the index, so an index built with another model is known to be. */
@@ -60,8 +61,8 @@ export function fakeEmbedder(): Embedder {
 
 /**
  * The real embedder. The library is imported here and nowhere else, dynamically, so nothing loads until the first
- * call; the pipeline is built once and kept. Before the library is touched the model folder is checked: with the model
- * there no host is contacted; with it missing and downloads off (CAFE_MODEL_OFFLINE), or a download that fails, the
+ * call; the pipeline is built once and kept. Before the library is touched the model folder is found (CAFE_MODEL_DIR,
+ * ~/.cafe-ai/models, or the folder shipped with the app; see model.ts): with the model there no host is contacted; with it missing and downloads off (CAFE_MODEL_OFFLINE), or a download that fails, the
  * error is the one message naming the three ways in (mirror, import, export), never a stack trace. The options come
  * from the environment first and then the workspace settings (deepRead.modelMirror, deepRead.offline), read at load.
  */
@@ -69,7 +70,7 @@ export function realEmbedder(env: NodeJS.ProcessEnv = process.env, settings?: ()
   let pipe: Promise<(texts: string[], opts: Record<string, unknown>) => Promise<{ tolist(): number[][] }>> | undefined;
   const load = () => {
     pipe ??= (async () => {
-      const opts = modelOptions(env, await settings?.());
+      const opts = await modelOptions(env, await settings?.());
       const cached = await modelCached(env);
       if (!cached && opts.offline) throw new Error(waysIn(opts));
       const lib = await import('@huggingface/transformers');

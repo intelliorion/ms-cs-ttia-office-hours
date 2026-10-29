@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-29 (Café app: Deep read's model ships with the repo)
+
+- **No download, no import step.** `cafe-app/models/Xenova/all-MiniLM-L6-v2/` holds the four files Deep read's
+  quantised load reads (`config.json`, `tokenizer.json`, `tokenizer_config.json`, `onnx/model_quantized.onnx`, about
+  23 MB), with their SHA-256 and the download date in `cafe-app/models/MANIFEST.json` and the Apache-2.0 attribution
+  in `LICENCE-NOTICE.md`. A fresh clone runs Deep read at once, and upkeep is armed from start-up.
+- **Where the app looks, in order** (`src/memory/model.ts`, `placeModel`): `CAFE_MODEL_DIR` when set; `~/.cafe-ai/models`
+  when it holds the four files; the folder shipped with the app when it does (found from the module's own path, so
+  `npm run cafe` and the server find it from any workspace); otherwise `~/.cafe-ai/models` as the download target.
+  The bundled folder is only ever read (a test loads the real model from it offline and checks the folder is
+  unchanged); downloads and `cafe model import` go to `~/.cafe-ai/models` or `CAFE_MODEL_DIR`, never into the repo.
+- **`cafe model status`** says `Folder: … (shipped with the app)`, `Source: bundled (<path>, <date>)` and whether the
+  four files match the manifest (a corrupt clone is named); the pop-out footer says "on this machine (shipped with
+  the app)". A test hashes the four files against `MANIFEST.json`, so a corrupt clone fails loudly.
+- **The message** when the model is not here and cannot be downloaded now opens with "The model shipped with the app
+  was not found at <path>" (or, with `CAFE_MODEL_DIR` set to a folder without it, that the shipped copy is not used
+  while it is set), then the three ways in as before. Mirror, import, export and offline are unchanged.
+- README (*Deep read*, *Behind a firm proxy*), the X-ray page (sections 1, 5 and 9) and x-ray.md say the model ships
+  in the repo and the hub is used only when someone deletes it or sets a custom folder.
+
 ## 2026-10-28 (Café app: Deep read's model when the firm blocks the Hugging Face hub)
 
 - **The hub has one job, and three stand-ins.** Deep read contacts `huggingface.co` only for the one-time download of

@@ -49,8 +49,8 @@ import { listThreads, readThread, runCommand, doActions, cancelActions, undoChat
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { createDeepRead } from '../memory/job';
 import { createUpkeep } from '../memory/upkeep';
-import { embedderName, getEmbedder, modelCached, modelDir } from '../memory/embed';
-import { isWaysIn, modelOptions, readSource, waysIn } from '../memory/model';
+import { embedderName, getEmbedder, modelCached } from '../memory/embed';
+import { isWaysIn, modelStatus, waysIn } from '../memory/model';
 import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
 import { edgeId, APPROVED_TOOLS, retiredToolNote } from '../graph/ontology';
@@ -141,13 +141,14 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     on: async () => upkeepOn(await loadSettings(root)), nodes: async () => (await rebuildGraph(root)).nodes,
   });
   const startup = upkeep.startupDecision;
-  // The model line of the pop-out: where it is, whether it is here, its source, and (when it is not here and cannot
-  // be downloaded: offline, or the last Run failed to get it) the one message naming the three ways in.
+  // The model line of the pop-out: where it is (CAFE_MODEL_DIR, ~/.cafe-ai/models or the folder shipped with the app),
+  // whether it is here, its source, and (when it is not here and cannot be downloaded: offline, or the last Run failed
+  // to get it) the one message naming the three ways in.
   const modelView = async () => {
-    const [settings, cached, job, source] = await Promise.all([loadSettings(root), modelReady(), deepRead.status(), readSource()]);
-    const opts = modelOptions(process.env, settings.deepRead);
-    const help = !cached && embedderName() !== 'fake' && (opts.offline || isWaysIn(job.error)) ? (isWaysIn(job.error) ? job.error! : waysIn(opts)) : undefined;
-    return { id: embedderName(), dir: modelDir(), cached, offline: opts.offline, ...(opts.mirror ? { mirror: opts.mirror } : {}), ...(source ? { source: source.kind } : {}), ...(help ? { help } : {}) };
+    const [settings, cached, job] = await Promise.all([loadSettings(root), modelReady(), deepRead.status()]);
+    const s = await modelStatus(process.env, settings.deepRead);
+    const help = !cached && embedderName() !== 'fake' && (s.offline || isWaysIn(job.error)) ? (isWaysIn(job.error) ? job.error! : waysIn(s)) : undefined;
+    return { id: embedderName(), dir: s.dir, cached, offline: s.offline, ...(s.mirror ? { mirror: s.mirror } : {}), ...(s.source ? { source: s.source.kind } : {}), ...(help ? { help } : {}) };
   };
   const memoryView = async () => ({
     upkeep: { on: upkeepOn(await loadSettings(root)), pending: upkeep.pending(), waiting: upkeep.waiting(), ...(startup() ? { startup: startup() } : {}) },

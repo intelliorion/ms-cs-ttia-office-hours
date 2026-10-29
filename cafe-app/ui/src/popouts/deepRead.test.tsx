@@ -233,6 +233,11 @@ describe('the dashboard', () => {
     await act(async () => useStore.setState({ memory: imported } as any));
     expect(document.querySelector('.dr-model')?.textContent).toContain('on this machine (imported)');
     expect(document.querySelector('[data-testid="deep-read-ways"]')).toBeNull();
+    // Shipped with the app (a fresh clone): the footer says so too.
+    const bundled = read(); bundled.model = { ...bundled.model, dir: '/app/cafe-app/models', source: 'bundled' };
+    await act(async () => useStore.setState({ memory: bundled } as any));
+    expect(document.querySelector('.dr-model')?.textContent).toContain('on this machine (shipped with the app)');
+    expect(document.querySelector('.dr-model')?.textContent).toContain('/app/cafe-app/models');
   });
 
   it('the title-bar pill shows a dot when anything is changed since or not yet', async () => {

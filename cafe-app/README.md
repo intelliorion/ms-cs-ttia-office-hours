@@ -430,9 +430,11 @@ by itself, piece by piece, and deliberately, with no Run needed. Every change go
 reason is kept and shown in the pop-out ("Last: read 2026-003 after Import · 3 passages · 26 Oct 14:02", "Last:
 skipped, nothing changed in 2026-003"). The rules, in order:
 
-1. **Never downloads the model on its own.** Until the model is on this machine (your first **Run** downloads it once),
-   upkeep does nothing and the pop-out says "press Run once to download the model". Once it is there, upkeep arms
-   itself: a changed idea is read even when there is no index yet (its passages are all new, and the index is made).
+1. **Never downloads the model on its own.** The model ships with the repo, so on a fresh clone it is on this machine
+   from the start and upkeep is armed at once. Only when that folder is gone and the model is nowhere else does upkeep
+   wait (the pop-out says "press Run once to download the model"; your first **Run** downloads it once). Once it is
+   there, upkeep arms itself: a changed idea is read even when there is no index yet (its passages are all new, and
+   the index is made).
    **At start-up**, once the server is listening, the ideas not read yet (never read, or changed while the app was
    closed) are read in the background, just those ("Last: read 2026-001 and 2026-002 at start-up · 14 passages");
    with every idea read it does nothing and writes nothing. The **Not yet** tile drains by itself.
@@ -463,26 +465,35 @@ two steps do not exist for it. When a search lands on an idea whose text changed
 
 **The model, and where it goes.** Deep read uses a second, local model, not the AI connector: Transformers.js
 (`@huggingface/transformers`) running `Xenova/all-MiniLM-L6-v2` (quantised, about 23 MB) on the CPU in the app's own
-process. The library is loaded only when a read starts (`npm start` and the tests never load it). The model is
-downloaded once, from the Hugging Face hub, on the first **Run**, into `~/.cafe-ai/models/` (outside the workspace, so
-`data/` stays deletable). After that nothing goes out: no text is sent anywhere, and people's names are coded before any
-AI sees a passage, exactly as today.
+process. The library is loaded only when a read starts (`npm start` and the tests never load it). **The model ships
+with the repo**: `cafe-app/models/Xenova/all-MiniLM-L6-v2/` holds the four files the quantised load reads
+(`config.json`, `tokenizer.json`, `tokenizer_config.json`, `onnx/model_quantized.onnx`, about 23 MB), with their
+SHA-256 in `cafe-app/models/MANIFEST.json` and the licence (Apache-2.0) in `LICENCE-NOTICE.md` beside them. A fresh
+clone runs Deep read with no download and no import step, and nothing ever goes out: no text is sent anywhere, and
+people's names are coded before any AI sees a passage, exactly as today.
+
+Where the app looks, in order: `CAFE_MODEL_DIR` when set; `~/.cafe-ai/models/` when the four files are there (a
+download or an import from before); the folder shipped with the app; otherwise `~/.cafe-ai/models/` is where the
+first **Run** would download it, from the hub or a mirror. The bundled folder is only ever read: the app writes
+nothing into the repo, and `cafe model status` says `Source: bundled` with the path and whether the four files match
+the manifest (a corrupt clone is named; `git checkout -- cafe-app/models` restores it).
 
 - `CAFE_MODEL_DIR=/path/to/models` keeps the model somewhere else (the model's own folder is
-  `<dir>/Xenova/all-MiniLM-L6-v2/`).
-- **A PC that cannot download.** See *Behind a firm proxy* below: a firm mirror, `cafe model import`, or a zip from
-  `cafe model export`. If a Run cannot get the model the pop-out says so, with those three ways in, and nothing else
-  changes.
+  `<dir>/Xenova/all-MiniLM-L6-v2/`); it is used even when the shipped copy is there, and `cafe model import` fills it.
+- **The shipped copy is gone, and the PC cannot download.** See *Behind a firm proxy* below: a firm mirror,
+  `cafe model import`, or a zip from `cafe model export`. If a Run cannot get the model the pop-out says so, opening
+  with where the shipped copy was looked for, then those three ways in, and nothing else changes.
 - An index built with another model (the test stub, say) shows as "Read with another model" and **Rerun all** reads
   it again with this one.
 
 ### Behind a firm proxy
 
-The hub (`huggingface.co`) is contacted for one thing only: the one-time download of the four model files on the
-first Run. When the firm blocks it, nothing else in the app is affected, and the model gets in one of three ways.
-`cafe model status` says where the model folder is, whether the model is cached, its size on disk, where it came from
-(hub, mirror or import; kept in a small `source.json` beside the files), and the mirror and offline settings in force.
-Nothing under `cafe model` contacts any host.
+With the model shipped in the repo the hub (`huggingface.co`) is normally never contacted at all. It has one job
+left: the one-time download of the four model files on the first Run when the shipped folder has been deleted (or
+`CAFE_MODEL_DIR` points at a folder without the model). When the firm blocks it, nothing else in the app is affected,
+and the model gets in one of three ways. `cafe model status` says where the model folder is, whether the model is
+cached, its size on disk, where it came from (bundled, or hub, mirror or import kept in a small `source.json` beside
+the files), and the mirror and offline settings in force. Nothing under `cafe model` contacts any host.
 
 1. **A firm mirror.** `CAFE_MODEL_MIRROR=https://artifacts.firm.example/hf` (or `deepRead.modelMirror` in
    `rules/settings.yaml`; the environment wins) points the download at an internal store (Artifactory, Nexus, or a plain
@@ -502,7 +513,8 @@ Nothing under `cafe model` contacts any host.
    the mirror and nowhere else. The files land in the same folder as a hub download would, and `source.json` records
    `mirror`.
 2. **Import by hand.** `cafe model import <folder-or-zip>` copies a model folder (the `all-MiniLM-L6-v2` folder as
-   downloaded on any machine with access, or a whole `models` cache, or a zip of either) into the model folder, checks
+   downloaded on any machine with access, or a whole `models` cache, or a zip of either) into `~/.cafe-ai/models/`
+   (or `CAFE_MODEL_DIR`; never the folder shipped with the app), checks
    that the four files are there (and names the missing ones if not), prints what it copied and the size, and from
    then on `cafe model status` and the pop-out say the model is on this machine. It accepts `CAFE_MODEL_DIR` like the
    app does.
@@ -516,9 +528,11 @@ message below instead of trying the hub. The default stays as it is (a download 
 unchanged.
 
 **The message.** When the model is not on this machine and cannot be downloaded (offline, the mirror or the hub
-unreachable, or the download failing), the pop-out and the CLI show one message, with no stack trace, that names the
-three ways in: the `CAFE_MODEL_MIRROR` setting and the four files a mirror must serve, the exact
-`cafe model import <folder-or-zip>` command and the folder it fills, and `cafe model export model.zip`.
+unreachable, or the download failing), the pop-out and the CLI show one message, with no stack trace. It opens with
+"The model shipped with the app was not found at `<path>`" (or, with `CAFE_MODEL_DIR` set to a folder without the
+model, that the shipped copy is not used while it is set), then names the three ways in: the `CAFE_MODEL_MIRROR`
+setting and the four files a mirror must serve, the exact `cafe model import <folder-or-zip>` command and the folder
+it fills, and `cafe model export model.zip`.
 
 **Tests.** `CAFE_EMBED_FAKE=1` swaps the model for a stub that hashes words into a fixed-length vector (deterministic;
 nothing downloaded). `npm test` uses it and never loads the library. Set it with `CAFE_AI_FAKE=1` to try the whole

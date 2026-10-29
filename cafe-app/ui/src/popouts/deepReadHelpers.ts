@@ -25,8 +25,8 @@ export interface DeepReadModel {
   offline?: boolean;
   /** The firm mirror's base URL, when one is set. */
   mirror?: string;
-  /** Where the files came from, when recorded: hub, mirror or import. */
-  source?: 'hub' | 'mirror' | 'import';
+  /** Where the files came from: shipped with the app (bundled), or recorded as hub, mirror or import. */
+  source?: 'hub' | 'mirror' | 'import' | 'bundled';
   /** The model is not here and cannot be downloaded: the one message naming the three ways in. */
   help?: string;
 }
@@ -175,7 +175,7 @@ export const MODEL_MISSING_LINE = 'The model is not on this machine yet: press R
 /** The footer's word on where the model comes from. */
 export function modelLine(m: DeepReadModel): string {
   if (m.id === 'fake') return ' (the test stub: nothing is downloaded)';
-  if (m.cached) return m.source === 'import' ? ', on this machine (imported)' : m.source === 'mirror' ? ', on this machine (from the firm mirror)' : ', on this machine';
+  if (m.cached) return m.source === 'bundled' ? ', on this machine (shipped with the app)' : m.source === 'import' ? ', on this machine (imported)' : m.source === 'mirror' ? ', on this machine (from the firm mirror)' : ', on this machine';
   if (m.offline) return ', not on this machine (downloads are off)';
   return m.mirror ? `, downloaded on the first Run from ${m.mirror}` : ', downloaded on the first Run';
 }

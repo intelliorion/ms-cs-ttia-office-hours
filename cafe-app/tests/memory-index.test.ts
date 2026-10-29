@@ -3,7 +3,8 @@ import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpWorkspace, sampleIdea } from './helpers';
 import { saveIdea } from '../src/ideas/store';
-import { cosine, fakeEmbedder, fakeVector, getEmbedder, embedderName, meanVector, modelDir, FAKE_DIMS, EMBED_MODEL } from '../src/memory/embed';
+import { cosine, fakeEmbedder, fakeVector, getEmbedder, embedderName, meanVector, FAKE_DIMS, EMBED_MODEL } from '../src/memory/embed';
+import { writableModelDir } from '../src/memory/model';
 import { chunkWorkspace } from '../src/memory/chunks';
 import { groupByIdea, ideaCentroids, indexAvailable, labelVectors, nearestChunks, readIndex, readState, summary, updateState, writeIndex, writeState, type IndexRow } from '../src/memory/index';
 
@@ -24,8 +25,8 @@ describe('the fake embedder', () => {
     expect(embedderName(FAKE)).toBe('fake');
     expect(embedderName({})).toBe(EMBED_MODEL);
     expect((await fakeEmbedder().embed(['a b', 'c'])).map((v) => v.length)).toEqual([FAKE_DIMS, FAKE_DIMS]);
-    expect(modelDir({ CAFE_MODEL_DIR: '/models/here' })).toBe('/models/here');
-    expect(modelDir({})).toMatch(/\.cafe-ai[\\/]models$/);
+    expect(writableModelDir({ CAFE_MODEL_DIR: '/models/here' })).toBe('/models/here');
+    expect(writableModelDir({})).toMatch(/\.cafe-ai[\\/]models$/);
   });
   it('the mean of unit vectors is unit length', () => {
     const m = meanVector([fakeVector('a b c'), fakeVector('c d e')]);

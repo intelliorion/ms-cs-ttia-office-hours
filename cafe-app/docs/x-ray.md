@@ -38,7 +38,7 @@ flowchart TB
       P1["Claude Code CLI<br/>(headless, one turn, no tools, no session)"]
       P2["GitHub Copilot CLI"]
       P3["VS Code helper"]
-      E["Sentence embedder<br/>MiniLM ONNX on CPU<br/>~/.cafe-ai/models"]
+      E["Sentence embedder<br/>MiniLM ONNX on CPU<br/>ships in cafe-app/models"]
     end
   end
   R <-->|"/api/* JSON"| S
@@ -77,7 +77,7 @@ VS Code helper is an HTTP call on the local machine.
 | Rules | `yaml` | The registry, inference rules, ontology, stages and settings are files the operator can read and edit |
 | Import readers | `pdfjs-dist`, `exceljs`, `csv-parse`, `@kenjiuno/msgreader`, `fflate` | Read what people drop in: PDF, Excel, CSV, Outlook `.msg`, zips |
 | Deck writer | `pptxgenjs` | Writes the roadshow deck |
-| Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process, downloaded once (from the hub, or a firm mirror, or imported by hand), cached outside the workspace |
+| Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process and ships in the repo (`cafe-app/models`, checksummed); the hub, a firm mirror or an import are only for a custom folder or a deleted copy |
 | Tests | vitest, jsdom, playwright-core | About 860 server tests and about 370 UI tests; the browser is driven headless for acceptance |
 
 About 29,000 lines of TypeScript outside the tests.
@@ -183,9 +183,12 @@ file says what may link to what, so a check can fail, and the export is JSON-LD 
 on the CPU with a small local model. It answers "what did people write" and "which ideas read alike", and it keeps
 itself current by re-reading only the ideas that changed.
 
-The model (`Xenova/all-MiniLM-L6-v2`, about 23 MB) is the only thing fetched from outside: once, on the first Run,
-from the Hugging Face hub, into `~/.cafe-ai/models`. That is the hub's one job, and when the firm blocks it three
-things replace it (`src/memory/model.ts`): a firm mirror (`CAFE_MODEL_MIRROR`, an internal store serving
+The model (`Xenova/all-MiniLM-L6-v2`, about 23 MB) ships in the repo: `cafe-app/models` holds the four files the
+quantised load reads, with their SHA-256 in `MANIFEST.json`, so a fresh clone reads with no download. The app looks
+in `CAFE_MODEL_DIR`, then `~/.cafe-ai/models`, then the bundled folder, and never writes into the repo
+(`src/memory/model.ts`). The Hugging Face hub is contacted only if someone deletes that folder or sets a custom
+folder without the model: then the first Run downloads it once into `~/.cafe-ai/models`, and when the firm blocks
+that three things replace it: a firm mirror (`CAFE_MODEL_MIRROR`, an internal store serving
 `Xenova/all-MiniLM-L6-v2/config.json`, `tokenizer.json`, `tokenizer_config.json` and `onnx/model_quantized.onnx`
 under one base URL), a manual import (`cafe model import <folder-or-zip>`) and an export zip (`cafe model export`).
 `CAFE_MODEL_OFFLINE=1` forbids any host; a Run without the model then fails at once with one message naming the

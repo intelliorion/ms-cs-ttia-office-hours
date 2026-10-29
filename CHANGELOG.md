@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-28 (Café app: Deep read's model when the firm blocks the Hugging Face hub)
+
+- **The hub has one job, and three stand-ins.** Deep read contacts `huggingface.co` only for the one-time download of
+  the four model files (`config.json`, `tokenizer.json`, `tokenizer_config.json`, `onnx/model_quantized.onnx`) on the
+  first Run. When the firm blocks it: `CAFE_MODEL_MIRROR` (or `deepRead.modelMirror` in `rules/settings.yaml`) points
+  the download at an internal store that serves `<mirror>/Xenova/all-MiniLM-L6-v2/<file>`, with
+  `CAFE_MODEL_MIRROR_TOKEN` as a bearer header on the mirror only, and never at the hub; `cafe model import
+  <folder-or-zip>` copies a model folder or a zip of one into the model folder and checks the four files;
+  `cafe model export <zip>` zips the cached folder for a colleague. `cafe model status` says where the folder is,
+  whether the model is cached, its size, and its source (hub, mirror or import, recorded in `source.json`).
+- **`CAFE_MODEL_OFFLINE=1`** (or `deepRead.offline`) never contacts any host: without the model a Run fails at once.
+  The default stays as it was (a download is allowed).
+- **One message the operator can act on.** When the model is not on this machine and cannot be downloaded (offline, the
+  mirror or the hub unreachable, the download failing), the pop-out and the CLI show one message naming the three ways
+  in, with the exact import command, the mirror setting, the four files and the folder; no stack trace. The pop-out's
+  footer says whether the model came from an import or the mirror.
+- README (*Behind a firm proxy*), the X-ray page and x-ray.md say the same.
+
 ## 2026-10-27 (Café app: what the 7.6/10 re-test found, fixed)
 
 - **The reply is words from the steps, never the planner's note.** An answer with no reply is asked once more for the

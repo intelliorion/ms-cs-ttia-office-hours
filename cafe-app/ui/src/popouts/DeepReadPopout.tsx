@@ -4,7 +4,7 @@ import { memoryPost, memoryUpkeep } from '../api';
 import { Modal } from './Modal';
 import { Ring } from '../layout/DeepReadButton';
 import {
-  buttonsFor, COPY, dashboard, decisionLine, FILTERS, filterIdeas, IDEA_STATUS, KEEPS_CURRENT, MODEL_MISSING_LINE, kindBars, ringShare, staleKinds, statusLine, whenText,
+  buttonsFor, COPY, dashboard, decisionLine, FILTERS, filterIdeas, IDEA_STATUS, KEEPS_CURRENT, MODEL_MISSING_LINE, modelLine, kindBars, ringShare, staleKinds, statusLine, whenText,
   type DeepReadButton as Control,
 } from './deepReadHelpers';
 
@@ -71,7 +71,8 @@ export function DeepReadPopout() {
               <section className="sec dr-keeps" data-testid="deep-read-keeps">
                 <h3>Keeps itself current</h3>
                 <p>{KEEPS_CURRENT}</p>
-                {!v.model.cached && <p className="dr-download" data-testid="deep-read-model">{MODEL_MISSING_LINE}</p>}
+                {!v.model.cached && !v.model.help && <p className="dr-download" data-testid="deep-read-model">{MODEL_MISSING_LINE}</p>}
+                {v.model.help && <pre className="dr-download dr-ways" data-testid="deep-read-ways">{v.model.help}</pre>}
                 <div className="dr-keeps-row">
                   <button className={`pill dr-switch${v.upkeep.on ? ' on' : ''}`} data-action="deep-read-upkeep" aria-pressed={v.upkeep.on} disabled={busy} onClick={() => void flip(!v.upkeep.on)}>
                     Automatic upkeep: {v.upkeep.on ? 'on' : 'off'}
@@ -133,7 +134,7 @@ export function DeepReadPopout() {
               {COPY.map((c) => <div key={c.title} className="dr-block"><h4>{c.title}</h4><p>{c.text}</p></div>)}
             </section>
             <div className="dr-model">
-              Model: <code>{v.model.id}</code>{v.model.id === 'fake' ? ' (the test stub: nothing is downloaded)' : v.model.cached ? ', on this machine' : ', downloaded on the first Run'} · kept in <code>{v.model.dir}</code> · the index is in the data folder under memory/ and can be deleted at any time.
+              Model: <code>{v.model.id}</code>{modelLine(v.model)} · kept in <code>{v.model.dir}</code> · the index is in the data folder under memory/ and can be deleted at any time.
             </div>
           </>
         )}

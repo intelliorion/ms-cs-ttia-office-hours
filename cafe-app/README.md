@@ -468,13 +468,57 @@ downloaded once, from the Hugging Face hub, on the first **Run**, into `~/.cafe-
 `data/` stays deletable). After that nothing goes out: no text is sent anywhere, and people's names are coded before any
 AI sees a passage, exactly as today.
 
-- `CAFE_MODEL_DIR=/path/to/models` keeps the model somewhere else.
-- **A PC that cannot download.** Run Deep read once on a PC that can (the pop-out says "on this machine" once the model
-  is there), then copy the whole `~/.cafe-ai/models` folder to the same place on the other PC, or anywhere and point
-  `CAFE_MODEL_DIR` at it. It is a plain folder copy; no zip, no install. If a Run cannot get the model the pop-out says
-  "Could not finish: …" and nothing else changes.
+- `CAFE_MODEL_DIR=/path/to/models` keeps the model somewhere else (the model's own folder is
+  `<dir>/Xenova/all-MiniLM-L6-v2/`).
+- **A PC that cannot download.** See *Behind a firm proxy* below: a firm mirror, `cafe model import`, or a zip from
+  `cafe model export`. If a Run cannot get the model the pop-out says so, with those three ways in, and nothing else
+  changes.
 - An index built with another model (the test stub, say) shows as "Read with another model" and **Rerun all** reads
   it again with this one.
+
+### Behind a firm proxy
+
+The hub (`huggingface.co`) is contacted for one thing only: the one-time download of the four model files on the
+first Run. When the firm blocks it, nothing else in the app is affected, and the model gets in one of three ways.
+`cafe model status` says where the model folder is, whether the model is cached, its size on disk, where it came from
+(hub, mirror or import; kept in a small `source.json` beside the files), and the mirror and offline settings in force.
+Nothing under `cafe model` contacts any host.
+
+1. **A firm mirror.** `CAFE_MODEL_MIRROR=https://artifacts.firm.example/hf` (or `deepRead.modelMirror` in
+   `rules/settings.yaml`; the environment wins) points the download at an internal store (Artifactory, Nexus, or a plain
+   HTTPS folder) and never at the hub. The mirror serves the same layout as the model folder on disk, so one base URL
+   plus these four paths:
+
+   ```
+   <mirror>/Xenova/all-MiniLM-L6-v2/config.json
+   <mirror>/Xenova/all-MiniLM-L6-v2/tokenizer.json
+   <mirror>/Xenova/all-MiniLM-L6-v2/tokenizer_config.json
+   <mirror>/Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx
+   ```
+
+   (Those are the files the quantised load fetches; the hub's own URLs for them are
+   `https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/<file>`.) If the store wants a token, set
+   `CAFE_MODEL_MIRROR_TOKEN` (or `deepRead.modelMirrorToken`): it is sent as `Authorization: Bearer …` on requests to
+   the mirror and nowhere else. The files land in the same folder as a hub download would, and `source.json` records
+   `mirror`.
+2. **Import by hand.** `cafe model import <folder-or-zip>` copies a model folder (the `all-MiniLM-L6-v2` folder as
+   downloaded on any machine with access, or a whole `models` cache, or a zip of either) into the model folder, checks
+   that the four files are there (and names the missing ones if not), prints what it copied and the size, and from
+   then on `cafe model status` and the pop-out say the model is on this machine. It accepts `CAFE_MODEL_DIR` like the
+   app does.
+3. **Export for a colleague.** `cafe model export model.zip` zips the cached model folder (about 23 MB, the ONNX
+   weights stored uncompressed) so one person with access can hand it to the others, who run `cafe model import
+   model.zip`.
+
+**Never contact a host.** `CAFE_MODEL_OFFLINE=1` (or `deepRead.offline: true` in `rules/settings.yaml`) tells the app
+never to contact any host for the model: with the model cached nothing changes; without it a Run fails at once with the
+message below instead of trying the hub. The default stays as it is (a download is allowed), so individual use is
+unchanged.
+
+**The message.** When the model is not on this machine and cannot be downloaded (offline, the mirror or the hub
+unreachable, or the download failing), the pop-out and the CLI show one message, with no stack trace, that names the
+three ways in: the `CAFE_MODEL_MIRROR` setting and the four files a mirror must serve, the exact
+`cafe model import <folder-or-zip>` command and the folder it fills, and `cafe model export model.zip`.
 
 **Tests.** `CAFE_EMBED_FAKE=1` swaps the model for a stub that hashes words into a fixed-length vector (deterministic;
 nothing downloaded). `npm test` uses it and never loads the library. Set it with `CAFE_AI_FAKE=1` to try the whole

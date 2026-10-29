@@ -28,8 +28,12 @@ export interface Settings {
   deckTemplate?: string;
   /** Which coding tool lends the app an LLM. 'auto' tries Claude Code, then Copilot CLI, then VS Code. */
   ai?: { provider?: AiChoice };
-  /** Deep read: automatic upkeep (reads what changed after an Import or a save). Absent means on. */
-  deepRead?: { upkeep?: boolean };
+  /**
+   * Deep read: automatic upkeep (reads what changed after an Import or a save; absent means on), and the model's way
+   * in when the firm blocks the Hugging Face hub: a mirror base URL (and its token) or offline (never contact a host).
+   * The environment variables CAFE_MODEL_MIRROR, CAFE_MODEL_MIRROR_TOKEN and CAFE_MODEL_OFFLINE win over these.
+   */
+  deepRead?: { upkeep?: boolean; modelMirror?: string; modelMirrorToken?: string; offline?: boolean };
 }
 
 export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';

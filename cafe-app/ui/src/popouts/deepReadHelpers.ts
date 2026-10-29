@@ -19,7 +19,18 @@ export interface DeepReadSummary {
   kinds: Record<string, { chunks: number; embedded: number }>;
   ideas: DeepReadIdea[]; available: boolean; otherModel?: string;
 }
-export interface DeepReadView { model: { id: string; dir: string; cached: boolean }; job: DeepReadJob; summary: DeepReadSummary; upkeep: DeepReadUpkeep }
+export interface DeepReadModel {
+  id: string; dir: string; cached: boolean;
+  /** CAFE_MODEL_OFFLINE: no host is ever contacted. */
+  offline?: boolean;
+  /** The firm mirror's base URL, when one is set. */
+  mirror?: string;
+  /** Where the files came from, when recorded: hub, mirror or import. */
+  source?: 'hub' | 'mirror' | 'import';
+  /** The model is not here and cannot be downloaded: the one message naming the three ways in. */
+  help?: string;
+}
+export interface DeepReadView { model: DeepReadModel; job: DeepReadJob; summary: DeepReadSummary; upkeep: DeepReadUpkeep }
 
 /** The ring's share, 0..1: what the job has done while it runs, else what the summary says is read. */
 export function ringShare(v: DeepReadView | null): number {
@@ -56,7 +67,7 @@ export function statusLine(v: DeepReadView): string {
   switch (job.status) {
     case 'running': return job.total ? `Reading ${job.done} of ${job.total} passages…` : 'Reading…';
     case 'paused': return `Paused at ${job.done} of ${job.total}`;
-    case 'error': return `Could not finish: ${job.error ?? 'unknown error'}`;
+    case 'error': return v.model.help && job.error === v.model.help ? 'Could not start: the model is not on this machine (see below)' : `Could not finish: ${job.error ?? 'unknown error'}`;
     default: {
       const changed = summary.ideas.filter((i) => i.status !== 'read').length;
       const since = changed ? ` · ${changed} idea${changed === 1 ? '' : 's'} changed since` : '';
@@ -64,7 +75,7 @@ export function statusLine(v: DeepReadView): string {
         // Read by upkeep alone: it arms itself once the model is here, so a workspace can be read with no Run pressed.
         if (summary.available && job.lastDecision?.act === 'read') return `Kept current on its own · last read ${whenText(job.lastDecision.at)}${since}`;
         if (!summary.chunks) return 'Nothing to read yet: import some ideas first';
-        return v.model.cached ? 'Not read yet' : 'Not read yet: press Run once to download the model';
+        return v.model.cached ? 'Not read yet' : v.model.help ? 'Not read yet: the model is not on this machine (see below)' : 'Not read yet: press Run once to download the model';
       }
       return `Read ${whenText(job.lastRun.at)} in ${tookText(job.lastRun.ms)}${since}`;
     }
@@ -161,3 +172,10 @@ export const toRead = (v: DeepReadView | null): number => (v ? v.summary.ideas.f
 
 export const KEEPS_CURRENT = 'Deep read keeps itself current once the model is on this machine: at start-up and after an Import or a save it reads only what is new or changed in the ideas that changed, never the whole workspace, never while you have it paused, and it never downloads the model itself (your first Run does). When nothing changed it does nothing, and says so.';
 export const MODEL_MISSING_LINE = 'The model is not on this machine yet: press Run once to download it. After that Deep read keeps itself current.';
+/** The footer's word on where the model comes from. */
+export function modelLine(m: DeepReadModel): string {
+  if (m.id === 'fake') return ' (the test stub: nothing is downloaded)';
+  if (m.cached) return m.source === 'import' ? ', on this machine (imported)' : m.source === 'mirror' ? ', on this machine (from the firm mirror)' : ', on this machine';
+  if (m.offline) return ', not on this machine (downloads are off)';
+  return m.mirror ? `, downloaded on the first Run from ${m.mirror}` : ', downloaded on the first Run';
+}

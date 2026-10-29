@@ -7,6 +7,8 @@ import { loadSteps } from '../src/rules/stages';
 import { systemClock } from '../src/clock';
 import { checkReport, checkWorkspace } from '../src/graph/check';
 import { writeExport } from '../src/graph/jsonld';
+import { exportModel, importModel, modelStatus, sizeText, statusLines } from '../src/memory/model';
+import { loadSettings } from '../src/round/store';
 
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -18,7 +20,8 @@ const [command, ...rest] = positional;
 const root = path.resolve(flag('workspace') ?? process.env.CAFE_WORKSPACE ?? 'cafe-workspace');
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | export [--idea ID]> [--workspace DIR] [--port N]';
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | export [--idea ID] | model <status | import <folder-or-zip> | export <zip>>> [--workspace DIR] [--port N]';
+const MODEL_USAGE = 'Usage: cafe model status | cafe model import <folder-or-zip> | cafe model export <zip>  [--workspace DIR]';
 
 async function main(): Promise<void> {
   switch (command) {
@@ -63,6 +66,33 @@ async function main(): Promise<void> {
       const file = await writeExport(root, idea ? { kind: 'idea', id: idea } : { kind: 'all' }, clock);
       console.log(`Written: ${file}`);
       return;
+    }
+    case 'model': {
+      // Deep read's model when the firm blocks the hub: where it is, a copy in by hand, a zip out for a colleague.
+      // Nothing here contacts any host. The workspace settings are read for the mirror and the offline switch.
+      const settings = async () => (await loadSettings(root).catch(() => ({} as { deepRead?: undefined }))).deepRead;
+      switch (rest[0]) {
+        case 'status': {
+          for (const l of statusLines(await modelStatus(process.env, await settings()))) console.log(l);
+          return;
+        }
+        case 'import': {
+          if (!rest[1]) throw new Error(MODEL_USAGE);
+          const r = await importModel(rest[1], process.env);
+          console.log(`Imported ${r.files.length} files (${sizeText(r.bytes)}) from ${r.from} into ${r.folder}:\n  ${r.files.join('\n  ')}`);
+          const s = await modelStatus(process.env, await settings());
+          console.log(s.cached ? 'The model is on this machine: Deep read needs no download.' : `Still missing: ${s.missing.join(', ')}`);
+          return;
+        }
+        case 'export': {
+          if (!rest[1]) throw new Error(MODEL_USAGE);
+          const r = await exportModel(rest[1], process.env);
+          console.log(`Written: ${r.zip} (${sizeText(r.bytes)}, ${r.files.length} files). On the other machine: cafe model import ${path.basename(r.zip)}`);
+          return;
+        }
+        default:
+          throw new Error(MODEL_USAGE);
+      }
     }
     case undefined:
       console.log(USAGE);

@@ -215,6 +215,24 @@ describe('the dashboard', () => {
     const here = view(); here.model.cached = true;
     await act(async () => useStore.setState({ memory: here } as any));
     expect(document.querySelector('[data-testid="deep-read-model"]')).toBeNull();
+    // Not here and not downloadable (offline, or the last Run could not get it): the one message with the three ways in,
+    // in place of the download line; the status line points at it; the footer says downloads are off.
+    const WAYS = 'The reading model (Xenova/all-MiniLM-L6-v2, about 23 MB) is not on this machine and downloads are off (CAFE_MODEL_OFFLINE=1). Three ways in:\n1. Firm mirror: set CAFE_MODEL_MIRROR …\n2. Import by hand: … cafe model import <folder-or-zip> …\n3. Export from a colleague: … cafe model export model.zip …';
+    const blocked = view(); blocked.model = { ...blocked.model, offline: true, help: WAYS };
+    await act(async () => useStore.setState({ memory: blocked } as any));
+    expect(document.querySelector('[data-testid="deep-read-model"]')).toBeNull();
+    expect(document.querySelector('[data-testid="deep-read-ways"]')?.textContent).toBe(WAYS);
+    expect(document.querySelector('[data-testid="deep-read-status"]')?.textContent).toBe('Not read yet: the model is not on this machine (see below)');
+    expect(document.querySelector('.dr-model')?.textContent).toContain('not on this machine (downloads are off)');
+    const failed = view({ status: 'error', error: WAYS }); failed.model = { ...failed.model, help: WAYS };
+    await act(async () => useStore.setState({ memory: failed } as any));
+    expect(document.querySelector('[data-testid="deep-read-status"]')?.textContent).toBe('Could not start: the model is not on this machine (see below)');
+    expect(document.querySelector('[data-testid="deep-read-ways"]')?.textContent).toBe(WAYS);
+    // Imported, or from the mirror: the footer says so.
+    const imported = read(); imported.model = { ...imported.model, source: 'import' };
+    await act(async () => useStore.setState({ memory: imported } as any));
+    expect(document.querySelector('.dr-model')?.textContent).toContain('on this machine (imported)');
+    expect(document.querySelector('[data-testid="deep-read-ways"]')).toBeNull();
   });
 
   it('the title-bar pill shows a dot when anything is changed since or not yet', async () => {

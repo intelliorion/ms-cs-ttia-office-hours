@@ -1354,6 +1354,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .ai-read.changed{color:var(--text);background:color-mix(in srgb,#f5b36b 12%,transparent)}
 /* Deep read: the one thing to do while the model is not on this machine. */
 .dr-keeps p.dr-download{color:var(--amber);font-weight:500}
+.dr-keeps pre.dr-ways{color:var(--amber);font:inherit;font-size:13px;line-height:1.45;white-space:pre-wrap;margin:6px 0 10px;padding:10px 12px;border:1px solid var(--amber);border-radius:8px;background:transparent}
 /* A chat change: the changed stars and threads pulse for a moment (Flat), and one line says what changed. */
 @keyframes flat-changed{0%,100%{opacity:1}50%{opacity:.35}}
 .flat2d .flat-changed{animation:flat-changed .5s ease-in-out 4}

@@ -1,6 +1,4 @@
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
+import { EMBED_MODEL, isWaysIn, libraryEnv, modelCached, modelDir, modelOptions, readSource, waysIn, writeSource, type ModelSettings } from './model';
 
 /**
  * Deep read's second, local model: a small sentence-embedding model run in this process on the CPU. The AI connector
@@ -14,17 +12,9 @@ export interface Embedder {
   embed(texts: string[]): Promise<number[][]>;
 }
 
-export const EMBED_MODEL = 'Xenova/all-MiniLM-L6-v2';
+/** The model's id, its folder and whether it is cached live in model.ts, with the three ways in when the hub is blocked. */
+export { EMBED_MODEL, modelCached, modelDir };
 export const FAKE_DIMS = 256;
-
-/** Where the model lives: CAFE_MODEL_DIR, or ~/.cafe-ai/models. Outside the workspace: data/ stays deletable. */
-export const modelDir = (env: NodeJS.ProcessEnv = process.env): string => env.CAFE_MODEL_DIR?.trim() || path.join(os.homedir(), '.cafe-ai', 'models');
-
-/** Is the model already in the cache folder (so a Run needs no download)? */
-export async function modelCached(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  const dir = path.join(modelDir(env), ...EMBED_MODEL.split('/'));
-  try { return (await fs.readdir(path.join(dir, 'onnx'))).some((f) => f.endsWith('.onnx')); } catch { return false; }
-}
 
 export const fakeEnabled = (env: NodeJS.ProcessEnv = process.env) => env.CAFE_EMBED_FAKE === '1';
 
@@ -70,17 +60,30 @@ export function fakeEmbedder(): Embedder {
 
 /**
  * The real embedder. The library is imported here and nowhere else, dynamically, so nothing loads until the first
- * call; the pipeline is built once and kept.
+ * call; the pipeline is built once and kept. Before the library is touched the model folder is checked: with the model
+ * there no host is contacted; with it missing and downloads off (CAFE_MODEL_OFFLINE), or a download that fails, the
+ * error is the one message naming the three ways in (mirror, import, export), never a stack trace. The options come
+ * from the environment first and then the workspace settings (deepRead.modelMirror, deepRead.offline), read at load.
  */
-export function realEmbedder(env: NodeJS.ProcessEnv = process.env): Embedder {
+export function realEmbedder(env: NodeJS.ProcessEnv = process.env, settings?: () => Promise<ModelSettings | undefined>): Embedder {
   let pipe: Promise<(texts: string[], opts: Record<string, unknown>) => Promise<{ tolist(): number[][] }>> | undefined;
   const load = () => {
     pipe ??= (async () => {
+      const opts = modelOptions(env, await settings?.());
+      const cached = await modelCached(env);
+      if (!cached && opts.offline) throw new Error(waysIn(opts));
       const lib = await import('@huggingface/transformers');
-      lib.env.cacheDir = modelDir(env);
-      const p = await lib.pipeline('feature-extraction', EMBED_MODEL, { dtype: 'q8' });
+      Object.assign(lib.env, libraryEnv(opts));
+      let p;
+      try {
+        p = await lib.pipeline('feature-extraction', EMBED_MODEL, { dtype: 'q8' });
+      } catch (e) {
+        if (cached || isWaysIn((e as Error).message)) throw e;
+        throw new Error(waysIn(opts, firstLine((e as Error).message)));
+      }
+      if (!cached && !(await readSource(env))) await writeSource(env, { kind: opts.mirror ? 'mirror' : 'hub', from: opts.mirror ?? 'https://huggingface.co/', at: new Date().toISOString() });
       return p as unknown as (texts: string[], opts: Record<string, unknown>) => Promise<{ tolist(): number[][] }>;
-    })();
+    })().catch((e) => { pipe = undefined; throw e; });
     return pipe;
   };
   return {
@@ -93,12 +96,13 @@ export function realEmbedder(env: NodeJS.ProcessEnv = process.env): Embedder {
     },
   };
 }
+const firstLine = (s: string): string => s.split('\n')[0].trim().slice(0, 200);
 
 let shared: Embedder | undefined;
 /** The embedder this process uses: the fake under CAFE_EMBED_FAKE=1, else the real one (built once). */
-export function getEmbedder(env: NodeJS.ProcessEnv = process.env): Embedder {
+export function getEmbedder(env: NodeJS.ProcessEnv = process.env, settings?: () => Promise<ModelSettings | undefined>): Embedder {
   if (fakeEnabled(env)) return fakeEmbedder();
-  shared ??= realEmbedder(env);
+  shared ??= realEmbedder(env, settings);
   return shared;
 }
 /** The name the index would be built with now, without loading anything. */

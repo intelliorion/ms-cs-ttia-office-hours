@@ -9,7 +9,7 @@ as a new message for you to check and send.
 browser; [`docs/x-ray.md`](docs/x-ray.md) is the GitHub quick view. Both show how the app is built
 (packages, one Node process, local files), how the AI is connected and how a Firm AI Gateway or Postgres would
 plug in, how the property graph, the knowledge graph and Deep read process an idea and why all three are needed,
-how the decision, design and roadshow stages use them, and why there is no NetworkX.
+how the decision, design and roadshow stages use them, and how NetworkX analyses the graph the app builds.
 
 The design is in `docs/superpowers/specs/2026-10-19-cafe-universe-ui-design.md` (the one-screen UI) and
 `docs/superpowers/specs/2026-10-19-creators-cafe-app-design.md` (the core).
@@ -538,6 +538,55 @@ it fills, and `cafe model export model.zip`.
 nothing downloaded). `npm test` uses it and never loads the library. Set it with `CAFE_AI_FAKE=1` to try the whole
 flow without a real AI: Deep read reaches 100 % on the test data, and a plain question ("what did teams say about data
 access?") is answered from the passages with a trace.
+
+## Network analysis with NetworkX
+
+**What.** The app builds the knowledge graph (the form, the AI's links, your edits, the rules) and NetworkX analyses it
+as a whole: which stars hold the most ideas together (betweenness and degree centrality), which ideas naturally group
+together (Louvain communities over the ideas, joined by the stars they share, with the stars that bind each group),
+how two stars are connected (shortest paths, with the link on each hop), what is cut off from the rest (connected
+components), which links are probably missing (link prediction: Adamic-Adar and Jaccard between peers), and whether
+there are dependency cycles.
+
+**Why both.** Building and reasoning stay in the app's own engine, because every link carries who said it, with
+what confidence and for which idea, and every derived link names its rule and inputs; you can read all of it. Whole-
+network algorithms are what NetworkX is the standard for, so the app does not rewrite them. In one line: *the app
+builds the graph, NetworkX analyses it.*
+
+```
+cafe network check                     # Python, the vendored NetworkX it will use, and the checksums
+cafe network stats                     # stars, links, density, components, average clustering
+cafe network central [--top N]         # betweenness and degree centrality, top stars, per type
+cafe network clusters                  # Louvain clusters of ideas and what binds them
+cafe network path "GSS" "Expense system"
+cafe network isolated                  # ideas, teams or systems not connected to the rest
+cafe network suggest                   # links that are probably missing (proposals only)
+cafe network cycles                    # dependency cycles along NEEDS, USES_DATA, DEPENDS_ON
+  [--with-derived] [--json] [--workspace DIR]
+cafe export --format networkx          # node-link JSON for your own notebook (docs/networkx-example.py)
+```
+
+The same analyses are at `GET /api/network?analysis=central&withDerived=0` (read-only), in the **Network** pop-out
+(title bar: clusters and stars light in the universe, suggested links have a Propose button), and in the assistant
+("which capability holds the most ideas together?", "is anything isolated?"), whose trace says "NetworkX betweenness
+centrality over stored facts". The decision suggestion reads the idea's cluster, centrality ranks and likely missing
+links (its basis says so); the design duplicate check flags a feature that matches a capability other ideas already
+need; the CSIC hand-off JSON-LD carries a labelled `networkAnalysis` block.
+
+- **Stored facts by default.** The analysis reads every link without `derived` (the form, the AI's links, your
+  edits); `--with-derived` or the pop-out's switch adds what the rules derive. Every output says which.
+- **You keep the last word.** NetworkX never changes the graph. A suggested link becomes a proposal in the assistant
+  and is made only when you press Do it.
+- **Behind a firm block.** Nothing is downloaded. The official pure-Python wheels ship in `cafe-app/vendor/networkx/`
+  (NetworkX 3.7 for Python 3.12+, 3.2.1 for Python 3.9 to 3.11, about 3.8 MB together), with their SHA-256 in
+  `MANIFEST.json` and the BSD-3 licence in `LICENCE-NOTICE.md`. `py/network.py` imports NetworkX straight from the
+  wheel and runs with `python -I -S`, so whatever the machine has installed (another NetworkX, numpy, scipy) is not
+  used, and only algorithms that need neither numpy nor scipy are run. `cafe network check` verifies the files.
+- **Python requirement.** Python 3.9 or later, found as `CAFE_PYTHON` (a full path) when set, else `python3`, else
+  `python` (Windows: `python`, `py -3`, `python3`). macOS's own `/usr/bin/python3` (3.9) works. Without it, every
+  network feature shows one line, "Network analysis needs Python 3.9 or later on this machine.", and the rest of the
+  app works as before. A run is stopped after 60 seconds (`CAFE_NETWORK_TIMEOUT_MS`); results are cached per graph
+  version.
 
 ## Knowledge graph: the registry, the rules and the ontology
 

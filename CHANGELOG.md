@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-30 (Café app: NetworkX analyses the graph, end to end)
+
+- **The app builds the graph, NetworkX analyses it.** `cafe-app/py/network.py` reads the graph as node-link JSON and
+  answers stats, central (betweenness and degree, per type), clusters (Louvain over the ideas joined by shared stars,
+  with the binding stars), path (shortest paths with the link on each hop), isolated (components), suggest (link
+  prediction with Adamic-Adar and Jaccard: a link most of an idea's closest peers have and it lacks, with the peers
+  and shared stars) and cycles. Deterministic: fixed seeds, sorted output.
+- **Vendored, no download.** The official wheels (NetworkX 3.7 for Python 3.12+, 3.2.1 for 3.9 to 3.11) ship in
+  `cafe-app/vendor/networkx/` with `MANIFEST.json` (SHA-256, size, BSD-3-Clause) and `LICENCE-NOTICE.md`, imported
+  from the zip and run with `python -I -S`: nothing installed is used, no numpy, no scipy.
+- **Stored facts by default**, derived links with `--with-derived`, said in every output; NetworkX never writes the
+  graph, and suggested links are proposals done only with Do it.
+- **Everywhere:** `cafe network check|stats|central|clusters|path A B|isolated|suggest|cycles`, `GET /api/network`,
+  `POST /api/network/propose`, the assistant's network step, the Network pop-out, the decision suggestion's network
+  block and basis, the design duplicate check across ideas, the CSIC hand-off's `networkAnalysis` block, and
+  `cafe export --format networkx` with `docs/networkx-example.py`.
+- **Without Python 3.9+** each of these says so in one line and the rest of the app is unchanged.
+- README (*Network analysis with NetworkX*), the X-ray page and x-ray.md (section 8 now "NetworkX for analysis, our
+  own engine for building and reasoning", the packages table) say so.
+
 ## 2026-10-29 (Café app: Deep read's model ships with the repo)
 
 - **No download, no import step.** `cafe-app/models/Xenova/all-MiniLM-L6-v2/` holds the four files Deep read's

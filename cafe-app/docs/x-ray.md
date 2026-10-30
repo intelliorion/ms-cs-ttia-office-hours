@@ -69,16 +69,17 @@ VS Code helper is an HTTP call on the local machine.
 | Part | Package | Why this one |
 |---|---|---|
 | Language, everywhere | TypeScript on Node 20 | One language for server, CLI, UI and tests; no second runtime to install on a locked-down PC |
-| Server | `node:http` (no framework) | 98 JSON routes registered in one file, and static files; a framework would add more than it removes |
+| Server | `node:http` (no framework) | 100 JSON routes registered in one file, and static files; a framework would add more than it removes |
 | UI | React 19, Vite | Built once into `web/`, served by the same process |
 | The universe | three.js, `@react-three/fiber`, `@react-three/drei`, `@react-three/postprocessing`, gsap | The 3D star field, the glow, the pulses |
 | UI state | zustand | Small store, no boilerplate |
-| Layout | `d3-force-3d` | Places the stars; the only graph library in the app, and it only does layout |
+| Layout | `d3-force-3d` | Places the stars in the universe |
+| Network analysis | NetworkX (vendored wheels, run by the local Python 3.9+) | Centrality, clusters, paths, components, link prediction over the graph the app builds; no download, no numpy |
 | Rules | `yaml` | The registry, inference rules, ontology, stages and settings are files the operator can read and edit |
 | Import readers | `pdfjs-dist`, `exceljs`, `csv-parse`, `@kenjiuno/msgreader`, `fflate` | Read what people drop in: PDF, Excel, CSV, Outlook `.msg`, zips |
 | Deck writer | `pptxgenjs` | Writes the roadshow deck |
 | Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process and ships in the repo (`cafe-app/models`, checksummed); the hub, a firm mirror or an import are only for a custom folder or a deleted copy |
-| Tests | vitest, jsdom, playwright-core | About 860 server tests and about 370 UI tests; the browser is driven headless for acceptance |
+| Tests | vitest, jsdom, playwright-core | About 940 server tests and about 380 UI tests; the browser is driven headless for acceptance |
 
 About 29,000 lines of TypeScript outside the tests.
 
@@ -283,27 +284,35 @@ Why not just one bigger layer? Each is small, separately testable, and deletable
 the index can be rebuilt, the rules can be edited by hand, and none of them blocks the others. A single store that
 did all three would be harder to trust and impossible to explain line by line.
 
-## 8. Why not NetworkX
+## 8. NetworkX for analysis, our own engine for building and reasoning
 
-A fair challenge: NetworkX is the standard graph library in Python. The answer is fit, not fashion.
+The challenge was "why not NetworkX". The answer now is both, each doing what it is best at: **the app builds the
+graph, NetworkX analyses it.**
 
-- **One runtime.** The app is one TypeScript codebase on Node: server, CLI, UI and tests. NetworkX would add a
-  Python install and a process boundary, with the graph serialised across it on every call. On a locked-down PC
-  that is a second thing to get approved.
-- **The graph is small and rebuilt, not stored.** A round is hundreds of stars and a few hundred links, rebuilt
-  from files in milliseconds on every read, with a per-idea cache. What the app needs is typed nodes and edges,
-  provenance on every link, rules applied in order, incremental rebuild and layout. That is `src/graph/build.ts`
-  with plain arrays and maps, plus `rules/*.yaml`. NetworkX's strength is algorithms over large graphs:
-  centrality, communities, shortest paths. The app runs none of them today.
-- **Provenance is the point.** Every link carries who said it, with what confidence, from which idea, and every
-  derived link carries its rule and inputs. That is domain data the app owns; a general graph library would hold it
-  as an attribute bag and the rules would still have to be written by hand.
-- **The one graph library in use does one job.** `d3-force-3d` places the stars in the universe. Layout is the
-  only place an algorithm was needed, so that is the only place a library was added.
-- **The door is open.** `cafe export` writes JSON-LD, which NetworkX, Neo4j, or a warehouse can load for analysis
-  at any time, without touching the app. If a future round reaches thousands of ideas and the questions turn to
-  "which capability is the hub" or "which cluster of ideas forms a programme", the honest answer is a JS library
-  such as graphology for those algorithms, or Neo4j behind the store adapter, chosen when the question exists.
+| Job | Who does it | Why |
+|---|---|---|
+| Build the graph: the form, the AI's links, the operator's edits, registry identities, incremental rebuild | Our engine (`src/graph/build.ts`, `registry.ts`) | Provenance on every link (who said it, confidence, which idea) is domain data the app owns |
+| Reason: derived links with their rule and inputs, the ontology, the checks | Our engine (`rules.ts`, `rules/*.yaml`, `check.ts`) | Rules in a fixed order the operator can read, edit and switch off; every derived link explains itself |
+| Answer questions step by step with a trace | Our planner (`src/command/query.ts`) | Every answer, count and lit star comes from steps the operator can read |
+| Whole-network analysis: betweenness and degree centrality, Louvain clusters, shortest paths with the link on each hop, connected components, link prediction (Adamic-Adar, Jaccard), dependency cycles | NetworkX (`py/network.py` via `src/graph/network.ts`) | Standard, well-tested algorithms; no reason to rewrite them |
+| Layout | `d3-force-3d` | Places the stars |
 
-So: not a better NetworkX, but a smaller thing that does what this app needs, explains itself, and exports to
-NetworkX the day someone needs it.
+How it is wired: the app sends its graph as node-link JSON on stdin to `python -I -S py/network.py`, which imports
+NetworkX straight from the official wheels vendored in `cafe-app/vendor/networkx` (3.7 for Python 3.12+, 3.2.1 for
+3.9 to 3.11; checksummed in `MANIFEST.json`, BSD-3). Nothing is downloaded, nothing installed on the machine is
+used, and only pure-Python algorithms run (no numpy, no scipy). Results are cached per graph version.
+
+- **Stored facts by default.** The analysis reads the form, the AI links and the operator's edits; `--with-derived`
+  (or the pop-out's switch) adds what the rules derive. Every output says which, because the rules have known
+  false positives and an analysis should not amplify them.
+- **Human last control.** NetworkX never writes the graph. A suggested link is a proposal the operator accepts with
+  the assistant's Do it.
+- **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
+  `GET /api/network`, a network step in the assistant ("which capability holds the most ideas together", traced as
+  "NetworkX betweenness centrality over stored facts"), the Network pop-out, the decision suggestion (the idea's
+  cluster, centrality ranks and likely missing links, said in its basis), the design duplicate check (a feature that
+  matches a capability other ideas need, NetworkX's prediction lowering the wording bar), the CSIC hand-off JSON-LD
+  (a labelled `networkAnalysis` block, kept out of the stored facts) and `cafe export --format networkx` with
+  `docs/networkx-example.py` for analysts.
+- **Without Python 3.9+** every NetworkX feature says so in one line and the rest of the app works as before.
+

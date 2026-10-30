@@ -135,7 +135,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
       <li><a href="#s5">5 · Three layers</a></li>
       <li><a href="#s6">6 · Three stages</a></li>
       <li><a href="#s7">7 · Why not RAG</a></li>
-      <li><a href="#s8">8 · Why not NetworkX</a></li>
+      <li><a href="#s8">8 · NetworkX for analysis</a></li>
       <li><a href="#s9">9 · Where it goes next</a></li>
       <li><a href="#remember">Remember</a></li>
     </ol>
@@ -188,7 +188,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         <g fill="currentColor">
           <rect x="56" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
           <text x="175" y="219" text-anchor="middle" font-weight="600">HTTP server</text>
-          <text x="175" y="238" text-anchor="middle" opacity="0.8">node:http · 98 JSON routes · src/server</text>
+          <text x="175" y="238" text-anchor="middle" opacity="0.8">node:http · 100 JSON routes · src/server</text>
 
           <rect x="310" y="198" width="238" height="56" rx="5" fill="none" stroke="currentColor" stroke-opacity="0.6"/>
           <text x="429" y="219" text-anchor="middle" font-weight="600">CLI</text>
@@ -297,8 +297,8 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
   <section id="s2">
     <div class="eyebrow">2 · What it is built from</div>
     <h2>Few packages, each with one job</h2>
-    <p class="talk">The app is about 29,000 lines of TypeScript and nine runtime packages, and the only graph library in it does layout.</p>
-    <p>The table below is the dependency list from <code>package.json</code> and <code>ui/package.json</code>, grouped by what each package is for. Read the third column as the test for each row: if the reason no longer holds, the package should go. The point it proves is that the app carries no framework, no database driver and no graph engine; each dependency reads a file format, draws the universe, or runs the embedding model.</p>
+    <p class="talk">The app is about 30,000 lines of TypeScript and nine runtime packages, plus NetworkX shipped as two wheels for whole-network analysis.</p>
+    <p>The table below is the dependency list from <code>package.json</code> and <code>ui/package.json</code>, grouped by what each package is for. Read the third column as the test for each row: if the reason no longer holds, the package should go. The point it proves is that the app carries no framework and no database driver; each dependency reads a file format, draws the universe, runs the embedding model, or (NetworkX, shipped as wheels and run by the local Python) analyses the finished graph.</p>
   </section>
   <section class="wide">
     <div class="scroll">
@@ -306,22 +306,23 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
       <thead><tr><th>Part</th><th>Package</th><th>Why this one</th></tr></thead>
       <tbody>
         <tr><td>Language, everywhere</td><td>TypeScript on Node 20</td><td>One language for server, CLI, UI and tests; no second runtime to install on a locked-down PC</td></tr>
-        <tr><td>Server</td><td><code>node:http</code> (no framework)</td><td>98 JSON routes registered in one file and static files; a framework would add more than it removes</td></tr>
+        <tr><td>Server</td><td><code>node:http</code> (no framework)</td><td>100 JSON routes registered in one file and static files; a framework would add more than it removes</td></tr>
         <tr><td>UI</td><td>React 19, Vite</td><td>Built once into <code>web/</code>, served by the same process</td></tr>
         <tr><td>The universe</td><td>three.js, <code>@react-three/fiber</code>, <code>@react-three/drei</code>, <code>@react-three/postprocessing</code>, gsap</td><td>The 3D star field, the glow, the pulses</td></tr>
         <tr><td>UI state</td><td>zustand</td><td>Small store, no boilerplate</td></tr>
-        <tr><td>Layout</td><td><code>d3-force-3d</code></td><td>Places the stars; the only graph library in the app, and it only does layout</td></tr>
+        <tr><td>Layout</td><td><code>d3-force-3d</code></td><td>Places the stars in the universe</td></tr>
+        <tr><td>Network analysis</td><td>NetworkX (vendored wheels, run by the local Python 3.9+)</td><td>Centrality, clusters, paths, components and link prediction over the graph the app builds; no download, no numpy</td></tr>
         <tr><td>Rules</td><td><code>yaml</code></td><td>The registry, inference rules, ontology, stages and settings are files the operator can read and edit</td></tr>
         <tr><td>Import readers</td><td><code>pdfjs-dist</code>, <code>exceljs</code>, <code>csv-parse</code>, <code>@kenjiuno/msgreader</code>, <code>fflate</code></td><td>Read what people drop in: PDF, Excel, CSV, Outlook <code>.msg</code>, zips</td></tr>
         <tr><td>Deck writer</td><td><code>pptxgenjs</code></td><td>Writes the roadshow deck as PowerPoint beside the HTML version</td></tr>
         <tr><td>Embeddings</td><td><code>@huggingface/transformers</code> (ONNX runtime, CPU)</td><td>Deep read's model runs in-process and ships in the repo (<code>cafe-app/models</code>, checksummed); the hub, a firm mirror or an import are only for a custom folder or a deleted copy</td></tr>
-        <tr><td>Tests</td><td>vitest, jsdom, playwright-core</td><td>About 860 server tests and about 370 UI tests; the browser is driven headless for acceptance</td></tr>
+        <tr><td>Tests</td><td>vitest, jsdom, playwright-core</td><td>About 940 server tests and about 380 UI tests; the browser is driven headless for acceptance</td></tr>
       </tbody>
     </table>
     </div>
   </section>
   <section>
-    <p>Two things follow from the table. First, every dependency can be explained in one line to the person who approves software, which matters on a locked-down PC. Second, the knowledge graph in section 5 is not a package at all: it is plain arrays and maps in <code>src/graph/build.ts</code> plus three YAML files, which is why section 8 can argue against adding a graph library.</p>
+    <p>Two things follow from the table. First, every dependency can be explained in one line to the person who approves software, which matters on a locked-down PC. Second, the knowledge graph in section 5 is not a package at all: it is plain arrays and maps in <code>src/graph/build.ts</code> plus three YAML files, which is why section 8 can hand only the analysis to NetworkX and keep the building and reasoning here.</p>
     <h3>How it is laid out</h3>
     <p>The server code under <code>src/</code> is about 20,000 lines without tests and the interface under <code>ui/src/</code> about 9,000, which together is the 29,000 above. The folders under <code>src/</code> follow the nouns in this document: <code>ai</code>, <code>graph</code>, <code>memory</code>, <code>command</code>, <code>review</code>, <code>design</code>, <code>roadshow</code>, <code>ideas</code>, <code>import</code>, <code>inbox</code>, <code>comms</code>, <code>server</code>, <code>workspace</code>. The tests live in <code>tests/</code> and next to the UI components, and the acceptance script drives the real browser against a fake AI (<code>CAFE_AI_FAKE=1</code>) so a whole round can be run end to end without a model.</p>
     <h3>What changes when it scales</h3>
@@ -821,41 +822,48 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
 
   <!-- ===================================================== 8 ===================================================== -->
   <section id="s8">
-    <div class="eyebrow">8 · Why not NetworkX</div>
-    <h2>A fair comparison with the standard graph library</h2>
-    <p class="talk">NetworkX is the right tool for graph algorithms; this app does not run any, it runs rules with provenance, and it would pay for NetworkX with a second runtime.</p>
-    <p>A fair challenge: NetworkX is the standard graph library in Python, well tested, well documented, and the first thing most people reach for when they hear "graph". The answer is fit, not fashion, so it is worth stating what NetworkX is good at before saying why it is the wrong fit here.</p>
-    <div class="procon">
-      <div class="pg">
-        <h3>What NetworkX is good at</h3>
-        <div class="k">Strengths</div>
-        <ul>
-          <li>Algorithms over large graphs: centrality, communities, shortest paths, flows, matchings, hundreds of them, each with a paper behind it.</li>
-          <li>A rich node and edge attribute model and many readers and writers, so an analyst can load almost anything and explore it in a notebook.</li>
-          <li>A community that has already answered most questions about it.</li>
-        </ul>
-      </div>
-      <div class="kg">
-        <h3>Why it is the wrong fit here</h3>
-        <div class="k">Mismatch</div>
-        <ul>
-          <li><strong>One runtime.</strong> The app is one TypeScript codebase on Node: server, CLI, UI and tests. NetworkX would add a Python install and a process boundary, with the graph serialised across it on every call. On a locked-down PC that is a second thing to get approved.</li>
-          <li><strong>The graph is small and rebuilt, not stored.</strong> A round is hundreds of stars and a few hundred links, rebuilt from files on every read with a per-idea cache. The app needs typed nodes and edges, provenance on every link, rules applied in a fixed order, incremental rebuild, and layout. That is <code>src/graph/build.ts</code> with plain arrays and maps plus three YAML files. The app runs none of NetworkX's algorithms today.</li>
-          <li><strong>Provenance is the point.</strong> Every link carries who said it, with what confidence, from which idea; every derived link carries its rule and inputs. A general graph library would hold that as an attribute bag, and the four rules would still have to be written by hand.</li>
-          <li><strong>The one graph library in use does one job.</strong> <code>d3-force-3d</code> places the stars in the universe. Layout is the only place an algorithm was needed, so that is the only place a library was added.</li>
-        </ul>
-      </div>
-      <div class="fut">
-        <h3>When it would become the right fit</h3>
-        <div class="k">The door is open</div>
-        <ul>
-          <li>The day a question needs an algorithm: "which capability is the hub of this round", "which cluster of ideas forms a programme", "what is the shortest chain from this team to that system across every idea".</li>
-          <li>The day a round reaches thousands of ideas and the rebuild on every read stops being cheap.</li>
-          <li>Either way the path exists today: <code>cafe export</code> writes JSON-LD that NetworkX, Neo4j or a warehouse can load for analysis without touching the app. For algorithms inside the app the honest answer is a JavaScript library such as graphology; for a graph that must persist, Neo4j behind the store adapter. Both chosen when the question exists, not before.</li>
-        </ul>
-      </div>
+    <div class="eyebrow">8 · NetworkX for analysis</div>
+    <h2>NetworkX for analysis, our own engine for building and reasoning</h2>
+    <p class="talk">The app builds the graph; NetworkX analyses it. Each does what it is best at, and the operator keeps the last word.</p>
+    <p>Colleagues asked "why not NetworkX". The honest answer is that the question was never either-or. Building this graph is domain work: every link carries who said it, with what confidence and for which idea, the registry keeps one identity per thing, and the rules derive new links in a fixed order with their inputs named. That stays in our TypeScript engine, where the operator can read it line by line. Analysing the finished graph as a whole is algorithm work, and there NetworkX is the standard: centrality, communities, paths, components and link prediction, well tested and well known. So the app now hands its graph to NetworkX for exactly that.</p>
+  </section>
+  <section class="wide">
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Job</th><th>Who does it</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Build: the form, the AI's links, the operator's edits, identities, incremental rebuild</td><td>Our engine (<code>src/graph/build.ts</code>, <code>registry.ts</code>)</td><td>Provenance on every link is domain data the app owns</td></tr>
+        <tr><td>Reason: derived links with rule and inputs, the ontology, the checks</td><td>Our engine (<code>rules.ts</code>, <code>rules/*.yaml</code>, <code>check.ts</code>)</td><td>Rules the operator can read, edit and switch off; every derived link explains itself</td></tr>
+        <tr><td>Answer questions step by step, with a trace</td><td>Our planner (<code>src/command/query.ts</code>)</td><td>Every answer and lit star comes from steps the operator can read</td></tr>
+        <tr><td>Whole-network analysis: betweenness and degree centrality, Louvain clusters, shortest paths with the link on each hop, components, link prediction (Adamic-Adar, Jaccard), dependency cycles</td><td>NetworkX (<code>py/network.py</code> via <code>src/graph/network.ts</code>)</td><td>Standard, well-tested algorithms; no reason to rewrite them</td></tr>
+        <tr><td>Layout</td><td><code>d3-force-3d</code></td><td>Places the stars</td></tr>
+      </tbody>
+    </table>
     </div>
-    <p>So: not a better NetworkX, but a smaller thing that does what this app needs, explains itself, and exports to NetworkX the day someone needs it.</p>
+  </section>
+  <section>
+    <h3>How it is wired</h3>
+    <ol>
+      <li>The app builds the graph as always, then writes it as node-link JSON to the standard input of <code>python -I -S py/network.py</code>.</li>
+      <li>The script imports NetworkX straight from the official wheels shipped in <code>cafe-app/vendor/networkx</code>: 3.7 for Python 3.12 and later, 3.2.1 for 3.9 to 3.11 (macOS's own <code>python3</code>). <code>MANIFEST.json</code> holds their SHA-256; the licence is BSD-3. <code>-I -S</code> keeps out anything installed on the machine, and only pure-Python algorithms are used, so there is no download, no numpy and no scipy, which matters on a locked-down PC.</li>
+      <li>The answer comes back as JSON, deterministic (fixed seeds, sorted lists), validated, and cached per graph version.</li>
+    </ol>
+    <h3>Two rules it keeps</h3>
+    <ul>
+      <li><strong>Stored facts by default.</strong> The analysis reads the form, the AI's links and the operator's edits. Derived links are added only when asked (<code>--with-derived</code>, or the pop-out's switch), and every output says which. The rules have known false positives; an analysis should not amplify them.</li>
+      <li><strong>Human last control.</strong> NetworkX never writes the graph. A link it predicts is a proposal the operator accepts, or not, with the assistant's Do it.</li>
+    </ul>
+    <h3>Where it shows up, end to end</h3>
+    <ul>
+      <li><strong>CLI and API:</strong> <code>cafe network check | stats | central | clusters | path A B | isolated | suggest | cycles</code> and <code>GET /api/network</code>, both read-only.</li>
+      <li><strong>The assistant:</strong> a network step for "which capability holds the most ideas together", "which ideas naturally group together", "how is this team connected to that system", "is anything isolated", "what links are probably missing". The trace says "NetworkX betweenness centrality over stored facts"; suggested links come back as Do it cards.</li>
+      <li><strong>The Network pop-out:</strong> the size line, the central stars, the clusters (one click lights a cluster in the universe), anything cut off, and the likely missing links with a Propose button.</li>
+      <li><strong>Decision:</strong> the suggestion reads the idea's cluster, the centrality rank of its capabilities and systems, and its likely missing links, and its basis says so.</li>
+      <li><strong>Design:</strong> the duplicate check also flags a feature that matches a capability other ideas already need, naming them; NetworkX's prediction lowers the wording bar.</li>
+      <li><strong>CSIC hand-off:</strong> the JSON-LD carries a <code>networkAnalysis</code> block, labelled as analysis and kept out of the stored facts.</li>
+      <li><strong>Analysts:</strong> <code>cafe export --format networkx</code> writes node-link JSON that <code>networkx.node_link_graph</code> loads; <code>docs/networkx-example.py</code> is a 15-line start.</li>
+    </ul>
+    <p>Without Python 3.9 or later, every NetworkX feature says so in one line and the rest of the app works exactly as before.</p>
   </section>
 
   <!-- ===================================================== 9 ===================================================== -->
@@ -981,7 +989,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
       <li><strong>How operator edits merge.</strong> The log is applied in order, and a merge re-points later edits. With two logs the order has to be defined, or the log has to become one shared, ordered table from the start.</li>
       <li><strong>Where Deep read's embeddings run.</strong> On each operator's CPU, as now, with the index per operator; or once in the firm, with one index, which puts the passages, the words people wrote, into the warehouse. The gateway path does not decide this; it is a separate choice.</li>
       <li><strong>Which warehouse, and for what.</strong> Postgres for the app's writes, Snowflake for the firm's reads, or one of them for both. The Neo4j and Snowflake comparison exists as a separate reference page and is the next read for that choice.</li>
-      <li><strong>When a graph database enters.</strong> NetworkX, graphology or Neo4j come in only if a graph outgrows an in-process rebuild or a question needs an algorithm, as section 8 says. The adapter seam is where Neo4j would sit if it ever does.</li>
+      <li><strong>When a graph database enters.</strong> NetworkX already does the analysis (section 8); Neo4j comes in only if a graph outgrows an in-process rebuild. The adapter seam is where Neo4j would sit if it ever does.</li>
     </ol>
     <div class="callout">
       <p><strong>The honest summary.</strong> Both paths are real because the seams are already in the code: one interface for providers, four named writers for state, and an export that carries provenance. Neither path is built, and neither should be until the Café has more than one operator or more than one laptop's worth of ideas. The decisions above come before the code.</p>

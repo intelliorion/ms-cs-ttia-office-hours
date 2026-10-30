@@ -121,3 +121,15 @@ describe('fault 4: the decision suggestion reads the idea\'s own systems, not ev
     expect(((await reviewInput(root, 'CAFE-2026-007')).input.graph ?? []).filter((g) => g.type === 'System').map((g) => g.label)).toEqual(['Procurement policy']);
   });
 });
+
+import { runQuery } from '../src/command/query';
+describe('an answer that rests on an unconfirmed link says so (c65: BSI "owns" an idea through a 0.5 AI link)', () => {
+  it('the trace line and the reason of a derived link with an input waiting for Do it are marked not confirmed', () => {
+    const links: AiLink[] = [ai({ from: 'capability:contract-lookup', rel: 'USES_DATA', to: 'system:teams-chat', idea: 'CAFE-2026-007', confidence: 0.5, status: 'pending', newNodes: [{ id: 'system:teams-chat', type: 'System', label: 'Teams chat' }] })];
+    const g = buildGraph(IDEAS, links);
+    const r = runQuery({ steps: [{ op: 'stars', codes: ['S1'] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } as any, { graph: g, ideas: IDEAS, rounds: [], idOf: (c: string) => (c === 'S1' ? 'system:teams-chat' : undefined) } as any);
+    expect(r.final).toEqual(['idea:CAFE-2026-007']);
+    expect(r.trace.map((t) => t.text)).toContain('Procurement FAQ bot depends on Teams chat: derived by needs+uses_data from Procurement FAQ bot NEEDS Contract lookup, Contract lookup USES_DATA Teams chat; not confirmed: it rests on Contract lookup USES_DATA Teams chat (0.5) waiting for your Do it');
+    expect(r.reasons).toEqual([{ from: 'idea:CAFE-2026-007', to: 'system:teams-chat', rel: 'DEPENDS_ON', why: 'via Contract lookup (not confirmed: waiting for your Do it)' }]);
+  });
+});

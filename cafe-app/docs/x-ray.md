@@ -79,7 +79,7 @@ VS Code helper is an HTTP call on the local machine.
 | Import readers | `pdfjs-dist`, `exceljs`, `csv-parse`, `@kenjiuno/msgreader`, `fflate` | Read what people drop in: PDF, Excel, CSV, Outlook `.msg`, zips |
 | Deck writer | `pptxgenjs` | Writes the roadshow deck |
 | Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process and ships in the repo (`cafe-app/models`, checksummed); the hub, a firm mirror or an import are only for a custom folder or a deleted copy |
-| Tests | vitest, jsdom, playwright-core | About 940 server tests and about 380 UI tests; the browser is driven headless for acceptance |
+| Tests | vitest, jsdom, playwright-core | About 1,000 server tests and about 370 UI tests; the browser is driven headless for acceptance |
 
 About 29,000 lines of TypeScript outside the tests.
 
@@ -150,7 +150,7 @@ flowchart TB
 
   subgraph L2["Layer 2 · Knowledge graph (meaning, as data)"]
     REG["Registry · rules/entities.yaml<br/>one star per thing, aliases:<br/>'T&E policy' = Travel & Expense policy"]
-    RUL["Inference · rules/inference.yaml<br/>NEEDS + USES_DATA ⇒ DEPENDS_ON<br/>NEEDS + BUILT_WITH ⇒ USES<br/>HAS_MEMBER + SUBMITTED ⇒ OWNS<br/>shared stars ⇒ SIMILAR_TO"]
+    RUL["Inference · rules/inference.yaml<br/>NEEDS + USES_DATA ⇒ DEPENDS_ON (same idea)<br/>NEEDS + BUILT_WITH ⇒ USES (same idea)<br/>HAS_MEMBER + SUBMITTED ⇒ OWNS (the record's team first)<br/>shared stars ⇒ SIMILAR_TO"]
     ONT["Ontology · rules/ontology.yaml<br/>what may link to what · cafe ontology check · JSON-LD export"]
   end
   F --> B["buildGraph (src/graph/build.ts)<br/>forms → AI links → operator edits → rules<br/>rebuilt in memory on every read, per-idea cache"]
@@ -175,10 +175,14 @@ the stage and the decision. Cheap, certain, and already enough for counts, lists
 **Knowledge graph.** Three small files turn those facts into meaning the app can reason over. The registry gives
 every thing one star and a list of names for it, so "T&E policy" and "Travel & Expense policy" are one system and
 no twin is ever made. The inference rules derive links that nobody typed: an idea NEEDS a capability and that
-capability USES_DATA from a system, so the idea DEPENDS_ON the system, scoped to the idea the AI read it from.
-Every derived link records its rule and its inputs and is rebuilt on every read; each rebuild writes `nodes.jsonl` and
-`edges.jsonl` as a snapshot for other tools, which the app never reads back. The ontology
-file says what may link to what, so a check can fail, and the export is JSON-LD that other tools read.
+capability USES_DATA from a system, so the idea DEPENDS_ON the system. Every stored link carries the ideas it is
+stated for, and the rules scope by them: a tool picked in 008's design is 008's, not every idea's that shares the
+feature; a team owns the ideas its record names; a capability-level fact nobody scoped applies only to the ideas whose
+own facts confirm it. Every derived link records its rule and every way it is derived and is rebuilt on every read;
+it can never be stored by hand. Each rebuild writes `nodes.jsonl` and `edges.jsonl` as a snapshot for other tools,
+which the app never reads back. The ontology file says what may link to what, so a check can fail (`cafe ontology
+check`; `cafe ontology fix` brings an older workspace in line, dry run first), and the export is JSON-LD that RDF
+tools read as written: the default graph, links as resources with node IRIs, PROV-O for derivation.
 
 **Deep read.** The text itself: the challenge, the current process, the emails, the designs, chunked and embedded
 on the CPU with a small local model. It answers "what did people write" and "which ideas read alike", and it keeps
@@ -242,8 +246,8 @@ changes it. A CSIC route writes `csic-handoff.md`, with a source line under ever
 the idea's subgraph with its derived links, so the next level starts from the graph and not from a retelling.
 
 **Design.** The tool picker is where the knowledge graph gains facts rather than only serving them. When the team
-picks a tool for a capability, the app writes BUILT_WITH links, and the inference rule derives USES for every idea
-that needs that capability. That is what later answers "what breaks if Copilot Studio leaves the approved list".
+picks a tool for a capability, the app writes BUILT_WITH links stated for that idea, and the inference rule derives
+USES for that idea (another idea that only shares the capability does not inherit the pick). That is what later answers "what breaks if Copilot Studio leaves the approved list".
 The data step enforces the Café data rule in code before the AI sees a file, the brainstorm saves the team's
 answers on the idea at once, and plan.md and the kits are written from the design, never application code.
 
@@ -303,8 +307,8 @@ NetworkX straight from the official wheels vendored in `cafe-app/vendor/networkx
 used, and only pure-Python algorithms run (no numpy, no scipy). Results are cached per graph version.
 
 - **Stored facts by default.** The analysis reads the form, the AI links and the operator's edits; `--with-derived`
-  (or the pop-out's switch) adds what the rules derive. Every output says which, because the rules have known
-  false positives and an analysis should not amplify them.
+  (or the pop-out's switch) adds what the rules derive. Every output says which, because derived links are
+  conclusions, not observations, and an analysis should not count them twice.
 - **Human last control.** NetworkX never writes the graph. A suggested link is a proposal the operator accepts with
   the assistant's Do it.
 - **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
@@ -312,7 +316,8 @@ used, and only pure-Python algorithms run (no numpy, no scipy). Results are cach
   "NetworkX betweenness centrality over stored facts"), the Network pop-out, the decision suggestion (the idea's
   cluster, centrality ranks and likely missing links, said in its basis), the design duplicate check (a feature that
   matches a capability other ideas need, NetworkX's prediction lowering the wording bar), the CSIC hand-off JSON-LD
-  (a labelled `networkAnalysis` block, kept out of the stored facts) and `cafe export --format networkx` with
+  (one Analysis node, its content a JSON literal, never links between the stars; an accepted capability → system
+  suggestion is stamped with the idea it was suggested for) and `cafe export --format networkx` with
   `docs/networkx-example.py` for analysts.
 - **Without Python 3.9+** every NetworkX feature says so in one line and the rest of the app works as before.
 

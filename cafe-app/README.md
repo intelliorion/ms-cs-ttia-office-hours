@@ -571,7 +571,9 @@ The same analyses are at `GET /api/network?analysis=central&withDerived=0` (read
 ("which capability holds the most ideas together?", "is anything isolated?"), whose trace says "NetworkX betweenness
 centrality over stored facts". The decision suggestion reads the idea's cluster, centrality ranks and likely missing
 links (its basis says so); the design duplicate check flags a feature that matches a capability other ideas already
-need; the CSIC hand-off JSON-LD carries a labelled `networkAnalysis` block.
+need; the CSIC hand-off JSON-LD carries one labelled Analysis node (its content a JSON literal, never links between
+the stars). A suggested Capability → System link is proposed for the idea it was suggested for (or one card per idea
+that needs the capability), so accepting it gives that idea, and only that idea, the dependency.
 
 - **Stored facts by default.** The analysis reads every link without `derived` (the form, the AI's links, your
   edits); `--with-derived` or the pop-out's switch adds what the rules derive. Every output says which.
@@ -599,7 +601,8 @@ identities, one section per kind (`Tool`, `System`, `Team`, `Entity`, `Capabilit
 `id` (`type:slug`), `label`, `aliases`, and an optional `ref` (a CSIC catalogue id, say). It starts with the approved
 tools and their aliases, which used to live only in code. Wherever a star is born (a form's team, feature or tool, a
 star the AI proposes, a star you add or rename, the Import's read of new ideas) its label is looked up here first, by
-label or alias, ignoring case, spacing and accents: "travel policy" and "Travel & Expense policy" are one star. Then the
+label or alias, ignoring case, spacing, accents and "&" against "and" (so "Travel and Expense policy" and "T+E policy"
+find "Travel & Expense policy"; "travel policy" is one star with it once it is an alias). Then the
 exact label, then Deep read's nearest star (when an index exists), then a new star. The star's details show **Also known
 as** and **Reference**. A **merge** records the merged label as an alias of the star kept, so the twin cannot come back
 at the next import or re-read; the assistant's `alias X as Y` records one by hand. Aliases are edits in
@@ -609,20 +612,56 @@ approved tools alone and the graph is exactly what it was.
 **The rules: facts nobody typed.** `rules/inference.yaml` (written by `init`; the built-in rules when absent) runs as
 the last layer of every build, after your edits:
 
-| Rule | From | Derives |
-|---|---|---|
-| `needs+uses_data` | Idea NEEDS Capability, Capability USES_DATA System, **for the same idea** | Idea DEPENDS_ON System |
-| `needs+built_with` | Idea NEEDS Capability, Capability BUILT_WITH Tool (a capability's tool is shared) | Idea USES Tool |
-| `member+submitted` | Team HAS_MEMBER Person, Person SUBMITTED Idea | Team OWNS Idea |
-| `shared-stars` | two ideas sharing two or more capabilities, pain points or categories | Idea SIMILAR_TO Idea, confidence n/3 |
+| Rule | From | Scope | Derives |
+|---|---|---|---|
+| `needs+uses_data` | Idea NEEDS Capability, Capability USES_DATA System | same-idea | Idea DEPENDS_ON System |
+| `needs+built_with` | Idea NEEDS Capability, Capability BUILT_WITH Tool | same-idea | Idea USES Tool |
+| `member+submitted` | Team HAS_MEMBER Person, Person SUBMITTED Idea | same-idea-first | Team OWNS Idea |
+| `shared-stars` | two ideas sharing two or more capabilities, pain points or categories | | Idea SIMILAR_TO Idea, confidence n/3 |
 
-Each rule can be switched off in the file (`enabled: false`). A derived link looks derived: dashed violet in the
-universe (the Show menu has the legend), `source: rule:<name>`, with `derived: { rule, inputs }` naming the links it
-rests on; its confidence is the lowest of its inputs and it is confirmed only when every input is. It is never confirmed,
-routed or merged by itself, it is left out of counts (the idea card, the Links tab, the star's links) and the link tables
-tag it "derived by <rule>" with no Add it anyway. The **same idea** scope matters: the AI extracts links for one idea at
-a time (each AI link carries `idea`), so a capability two ideas share does not hand one idea's data dependency to the
-other. A link you make with an idea open on the left is that idea's; one made with nothing open is shared knowledge.
+**Every fact knows which ideas it is stated for.** Each stored link carries `ideas`: the idea whose form, AI read or
+your edit put it there, and every one of them when several did (two ideas whose reads both found that a capability
+reads Email: one link, two ideas). The rules scope by it:
+
+- **same-idea**: every link in the chain is stated for one same idea. A tool picked in 008's tool picker is 008's: an
+  idea that only shares the feature does not use the tool (Power Apps was "used by 6 ideas", 5 of them false). A
+  capability's data is the idea's that found it.
+- **same-idea-first**: as same-idea, and an idea with no such derivation falls back to links of any idea. A team owns
+  the ideas its record names (the submitter's CS Function on that idea); the submitter's other teams only when the
+  record names none, so one person in GSS and BSI no longer makes both teams own both ideas.
+- **any**: links of any idea join; write it in the file if that is what you mean.
+
+A rule written without `scope` takes the scope of the built-in rule of its name, else same-idea: a rule never
+spreads a fact across ideas unless the file says `any`. A capability-level link stated for no idea (one made in the
+assistant before it stamped ideas) applies only to the ideas that **confirm** it, those whose own facts already reach
+its far end (006's read found the T&E policy, so "Policy question answering uses the T&E policy" holds for 006, as one
+more way it depends on it; 007's facts never mention the policy, so it gets nothing). It never gives an idea a new
+dependency on its own, and `cafe ontology check` lists it as **unscoped** with the command that settles it.
+
+Chains may have any number of links (each relation's end must be the next one's start, and the first start and last
+end the derived relation's pair; derived relations cannot be chain links). Every way an edge is derived is kept:
+`derived: { rule, inputs, alternatives }`, the surest way as `inputs`. `enabled: false`, `no`, `off` and `0` switch a
+rule off; anything that is not yes or no is reported and the rule is off. A rule the file cannot take is dropped and
+said so; an `inference.yaml` YAML cannot read is an error in `cafe ontology check` and in `/api/graph`'s problems,
+the built-in rules applying until it is fixed (never silently).
+
+A derived link looks derived: dashed violet in the universe (the Show menu has the legend), `source: rule:<name>`,
+with `derived` naming the links it rests on; its confidence is the lowest of its inputs and it is confirmed only when
+every input is. It is never confirmed, routed or merged by itself, it is left out of counts (the idea card, the Links
+tab, the star's links) and the link tables tag it "derived by <rule>" with no Add it anyway. It cannot be stored by
+hand either: the build refuses a DEPENDS_ON, USES, OWNS or SIMILAR_TO in `operator.jsonl` or `ai-links.jsonl` and the
+check names it. In the assistant, "remove the link 007 → Copilot Studio" on a derived link says which stored facts it
+rests on (every way) and offers to remove the idea's own fact in each way instead (its need for the capability); a
+tool pick changes in the tool picker.
+
+The assistant stamps every capability-level link it proposes (Capability USES_DATA System) with its idea: the idea
+named or open on the left, else one card per idea that needs the capability, Do it on the ones it holds for; it is not
+proposed when no idea needs the capability. Your links are sourced `operator:<edit id>@<date>`; an AI link records the
+form field it was read in (`ai:claude:challenge`, `ai:claude:current_process`, ...; `ai:<provider>:<file>` from an
+Import, `ai:<provider>:review-answers` from the review). An AI link below the confidence threshold (`graph:
+confirmAt` in `rules/settings.yaml`, default 0.7) is stored waiting for your Do it, not confirmed. Aliases cannot make
+one tool another product: "also know Copilot Studio as UiPath" (or Power Automate, or any other tool star) is refused.
+Identity keeps distinct names apart: C++, C# and C are three stars; ids are otherwise as they were.
 `edges.jsonl` holds the derived links too, flagged. Demand's **Systems depended on** and **Tools in use** beams, the
 idea's **Similar ideas** block (with the shared stars as the why), and the assistant's `follow`/`rank` with a derived
 relation ("which ideas depend on the expense system", "what does GSS own") all come from here; the trace says "derived
@@ -642,15 +681,36 @@ reported by the check and ignored.
 
 ```bash
 npm run cafe -- ontology check --workspace ~/cafe-workspace   # files and graph against the ontology; prints violations, fixes nothing
+npm run cafe -- ontology fix --workspace ~/cafe-workspace     # what it would fix (a dry run); --apply writes it
 npm run cafe -- export --workspace ~/cafe-workspace [--idea CAFE-2026-004]   # JSON-LD into data/exports/
 ```
 
 **Check** reads `ontology.yaml`, `entities.yaml` (sections, id prefixes, duplicate ids and aliases),
-`inference.yaml` (unknown relations, chains whose kinds do not line up), then the graph and the files behind it (an AI
-link or an edit the build skipped, an alias on a star that is gone), one line per violation, exit code 1 when any.
-**Export** writes the graph, or one idea and what it touches, as JSON-LD with an `@context` mapping the ontology; the
-assistant's "export graph [idea]" does the same, and routing an idea to CSIC writes its corner of the graph as
-`csic-handoff.jsonld` beside `csic-handoff.md`. The export is local and holds people's names as the files do.
+`inference.yaml` (every rule it cannot take, a file it cannot read), then the graph and the files behind it (an AI
+link or an edit the build refused or skipped: a derived relation stored by hand, a link to a star that is not there,
+an id whose prefix is not its type's, a kind the ontology does not know, an empty source; an alias on a star that is
+gone), one line per violation, exit code 1 when any. It then lists, apart, the **unscoped** facts (with the command
+that settles each) and the AI links confirmed below the confidence threshold; `--strict` fails on those too.
+
+**Fix** brings a workspace made before the graph reasoned per idea in line with it, a dry run unless `--apply`: an
+unscoped edit is stamped with the ideas that confirm it (or the one idea that needs its capability; when two or more
+could and none confirms, it is left for you with `--stamp op-9=CAFE-2026-006[,…]`), the edit keeping its id and date
+(`stamped` records when); an AI link confirmed on arrival below the threshold goes back to waiting for your Do it; a
+derived relation stored by hand is switched off (undone, kept in the log); the rules' scopes are written out. It
+prints the derived links that would come, go or wait on an unconfirmed link.
+
+**Export** writes the graph, or one idea and what it touches, as JSON-LD; the assistant's "export graph [idea]" does
+the same, and routing an idea to CSIC writes its corner of the graph as `csic-handoff.jsonld` beside
+`csic-handoff.md`. The document is only `@context` and `@graph`, so a JSON-LD processor (in safe mode) puts every quad
+in the default graph and a plain SPARQL query finds the stars. Each star is a resource with its outgoing links as
+properties; each link is also a `cafe:Link` resource whose ends are node IRIs, with its source, confidence, confirmed
+and `statedFor` (the ideas); a derived link has `prov:wasGeneratedBy` its rule (a `prov:Activity`) and
+`prov:wasDerivedFrom` the links it rests on, other ways as `cafe:alternative`; the `cafe:export` node has the scope and
+`prov:generatedAtTime`. The export is local and holds people's names as the files do.
+
+Every command that reads a workspace (`import`, `ontology`, `export`, `network`) stops with one line when the folder
+is missing or is not a Café workspace, naming `--workspace` and `CAFE_WORKSPACE` (it used to read the missing default
+`./cafe-workspace` as an empty graph: "top 0"). `start` sets up a folder you name on purpose when it is new or empty.
 
 ## AI help (optional)
 

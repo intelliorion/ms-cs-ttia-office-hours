@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-10-30 (Café app: the knowledge graph reasons per idea)
+
+An adversarial test of the graph's reasoning found eleven faults; each is now pinned by a test that failed before
+(`tests/kg-reasoning.test.ts`, `kg-check-fix.test.ts`, `kg-assistant.test.ts`, `jsonld-rdf.test.ts`).
+
+- **Every fact knows which ideas it is stated for** (`ideas` on each stored link) and the rules scope by it.
+  `needs+built_with` is same-idea: a tool picked in one idea's design is that idea's (Power Apps was "used by 6
+  ideas", 5 false; Copilot Studio no longer leaks to the Procurement FAQ bot). `member+submitted` is same-idea-first:
+  a team owns the ideas its record names (one submitter in GSS and BSI no longer makes both teams own both ideas).
+  A capability-level link stated for no idea applies only to the ideas whose own facts confirm it.
+- **Rules:** chains of any length; every way a link is derived is kept; `enabled: no/off/false/0` all switch a rule
+  off; a broken `inference.yaml` is an error in the check and in `/api/graph`, never a silent fall-back.
+- **Refused at build, named by `cafe ontology check`:** a derived relation stored by hand, an id whose prefix is not
+  its type's, a kind the ontology does not know, AI links to unknown stars. AI links to a star the operator added are
+  no longer dropped. The check also lists unscoped facts and AI links confirmed below the threshold.
+- **`cafe ontology fix`** (dry run; `--apply`; `--stamp op-N=ID`) stamps unscoped edits with the ideas that confirm
+  them, sends low-confidence auto-confirmed AI links back to waiting, switches off hand-stored derived relations and
+  writes the rules' scopes out, previewing the derived links that come, go or wait.
+- **AI links** below `graph: confirmAt` (default 0.7) wait for Do it; their source names the form field read;
+  operator links are sourced `operator:<edit>@<date>`. An answer resting on an unconfirmed link says so.
+- **The assistant** stamps every Capability → System link with its idea (one card per idea that needs the
+  capability), refuses to "unlink" a derived link and offers the stored fact behind it instead, and never aliases a
+  tool to another product (UiPath, Power Automate). Accepted NetworkX suggestions carry the idea they were suggested
+  for. The decision suggestion reads the idea's own systems only.
+- **Identity:** C++, C# and C are three stars; "&" and "and" resolve alike; categories and outcomes take aliases.
+- **JSON-LD as RDF:** the default graph (a plain SPARQL query finds it), links as resources with node IRIs, PROV-O
+  (`prov:wasDerivedFrom`, `prov:wasGeneratedBy`, `prov:generatedAtTime`); validated with jsonld and oxigraph.
+- **CLI:** every command that reads a workspace stops with one line naming `--workspace` and `CAFE_WORKSPACE` when the
+  folder is missing or not a workspace (`cafe network central` used to print "top 0").
+- **Tests:** the intermittent `memory-assistant` failure was a race with automatic upkeep reading the seeded ideas;
+  removed at its cause, five consecutive full runs green.
+- README (*Knowledge graph*), the X-ray page and x-ray.md say so.
+
 ## 2026-10-30 (Café app: NetworkX analyses the graph, end to end)
 
 - **The app builds the graph, NetworkX analyses it.** `cafe-app/py/network.py` reads the graph as node-link JSON and

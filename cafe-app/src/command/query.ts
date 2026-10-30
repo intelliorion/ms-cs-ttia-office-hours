@@ -97,6 +97,7 @@ export const QUERY_GUIDE = [
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
+  'A trace line or reason marked "not confirmed" rests on a link the operator has not confirmed (an AI link below the confidence threshold, waiting for Do it): say so in the reply for that idea, never state it as settled.',
   'Which team owns, whose idea, which function or team is behind [I1]: follow OWNS (dir in, type Team) from the idea; it is derived from the submitter\'s team, so it exists even when no lead is recorded.',
   '  Do not work ownership out through a lead\'s HAS_MEMBER link.',
   'A question about what is affected, needs rework, depends on, breaks, or would be hit if a system, data source or tool changes, is retired or is rewritten: start from that star (match by label; the registry\'s aliases',
@@ -261,8 +262,14 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   const touched = new Set<string>();
   const trace: StepTrace[] = [];
   const edgeById = new Map(w.graph.edges.map((e) => [e.id, e]));
+  /** What a derived link rests on that nobody confirmed (an AI link waiting for Do it), said wherever the link is used. */
+  const unconfirmedNote = (e: GEdge) => {
+    if (e.confirmed) return '';
+    const waiting = e.derived!.inputs.map((id) => edgeById.get(id)).filter((i): i is GEdge => !!i && !i.confirmed);
+    return `; not confirmed: it rests on ${waiting.length ? waiting.map((i) => `${name(i.from)} ${i.rel} ${name(i.to)} (${i.confidence})`).join(', ') : 'a link'} waiting for your Do it`;
+  };
   const derivedLine = (e: GEdge): AsideLine => ({
-    text: `${name(e.from)} ${relWord(e.rel)} ${name(e.to)}: derived by ${e.derived!.rule} from ${e.derived!.inputs.map((id) => { const i = edgeById.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}`,
+    text: `${name(e.from)} ${relWord(e.rel)} ${name(e.to)}: derived by ${e.derived!.rule} from ${e.derived!.inputs.map((id) => { const i = edgeById.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}${unconfirmedNote(e)}`,
     size: 1, ends: [e.from, e.to],
   });
   const aside: { at: number; lines: AsideLine[] }[] = [];
@@ -363,7 +370,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           const kept = used.filter((e) => set.includes(e.from) || set.includes(e.to));
           if (text) trace.push({ text, size: set.length });
           pushDerived(kept); text = '';
-          reasons = [...(reasons ?? []), ...kept.map((e) => ({ from: e.from, to: e.to, rel: e.rel, why: e.description }))];
+          reasons = [...(reasons ?? []), ...kept.map((e) => ({ from: e.from, to: e.to, rel: e.rel, why: `${e.description}${e.confirmed ? '' : ' (not confirmed: waiting for your Do it)'}` }))];
         }
       } else if (s.op === 'filter') {
         const before = set;

@@ -438,8 +438,9 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     await seed(root);
     const e = await runCommand(root, 'add the system T&E policy to @Document parsing', ai, clock, { mentions: ['capability:document-parsing'] });
     expect(e.problems).toEqual([]);
-    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
-    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
+    // Document parsing is needed by Desk booking assistant alone: the link is stamped for it.
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data) for Desk booking assistant']);
+    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy', idea: 'CAFE-2026-001' });
     // The AI asked to add; the resolver linked instead: the reply says so after the AI's sentence, so the card never contradicts it.
     expect(e.reply).toBe('This links it to the system as the data it uses. Travel & Expense policy already exists, known as "T&E policy": this links it instead of adding a new one.');
     await doActions(root, e.id, undefined, clock);
@@ -451,8 +452,8 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     await seed(root);
     const e = await runCommand(root, 'add the system travel policy to @Policy Q&A', ai, clock, { mentions: ['capability:policy-q-a'] });
     expect(e.actions).toEqual([]);
-    expect(e.problems).toEqual(['Policy Q&A already uses the data Travel & Expense policy.']);
-    expect(e.reply).toBe('Policy Q&A already uses the data Travel & Expense policy.');
+    expect(e.problems).toEqual(['Policy Q&A already uses the data Travel & Expense policy for Procurement FAQ bot.']);
+    expect(e.reply).toBe('Policy Q&A already uses the data Travel & Expense policy for Procurement FAQ bot.');
   });
 
   it('a system added to an idea with one capability: the link goes to that capability', async () => {
@@ -460,8 +461,8 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     await seed(root);
     const e = await runCommand(root, 'add the system travel policy to @Desk booking assistant', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
     expect(e.problems).toEqual([]);
-    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "travel policy") to Document parsing (uses the data)']);
-    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy' });
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "travel policy") to Document parsing (uses the data) for Desk booking assistant']);
+    expect(e.actions[0].action).toEqual({ t: 'link', from: 'capability:document-parsing', rel: 'USES_DATA', to: 'system:travel-expense-policy', idea: 'CAFE-2026-001' });
     expect(e.reply).toBe('This links it to the system as the data it uses. A system links to a capability: this goes to Document parsing. Travel & Expense policy already exists, known as "travel policy": this links it instead of adding a new one.');
   });
 
@@ -488,7 +489,7 @@ describe('the Café assistant: adding a star the registry already knows', () => 
     await seed(root);
     const e = await runCommand(root, 'add the system Floor plan system to @Desk booking assistant', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
     expect(e.problems).toEqual([]);
-    expect(e.actions.map((a) => a.label)).toEqual(['New system or data: Floor plan system, linked from Document parsing (uses the data)']);
+    expect(e.actions.map((a) => a.label)).toEqual(['New system or data: Floor plan system, linked from Document parsing (uses the data) for Desk booking assistant']);
     expect(e.reply).toBe('This links it to the system as the data it uses. A system links to a capability: this goes to Document parsing.');
   });
 
@@ -502,7 +503,7 @@ describe('the Café assistant: adding a star the registry already knows', () => 
       const e = await runCommand(root, 'add the system T&E policy to @Document parsing', ai, clock, { mentions: ['capability:document-parsing'] });
       expect(e.kind).toBe('command');
       expect(e.problems).toEqual([]);
-      expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+      expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data) for Desk booking assistant']);
     } finally { process.env.CAFE_AI_FAKE = was; }
   });
 });
@@ -549,7 +550,7 @@ describe('the Café assistant: a two-part message, the question answered and the
     await seed(root);
     const e = await runCommand(root, 'Add a system T&E policy to @Desk booking assistant, then tell me which ideas depend on the Travel & Expense policy.', ai, clock, { mentions: ['idea:CAFE-2026-001'] });
     expect(e.problems).toEqual([]);
-    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data)']);
+    expect(e.actions.map((a) => a.label)).toEqual(['Link Travel & Expense policy (known as "T&E policy") to Document parsing (uses the data) for Desk booking assistant']);
     expect(e.reply).toBe('You asked to add T&E policy to Desk booking assistant; this links it as the data it uses. By the graph, 1 idea depends on Travel & Expense policy: Procurement FAQ bot (via Policy Q&A). A system links to a capability: this goes to Document parsing. Travel & Expense policy already exists, known as "T&E policy": this links it instead of adding a new one.');
   });
 

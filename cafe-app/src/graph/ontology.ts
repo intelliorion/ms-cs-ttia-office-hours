@@ -106,6 +106,12 @@ export function currentOntology(): Ontology {
 /** Back to the built-in ontology (tests, and a workspace with no file). */
 export function resetOntology(): void { applyOntology(clone(BUILTIN_ONTOLOGY)); }
 
+/**
+ * Capability-level facts that must say which idea they are for: the rules read them per idea, so the assistant
+ * stamps the idea on every one it proposes (the one on screen, or each idea that needs the capability).
+ */
+export const IDEA_SCOPED: Relation[] = ['USES_DATA', 'BUILT_WITH'];
+
 /** Relations the AI may propose. People links come only from the form. */
 export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA'];
 export const AI_NODE_TYPES: NodeType[] = ['PainPoint', 'Capability', 'Tool', 'System'];

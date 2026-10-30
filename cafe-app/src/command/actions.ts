@@ -1,4 +1,4 @@
-import { ALLOWED, DERIVED_RELATIONS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALLOWED, DERIVED_RELATIONS, IDEA_SCOPED, KNOWN_UNAPPROVED_TOOLS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nameKey, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -23,6 +23,29 @@ export function cantLink(a: NodeType, b: NodeType): string {
   const kind = (t: NodeType) => { const w = NODE_LABELS[t].toLowerCase(); return `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`; };
   const both = `${kind(a)} and ${kind(b)}`;
   return `${both[0].toUpperCase()}${both.slice(1)} can't be linked that way.`;
+}
+
+/**
+ * The ideas a capability-level link (Capability USES_DATA System) is for: the idea named, or the one on screen, or
+ * every idea that needs the capability (one proposal each, the operator saying yes to the ones it holds for). Never
+ * none: a link no idea owns would give no idea a dependency (the rules scope by the idea), so it is not proposed.
+ * Other relations need no idea: `ideas` is empty.
+ */
+export function linkScope(
+  graph: { nodes: GNode[]; edges: GEdge[] }, from: string, rel: Relation, to: string,
+  opts: { named?: string; focus?: string; title?: (id: string) => string } = {},
+): { ideas: string[]; note?: string } | { problem: string } {
+  if (!IDEA_SCOPED.includes(rel)) return { ideas: [] };
+  const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
+  const title = opts.title ?? ((i: string) => label(`idea:${i}`));
+  const have = graph.edges.find((e) => e.id === edgeId(from, rel, to) && !e.derived);
+  const needers = [...new Set(graph.edges.filter((e) => e.rel === 'NEEDS' && e.to === from && !e.derived).map((e) => e.from.slice('idea:'.length)))].sort();
+  if (opts.named && !needers.includes(opts.named)) return { problem: `${title(opts.named)} does not need ${label(from)}, so the link would give it nothing: link it for an idea that needs ${label(from)}.` };
+  const wanted = opts.named ? [opts.named] : opts.focus && needers.includes(opts.focus) ? [opts.focus] : needers;
+  if (!wanted.length) return { problem: `No idea needs ${label(from)} yet, so linking it to ${label(to)} would give no idea a dependency: open the idea it is for, or say which idea.` };
+  const fresh = wanted.filter((i) => !have?.ideas?.includes(i));
+  if (!fresh.length) return { problem: `${label(from)} already ${REL_WORD[rel] ?? 'is linked to'} ${label(to)} for ${wanted.map(title).join(', ')}.` };
+  return { ideas: fresh, ...(fresh.length > 1 ? { note: `${label(from)} is needed by ${fresh.length} ideas: say Do it on each idea it holds for; a link holds only for the ideas it names.` } : {}) };
 }
 
 export type CommandAction =
@@ -96,6 +119,32 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
   const ideaOf = (n: GNode) => ctx.ideas.find((i) => `idea:${i.id}` === n.id);
   const roundOf = (n: GNode) => ctx.rounds.find((r) => r.id === n.attrs?.roundId);
   const missing = (s: CommandStep) => problems.push(`I couldn't find ${[s.a, s.b].filter(Boolean).length > 1 ? 'both stars' : 'that star'} in the universe, so I left "${s.op}" out.`);
+  const title = (ideaId: string) => ctx.ideas.find((i) => i.id === ideaId)?.title ?? nodes.get(`idea:${ideaId}`)?.label ?? ideaId;
+  const scopeFor = (from: string, rel: Relation, to: string, named?: string) => linkScope(ctx.graph, from, rel, to, { named, focus: ctx.focusIdea, title });
+  const edgesById = new Map(ctx.graph.edges.map((e) => [e.id, e]));
+  const factWords = (id: string) => { const e = edgesById.get(id); return e ? `${nodes.get(e.from)?.label ?? e.from} ${REL_WORD[e.rel] ?? e.rel.toLowerCase().replace(/_/g, ' ')} ${nodes.get(e.to)?.label ?? e.to}` : id; };
+  /**
+   * A derived link can't be removed: it is what the rules say about the stored facts, and it comes back at the next
+   * build. Say which stored facts it rests on (every way it is derived), and offer to remove the idea's own fact in
+   * each way (its need for the capability), the one the operator can change here; a tool pick changes in the picker.
+   */
+  const derivedUnlink = (hit: GEdge) => {
+    const ways = [hit.derived!.inputs, ...(hit.derived!.alternatives ?? [])];
+    const from = nodes.get(hit.from)?.label ?? hit.from; const to = nodes.get(hit.to)?.label ?? hit.to;
+    const rest = ways.map((w) => w.map(factWords).join(' and ')).join('; or ');
+    problems.push(`${from} → ${to} (${hit.rel.toLowerCase().replace(/_/g, ' ')}) is derived by ${hit.derived!.rule} from what the graph holds, so it can't be removed by itself: it rests on ${rest}. Change one of those stored facts instead${ways.length > 1 ? `; it goes only when every way (${ways.length}) is gone` : ''}.`);
+    const offered = new Set<string>();
+    for (const w of ways) {
+      const own = w.map((id) => edgesById.get(id)).find((e) => e && !e.derived && (e.from === hit.from || e.to === hit.to) && e.rel !== 'BUILT_WITH' && e.rel !== 'SUBMITTED' && (nodes.get(e.from)?.type === 'Idea' || nodes.get(e.to)?.type === 'Idea'));
+      if (!own || offered.has(own.id)) continue;
+      offered.add(own.id);
+      proposals.push({
+        label: `Remove the link ${nodes.get(own.from)!.label} → ${nodes.get(own.to)!.label} (the stored fact behind ${from} → ${to})`,
+        action: { t: 'unlink', from: own.from, rel: own.rel, to: own.to, source: own.source },
+        note: ways.length > 1 ? `${from} → ${to} is derived ${ways.length} ways: it goes only when each is gone.` : `${from} → ${to} goes with it at the next build.`,
+      });
+    }
+  };
 
   // A role is added to the ones the person has (a lead can also build it); null takes them off the team.
   const roleProposal = (person: GNode | string, ideaNode: GNode, role: PersonRole | null) => {
@@ -143,6 +192,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (s.op === 'unlink') {
         const hit = ctx.graph.edges.find((e) => ((e.from === a.id && e.to === b.id) || (e.from === b.id && e.to === a.id)) && (!s.rel || e.rel === s.rel));
         if (!hit) { problems.push(`There is no link between ${a.label} and ${b.label}.`); continue; }
+        if (hit.derived) { derivedUnlink(hit); continue; }
         proposals.push({ label: `Remove the link ${nodes.get(hit.from)!.label} → ${nodes.get(hit.to)!.label}`, action: { t: 'unlink', from: hit.from, rel: hit.rel, to: hit.to, source: hit.source } });
         continue;
       }
@@ -160,9 +210,17 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
       const [ft] = ALLOWED[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
-      if (ctx.graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) { problems.push(`${from.label} and ${to.label} are already linked.`); continue; }
-      const onIdea = [from, to].some((n) => n.type === 'Idea') ? undefined : ctx.focusIdea;
-      proposals.push({ label: `Link ${from.label} → ${to.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from: from.id, rel, to: to.id, ...(onIdea ? { idea: onIdea } : {}) } });
+      if (!IDEA_SCOPED.includes(rel) && ctx.graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) { problems.push(`${from.label} and ${to.label} are already linked.`); continue; }
+      // A capability-level link says which idea it is for: one proposal per idea, each stamped.
+      const scope = scopeFor(from.id, rel, to.id);
+      if ('problem' in scope) { problems.push(scope.problem); continue; }
+      const relWord = `${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`;
+      if (!scope.ideas.length) {
+        const onIdea = [from, to].some((n) => n.type === 'Idea') ? undefined : ctx.focusIdea;
+        proposals.push({ label: `Link ${from.label} → ${to.label}${relWord}`, action: { t: 'link', from: from.id, rel, to: to.id, ...(onIdea ? { idea: onIdea } : {}) } });
+      } else for (const idea of scope.ideas) {
+        proposals.push({ label: `Link ${from.label} → ${to.label}${relWord} for ${title(idea)}`, action: { t: 'link', from: from.id, rel, to: to.id, idea }, ...(scope.note ? { note: scope.note } : {}) });
+      }
     } else if (s.op === 'role') {
       const a = star(s.a); const b = star(s.b);
       // A person not yet in the graph comes by name: the same person if the name matches one, else a new one.
@@ -213,7 +271,9 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         const sys = known ? nodes.get(known) : undefined;
         if (sys) {
           const ideaCaps = new Set(ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS').map((e) => e.to));
-          const through = ctx.graph.edges.filter((e) => e.rel === 'USES_DATA' && e.to === sys.id && ideaCaps.has(e.from)).map((e) => nodes.get(e.from)?.label).filter((l): l is string => !!l).sort();
+          // Only the capabilities' links stated for this idea: another idea's use of the system is not this one's.
+          const mine = home.id.slice('idea:'.length);
+          const through = ctx.graph.edges.filter((e) => e.rel === 'USES_DATA' && e.to === sys.id && ideaCaps.has(e.from) && e.ideas?.includes(mine)).map((e) => nodes.get(e.from)?.label).filter((l): l is string => !!l).sort();
           const depends = ctx.graph.edges.some((e) => e.rel === 'DEPENDS_ON' && e.from === home!.id && e.to === sys.id);
           if (through.length || depends) {
             const aka = sys.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : '';
@@ -223,6 +283,8 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         }
       }
       // A system on an idea: it links to one of the idea's capabilities, not to the idea. One capability: that one; several: ask which.
+      // The link is then that idea's.
+      const namedIdea = home.type === 'Idea' ? home.id.slice('idea:'.length) : undefined;
       if (type === 'System' && home.type === 'Idea') {
         const caps = ctx.graph.edges.filter((e) => e.from === home!.id && e.rel === 'NEEDS' && !e.derived).map((e) => nodes.get(e.to)).filter((n): n is GNode => n?.type === 'Capability')
           .sort((x, y) => x.label.localeCompare(y.label));
@@ -243,17 +305,25 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const node = same?.id ?? hit?.id ?? nodeId(type, name);
       const label = same?.label ?? hit?.label ?? name;
       const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
-      const onIdea = home.type === 'Idea' ? undefined : ctx.focusIdea;
+      // A capability-level link is stamped with its idea (the one named, on screen, or each idea that needs it).
+      const scoped = IDEA_SCOPED.includes(rel) ? scopeFor(from, rel, to, namedIdea) : { ideas: [] as string[] };
+      if ('problem' in scoped) {
+        // A system new to the graph has no link yet: the "already" problem cannot apply; only "no idea needs it".
+        problems.push(scoped.problem); continue;
+      }
+      const onIdeas: (string | undefined)[] = scoped.ideas.length ? scoped.ideas : [home.type === 'Idea' ? undefined : ctx.focusIdea];
+      if (scoped.note) notes.push(scoped.note);
+      const forIdea = (i: string | undefined) => (scoped.ideas.length && i ? ` for ${title(i)}` : '');
       if (same) {
         // The star is there already: the add becomes the link, under the name the operator used.
         const known = same.label.toLowerCase() !== name.toLowerCase() ? ` (known as "${name}")` : '';
-        if (ctx.graph.edges.some((e) => e.id === edgeId(from, rel, to))) { problems.push(`${nodes.get(from)!.label} already ${REL_WORD[rel] ?? 'is linked to'} ${nodes.get(to)!.label}.`); continue; }
+        if (!scoped.ideas.length && ctx.graph.edges.some((e) => e.id === edgeId(from, rel, to))) { problems.push(`${nodes.get(from)!.label} already ${REL_WORD[rel] ?? 'is linked to'} ${nodes.get(to)!.label}.`); continue; }
         notes.push(`${same.label} already exists${known ? `, known as "${name}"` : ''}: this links it instead of adding a new one.`);
-        proposals.push({ label: `Link ${same.label}${known} to ${home.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'link', from, rel, to, ...(onIdea ? { idea: onIdea } : {}) }, note: notes.join(' ') });
+        for (const onIdea of onIdeas) proposals.push({ label: `Link ${same.label}${known} to ${home.label}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}${forIdea(onIdea)}`, action: { t: 'link', from, rel, to, ...(onIdea ? { idea: onIdea } : {}) }, note: notes.join(' ') });
         continue;
       }
       const dir = from === home.id ? `linked from ${home.label}` : `linked to ${home.label}`;
-      proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) }, ...(notes.length ? { note: notes.join(' ') } : {}) });
+      for (const onIdea of onIdeas) proposals.push({ label: `New ${word(type)}: ${label}, ${dir}${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}${forIdea(onIdea)}`, action: { t: 'add_star', node, type, label, link: { from, rel, to }, ...(onIdea ? { idea: onIdea } : {}) }, ...(notes.length ? { note: notes.join(' ') } : {}) });
     } else if (s.op === 'remove_star') {
       const a = star(s.a);
       if (!a) { missing(s); continue; }
@@ -296,6 +366,12 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (a.type === 'Person' || a.type === 'Idea' || a.type === 'Round') { problems.push(`${a.label} comes from the form, so it has no aliases.`); continue; }
       const known = ctx.registry?.resolve(a.type, name) ?? ctx.graph.nodes.filter((n) => n.type === a.type).map((n) => ({ id: n.id, label: n.label })).find((n) => n.label.toLowerCase() === name.toLowerCase());
       if (known) { problems.push(known.id === a.id ? `${a.label} is already known as "${name}".` : `"${name}" is already a ${word(a.type)}: ${known.label}. Merge them instead.`); continue; }
+      // A tool's other name must never be another product: "Copilot Studio is also UiPath" would make a retired or
+      // unapproved tool look approved. The approved list is changed in rules/entities.yaml, not by an alias.
+      if (a.type === 'Tool') {
+        const other = KNOWN_UNAPPROVED_TOOLS.find((t) => nameKey(t) === nameKey(name)) ?? ctx.graph.nodes.find((n) => n.type === 'Tool' && n.id !== a.id && nameKey(n.label) === nameKey(name))?.label;
+        if (other) { problems.push(`${other} is another tool, not on the approved list: it can't be another name of ${a.label}. Approved tools change in rules/entities.yaml.`); continue; }
+      }
       proposals.push({ label: `Also know ${a.label} as "${name}"`, action: { t: 'alias', node: a.id, label: name, of: a.label } });
     }
   }
@@ -343,6 +419,8 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
       return { inverse: { t: 'edits-off', ids: [star.inverse.id, link.inverse.id] } };
     }
     case 'unlink': {
+      // A derived link is the rules' to say: an unlink edit would hide it for nothing (it comes back), so it is refused.
+      if (DERIVED_RELATIONS.includes(a.rel)) throw new Error(`${a.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules: remove one of the stored links it rests on instead`);
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
       if (isOperatorSource(a.source)) {
         const made = (await readEdits(root)).filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);

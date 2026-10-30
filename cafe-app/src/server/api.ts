@@ -271,7 +271,7 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     return { ...(await networkMany(root, list, options, { withDerived })), analyses: list };
   });
   // A NetworkX suggestion the operator wants to make: it becomes a proposal in the assistant, done only with Do it.
-  add('POST', '/api/network/propose', async ({ body }) => proposeLink(root, { from: String(body.from ?? ''), rel: String(body.rel ?? ''), to: String(body.to ?? ''), why: body.why ? String(body.why) : undefined, thread: body.thread ? String(body.thread) : undefined }, clock));
+  add('POST', '/api/network/propose', async ({ body }) => proposeLink(root, { from: String(body.from ?? ''), rel: String(body.rel ?? ''), to: String(body.to ?? ''), why: body.why ? String(body.why) : undefined, thread: body.thread ? String(body.thread) : undefined, idea: body.idea ? String(body.idea) : undefined }, clock));
   add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });
 

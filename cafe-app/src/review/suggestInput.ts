@@ -12,7 +12,7 @@ import { importedNames, namesInAddresses } from '../inbox/names';
 import { builderOf } from '../ideas/people';
 import { ideaNetwork } from '../graph/network';
 
-/** What review needs from the graph: the idea's pain points, capabilities and systems (systems through its capabilities). */
+/** What review needs from the graph: the idea's pain points, capabilities and systems (its own DEPENDS_ON: systems its capabilities use for it). */
 const KINDS = new Set(['PainPoint', 'Capability', 'System']);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -53,7 +53,8 @@ export async function reviewInput(
     if (e.from === me && KINDS.has(nodes.get(e.to)?.type ?? '')) linked.add(e.to);
     if (e.to === me && KINDS.has(nodes.get(e.from)?.type ?? '')) linked.add(e.from);
   }
-  for (const e of graph.edges) if (linked.has(e.from) && e.rel === 'USES_DATA') linked.add(e.to);
+  // Its systems are its own dependencies (DEPENDS_ON, scoped to the idea by the rules), picked up above: following
+  // USES_DATA from a shared capability would bring in the systems other ideas use it with (007 was sent eight).
   const ideasOf = (sid: string) => new Set(graph.edges.flatMap((e) => (e.to === sid && nodes.get(e.from)?.type === 'Idea' ? [e.from] : e.from === sid && nodes.get(e.to)?.type === 'Idea' ? [e.to] : [])));
   const graphFacts = [...linked].map((sid) => {
     const n = nodes.get(sid)!;

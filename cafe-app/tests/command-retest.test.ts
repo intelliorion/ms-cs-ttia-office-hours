@@ -153,7 +153,7 @@ describe('adding a system an idea already depends on says so', () => {
   const links: AiLink[] = [
     link('idea:CAFE-2026-002', 'NEEDS', 'capability:policy-answers', 'Capability', 'Policy answers'),
     link('idea:CAFE-2026-002', 'NEEDS', 'capability:record-update', 'Capability', 'Record update'),
-    link('capability:policy-answers', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy'),
+    { ...link('capability:policy-answers', 'USES_DATA', 'system:travel-expense-policy', 'System', 'Travel & Expense policy'), idea: 'CAFE-2026-002' },
   ];
   const registry = makeRegistry(defaultEntries(), edits);
   const graph = buildGraph(IDEAS, links, [], edits, { registry });

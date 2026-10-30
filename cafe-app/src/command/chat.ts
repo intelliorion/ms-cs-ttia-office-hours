@@ -14,9 +14,9 @@ import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type NetworkSuggestion, type Query, type QueryResult, type StepTrace } from './query';
 import { prepareNetwork } from '../graph/network';
-import { ALLOWED, DERIVED_RELATIONS, edgeId, type Relation } from '../graph/ontology';
+import { ALLOWED, DERIVED_RELATIONS, IDEA_SCOPED, edgeId, type Relation } from '../graph/ontology';
 import { validate } from '../ai/schema';
-import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
+import { applyAction, linkScope, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
 import { loadRegistry } from '../graph/registryFile';
@@ -368,11 +368,21 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   // NetworkX's suggested links: proposals with Do it, the operator's to accept. The AI's own proposals come first.
   if (suggested.length && !entry.error) {
     const have = new Set([...entry.actions.map((a) => (a.action.t === 'link' ? edgeId(a.action.from, a.action.rel, a.action.to) : '')), ...graph.edges.map((e) => e.id)]);
+    const stated = new Set(graph.edges.filter((e) => !e.derived && !IDEA_SCOPED.includes(e.rel)).map((e) => e.id));
     for (const x of suggested) {
       const id = edgeId(x.from, x.rel, x.to);
-      if (have.has(id) || !nodes.has(x.from) || !nodes.has(x.to)) continue;
+      if (have.has(id) && !IDEA_SCOPED.includes(x.rel)) continue;
+      if (stated.has(id) || !nodes.has(x.from) || !nodes.has(x.to)) continue;
+      // A capability-level link is stamped with the idea it is for: one proposal per idea that needs the capability.
+      const scope = linkScope(graph, x.from, x.rel, x.to);
+      if ('problem' in scope) continue;
       have.add(id);
-      entry.actions.push({ id: `a${entry.actions.length + 1}`, label: `Link ${label(x.from)} → ${label(x.to)} (${x.rel === 'NEEDS' ? 'needs' : 'uses the data'}) · suggested by NetworkX`, action: { t: 'link', from: x.from, rel: x.rel, to: x.to }, status: 'proposed', note: `Like ${x.why.split(': ').slice(1).join(': ')}` });
+      for (const idea of scope.ideas.length ? scope.ideas : [undefined]) {
+        entry.actions.push({
+          id: `a${entry.actions.length + 1}`, label: `Link ${label(x.from)} → ${label(x.to)} (${x.rel === 'NEEDS' ? 'needs' : 'uses the data'})${idea ? ` for ${label(`idea:${idea}`)}` : ''} · suggested by NetworkX`,
+          action: { t: 'link', from: x.from, rel: x.rel, to: x.to, ...(idea ? { idea } : {}) }, status: 'proposed', note: `Like ${x.why.split(': ').slice(1).join(': ')}`,
+        });
+      }
     }
   }
   // The derived links the reply relies on (both ends named in it) come back from behind "and N more".
@@ -390,14 +400,19 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
  * A link the Network pop-out's Propose button sends: one message in the assistant with the link as a proposal, so it
  * goes through the same Do it as every other change. The app checks it first; nothing changes here.
  */
-export async function proposeLink(root: string, link: { from: string; rel: string; to: string; why?: string; thread?: string }, clock: Clock): Promise<ChatEntry> {
+export async function proposeLink(root: string, link: { from: string; rel: string; to: string; why?: string; thread?: string; idea?: string }, clock: Clock): Promise<ChatEntry> {
   const graph = await rebuildGraph(root);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   const from = nodes.get(link.from); const to = nodes.get(link.to); const rel = link.rel as Relation;
   if (!from || !to) throw new Error('One of those stars is not in the universe any more.');
   const pair = ALLOWED[rel];
   if (!pair || DERIVED_RELATIONS.includes(rel) || pair[0] !== from.type || pair[1] !== to.type) throw new Error(`${from.label} and ${to.label} can't be linked that way.`);
-  if (graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) throw new Error(`${from.label} and ${to.label} are already linked.`);
+  // A capability-level link is stamped with the idea it was suggested for (the one sent), else each idea that needs it.
+  const named = link.idea?.replace(/^idea:/, '') || undefined;
+  const scope = linkScope(graph, from.id, rel, to.id, { named });
+  if ('problem' in scope) throw new Error(scope.problem);
+  if (!IDEA_SCOPED.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) throw new Error(`${from.label} and ${to.label} are already linked.`);
+  const ideaLabel = (i: string) => nodes.get(`idea:${i}`)?.label ?? i;
   const all = await readChat(root);
   const threads = await readThreads(root);
   const now = Date.now();
@@ -408,8 +423,11 @@ export async function proposeLink(root: string, link: { from: string; rel: strin
   const why = String(link.why ?? '').trim().slice(0, 400);
   const entry: ChatEntry = {
     id: `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`, thread: thread.id, at: clock(), ts: now, text, kind: 'command',
-    reply: `NetworkX suggests ${from.label} ${relWord} ${to.label}${why ? ` (${why})` : ''}. It is only a suggestion: nothing changes until you press Do it.`,
-    actions: [{ id: 'a1', label: `Link ${from.label} → ${to.label} (${relWord}) · suggested by NetworkX`, action: { t: 'link', from: from.id, rel, to: to.id }, status: 'proposed' }],
+    reply: `NetworkX suggests ${from.label} ${relWord} ${to.label}${why ? ` (${why})` : ''}. It is only a suggestion: nothing changes until you press Do it.${scope.note ? ` ${scope.note}` : ''}`,
+    actions: (scope.ideas.length ? scope.ideas : [undefined]).map((idea, i) => ({
+      id: `a${i + 1}`, label: `Link ${from.label} → ${to.label} (${relWord})${idea ? ` for ${ideaLabel(idea)}` : ''} · suggested by NetworkX`,
+      action: { t: 'link' as const, from: from.id, rel, to: to.id, ...(idea ? { idea } : {}) }, status: 'proposed' as const,
+    })),
     problems: [], steps: [], highlight: [from.id, to.id],
   };
   await saveThread(root, { ...thread, updated: now });

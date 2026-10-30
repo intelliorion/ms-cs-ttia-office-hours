@@ -107,3 +107,8 @@ export async function chatStream(body: { text: string; focus?: string[] | null; 
   });
   return readStream(res, onProgress);
 }
+
+/** Network: NetworkX over the graph (read-only), stored facts unless withDerived; a suggested link goes to the assistant as a proposal. */
+export const getNetwork = (analyses: string[], withDerived = false) =>
+  fetch(`/api/network?analysis=${analyses.join(',')}${withDerived ? '&withDerived=1' : ''}&top=8`).then((r) => handle<any>(r));
+export const networkPropose = (link: { from: string; rel: string; to: string; why?: string; thread?: string }) => post('/api/network/propose', link);

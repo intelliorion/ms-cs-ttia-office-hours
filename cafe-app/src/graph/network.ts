@@ -394,7 +394,9 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
     if (e.derived) continue;
     if (e.from === me && e.rel === 'NEEDS') mine.add(e.to);
   }
-  for (const e of graph.edges) if (!e.derived && mine.has(e.from) && e.rel === 'USES_DATA') mine.add(e.to);
+  // Its systems: those its capabilities use for it (a link scoped to another idea is that idea's system, not this one's).
+  const cafeId = me.slice('idea:'.length);
+  for (const e of graph.edges) if (!e.derived && mine.has(e.from) && e.rel === 'USES_DATA' && (!e.idea || e.idea === cafeId)) mine.add(e.to);
   const centrality: Extract<IdeaNetwork, { available: true }>['centrality'] = [];
   for (const t of ['Capability', 'System'] as const) {
     const list: any[] = central.byType?.[t] ?? [];

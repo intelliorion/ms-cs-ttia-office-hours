@@ -16,7 +16,9 @@ export type Popout =
   /** Deep read: what the assistant has read. */
   | { kind: 'deep-read' }
   /** Everything the design series made for one idea. */
-  | { kind: 'design-pack'; id: string };
+  | { kind: 'design-pack'; id: string }
+  /** Network: what NetworkX finds across the whole graph. */
+  | { kind: 'network' };
 
 /** A move the app offers after a review or a sent email. Applied only when the operator says yes. */
 export interface Suggest { id: string; stage?: number; closeAs?: string; label: string }

@@ -15,6 +15,7 @@ export function TitleBar() {
       <div className="btns">
         <AssistantLauncher />
         <DeepReadButton />
+        <button className="pill net-pill" data-action="network" title="Network: what NetworkX finds across the whole graph" onClick={() => openPopout({ kind: 'network' })}><span className="net-icon" aria-hidden="true">⋈</span>Network</button>
         <button className={`pill inbox${waiting ? ' waiting' : ''}`} data-action="inbox" title="Drop anything: exports, emails, transcripts, Word, PDF and pictures" onClick={() => openPopout({ kind: 'inbox' })}>
           <span className="ib-icon" aria-hidden="true">⤓</span>Import{waiting > 0 && <span className="ib-badge">{waiting}</span>}</button>
         <button className="pill" data-action="round" onClick={() => openPopout({ kind: 'round' })}>Rounds</button>

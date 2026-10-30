@@ -1364,3 +1364,27 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 @keyframes change-note{0%{opacity:0;transform:translate(-50%,-6px)}10%,75%{opacity:1;transform:translate(-50%,0)}100%{opacity:0}}
 @media (prefers-reduced-motion: reduce){.flat2d .flat-changed,.change-note{animation:none}}
 .tf-legend i.dot-line{border-top-style:dotted}
+
+/* Network pop-out: NetworkX over the graph */
+.net-pill .net-icon{color:var(--teal);margin-right:6px;font-size:12px}
+.net-lede{margin:0 0 6px;color:var(--muted);font-size:14px}
+.net-line{font-family:var(--mono);font-size:13px;color:var(--text)}
+.net-bars{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.net-bars li{display:grid;grid-template-columns:minmax(160px,260px) 1fr auto;align-items:center;gap:10px}
+.net-track{height:6px;border-radius:3px;background:rgba(var(--rgb-line),.15);overflow:hidden}
+.net-bar{display:block;height:100%;background:var(--teal);border-radius:3px}
+.net-n{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.net-clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.net-cluster{border:1px solid rgba(var(--rgb-line),.25);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.net-cluster-h{all:unset;cursor:pointer;font-weight:600;color:var(--strong);display:flex;justify-content:space-between;gap:8px}
+.net-cluster-h span{font-weight:400;font-size:12px;color:var(--teal)}
+.net-cluster-h:hover span,.net-cluster-h:focus-visible span{text-decoration:underline}
+.net-chips,.net-bound,.net-alone{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.net-bound>span,.net-alone>span{font-size:12px;color:var(--muted)}
+.net-alone{margin-top:10px}
+.net-sugg{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.net-sugg li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border:1px solid rgba(var(--rgb-warm),.4);border-radius:6px}
+.net-sugg-l{display:flex;flex-direction:column;gap:4px;min-width:0}
+.net-rel{font-size:13px;color:var(--amber)}
+.net-why{font-size:12px;color:var(--muted)}
+.net-foot{margin-top:12px}

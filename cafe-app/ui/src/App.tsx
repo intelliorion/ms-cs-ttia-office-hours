@@ -18,6 +18,7 @@ import { AiPopout } from './popouts/AiPopout';
 import { DesignPackPopout } from './popouts/DesignPackPopout';
 import { ConfigPopout } from './popouts/ConfigPopout';
 import { DeepReadPopout } from './popouts/DeepReadPopout';
+import { NetworkPopout } from './popouts/NetworkPopout';
 import { TypeFilter } from './layout/TypeFilter';
 import { ChangeNote } from './layout/ChangeNote';
 import { labelModeText, visibleGraph } from './universe/graphView';
@@ -105,6 +106,7 @@ export default function App() {
         {popout?.kind === 'ai' && <AiPopout />}
         {popout?.kind === 'config' && <ConfigPopout />}
         {popout?.kind === 'deep-read' && <DeepReadPopout />}
+        {popout?.kind === 'network' && <NetworkPopout />}
         {popout?.kind === 'design-pack' && <DesignPackPopout id={popout.id} />}
       </Stage>
       {!focus && <Drawers />}

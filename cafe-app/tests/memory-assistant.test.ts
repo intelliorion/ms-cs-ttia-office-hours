@@ -15,9 +15,21 @@ afterAll(() => { process.env.CAFE_EMBED_FAKE = was.embed; process.env.CAFE_AI_FA
 const j = (r: Response): Promise<any> => r.json();
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => { await close?.(); close = undefined; });
-async function boot() {
+/**
+ * A server with the fake embedder, so Deep read can read. Two things read on their own and must be settled before a
+ * test seeds ideas: start-up upkeep (once, after listen) and automatic upkeep (20 ms after a save). A test about Deep
+ * read being off says so (`off`): the switch goes off before anything is seeded, so no read can race the question.
+ * (It used to race: under load, the 20 ms upkeep read the seeded ideas before the question and a reading step appeared.)
+ */
+async function boot(deepRead: 'auto' | 'off' = 'auto') {
   const s = await startServer('2026-10-19', { upkeep: { quietMs: 20, maxMs: 150 } });
   close = () => new Promise<void>((resolve) => { s.server.close(() => resolve()); s.server.closeAllConnections(); });
+  // Start-up upkeep has decided (it has nothing to read in a new workspace) before anything is seeded.
+  for (let i = 0; !(await get(s.base, '/api/memory')).upkeep.startup; i++) {
+    if (i > 1000) throw new Error('start-up upkeep never settled');
+    await new Promise((r) => setTimeout(r, 2));
+  }
+  if (deepRead === 'off') await post(s.base, '/api/memory/upkeep', { on: false });
   return s;
 }
 const post = (base: string, url: string, body: unknown = {}) => fetch(base + url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -113,7 +125,7 @@ describe('similar ideas: the graph first, Deep read second', () => {
   });
 
   it('with Deep read never run: only the graph part, no reading step', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await boot('off');
     await seed(root);
     const e = await ask(base);
     expect(e.reply).toBe('By shared stars: Procurement FAQ bot (share Mailbox triage, Policy Q&A).');
@@ -142,7 +154,7 @@ describe('impact of a system change: the derived links first, search second', ()
   ];
 
   it('with Deep read off: the policy star, follow DEPENDS_ON in, the two depending ideas lit and the rule in the trace; no search', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await boot('off');
     await seed(root);
     const e = await ask(base);
     expect(e.kind).toBe('question');
@@ -168,7 +180,7 @@ describe('impact of a system change: the derived links first, search second', ()
 
 describe('which team owns an idea: the derived OWNS link, from the submitter, even with no lead', () => {
   it('an idea with a submitter and no lead still has its team, the trace says member+submitted, and the reply names the submitter', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await boot('off');
     await saveIdea(root, sampleIdea({ id: 'CAFE-2026-001', title: 'Travel policy assistant', function: 'GSS', challenge: 'Travel policy questions flood the mailbox.', dedupe_key: 'a',
       people: { submitter: 'Avery Chen', team: [] } }));
     const e = await post(base, '/api/chat', { text: 'which team owns @Travel policy assistant?', mentions: ['idea:CAFE-2026-001'] }).then(j);
@@ -206,7 +218,7 @@ describe('a capability shared by two teams: one grouped query, then what the sub
   const BY_GRAPH = 'By the graph, Policy Q&A: Travel policy assistant, Onboarding checklist helper (both need it); Document parsing: Desk booking assistant, Expense anomaly finder (both need it).';
 
   it('with Deep read off: one query, the ideas grouped per shared capability in the trace, then each idea\'s current process read from its record', async () => {
-    const { base, root } = await boot();
+    const { base, root } = await boot('off');
     await seed(root);
     const e = await ask(base);
     expect(e.kind).toBe('question');

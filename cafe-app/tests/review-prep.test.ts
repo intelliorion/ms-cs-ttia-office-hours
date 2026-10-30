@@ -31,7 +31,7 @@ describe('the Review and Select to-do list', () => {
     await saveIdea(root, idea);
     const { run, seen } = ai({ decision: 'ask', reason: 'No builder yet for [P1].', needs: [{ ...builder, met: false }, { ...data, met: false }] });
     const prep = await suggestPrep(root, 'CAFE-2026-001', run, clock);
-    expect(prep).toMatchObject({ decision: 'ask', at: '2026-10-22', basis: 'Based on the form', provider: 'fake' });
+    expect(prep).toMatchObject({ decision: 'ask', at: '2026-10-22', basis: 'Based on the form and NetworkX network analysis (no cluster, 0 centrality ranks, 0 likely missing links)', provider: 'fake' });
     expect(prep.needs.map((n) => n.id)).toEqual(['n1', 'n2']);
     expect(prep.reason).toMatch(/^No builder yet for Person 1\.$/);
     expect(JSON.stringify(seen[0])).not.toMatch(/Person 1/);
@@ -59,7 +59,7 @@ describe('the Review and Select to-do list', () => {
       { id: 'n1', ...builder, met: true, note: 'A builder is named', answer: 'Our analyst will build it and can attend.' },
       { id: 'n2', ...data, met: true, note: 'Sample data' },
     ]);
-    expect(prep.basis).toBe('Based on the form, with 1 answer you added');
+    expect(prep.basis).toBe('Based on the form and NetworkX network analysis (no cluster, 0 centrality ranks, 0 likely missing links), with 1 answer you added');
     expect(prep.needs.some((n) => isOpenNeed(n))).toBe(false);
     // An empty answer clears it; an unknown item is refused.
     expect((await answerNeed(root, 'CAFE-2026-001', 'n1', '')).needs[0].answer).toBeUndefined();

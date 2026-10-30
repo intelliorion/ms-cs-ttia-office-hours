@@ -10,6 +10,7 @@ import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
 import { rebuildGraph } from '../graph/store';
 import { exportJsonLd, subgraphOf } from '../graph/jsonld';
+import { ideaNetwork, type IdeaNetwork } from '../graph/network';
 
 export const CRITERIA = [
   { id: 'feasible', text: 'A proof of concept is feasible with approved tools and no live non-Microsoft system' },
@@ -121,11 +122,28 @@ export async function saveReview(
     await writeFileAtomic(handoff, renderHandoff(idea, settings));
     // The idea's corner of the knowledge graph, for the CSIC Repository's own tools, beside the draft.
     const graph = await rebuildGraph(root);
-    await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify(exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`), null, 1));
+    // With it, what NetworkX finds about the idea across the programme: analysis, labelled as such, apart from the stored facts.
+    const doc = exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`);
+    await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify({ ...doc, networkAnalysis: handoffNetwork(await ideaNetwork(graph, idea.id)) }, null, 1));
   }
   await writeFileAtomic(path.join(dir, 'review.md'), renderReview(idea, review));
   await saveIdea(root, idea);
   if (ticksS2a) await appendHistory(dir, { at: today, action: 'tick', by: 'operator', step: 's2a', source: 'review.md' });
   await appendHistory(dir, { at: today, action: 'review', by: 'operator', detail: `${decision}: ${reason}`, source: 'review.md' });
   return { idea, warnings, ...(handoff ? { handoff } : {}), ...(suggest ? { suggest } : {}) };
+}
+
+/**
+ * The hand-off's network block: computed by NetworkX over the stored facts of the whole programme when the decision
+ * was saved. It is analysis, not a fact anyone recorded, and is kept out of @graph and links for that reason.
+ */
+export function handoffNetwork(n: IdeaNetwork): Record<string, unknown> {
+  const note = 'Analysis, not stored facts: computed by NetworkX over the stored facts of the whole Café graph when the decision was saved. Not part of @graph or links.';
+  if (!n.available) return { kind: 'analysis', note, unavailable: n.reason };
+  return {
+    kind: 'analysis', note, by: `NetworkX ${n.networkx}`, scope: n.scope,
+    cluster: n.cluster ? { otherIdeas: n.cluster.others.map((x) => ({ '@id': `cafe:${x.id}`, label: x.label })), boundBy: n.cluster.boundBy.map((b) => ({ '@id': `cafe:${b.id}`, '@type': b.type, label: b.label, ideas: b.ideas })) } : null,
+    centrality: n.centrality.map((c) => ({ '@id': `cafe:${c.id}`, '@type': c.type, label: c.label, measure: 'betweenness centrality', score: c.betweenness, rank: c.rank, of: c.of, ideas: c.ideas })),
+    likelyMissingLinks: n.suggestions.map((x) => ({ rel: x.rel, to: { '@id': `cafe:${x.to.id}`, '@type': x.to.type, label: x.to.label }, share: x.share, adamicAdar: x.adamicAdar, jaccard: x.jaccard, peers: x.peers.map((p) => p.label), status: 'suggestion, not applied' })),
+  };
 }

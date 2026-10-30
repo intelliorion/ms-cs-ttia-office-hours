@@ -92,9 +92,13 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
   const draftEmail = () => call(() => designPost(idea.id, 'tools/prep/email'), { ok: (o: any) => openedText(o.email.template) });
   const problem = dirty ? picksProblem(rows) : null;
   /** After a save: saved features that look like a star the idea already had. Merge, or keep both. */
-  const [similar, setSimilar] = useState<{ feature: string; featureId: string; star: string; starId: string }[]>([]);
-  const merge = async (x: { feature: string; featureId: string; star: string; starId: string }) => {
-    const r = await call(() => post('/api/graph/merge', { from: x.starId, into: x.featureId }), { ok: () => `Merged ${x.star} into ${x.feature}: its links moved over.` });
+  const [similar, setSimilar] = useState<SimilarStarView[]>([]);
+  const [similarBy, setSimilarBy] = useState('');
+  // On the idea, the AI's star goes into the saved feature; across ideas, the feature goes into the star other ideas already need.
+  const merge = async (x: SimilarStarView) => {
+    const across = !!x.ideas?.length;
+    const [from, into, a, b] = across ? [x.featureId, x.starId, x.feature, x.star] : [x.starId, x.featureId, x.star, x.feature];
+    const r = await call(() => post('/api/graph/merge', { from, into }), { ok: () => `Merged ${a} into ${b}: its links moved over.` });
     if (r) setSimilar((xs) => xs.filter((y) => y.starId !== x.starId));
   };
   const save = async () => {
@@ -102,7 +106,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
     const r = await call(() => designPost(idea.id, 'tools', b), {
       ok: () => `Saved ${features(b.features.length)}${choice ? ` and ${choice.tool}` : ''}. approach.md is written and the universe shows the tool.`,
     });
-    if (r) { setDirty(false); setRows(featureRows(r.state.features)); setChoice(toolView(r.state.tool, tools)); setSimilar(r.similar ?? []); }
+    if (r) { setDirty(false); setRows(featureRows(r.state.features)); setChoice(toolView(r.state.tool, tools)); setSimilar(r.similar ?? []); setSimilarBy(r.similarBy ?? ''); }
   };
   const builder = buildersOf(idea)[0];
   const off = busy || aiWorking;
@@ -269,7 +273,7 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
           <ul>
             {similar.map((x) => (
               <li key={x.starId} data-similar={x.starId}>
-                <span><b>{x.feature}</b> looks like <b>{x.star}</b>, which the AI found in the submission.</span>
+                <span>{similarText(x)}</span>
                 <span className="tp-acts">
                   <button className="btn sm primary" data-action="merge-star" disabled={off} onClick={() => void merge(x)}>Merge</button>
                   <button className="btn sm" data-action="keep-both" disabled={off} onClick={() => setSimilar((xs) => xs.filter((y) => y.starId !== x.starId))}>Keep both</button>
@@ -277,8 +281,23 @@ export function ToolPickerSection({ idea, design, busy, aiWorking, noAi, aiName,
               </li>
             ))}
           </ul>
+          {similarBy && <div className="hint tp-similar-by" data-testid="similar-by">Checked across ideas with {similarBy}.</div>}
         </div>
       )}
     </section>
   );
+}
+
+/** A saved feature that looks like a capability already in the universe (see similarStars on the server). */
+export interface SimilarStarView {
+  feature: string; featureId: string; star: string; starId: string;
+  ideas?: { id: string; label: string }[];
+  networkx?: { version: string; share: number; peers: string[] };
+}
+
+/** The line for one look-alike: on the idea (the AI's), or across ideas with the ideas that need it and NetworkX's reason. */
+export function similarText(x: SimilarStarView): React.ReactNode {
+  if (!x.ideas?.length) return <><b>{x.feature}</b> looks like <b>{x.star}</b>, which the AI found in the submission.</>;
+  return <><b>{x.feature}</b> looks like <b>{x.star}</b>, which {x.ideas.map((i) => i.label).join(', ')} already need{x.ideas.length === 1 ? 's' : ''}.
+    {x.networkx && <> NetworkX predicts this idea needs it too: {Math.round(x.networkx.share * 100)} % of its closest peers by weight ({x.networkx.peers.join(', ')}) do.</>}</>;
 }

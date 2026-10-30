@@ -10,6 +10,7 @@ import type { Idea } from '../ideas/idea';
 import { nodeId, type GNode } from '../graph/ontology';
 import { importedNames, namesInAddresses } from '../inbox/names';
 import { builderOf } from '../ideas/people';
+import { ideaNetwork } from '../graph/network';
 
 /** What review needs from the graph: the idea's pain points, capabilities and systems (systems through its capabilities). */
 const KINDS = new Set(['PainPoint', 'Capability', 'System']);
@@ -21,7 +22,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * `basis` says, in the app's words, what the suggestion was based on, so a new email visibly changes it.
  */
 export async function reviewInput(
-  root: string, id: string, added: { question: string; answer: string }[] = [], opts: { skipSource?: string } = {},
+  root: string, id: string, added: { question: string; answer: string }[] = [], opts: { skipSource?: string; network?: boolean } = {},
 ): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
   const loaded = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
   // The design questions read their own answers as steps: their copies on the idea are left out for them.
@@ -60,6 +61,14 @@ export async function reviewInput(
     return { type: n.type, label: n.label, ...(others ? { alsoNeededBy: others } : {}) };
   });
 
+  // The decision suggestion also reads what NetworkX finds across the programme (stored facts; names coded like the rest).
+  const net = opts.network ? await ideaNetwork(graph, idea.id) : undefined;
+  const network: ReviewSuggestInput['network'] = !net ? undefined : !net.available ? { unavailable: net.reason } : {
+    by: `NetworkX ${net.networkx} over ${net.scope}`,
+    cluster: net.cluster ? { otherIdeas: net.cluster.others.map((x) => x.label), boundBy: net.cluster.boundBy.map((b) => `${coded(b.label)} (${b.type}, ${b.ideas} ideas)`) } : null,
+    centrality: net.centrality.map((c) => ({ star: c.label, type: c.type, rank: `${c.rank} of ${c.of}`, ideas: c.ideas })),
+    likelyMissing: net.suggestions.map((x) => ({ link: `${x.rel === 'NEEDS' ? 'needs' : 'uses the data'} ${x.to.label}`, because: `${Math.round(x.share * 100)} % of its closest peers by weight have it: ${x.peers.map((p) => p.label).join(', ')}` })),
+  };
   const input: ReviewSuggestInput = {
     idea: ideaText,
     form: {
@@ -70,6 +79,7 @@ export async function reviewInput(
     progress,
     ...(idea.flags.length ? { flags: idea.flags } : {}),
     ...(graphFacts.length ? { graph: graphFacts } : {}),
+    ...(network ? { network } : {}),
   };
   const parts = [
     'the form',
@@ -79,6 +89,9 @@ export async function reviewInput(
     progress.attendanceConfirmed ? 'attendance confirmed' : '',
     idea.flags.length ? plural(idea.flags.length, 'flag') : '',
     graphFacts.length ? plural(graphFacts.length, 'graph link') : '',
+    !net ? '' : net.available
+      ? `NetworkX network analysis (${net.cluster ? `a cluster with ${plural(net.cluster.others.length, 'other idea')}` : 'no cluster'}, ${plural(net.centrality.length, 'centrality rank')}, ${plural(net.suggestions.length, 'likely missing link')})`
+      : `no network analysis (unavailable: ${net.reason.split(/(?<=\.) /)[0].replace(/\.$/, '')})`,
   ].filter(Boolean);
   // What an imported email found but the operator has not said yes to yet: not part of the idea, so not read; say so.
   const waiting = (await listItems(root)).flatMap((i) => (i.actions ?? []) as { status?: string; action?: { ideaId?: string } }[])

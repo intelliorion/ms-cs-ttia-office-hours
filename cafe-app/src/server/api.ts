@@ -27,7 +27,7 @@ import { createConnector, defaultProviders, saveAiProvider, type Connector } fro
 import { extractTask, reviewSuggestTask, pingTask, toolPickTask, featureListTask, designStepTask, designPlanTask, designDiagramTask, designKitTask, roadshowPrepTask, roadshowDeckTask, dataStepTask, type DesignKitOutput } from '../ai/tasks';
 import { applyFeatureChanges } from '../design/scope';
 import { readDesign, renderDesignMd, writeDesign } from '../design/store';
-import { saveToolPicks, similarStars, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
+import { saveToolPicks, similarStarsChecked, suggestTools, suggestFeatures, answerToolNeed, draftToolNeedsEmail, markToolAsked } from '../design/tools';
 import {
   applyDesignEvent, approveDesign, askTeam, assertNoOpenStep, checkDesignStart, codedDesignInput, decodeStep, drawDiagram, isDone, redesign, stepEvent, DesignError, SUMMARY_MAX,
 } from '../design/brainstorm';
@@ -364,7 +364,8 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('POST', '/api/ideas/:id/tools', async ({ params, body }) => {
     const { state, designFile } = await saveToolPicks(root, params.id, { features: body.features, tool: body.tool }, { clock, steps: await steps() });
     // Saved features that look like a star the idea already has: listed for Merge or Keep both, never merged here.
-    return { state, designMd: await readFile(designFile, 'utf8'), similar: await similarStars(root, await loadIdea(root, params.id)) };
+    const checked = await similarStarsChecked(root, await loadIdea(root, params.id));
+    return { state, designMd: await readFile(designFile, 'utf8'), similar: checked.similar, similarBy: checked.network };
   });
   // Merge one star into another (its links move): the same operator edit the assistant's merge makes, so it can be undone there.
   add('POST', '/api/graph/merge', async ({ body }) => {

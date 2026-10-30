@@ -15,6 +15,7 @@ import { writeFileAtomic } from '../workspace/files';
 import { canonicalTool, nodeId, retiredToolNote, slug } from '../graph/ontology';
 import { rebuildGraph } from '../graph/store';
 import { wordOverlap } from '../inbox/conflicts';
+import { ideaNetwork } from '../graph/network';
 import {
   FEATURE_FLAGS, FEATURE_ONLY_FLAGS, FEATURES_MAX, type FeatureFlag, type FeatureListInput, type FeatureListOutput,
   type FeatureSuggestion, type ToolPickInput, type ToolPickOutput,
@@ -387,25 +388,62 @@ export async function markToolAsked(root: string, id: string, at: string, asked 
   await writeDesign(root, id, state);
 }
 
-/** A saved feature and a star already on the idea that looks like the same thing. */
-export interface SimilarStar { feature: string; featureId: string; star: string; starId: string }
+/**
+ * A saved feature and a capability that looks like the same thing: one already on the idea (the AI's, from the
+ * submission), or one other ideas already need (`ideas`), found across the programme with NetworkX's link prediction.
+ */
+export interface SimilarStar {
+  feature: string; featureId: string; star: string; starId: string;
+  /** Other ideas that already need the star: the duplicate is across ideas, not only in this idea's wording. */
+  ideas?: { id: string; label: string }[];
+  /** NetworkX predicts the idea needs the star (its closest peers do): the share of their weight, and who they are. */
+  networkx?: { version: string; share: number; peers: string[] };
+}
 
 /**
- * Features that look like a capability already linked to the idea (the AI's, from the submission): half or more of
- * their words shared. Never merged by the app: the operator says Merge or Keep both.
+ * Features that look like a capability already in the universe. On the idea: half or more of their words shared.
+ * Across ideas: a capability other ideas need, with half or more words shared, or a third when NetworkX's link
+ * prediction says this idea probably needs it too (its closest peers do). Never merged by the app: the operator says
+ * Merge or Keep both. Without Python the cross-idea check falls back to the wording alone and `network` says why.
  */
 export async function similarStars(root: string, idea: Idea): Promise<SimilarStar[]> {
+  return (await similarStarsChecked(root, idea)).similar;
+}
+
+export async function similarStarsChecked(root: string, idea: Idea): Promise<{ similar: SimilarStar[]; network: string }> {
   const features = idea.features ?? Object.keys(idea.tools ?? {});
-  if (!features.length) return [];
+  if (!features.length) return { similar: [], network: '' };
   const graph = await rebuildGraph(root);
   const me = `idea:${idea.id}`;
   const mine = new Set(features.map((f) => nodeId('Capability', f)));
-  const others = graph.edges.filter((e) => e.from === me && e.rel === 'NEEDS' && !mine.has(e.to))
-    .map((e) => graph.nodes.find((n) => n.id === e.to)).filter((n): n is NonNullable<typeof n> => n?.type === 'Capability');
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const stored = graph.edges.filter((e) => !e.derived);
+  const others = stored.filter((e) => e.from === me && e.rel === 'NEEDS' && !mine.has(e.to))
+    .map((e) => byId.get(e.to)).filter((n): n is NonNullable<typeof n> => n?.type === 'Capability');
   const out: SimilarStar[] = [];
   for (const f of features) {
     const best = others.map((n) => ({ n, score: wordOverlap(f, n.label) })).filter((x) => x.score >= 0.5).sort((a, b) => b.score - a.score)[0];
     if (best && !out.some((o) => o.starId === best.n.id)) out.push({ feature: f, featureId: nodeId('Capability', f), star: best.n.label, starId: best.n.id });
   }
-  return out;
+  // Across ideas: capabilities other ideas need that this idea does not, read with NetworkX's prediction for this idea.
+  const needers = new Map<string, string[]>();
+  for (const e of stored) if (e.rel === 'NEEDS' && e.from !== me && byId.get(e.to)?.type === 'Capability') needers.set(e.to, [...(needers.get(e.to) ?? []), e.from]);
+  const linked = new Set(stored.filter((e) => e.from === me && e.rel === 'NEEDS').map((e) => e.to));
+  const net = await ideaNetwork(graph, idea.id);
+  const predicted = new Map(net.available ? net.suggestions.filter((x) => x.rel === 'NEEDS').map((x) => [x.to.id, x]) : []);
+  for (const f of features) {
+    const fid = nodeId('Capability', f);
+    const best = [...needers.keys()]
+      .filter((cid) => cid !== fid && !linked.has(cid) && !out.some((o) => o.starId === cid))
+      .map((cid) => ({ cid, score: wordOverlap(f, byId.get(cid)!.label), p: predicted.get(cid) }))
+      .filter((x) => x.score >= 0.5 || (x.p && x.score >= 1 / 3))
+      .sort((a, b) => Number(!!b.p) - Number(!!a.p) || b.score - a.score || a.cid.localeCompare(b.cid))[0];
+    if (!best) continue;
+    out.push({
+      feature: f, featureId: fid, star: byId.get(best.cid)!.label, starId: best.cid,
+      ideas: [...new Set(needers.get(best.cid))].sort().map((id) => ({ id, label: byId.get(id)?.label ?? id })),
+      ...(best.p && net.available ? { networkx: { version: net.networkx, share: best.p.share, peers: best.p.peers.map((x) => x.label) } } : {}),
+    });
+  }
+  return { similar: out, network: net.available ? `NetworkX ${net.networkx} over stored facts` : `network analysis unavailable: ${net.reason}` };
 }

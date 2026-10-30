@@ -25,7 +25,7 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
   const prev = idea.prep?.needs ?? [];
   // What the operator pasted counts as the team's answer to that item's question.
   const pasted = prev.filter((n) => n.answer?.trim()).map((n) => ({ question: n.ask, answer: n.answer! }));
-  const { input, basis, codes } = await reviewInput(root, id, pasted);
+  const { input, basis, codes } = await reviewInput(root, id, pasted, { network: true });
   const { provider, output } = await run({ ...input, ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}) });
   const needs: PrepNeed[] = mergeNeeds(prev, output.needs, (s) => showNames(s, codes));
   const prep: ReviewPrep = {

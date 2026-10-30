@@ -363,3 +363,62 @@ export async function prepareNetwork(q: Query, graph: { nodes: GNode[]; edges: G
   }
   return (s) => runs.get(s);
 }
+
+/* ---------- one idea's network facts, for the stages (decision, design, the CSIC hand-off) ---------- */
+
+/** What NetworkX says about one idea, from stored facts: its cluster, the centrality of its capabilities and systems, its likely missing links. */
+export type IdeaNetwork =
+  | {
+    available: true; networkx: string; scope: 'stored facts';
+    /** The other ideas in its Louvain cluster and the stars that bind the cluster; none when it shares nothing. */
+    cluster: { others: { id: string; label: string }[]; boundBy: { id: string; type: NodeType; label: string; ideas: number }[] } | null;
+    /** Each of its capabilities and systems: betweenness rank among stars of its kind (1 = holds the most together). */
+    centrality: { id: string; type: NodeType; label: string; rank: number; of: number; betweenness: number; ideas: number }[];
+    /** Links it probably lacks (its closest peers have them), proposals only. */
+    suggestions: { rel: Relation; to: { id: string; type: NodeType; label: string }; share: number; adamicAdar: number; jaccard: number; peers: { id: string; label: string; shared: string[] }[] }[];
+  }
+  | { available: false; reason: string };
+
+/** Enough to rank every star and keep every suggestion: the stages read one idea out of the whole answer. */
+const ALL = 100_000;
+
+export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ideaId: string, opts: NetworkRunOptions = {}): Promise<IdeaNetwork> {
+  const me = ideaId.startsWith('idea:') ? ideaId : `idea:${ideaId}`;
+  let out: NetworkOutput;
+  try {
+    out = await runNetwork(graph, ['central', 'clusters', 'suggest'], { top: ALL, types: ['Capability', 'System'] }, { ...opts, withDerived: false });
+  } catch (e) { return { available: false, reason: (e as Error).message }; }
+  const { central, clusters, suggest } = out.results as any;
+  const mine = new Set<string>();
+  for (const e of graph.edges) {
+    if (e.derived) continue;
+    if (e.from === me && e.rel === 'NEEDS') mine.add(e.to);
+  }
+  for (const e of graph.edges) if (!e.derived && mine.has(e.from) && e.rel === 'USES_DATA') mine.add(e.to);
+  const centrality: Extract<IdeaNetwork, { available: true }>['centrality'] = [];
+  for (const t of ['Capability', 'System'] as const) {
+    const list: any[] = central.byType?.[t] ?? [];
+    list.forEach((x, i) => { if (mine.has(x.id)) centrality.push({ id: x.id, type: t, label: x.label, rank: i + 1, of: list.length, betweenness: x.betweenness, ideas: x.ideas }); });
+  }
+  const c = (clusters.clusters as any[]).find((k) => k.ideas.some((x: any) => x.id === me));
+  return {
+    available: true, networkx: out.networkx, scope: 'stored facts',
+    cluster: c ? { others: c.ideas.filter((x: any) => x.id !== me).map((x: any) => ({ id: x.id, label: x.label })), boundBy: c.binding.map((b: any) => ({ id: b.id, type: b.type, label: b.label, ideas: b.ideas })) } : null,
+    centrality,
+    suggestions: (suggest.suggestions as any[]).filter((s) => s.from.id === me).slice(0, 5).map((s) => ({
+      rel: s.rel, to: s.to, share: s.share, adamicAdar: s.adamicAdar, jaccard: s.jaccard,
+      peers: s.because.map((b: any) => ({ id: b.peer.id, label: b.peer.label, shared: b.shared.map((x: any) => x.label) })),
+    })),
+  };
+}
+
+/** The idea's network facts in one line, for a basis or a hand-off. */
+export function ideaNetworkLine(n: IdeaNetwork): string {
+  if (!n.available) return 'network analysis unavailable';
+  const parts = [
+    n.cluster ? `a cluster with ${n.cluster.others.length} other idea${n.cluster.others.length === 1 ? '' : 's'}` : 'no cluster',
+    `${n.centrality.length} centrality rank${n.centrality.length === 1 ? '' : 's'}`,
+    `${n.suggestions.length} likely missing link${n.suggestions.length === 1 ? '' : 's'}`,
+  ];
+  return `NetworkX ${n.networkx} over stored facts (${parts.join(', ')})`;
+}

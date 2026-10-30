@@ -44,7 +44,15 @@ export interface ReviewSuggestInput {
   graph?: { type: string; label: string; alsoNeededBy?: number }[];
   /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
   todo?: { need: string; ask: string }[];
+  /**
+   * NetworkX over the stored facts (an analysis, not a fact anyone typed): the other ideas in its cluster and the stars
+   * binding them, the centrality rank of each of its capabilities and systems, and links it probably lacks. Or why not.
+   */
+  network?: ReviewNetwork;
 }
+export type ReviewNetwork =
+  | { by: string; cluster: { otherIdeas: string[]; boundBy: string[] } | null; centrality: { star: string; type: string; rank: string; ideas: number }[]; likelyMissing: { link: string; because: string }[] }
+  | { unavailable: string };
 /** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
 export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
 /**
@@ -256,7 +264,9 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
     return build('review-suggest', [
       'Suggest a review of this idea for the operator, who decides. Read all of DATA: the form (idea and form), the team\'s answers to our questions',
       'from their emails (answers), what has happened since (progress), flags, and what the knowledge graph holds for it (graph: its pain points,',
-      'capabilities and systems, and how many other ideas need each, which bears on reuse). Later information outranks the form: an answer that',
+      'capabilities and systems, and how many other ideas need each, which bears on reuse), and network: what NetworkX found across the whole programme',
+      '(its cluster of related ideas, how central its capabilities and systems are, links it probably lacks); network is analysis, weigh it for reuse and theme',
+      'but never treat a likely missing link as a fact, and if network says unavailable, decide without it. Later information outranks the form: an answer that',
       'names a builder, the data or a live system changes the criteria. Tick each criterion true only if DATA supports it:',
       ...CRITERIA.map((c) => `- ${c.id}: ${c.text}`),
       'Suggest one decision:',

@@ -45,7 +45,8 @@ import { fitSampleToData } from '../data/kitSample';
 import { addDataQuestion, answerDataStep, confirmData, finishDataByHand, nextDataStep } from '../data/questions';
 import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
-import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction } from '../command/chat';
+import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction, proposeLink } from '../command/chat';
+import { NETWORK_ANALYSES, networkFor, networkMany, type NetworkAnalysis } from '../graph/network';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { createDeepRead } from '../memory/job';
 import { createUpkeep } from '../memory/upkeep';
@@ -257,6 +258,20 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     // What waits on the operator: a derived edge waits on its inputs, so it is not counted twice.
     return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
   });
+  // NetworkX analyses the graph the app built: read-only. Stored facts unless withDerived=1. analysis is one name or a
+  // comma list (the pop-out's overview); a path takes a and b (ids or labels).
+  add('GET', '/api/network', async ({ query }) => {
+    const list = String(query?.analysis ?? 'stats').split(',').map((x) => x.trim()).filter(Boolean) as NetworkAnalysis[];
+    const bad = list.filter((a) => !NETWORK_ANALYSES.includes(a));
+    if (bad.length) throw new Error(`There is no analysis "${bad[0]}". Choose from ${NETWORK_ANALYSES.join(', ')}.`);
+    const withDerived = /^(1|true|yes)$/i.test(String(query?.withDerived ?? ''));
+    const top = query?.top ? Math.max(1, Math.min(50, Number(query.top) || 10)) : undefined;
+    const options = { ...(top ? { top } : {}), ...(query?.a ? { a: String(query.a) } : {}), ...(query?.b ? { b: String(query.b) } : {}) };
+    if (list.length === 1) return networkFor(root, list[0], options, { withDerived });
+    return { ...(await networkMany(root, list, options, { withDerived })), analyses: list };
+  });
+  // A NetworkX suggestion the operator wants to make: it becomes a proposal in the assistant, done only with Do it.
+  add('POST', '/api/network/propose', async ({ body }) => proposeLink(root, { from: String(body.from ?? ''), rel: String(body.rel ?? ''), to: String(body.to ?? ''), why: body.why ? String(body.why) : undefined, thread: body.thread ? String(body.thread) : undefined }, clock));
   add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });
 

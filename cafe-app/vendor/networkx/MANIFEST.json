@@ -1,0 +1,11 @@
+{
+  "package": "networkx",
+  "licence": "BSD-3-Clause",
+  "origin": "https://pypi.org/project/networkx/ (the official pure-Python wheels, py3-none-any, unmodified)",
+  "downloadedAt": "2026-10-30",
+  "note": "Imported straight from the wheel (zipimport) by py/network.py, run as python -I -S so nothing installed on the machine is used and no numpy or scipy is needed. The newest wheel the found Python supports is used: 3.7 needs Python 3.12 or later (not 3.14.1); 3.2.1 covers Python 3.9 to 3.11, such as macOS's own /usr/bin/python3. See LICENCE-NOTICE.md.",
+  "wheels": [
+    { "file": "networkx-3.7-py3-none-any.whl", "version": "3.7", "sha256": "e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0", "bytes": 2142205, "minPython": "3.12", "excludePython": ["3.14.1"] },
+    { "file": "networkx-3.2.1-py3-none-any.whl", "version": "3.2.1", "sha256": "f18c69adc97877c42332c170849c96cefa91881c99a7cb3e95b7c659ebdc1ec2", "bytes": 1647772, "minPython": "3.9" }
+  ]
+}

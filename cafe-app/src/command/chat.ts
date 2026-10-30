@@ -12,7 +12,9 @@ import { nodeId, type GNode } from '../graph/ontology';
 import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
 import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
-import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type Query, type QueryResult, type StepTrace } from './query';
+import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type NetworkSuggestion, type Query, type QueryResult, type StepTrace } from './query';
+import { prepareNetwork } from '../graph/network';
+import { ALLOWED, DERIVED_RELATIONS, edgeId, type Relation } from '../graph/ontology';
 import { validate } from '../ai/schema';
 import { applyAction, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
@@ -220,6 +222,20 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   };
   /** The queries run for this message, so an identical one is not run again. */
   const ran: string[] = [];
+  /** The links NetworkX suggested in this message: shown as proposals with Do it, never made by the app. */
+  const suggested: NetworkSuggestion[] = [];
+  /** A network step's facts with every star id swapped for its code, and the stars it names (labels, people by type only). */
+  const codeNetwork = (facts: unknown) => {
+    const seen = new Set<string>();
+    const walk = (v: unknown): unknown => {
+      if (typeof v === 'string') { const n = nodes.get(v); if (!n) return v; seen.add(v); return codeFor(hidden.codes, n); }
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+      return v;
+    };
+    const coded = walk(facts);
+    return { facts: coded, named: [...seen].map((id) => legendOf(nodes.get(id)!)) };
+  };
   let lastFound: string[] = thread.last;
   let finalReply = '';
   try {
@@ -268,7 +284,11 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         if (ran.includes(key)) { refuse('search', output.thought, 'You already ran this exact search: its result is in steps above. Use it, or search differently (one hop more, or a search of the text).'); continue; }
         ran.push(key);
         const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
-        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf: (c) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id, last: lastFound, ...(memory ? { memory } : {}) });
+        const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
+        // NetworkX runs out of process: its answers for the network steps are prepared first, like Deep read's.
+        const network = await prepareNetwork(output.query as Query, graph, idOf);
+        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
+        if (r.suggestions) suggested.push(...r.suggestions);
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
         const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
         for (const id of stale) r.trace.push({ text: `${id.replace(/^CAFE-/, '')} changed since it was read`, size: 1 });
@@ -295,6 +315,8 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
             ...(stale.length ? { stale: stale.map((id) => codeFor(hidden.codes, nodes.get(`idea:${id}`)!)) } : {}),
             // A scoped search's reading of the records (current process …) for the ideas with no such passage: quote each.
             ...(r.records ? { records: r.records.map((x) => ({ idea: codeFor(hidden.codes, nodes.get(x.idea)!), field: x.field, text: coded(x.text).slice(0, HIT_MAX) })) } : {}),
+            // NetworkX's facts in codes, with the stars they name; suggestions are proposals the app shows with Do it.
+            ...(r.network ? { network: r.network.map((f) => { const c = codeNetwork(f.facts); return { analysis: f.analysis, ...(f.error ? { error: f.error } : { by: `NetworkX ${f.networkx}`, scope: f.scope, facts: c.facts, named: c.named }) }; }) } : {}),
           },
         });
       } else if (output.next === 'read_idea') {
@@ -343,6 +365,16 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   } catch (e) {
     entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
+  // NetworkX's suggested links: proposals with Do it, the operator's to accept. The AI's own proposals come first.
+  if (suggested.length && !entry.error) {
+    const have = new Set([...entry.actions.map((a) => (a.action.t === 'link' ? edgeId(a.action.from, a.action.rel, a.action.to) : '')), ...graph.edges.map((e) => e.id)]);
+    for (const x of suggested) {
+      const id = edgeId(x.from, x.rel, x.to);
+      if (have.has(id) || !nodes.has(x.from) || !nodes.has(x.to)) continue;
+      have.add(id);
+      entry.actions.push({ id: `a${entry.actions.length + 1}`, label: `Link ${label(x.from)} → ${label(x.to)} (${x.rel === 'NEEDS' ? 'needs' : 'uses the data'}) · suggested by NetworkX`, action: { t: 'link', from: x.from, rel: x.rel, to: x.to }, status: 'proposed', note: `Like ${x.why.split(': ').slice(1).join(': ')}` });
+    }
+  }
   // The derived links the reply relies on (both ends named in it) come back from behind "and N more".
   if (traces.length) entry.trace = traces.map((t) => revealDerived(t.trace, t.aside, entry.reply, label));
   if (results.length) entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
@@ -351,6 +383,36 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   // Changes left waiting in other conversations are not shown any more: cancel them, saying why.
   for (const old of all) if (old.thread !== thread.id) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A new conversation replaced it'; }
   await writeChat(root, all);
+  return save(root, entry);
+}
+
+/**
+ * A link the Network pop-out's Propose button sends: one message in the assistant with the link as a proposal, so it
+ * goes through the same Do it as every other change. The app checks it first; nothing changes here.
+ */
+export async function proposeLink(root: string, link: { from: string; rel: string; to: string; why?: string; thread?: string }, clock: Clock): Promise<ChatEntry> {
+  const graph = await rebuildGraph(root);
+  const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
+  const from = nodes.get(link.from); const to = nodes.get(link.to); const rel = link.rel as Relation;
+  if (!from || !to) throw new Error('One of those stars is not in the universe any more.');
+  const pair = ALLOWED[rel];
+  if (!pair || DERIVED_RELATIONS.includes(rel) || pair[0] !== from.type || pair[1] !== to.type) throw new Error(`${from.label} and ${to.label} can't be linked that way.`);
+  if (graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) throw new Error(`${from.label} and ${to.label} are already linked.`);
+  const all = await readChat(root);
+  const threads = await readThreads(root);
+  const now = Date.now();
+  const relWord = rel === 'NEEDS' ? 'needs' : rel === 'USES_DATA' ? 'uses the data' : rel.toLowerCase().replace(/_/g, ' ');
+  const text = `Propose the link NetworkX suggested: ${from.label} ${relWord} ${to.label}`;
+  const thread: ChatThread = threads.find((t) => t.id === link.thread)
+    ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: text.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
+  const why = String(link.why ?? '').trim().slice(0, 400);
+  const entry: ChatEntry = {
+    id: `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`, thread: thread.id, at: clock(), ts: now, text, kind: 'command',
+    reply: `NetworkX suggests ${from.label} ${relWord} ${to.label}${why ? ` (${why})` : ''}. It is only a suggestion: nothing changes until you press Do it.`,
+    actions: [{ id: 'a1', label: `Link ${from.label} → ${to.label} (${relWord}) · suggested by NetworkX`, action: { t: 'link', from: from.id, rel, to: to.id }, status: 'proposed' }],
+    problems: [], steps: [], highlight: [from.id, to.id],
+  };
+  await saveThread(root, { ...thread, updated: now });
   return save(root, entry);
 }
 

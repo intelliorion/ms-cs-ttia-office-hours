@@ -520,6 +520,12 @@ function agentFor(prompt: string) {
   }
   if (/\?\s*$/.test(cmd)) {
     const start = a ?? focus;
+    // Whole-network questions go to NetworkX (a network step), answered from its facts; suggested links stay proposals the app shows.
+    const net = networkAsk(cmd, a, b);
+    if (net) {
+      if (!data.steps?.length) return { next: 'search', thought: net.thought, query: { steps: [net.step] } };
+      return { next: 'answer', thought: 'Answering from what NetworkX found', reply: networkReply(data.steps[0]?.result?.network?.[0]), followups: ['Which ideas naturally group together?'] };
+    }
     // "which ideas are similar to [I1]?": the derived SIMILAR_TO links first (facts, with the shared stars), then Deep read's reading when it has run.
     if (start && /similar|\blike\b|same as|overlap/i.test(cmd)) {
       if (!data.steps?.length) return { next: 'search', thought: `Looking for the ideas SIMILAR_TO [${start}] by shared stars`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'follow', rel: 'SIMILAR_TO', type: 'Idea' }] } };
@@ -590,6 +596,34 @@ function agentFor(prompt: string) {
     return propose(`You asked to add a ${m[1]} to [${a}].`, [addFor(m, a)]);
   }
   return { next: 'clarify', thought: 'Not sure', reply: 'What would you like me to change, or what would you like to know?' };
+}
+
+/** A whole-network question, by its words: the network step to run, or none. */
+function networkAsk(cmd: string, a?: string, b?: string): { thought: string; step: Record<string, unknown> } | undefined {
+  const type = /capabilit/i.test(cmd) ? 'Capability' : /\bsystems?\b/i.test(cmd) ? 'System' : /\bpeople|person\b/i.test(cmd) ? 'Person' : /\bteams?\b/i.test(cmd) && !a ? 'Team' : undefined;
+  if (/holds?\b.*\btogether|most central|betweenness|bridge/i.test(cmd)) return { thought: `Asking NetworkX which ${type ? type.toLowerCase() : 'star'} holds the most ideas together`, step: { op: 'network', analysis: 'central', ...(type ? { type } : {}), limit: 5 } };
+  if (/group together|naturally group|clusters?\b|communit/i.test(cmd)) return { thought: 'Asking NetworkX which ideas group together', step: { op: 'network', analysis: 'clusters' } };
+  if (a && b && /connected|link(?:ed)? to|path/i.test(cmd)) return { thought: `Asking NetworkX how [${a}] is connected to [${b}]`, step: { op: 'network', analysis: 'path', codes: [a, b] } };
+  if (/isolated|cut off|not connected|on (?:its|their) own/i.test(cmd)) return { thought: 'Asking NetworkX what is not connected to the rest', step: { op: 'network', analysis: 'isolated' } };
+  if (/missing|should (?:be )?link|probably link/i.test(cmd)) return { thought: 'Asking NetworkX which links are probably missing', step: { op: 'network', analysis: 'suggest', limit: 5 } };
+  if (/\bcycles?\b|circular/i.test(cmd)) return { thought: 'Asking NetworkX for dependency cycles', step: { op: 'network', analysis: 'cycles' } };
+  return undefined;
+}
+
+/** The answer from a network step's facts (codes only), saying it comes from NetworkX and over which facts. */
+function networkReply(f: any): string {
+  if (!f) return 'NetworkX found nothing to say.';
+  if (f.error) return f.error;
+  const by = `(${f.by}, ${f.scope})`;
+  const x = f.facts;
+  const c = (code: string) => `[${code}]`;
+  if (f.analysis === 'central') return x.top.length ? `By ${by.slice(1, -1)}, ${c(x.top[0].star)} holds the most ideas together (betweenness ${Number(x.top[0].betweenness).toFixed(3)}, ${x.top[0].ideas} ideas)${x.top.length > 1 ? `, then ${x.top.slice(1, 3).map((t: any) => c(t.star)).join(' and ')}` : ''}.` : `Nothing stands out ${by}.`;
+  if (f.analysis === 'clusters') return x.clusters.length ? `${x.clusters.length} group${x.clusters.length === 1 ? '' : 's'} ${by}: ${x.clusters.map((g: any, i: number) => `${i + 1}) ${g.ideas.map(c).join(', ')}, bound by ${g.boundBy.slice(0, 2).map((s: any) => c(s.star)).join(' and ')}`).join('; ')}.` : `No ideas share stars ${by}.`;
+  if (f.analysis === 'path') return x.found ? `${x.hops} hop${x.hops === 1 ? '' : 's'} ${by}: ${x.paths[0].map((h: any[]) => h.map((l: any) => `${c(l.from)} ${String(l.rel).toLowerCase().replace(/_/g, ' ')} ${c(l.to)}`).join('; ')).join(', then ')}.` : `No chain of links joins them ${by}.`;
+  if (f.analysis === 'isolated') return x.notConnected.length ? `Not connected to the rest ${by}: ${x.notConnected.map(c).join(', ')}.` : `Nothing is cut off: everything is in one connected group ${by}.`;
+  if (f.analysis === 'suggest') return x.suggestions.length ? `${x.suggestions.length} link${x.suggestions.length === 1 ? '' : 's'} look missing ${by}; each is a proposal below for you to accept or not: ${x.suggestions.slice(0, 3).map((s: any) => `${c(s.from)} ${s.rel === 'NEEDS' ? 'needs' : 'uses the data'} ${c(s.to)}`).join(', ')}.` : `No link looks missing ${by}.`;
+  if (f.analysis === 'cycles') return x.count ? `${x.count} dependency cycles ${by}.` : `No dependency cycles ${by}.`;
+  return `${x.stars} stars and ${x.links} links ${by}.`;
 }
 
 /** The kind keys by their labels, as the prompt sends them. */

@@ -2,7 +2,7 @@ import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, MERGEABLE, NOT_APPROVED_NOTE, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, DERIVED_RELATIONS, MERGEABLE, NODE_TYPES, NOT_APPROVED_NOTE, edgeId, idMatchesType, nodeId, operatorSource, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
 import { defaultEntries, makeRegistry, type Registry } from './registry';
 import { DEFAULT_RULES, infer, type Rule } from './rules';
 export { nodeId } from './ontology';
@@ -113,7 +113,8 @@ export function ideaBundle(idea: Idea, registry: Registry = DEFAULT_REGISTRY): B
     for (const v of values ?? []) {
       const label = v.trim();
       if (!label || label.length > CHOICE_MAX) continue;
-      const id = type === 'Beneficiary' ? born(type, label) : node({ id: nodeId(type, label), type, label });
+      // The registry first, as for every star born from a label: an alias the operator gave a category or an outcome holds.
+      const id = born(type, label);
       edge(ideaId, rel, id, column, `${src}:${column}`);
     }
   }
@@ -136,11 +137,16 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
   const nodes = new Map<string, GNode>();
   const edges = new Map<string, GEdge>();
   const node = (n: GNode) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
+  /** One stored fact; the same fact stated again (for another idea, by another source) adds its idea and its words. */
   const edge = (from: string, rel: Relation, to: string, description: string, source: string, confidence = 1, confirmed = true, idea?: string) => {
     const id = edgeId(from, rel, to);
     const existing = edges.get(id);
-    if (existing) { if (description && !existing.description.includes(description)) existing.description += `; ${description}`; return; }
-    edges.set(id, { id, from, to, rel, description, source, confidence, confirmed, ...(idea ? { idea } : {}) });
+    if (existing) {
+      if (description && !existing.description.includes(description)) existing.description += `; ${description}`;
+      if (idea) addIdea(existing, idea);
+      return;
+    }
+    edges.set(id, { id, from, to, rel, description, source, confidence, confirmed, ...(idea ? { ideas: [idea] } : {}) });
   };
 
   // Every round is a star, with or without ideas. An idea whose round folder is gone still gets its round by id.
@@ -162,18 +168,26 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     let bundle = opts.cache?.get(idea.id, key);
     if (!bundle) { bundle = ideaBundle(idea, registry); opts.cache?.set(idea.id, key, bundle); }
     for (const n of bundle.nodes) node({ ...n, ...(n.attrs ? { attrs: { ...n.attrs } } : {}) });
-    for (const e of bundle.edges) edge(e.from, e.rel, e.to, e.description, e.source);
+    for (const e of bundle.edges) edge(e.from, e.rel, e.to, e.description, e.source, 1, true, idea.id);
     if (bundle.round) {
       const star = roundStar(bundle.round);
       star.attrs!.ideas = Number(star.attrs!.ideas) + 1;
-      edge(nodeId('Idea', idea.id), 'IN_ROUND', star.id, 'Round', `form:${idea.id}`);
+      edge(nodeId('Idea', idea.id), 'IN_ROUND', star.id, 'Round', `form:${idea.id}`, 1, true, idea.id);
     }
+  }
+
+  // The stars the operator added are there for the AI links too: the AI is shown every star, the operator's
+  // included, and links to them (a policy the operator added, then found again by a read) must not be dropped.
+  // Each add is applied again, in order, with the other edits below; a later remove still removes it.
+  for (const e of edits) {
+    if (e.status === 'active' && e.t === 'add' && NODE_TYPES.includes(e.type) && idMatchesType(e.node, e.type) && e.label.trim()) node({ id: e.node, type: e.type, label: e.label.trim() });
   }
 
   for (const l of aiLinks) {
     if (l.status === 'removed') continue;
     if (!AI_RELATIONS.includes(l.rel)) continue;
-    if ((l.newNodes ?? []).some((n) => !AI_NODE_TYPES.includes(n.type))) continue;
+    // A new star must be a kind the AI may make, with an id that carries its kind ("capability:…" for a Capability).
+    if ((l.newNodes ?? []).some((n) => !AI_NODE_TYPES.includes(n.type) || !idMatchesType(n.id, n.type))) continue;
     const pair = ALLOWED[l.rel]; if (!pair) continue;
     const fromKnown = nodes.has(l.from); const toKnown = nodes.has(l.to);
     const newNodes = new Map((l.newNodes ?? []).map((n) => [n.id, n]));
@@ -206,6 +220,12 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
   };
 }
 
+/** Adds an idea to the ones a fact is stated for, kept sorted. */
+function addIdea(e: GEdge, idea: string): void {
+  if (e.ideas?.includes(idea)) return;
+  e.ideas = [...(e.ideas ?? []), idea].sort();
+}
+
 /** Two star ids of one mergeable kind (ids are "type:slug"): only such a merge is ever applied, so only such a merge is followed. */
 const sameKind = (a: string, b: string) => { const t = a.split(':')[0]; return t === b.split(':')[0] && MERGEABLE.some((m) => m.toLowerCase() === t); };
 /** Where a star id ends up once the merges are followed (a merged star's edits go to the star kept, like an alias). */
@@ -229,6 +249,8 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
     if (raw.status !== 'active') continue;
     const e = raw.t === 'merge' ? raw : repoint(raw, merged);
     if (e.t === 'add') {
+      // A star of a kind the ontology does not know, or whose id lies about its kind, is refused (check names it).
+      if (!NODE_TYPES.includes(e.type) || !idMatchesType(e.node, e.type)) continue;
       if (!nodes.has(e.node) && e.label.trim()) nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
     } else if (e.t === 'remove') {
       if (!nodes.delete(e.node)) continue;
@@ -239,10 +261,14 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
     } else if (e.t === 'unlink') {
       edges.delete(edgeId(e.from, e.rel, e.to));
     } else if (e.t === 'link') {
+      // A derived relation is the rules' to state: one stored by hand is refused here and named by check.
       const pair = ALLOWED[e.rel]; const from = nodes.get(e.from); const to = nodes.get(e.to);
-      if (!pair || !from || !to || from.type !== pair[0] || to.type !== pair[1]) continue;
+      if (!pair || DERIVED_RELATIONS.includes(e.rel) || !from || !to || from.type !== pair[0] || to.type !== pair[1]) continue;
       const id = edgeId(e.from, e.rel, e.to);
-      if (!edges.has(id)) edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: 'operator', confidence: 1, confirmed: true, ...(e.idea ? { idea: e.idea } : {}) });
+      const there = edges.get(id);
+      // The same fact stated for another idea: that idea is added to it (a capability another idea also uses the data of).
+      if (there) { if (e.idea) addIdea(there, e.idea); continue; }
+      edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: operatorSource(e.id, e.at), confidence: 1, confirmed: true, ...(e.idea ? { ideas: [e.idea] } : {}) });
     } else if (e.t === 'merge') {
       if (e.from !== e.into && sameKind(e.from, e.into)) merged.set(e.from, e.into);
       const from = nodes.get(e.from); const into = nodes.get(follow(merged, e.into));
@@ -253,7 +279,9 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
         const f = x.from === from.id ? into.id : x.from; const t = x.to === from.id ? into.id : x.to;
         if (f === t) continue;
         const nid = edgeId(f, x.rel, t);
-        if (!edges.has(nid)) edges.set(nid, { ...x, id: nid, from: f, to: t });
+        const kept = edges.get(nid);
+        if (!kept) edges.set(nid, { ...x, id: nid, from: f, to: t });
+        else for (const i of x.ideas ?? []) addIdea(kept, i);
       }
       nodes.delete(from.id);
     }

@@ -20,10 +20,10 @@ const edit = (e: Partial<OperatorEdit> & Pick<OperatorEdit, 't'>, n = 1): Operat
 const rels = (g: { edges: { from: string; rel: string; to: string }[] }) => g.edges.map((e) => `${e.from} ${e.rel} ${e.to}`);
 
 describe('operator edits on the graph', () => {
-  it('a link the operator made shows, sourced "operator", confirmed', () => {
+  it('a link the operator made shows, sourced by the edit that made it and its date, confirmed', () => {
     const g = buildGraph([a, b], [], [], [edit({ t: 'link', from: 'team:gss', rel: 'HAS_MEMBER', to: 'person:person-2' })]);
     const e = g.edges.find((x) => x.id === 'team:gss|HAS_MEMBER|person:person-2')!;
-    expect(e).toMatchObject({ source: 'operator', confirmed: true, confidence: 1 });
+    expect(e).toMatchObject({ source: 'operator:op-1@2026-10-22', confirmed: true, confidence: 1 });
   });
 
   it('a link between stars that are gone, or with the wrong types, is skipped', () => {

@@ -9,7 +9,7 @@ import { appendEdit, nextEditId, readEdits } from './operator';
 import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
 import type { Clock } from '../clock';
 import { registryFrom } from './registryFile';
-import { loadRules } from './rules';
+import { readRules } from './rules';
 import { loadOntology } from './ontologyFile';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
@@ -57,6 +57,26 @@ export async function setAiLinkStatus(root: string, edgeId: string, status: AiLi
   await writeLines(root, lines);
 }
 
+/**
+ * Rewrites ai-links.jsonl line by line: `change` returns the link as it should now be (the same object to keep it, an
+ * array to put several in its place). Unreadable lines are kept as they were. Returns how many links changed.
+ */
+export async function updateAiLinks(root: string, change: (link: AiLink, line: number) => AiLink | AiLink[]): Promise<number> {
+  const lines = await readLines(root);
+  let n = 0;
+  const out: { raw: string; n: number; link?: AiLink }[] = [];
+  for (const l of lines) {
+    if (!l.link) { out.push(l); continue; }
+    const before = JSON.stringify(l.link);
+    const next = change(structuredClone(l.link), l.n);
+    const list = Array.isArray(next) ? next : [next];
+    if (list.length !== 1 || JSON.stringify(list[0]) !== before) n++;
+    for (const x of list) out.push({ raw: '', n: l.n, link: x });
+  }
+  if (n) await writeLines(root, out);
+  return n;
+}
+
 /** One bundle cache per workspace; an idea's bundle goes when its folder is touched (Deep read's bus), or when its record changes. */
 const caches = new Map<string, BundleCache>();
 onTouched((t) => { const c = caches.get(t.root); if (c) for (const id of t.ideas) c.drop(id); });
@@ -68,10 +88,12 @@ export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edge
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);
-  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: await loadRules(root), cache: cacheFor(root) });
+  // The rules file's problems (a broken file, a rule it cannot take) go with the graph's: said in the app, never silent.
+  const rules = await readRules(root);
+  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: rules.rules, cache: cacheFor(root) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
-  return { ...graph, problems };
+  return { ...graph, problems: [...problems, ...rules.problems.map((message) => ({ line: 0, message }))] };
 }
 
 /**

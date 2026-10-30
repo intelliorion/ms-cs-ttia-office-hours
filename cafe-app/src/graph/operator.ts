@@ -30,7 +30,8 @@ export async function readEdits(root: string): Promise<OperatorEdit[]> {
   return edits.map((e) => ({ ...e }));
 }
 
-async function writeEdits(root: string, edits: OperatorEdit[]): Promise<void> {
+/** Rewrites the whole log (cafe ontology fix stamps an idea on an edit in place; every other change is an append or a status). */
+export async function writeEdits(root: string, edits: OperatorEdit[]): Promise<void> {
   await writeFileAtomic(file(root), edits.map((e) => JSON.stringify(e)).join('\n') + (edits.length ? '\n' : ''));
 }
 

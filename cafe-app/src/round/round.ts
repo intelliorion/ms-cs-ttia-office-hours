@@ -34,6 +34,8 @@ export interface Settings {
    * The environment variables CAFE_MODEL_MIRROR, CAFE_MODEL_MIRROR_TOKEN and CAFE_MODEL_OFFLINE win over these.
    */
   deepRead?: { upkeep?: boolean; modelMirror?: string; modelMirrorToken?: string; offline?: boolean };
+  /** The knowledge graph: an AI link below confirmAt (0 to 1, default 0.7) is stored waiting for the operator's Do it. */
+  graph?: { confirmAt?: number };
 }
 
 export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';

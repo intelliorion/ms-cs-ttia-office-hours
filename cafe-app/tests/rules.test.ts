@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
 import { buildGraph } from '../src/graph/build';
-import { DEFAULT_RULES, infer, parseRules, loadRules, type Rule } from '../src/graph/rules';
+import { DEFAULT_RULES, infer, parseRules, loadRules, readRules, readRuleList, type Rule } from '../src/graph/rules';
 import { ALLOWED, DERIVED_RELATIONS, edgeId, type AiLink, type OperatorEdit } from '../src/graph/ontology';
 import { rebuildGraph } from '../src/graph/store';
 import { saveIdea } from '../src/ideas/store';
@@ -43,10 +43,12 @@ describe('the ontology knows the derived relations', () => {
     expect(ALLOWED.DEPENDS_ON).toEqual(['Idea', 'System']); expect(ALLOWED.USES).toEqual(['Idea', 'Tool']);
     expect(ALLOWED.OWNS).toEqual(['Team', 'Idea']); expect(ALLOWED.SIMILAR_TO).toEqual(['Idea', 'Idea']);
   });
-  it('an AI edge carries the idea it was extracted for; a form edge and an operator link do not need to', () => {
+  it('every stored edge carries the ideas it is stated for: the AI read\'s, the form\'s; the same fact for two ideas carries both', () => {
     const g = buildGraph([travel], LINKS);
-    expect(g.edges.find((e) => e.id === 'capability:policy-q-a|USES_DATA|system:travel-expense-policy')?.idea).toBe('CAFE-2026-006');
-    expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.idea).toBeUndefined();
+    expect(g.edges.find((e) => e.id === 'capability:policy-q-a|USES_DATA|system:travel-expense-policy')?.ideas).toEqual(['CAFE-2026-006']);
+    expect(g.edges.find((e) => e.rel === 'SUBMITTED')?.ideas).toEqual(['CAFE-2026-006']);
+    const both = buildGraph([travel, faq], [...LINKS, { ...LINKS[1], idea: 'CAFE-2026-007' }]);
+    expect(both.edges.find((e) => e.id === 'capability:policy-q-a|USES_DATA|system:travel-expense-policy')?.ideas).toEqual(['CAFE-2026-006', 'CAFE-2026-007']);
   });
 });
 
@@ -64,14 +66,14 @@ describe('needs+uses_data: Idea NEEDS Capability, Capability USES_DATA System â†
     expect(rels(g)).not.toContain('idea:CAFE-2026-007 DEPENDS_ON system:travel-expense-policy');
     expect(rels(g)).not.toContain('idea:CAFE-2026-006 DEPENDS_ON system:procurement-policy');
   });
-  it('an operator link made with no idea on screen is shared knowledge: it chains with every idea that needs the capability', () => {
+  it('an operator link made with no idea on screen is stated for no idea: it is in the graph but no idea depends on it through it (no workspace-wide spread)', () => {
     const edits: OperatorEdit[] = [
       { id: 'op-1', at: '2026-10-26', status: 'active', t: 'add', node: 'system:policy-portal', type: 'System', label: 'Policy portal' },
       { id: 'op-2', at: '2026-10-26', status: 'active', t: 'link', from: 'capability:policy-q-a', rel: 'USES_DATA', to: 'system:policy-portal' },
     ];
-    const r = rels(buildGraph([expense, travel, faq], LINKS, [], edits, { rules: only('needs+uses_data') }));
-    expect(r).toContain('idea:CAFE-2026-006 DEPENDS_ON system:policy-portal');
-    expect(r).toContain('idea:CAFE-2026-007 DEPENDS_ON system:policy-portal');
+    const g = buildGraph([expense, travel, faq], LINKS, [], edits, { rules: only('needs+uses_data') });
+    expect(rels(g)).toContain('capability:policy-q-a USES_DATA system:policy-portal');
+    expect(rels(g).filter((r) => r.endsWith('DEPENDS_ON system:policy-portal'))).toEqual([]);
   });
   it('an operator link made with an idea on screen is that idea\'s', () => {
     const edits: OperatorEdit[] = [
@@ -90,11 +92,11 @@ describe('needs+uses_data: Idea NEEDS Capability, Capability USES_DATA System â†
 });
 
 describe('needs+built_with: Idea NEEDS Capability, Capability BUILT_WITH Tool â†’ Idea USES Tool', () => {
-  it('derives from the tool picker\'s form links, with no scope: a capability\'s tool is shared', () => {
+  it('derives from the tool picker\'s form links, scoped: the idea whose design picked the tool uses it; one that only shares the feature does not', () => {
     const other = sampleIdea({ ...faq, features: ['Duplicate claim spotting'], tools: {} });
     const g = buildGraph([expense, other], [], [], [], { rules: only('needs+built_with') });
     expect(rels(g)).toContain('idea:CAFE-2026-004 USES tool:dataiku');
-    expect(rels(g)).toContain('idea:CAFE-2026-007 USES tool:dataiku');
+    expect(rels(g)).not.toContain('idea:CAFE-2026-007 USES tool:dataiku');
     expect(g.edges.find((e) => e.rel === 'USES')).toMatchObject({ source: 'rule:needs+built_with', confirmed: true, confidence: 1, description: 'via Duplicate claim spotting' });
   });
 });
@@ -139,10 +141,10 @@ describe('the rules as a whole', () => {
     const g = buildGraph([expense, travel, faq], LINKS);
     expect(new Set(derived(g).map((e) => e.rel))).toEqual(new Set(['DEPENDS_ON', 'USES', 'OWNS', 'SIMILAR_TO']));
     expect(g.edges.filter((e) => !e.derived)).toEqual(buildGraph([expense, travel, faq], LINKS, [], [], { rules: off }).edges);
-    // The operator stated the dependency: the stated edge stays, the rule adds nothing on top of it.
+    // A derived relation stored by hand is refused by the build: the rule's own derivation is what stands.
     const stated: OperatorEdit[] = [{ id: 'op-1', at: '2026-10-26', status: 'active', t: 'link', from: 'idea:CAFE-2026-006', rel: 'DEPENDS_ON', to: 'system:travel-expense-policy' }];
     const e = buildGraph([travel], LINKS, [], stated).edges.find((x) => x.id === edgeId('idea:CAFE-2026-006', 'DEPENDS_ON', 'system:travel-expense-policy'))!;
-    expect(e.source).toBe('operator'); expect(e.derived).toBeUndefined();
+    expect(e.source).toBe('rule:needs+uses_data'); expect(e.derived?.rule).toBe('needs+uses_data');
   });
   it('infer is pure: the same input gives the same edges, in id order', () => {
     const g = buildGraph([expense, travel, faq], LINKS, [], [], { rules: [] });
@@ -162,10 +164,13 @@ describe('the rules as a whole', () => {
       { name: 'x', kind: 'chain', chain: ['NEEDS', 'USES_DATA'], then: 'DEPENDS_ON', scope: 'same-idea', enabled: true },
       { name: 'z', kind: 'shared-stars', then: 'SIMILAR_TO', min: 3, enabled: true },
     ]);
+    expect(readRuleList({ rules: [{ name: 'y', chain: ['NEEDS', 'NOPE'], then: 'DEPENDS_ON' }, { name: 'w', then: 'USES' }] }).problems).toEqual([
+      'inference.yaml: y: unknown relation "NOPE" (dropped)', 'inference.yaml: w: a chain needs two or more relations (dropped)',
+    ]);
     expect(parseRules(null)).toEqual(DEFAULT_RULES);
     expect(parseRules({ rules: 'nope' })).toEqual(DEFAULT_RULES);
   });
-  it('init writes rules/inference.yaml with the four rules; a rule switched off there derives nothing; a broken file means the defaults', async () => {
+  it('init writes rules/inference.yaml with the four rules; a rule switched off there derives nothing; a broken file is an error, the defaults applying until it is fixed', async () => {
     const root = await tmpWorkspace();
     const file = YAML.parse(await readFile(path.join(root, 'rules', 'inference.yaml'), 'utf8'));
     expect(file.rules.map((r: any) => r.name)).toEqual(['needs+uses_data', 'needs+built_with', 'member+submitted', 'shared-stars']);
@@ -179,6 +184,10 @@ describe('the rules as a whole', () => {
     expect(derived(await rebuildGraph(root)).some((e) => e.rel === 'OWNS')).toBe(false);
     await writeFileAtomic(paths(root).inference, 'rules: [a: {');
     expect(await loadRules(root)).toEqual(DEFAULT_RULES);
+    const read = await readRules(root);
+    expect(read.problems).toHaveLength(1);
+    expect(read.problems[0]).toMatch(/^inference\.yaml could not be read \(.+\): the built-in rules apply until it is fixed$/);
+    expect((await rebuildGraph(root)).problems.map((p) => p.message)).toContain(read.problems[0]);
   });
 });
 

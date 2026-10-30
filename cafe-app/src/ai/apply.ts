@@ -1,4 +1,4 @@
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, NOT_APPROVED_NOTE, canonicalTool, isOperatorSource, edgeId, nodeId, type AiLink, type GEdge, type GNode, type NodeType } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { ExtractInput, ExtractOutput } from './tasks';
 import type { NearestStar } from '../memory/lookup';
@@ -12,6 +12,9 @@ export const REUSE_AT = 0.85;
 const STOP = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with', 'via']);
 const tokens = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const contentWords = (s: string) => tokens(s).filter((w) => !STOP.has(w));
+
+/** The idea's text fields the extract reads: a link names the one it came from, and its source records it. */
+export const FIELDS = ['challenge', 'current_process', 'outcomes', 'business_impact', 'beneficiaries', 'additional_context'];
 
 /** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
@@ -47,7 +50,13 @@ export function toAiLinks(
 export function planAiLinks(
   ideaId: string, out: ExtractOutput,
   graph: { nodes: GNode[]; edges: GEdge[] }, previous: AiLink[], provider: string,
-  opts: { status?: AiLink['status']; nearest?: NearestStar; reuseAt?: number; registry?: Registry } = {},
+  opts: {
+    status?: AiLink['status']; nearest?: NearestStar; reuseAt?: number; registry?: Registry;
+    /** With status 'confirmed': a link below this confidence is stored waiting for the operator's Do it instead. */
+    confirmAt?: number;
+    /** Where the AI read it when the link does not say (the extract names the form field per link). */
+    origin?: string;
+  } = {},
 ): { links: AiLink[]; newNodes: GNode[]; near: Record<string, string> } {
   const ideaNode = nodeId('Idea', ideaId);
   const key = (s: string) => s.trim().toLowerCase();
@@ -113,9 +122,16 @@ export function planAiLinks(
   // (and every idea), or an AI link the operator confirmed. Nodes that exist only because of
   // a still-pending AI link stay "new", so links to them stay unconfirmed too.
   const known = new Set<string>(graph.nodes.filter((n) => n.type === 'Idea').map((n) => n.id));
-  for (const e of graph.edges) if (e.source.startsWith('form:') || e.source === 'operator') { known.add(e.from); known.add(e.to); }
+  for (const e of graph.edges) if (e.source.startsWith('form:') || isOperatorSource(e.source)) { known.add(e.from); known.add(e.to); }
   for (const l of previous) if (l.status === 'confirmed') { known.add(l.from); known.add(l.to); }
-  const seen = new Set([...graph.edges.map((e) => e.id), ...previous.map((l) => edgeId(l.from, l.rel, l.to))]);
+  // A link already there is not proposed again for this idea. A capability-level fact (no Idea end) another idea's read
+  // stated is proposed again for this one: the rules scope by the idea, so this idea needs the fact stated for it.
+  const graphTypes = new Map(graph.nodes.map((n) => [n.id, n.type]));
+  const ideaEnded = (from: string, to: string) => graphTypes.get(from) === 'Idea' || graphTypes.get(to) === 'Idea' || from === ideaNode || to === ideaNode;
+  const seen = new Set<string>();
+  for (const e of graph.edges) if (!e.derived) seen.add(ideaEnded(e.from, e.to) ? e.id : `${e.id}#${e.ideas?.includes(ideaId) ? ideaId : 'other'}`);
+  for (const l of previous) seen.add(ideaEnded(l.from, l.to) ? edgeId(l.from, l.rel, l.to) : `${edgeId(l.from, l.rel, l.to)}#${l.idea === ideaId ? ideaId : 'other'}`);
+  const seenKey = (from: string, rel: ExtractOutput['links'][number]['rel'], to: string) => (ideaEnded(from, to) ? edgeId(from, rel, to) : `${edgeId(from, rel, to)}#${ideaId}`);
 
   const resolve = (label: string): GNode | undefined => {
     if (key(label) === 'idea') return { id: ideaNode, type: 'Idea', label: 'idea' };
@@ -129,16 +145,19 @@ export function planAiLinks(
     if (!from || !to) continue;
     const [ft, tt] = ALLOWED[l.rel];
     if (from.type !== ft || to.type !== tt) continue;
-    const id = edgeId(from.id, l.rel, to.id);
+    const id = seenKey(from.id, l.rel, to.id);
     if (seen.has(id)) continue;
     seen.add(id);
     const unapproved = [from, to].some((n) => n.type === 'Tool' && n.attrs?.approved === false);
     const newNodes = [from, to].filter((n) => n.type !== 'Idea' && !known.has(n.id));
     const extra = [l.from, l.to].map((x) => folded.get(key(x))).filter((x): x is string => !!x);
     const description = `${l.description}${extra.length ? ` (${extra.join(', ')})` : ''}${unapproved ? NOT_APPROVED_NOTE : ''}`;
+    // Where it was read: the form field the AI names for the link, else the caller's origin.
+    const field = l.field && FIELDS.includes(l.field) ? l.field : opts.origin ?? 'form';
+    const status = opts.status === 'confirmed' && opts.confirmAt !== undefined && l.confidence < opts.confirmAt ? 'pending' : opts.status ?? 'pending';
     links.push({
       from: from.id, to: to.id, rel: l.rel, description, confidence: l.confidence,
-      source: `ai:${provider}:challenge`, status: opts.status ?? 'pending', idea: ideaId,
+      source: `ai:${provider}:${field}`, status, idea: ideaId,
       ...(newNodes.length ? { newNodes } : {}),
     });
   }

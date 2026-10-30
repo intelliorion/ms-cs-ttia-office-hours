@@ -18,7 +18,8 @@ const links: AiLink[] = [
   ai('idea:CAFE-2026-001', 'NEEDS', 'capability:policy-q-a', 'Capability', 'Policy Q&A'),
   ai('idea:CAFE-2026-002', 'NEEDS', 'capability:policy-q-a', 'Capability', 'Policy Q&A'),
   ai('idea:CAFE-2026-003', 'NEEDS', 'capability:claim-scoring', 'Capability', 'Claim scoring'),
-  { ...ai('capability:claim-scoring', 'USES_DATA', 'system:expense-export', 'System', 'Expense export') },
+  // Read for the idea that needs Claim scoring: the AI records the idea on every link it makes.
+  { ...ai('capability:claim-scoring', 'USES_DATA', 'system:expense-export', 'System', 'Expense export'), idea: 'CAFE-2026-003' },
   ai('idea:CAFE-2026-001', 'REPLACES', 'painpoint:policy-emails', 'PainPoint', 'Policy emails'),
 ];
 const graph = buildGraph(ideas, links, [{ id: 'ROUND-001', name: '2026 Q4', created: '2026-10-01' } as any]);

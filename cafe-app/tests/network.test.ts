@@ -48,7 +48,8 @@ const LINK: AiLink = { from: 'capability:request-handling', rel: 'USES_DATA', to
 async function workspace(): Promise<string> {
   const root = await tmpWorkspace();
   for (const i of IDEAS) await saveIdea(root, i);
-  await appendAiLink(root, LINK);
+  // The AI read each of the three ideas that need Request handling and found the mailbox for each: one fact, three ideas.
+  for (const idea of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) await appendAiLink(root, { ...LINK, idea });
   return root;
 }
 
@@ -310,7 +311,7 @@ describe.skipIf(!!SKIP)('NetworkX: the API', () => {
     const s = await startServer();
     try {
       for (const i of IDEAS) await saveIdea(s.root, i);
-      await appendAiLink(s.root, LINK);
+      for (const idea of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) await appendAiLink(s.root, { ...LINK, idea });
       const one = await (await fetch(`${s.base}/api/network?analysis=central&top=3`)).json() as any;
       expect(one).toMatchObject({ analysis: 'central', scope: 'stored', scopeText: 'stored facts' });
       expect(one.results.central.betweenness[0].id).toBe('capability:request-handling');

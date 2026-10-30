@@ -34,7 +34,8 @@ const LINK: AiLink = { from: 'capability:request-handling', rel: 'USES_DATA', to
 async function workspace() {
   const root = await tmpWorkspace();
   for (const i of IDEAS) await saveIdea(root, i);
-  await appendAiLink(root, LINK);
+  // The AI read each of the three ideas that need Request handling and found the mailbox for each: one fact, three ideas.
+  for (const idea of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) await appendAiLink(root, { ...LINK, idea });
   return root;
 }
 async function noPython<T>(f: () => Promise<T>): Promise<T> {

@@ -20,8 +20,8 @@ const VALID = {
     { type: 'System', label: 'Shared mailbox' },
   ],
   links: [
-    { from: 'idea', to: 'Document parsing', rel: 'NEEDS', description: 'Reads the attachments', confidence: 0.9 },
-    { from: 'Document parsing', to: 'Shared mailbox', rel: 'USES_DATA', description: 'Mail arrives here', confidence: 0.6 },
+    { from: 'idea', to: 'Document parsing', rel: 'NEEDS', description: 'Reads the attachments', confidence: 0.9, field: 'challenge' },
+    { from: 'Document parsing', to: 'Shared mailbox', rel: 'USES_DATA', description: 'Mail arrives here', confidence: 0.6, field: 'current_process' },
   ],
 };
 const INPUT = {
@@ -319,7 +319,7 @@ describe('/api/ai routes', () => {
   const post = (base: string, url: string, body: unknown) =>
     fetch(`${base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-  it('extract applies AI links confirmed and the graph shows them confirmed', async () => {
+  it('extract applies AI links confirmed at or above the threshold, the rest waiting for Do it, each sourced by the field it was read in', async () => {
     const c = createConnector({ providers: [fake(JSON.stringify(VALID))], settings: DEFAULT_SETTINGS });
     const s = await startServer('2026-10-19', { connector: c });
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); };
@@ -330,14 +330,14 @@ describe('/api/ai routes', () => {
     const r = await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' });
     const body = await r.json() as any;
     expect(r.status).toBe(200);
-    expect(body.added).toBe(2);
-    // Every end is new, but AI links now arrive confirmed; nothing was held.
+    // The 0.9 link arrives confirmed; the 0.6 one (below 0.7) waits for the operator. Nothing was held.
+    expect(body.added).toBe(1);
     expect(body.held).toEqual([]);
-    expect(body.links.every((e: any) => e.confirmed)).toBe(true);
+    expect(body.links.map((e: any) => [e.rel, e.confirmed])).toEqual([['USES_DATA', false], ['NEEDS', true]]);
     expect(body.suggestions.newNodes.map((n: any) => n.id).sort()).toEqual(['capability:document-parsing', 'system:shared-mailbox']);
-    expect(body.links.every((e: any) => e.source === 'ai:claude:challenge')).toBe(true);
+    expect(body.links.map((e: any) => e.source).sort()).toEqual(['ai:claude:challenge', 'ai:claude:current_process']);
     const g = await (await fetch(`${s.base}/api/graph`)).json() as any;
-    expect(g.unconfirmed).toBe(0);
+    expect(g.unconfirmed).toBe(1);
     expect(g.edges.some((e: any) => e.from === 'idea:CAFE-2026-001' && e.to === 'capability:document-parsing' && e.rel === 'NEEDS')).toBe(true);
     expect(g.nodes.some((n: any) => n.id === 'system:shared-mailbox')).toBe(true);
     const again = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
@@ -383,7 +383,8 @@ describe('/api/ai routes', () => {
     expect(ex).toMatchObject({ added: 1, held: [] });
     const id = 'idea:CAFE-2026-002|NEEDS|capability:document-parsing';
     const g1 = await (await fetch(`${s.base}/api/graph`)).json() as any;
-    expect(g1.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true, source: 'ai:claude:challenge' });
+    // The reply names no field: the source says it was read from the form.
+    expect(g1.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true, source: 'ai:claude:form' });
     expect((await post(s.base, '/api/graph/remove', { edgeId: id })).status).toBe(200);
     const g2 = await (await fetch(`${s.base}/api/graph`)).json() as any;
     expect(g2.edges.some((e: any) => e.id === id)).toBe(false);
@@ -436,8 +437,9 @@ describe('/api/ai routes', () => {
     await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
     expect(await (await fetch(`${s.base}/api/ai/status`)).json()).toMatchObject({ provider: 'fake', label: 'Fake (test)' });
     const ex = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
-    // The fake proposes a Planner tool too; the AI never picks a tool, so only the 3 other links land.
-    expect(ex.added).toBe(3);
+    // The fake proposes a Planner tool too; the AI never picks a tool, so only the 3 other links land, the 0.6 one waiting.
+    expect(ex.links).toHaveLength(3);
+    expect(ex.added).toBe(2);
     expect(ex.held).toEqual([]);
     expect(ex.suggestions.newNodes).toHaveLength(3);
     expect(ex.suggestions.newNodes.some((n: any) => n.type === 'Tool')).toBe(false);

@@ -115,17 +115,26 @@ export interface GNode { id: string; type: NodeType; label: string; attrs?: Reco
 export interface GEdge {
   id: string; from: string; to: string; rel: Relation; description: string;
   source: string; confidence: number; confirmed: boolean;
-  /** The idea an AI edge was extracted for, or an operator link was made on (the rules scope by it). */
-  idea?: string;
-  /** Set on an edge a rule derived: the rule's name and the ids of the edges it rests on. */
-  derived?: { rule: string; inputs: string[] };
+  /**
+   * The ideas the fact is stated for, sorted: the idea whose form, AI read or operator edit put it there, every one of
+   * them when several did (a capability two ideas both use the data of). The rules scope by it: a capability-level fact
+   * with no idea (an operator link made with no idea on screen) is stated for none, so it joins no idea's chain. On a
+   * derived edge: the ideas every input shares.
+   */
+  ideas?: string[];
+  /**
+   * Set on an edge a rule derived: the rule's name and the ids of the edges it rests on (the surest derivation), with
+   * every other way the same edge is derived in `alternatives`: the edge goes only when all of them are gone.
+   */
+  derived?: { rule: string; inputs: string[]; alternatives?: string[][] };
 }
 /**
  * A change the operator asked for in the command bar, kept in graph/operator.jsonl and laid over the graph built
  * from the ideas and AI links, in file order. "undone" edits are kept for the record and do nothing.
  */
 export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone' } & (
-  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string }
+  /** stamped: the date `cafe ontology fix` gave a link made with no idea the idea it is for. */
+  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string; stamped?: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string }
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }
@@ -151,8 +160,25 @@ function fnv1a32(str: string): number {
   for (const c of str) { h ^= c.codePointAt(0)!; h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
+/**
+ * The id part of a label. A "+" or "#" closing a word is spelled out, so C++, C# and C stay three stars
+ * ("c-plus-plus-coding", "c-sharp-coding", "c-coding"); every other mark (T+E, #42, &) is a separator, as it always
+ * was, so no existing id changes.
+ */
 export const slug = (s: string) =>
-  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || `h${fnv1a32(s).toString(16)}`;
+  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(?<=[\p{L}\p{N}+])\+(?![\p{L}\p{N}])/gu, ' plus ').replace(/(?<=\p{L})#(?![\p{L}\p{N}])/gu, ' sharp ')
+    .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || `h${fnv1a32(s).toString(16)}`;
+/**
+ * The key two wordings of one name share, for the registry's lookup (never an id): case, accents and spacing aside,
+ * "&" and a "+" between two words ("T+E") read as "and", so "Travel and Expense policy" finds "Travel & Expense
+ * policy". A "+" or "#" closing a word (C++, C#) stays apart from the bare word, so distinct names never collapse.
+ */
+export const nameKey = (s: string) => slug(
+  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ').replace(/(?<=[\p{L}\p{N}])\s*\+\s*(?=[\p{L}\p{N}])/gu, ' and '),
+);
+/** Whether a star id carries its type's prefix ("capability:…" for a Capability): an id that lies about its kind is refused. */
+export const idMatchesType = (id: string, type: string) => typeof id === 'string' && id.startsWith(`${type === 'Idea' ? 'idea' : type.toLowerCase()}:`) && id.length > type.length + 1;
 export function nodeId(type: NodeType, label: string): string {
   if (type === 'Idea') return `idea:${label}`;
   return `${type.toLowerCase()}:${slug(label)}`;
@@ -177,6 +203,14 @@ export function canonicalTool(label: string): string | undefined {
 }
 export const isApprovedTool = (label: string) => canonicalTool(label) !== undefined;
 export const NOT_APPROVED_NOTE = ' — not on the approved list';
+/**
+ * Tools the Café has met that are not on the approved list (UiPath has left it). A name here is never taken as
+ * another name of an approved tool: "also know Copilot Studio as UiPath" would make a retired tool look approved.
+ */
+export const KNOWN_UNAPPROVED_TOOLS: string[] = ['UiPath', 'Power Automate', 'GitHub Copilot', 'ChatGPT', 'Automation Anywhere', 'Blue Prism', 'Alteryx', 'Zapier'];
+/** The source an operator link carries: the edit that made it and its date. */
+export const operatorSource = (id: string, at: string) => `operator:${id}@${at}`;
+export const isOperatorSource = (source: string) => source === 'operator' || source.startsWith('operator:');
 /**
  * Said wherever an older record's tool is shown that has since left the approved list (UiPath did). The record loads
  * as it is: the tool is never swapped for another one; the picker needs a new pick.

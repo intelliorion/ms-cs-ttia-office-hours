@@ -1,6 +1,8 @@
 #!/usr/bin/env -S npx tsx
 import path from 'node:path';
-import { initWorkspace } from '../src/workspace/init';
+import { readdir } from 'node:fs/promises';
+import { initWorkspace, workspaceProblem } from '../src/workspace/init';
+import { applyFix, fixLines, planFix } from '../src/graph/fix';
 import { createApp } from '../src/server/server';
 import { importExport } from '../src/import/importRows';
 import { loadSteps } from '../src/rules/stages';
@@ -17,14 +19,22 @@ const flag = (name: string): string | undefined => {
   return i > -1 ? argv[i + 1] : undefined;
 };
 /** Flags that take no value: the word after them is a positional, not their value. */
-const SWITCHES = ['--strict', '--json', '--with-derived'];
+const SWITCHES = ['--strict', '--json', '--with-derived', '--apply'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1]?.startsWith('--') && !SWITCHES.includes(argv[i - 1])));
 const has = (name: string) => argv.includes(`--${name}`);
 const [command, ...rest] = positional;
-const root = path.resolve(flag('workspace') ?? process.env.CAFE_WORKSPACE ?? 'cafe-workspace');
+/** Every value of a flag that may be given more than once (--stamp op-9=ID --stamp op-12=ID). */
+const flags = (name: string): string[] => argv.flatMap((a, i) => (a === `--${name}` && argv[i + 1] !== undefined ? [argv[i + 1]] : []));
+const named = flag('workspace') ?? (process.env.CAFE_WORKSPACE?.trim() || undefined);
+const root = path.resolve(named ?? 'cafe-workspace');
+/** Stops with one plain message when the folder is missing or not a Café workspace; nothing is read or written. */
+async function needWorkspace(): Promise<void> {
+  const problem = await workspaceProblem(root);
+  if (problem) { console.error(problem); process.exit(1); }
+}
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--json]> [--workspace DIR] [--port N]';
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--json]> [--workspace DIR] [--port N]';
 const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--json] [--top N] [--workspace DIR]`;
 const MODEL_USAGE = 'Usage: cafe model status | cafe model import <folder-or-zip> | cafe model export <zip>  [--workspace DIR]';
 
@@ -38,6 +48,10 @@ async function main(): Promise<void> {
       return;
     }
     case 'start': {
+      // A folder named on purpose is set up on first start; the default folder only when it is a workspace already.
+      const problem = await workspaceProblem(root);
+      const fresh = named !== undefined && (await readdir(root).then((x) => x.length === 0, () => true));
+      if (problem && !fresh) { console.error(problem); process.exit(1); }
       const { moved, left } = await initWorkspace(root);
       if (moved.length) console.log(`Moved the Café's data into data/: ${moved.join(', ')}`);
       if (left.length) console.log(`These are both at the top and in data/, so they were left as they are: ${left.join(', ')}. Move what you need into data/ by hand.`);
@@ -54,19 +68,35 @@ async function main(): Promise<void> {
     }
     case 'import': {
       if (!rest[0]) throw new Error('Usage: cafe import <export.csv|export.xlsx>');
+      await needWorkspace();
       const report = await importExport(root, path.resolve(rest[0]), { clock, steps: await loadSteps(root) });
       console.log(JSON.stringify(report, null, 2));
       return;
     }
     case 'ontology': {
-      if (rest[0] !== 'check') throw new Error('Usage: cafe ontology check --workspace DIR');
-      // --strict: a stale operator edit fails the check too.
+      if (rest[0] !== 'check' && rest[0] !== 'fix') throw new Error('Usage: cafe ontology check [--strict] | cafe ontology fix [--apply] [--stamp op-N=ID[,ID]]  [--workspace DIR]');
+      await needWorkspace();
+      if (rest[0] === 'fix') {
+        // A dry run unless --apply: what it would change and how the derived links would change.
+        const stamp: Record<string, string[]> = {};
+        for (const s of flags('stamp')) {
+          const m = /^([\w-]+)=(.+)$/.exec(s);
+          if (!m) throw new Error(`--stamp ${s}: write it as op-9=CAFE-2026-006 (or several ideas with commas)`);
+          stamp[m[1]] = m[2].split(',').map((x) => x.trim()).filter(Boolean);
+        }
+        const plan = await planFix(root, stamp);
+        const applied = has('apply') ? await applyFix(root, plan, clock) : undefined;
+        for (const l of fixLines(plan, applied)) console.log(l);
+        return;
+      }
+      // --strict: a stale operator edit, an unscoped fact or a low-confidence AI link fails the check too.
       const { lines, code } = checkReport(await checkWorkspace(root), has('strict'));
       for (const l of lines) console.log(l);
       if (code) process.exit(code);
       return;
     }
     case 'export': {
+      await needWorkspace();
       const format = flag('format');
       if (format && format !== 'networkx' && format !== 'jsonld') throw new Error('Usage: cafe export [--idea ID] [--format jsonld | networkx]');
       if (format === 'networkx') {
@@ -117,6 +147,7 @@ async function main(): Promise<void> {
         return;
       }
       if (!what || !NETWORK_ANALYSES.includes(what as NetworkAnalysis)) throw new Error(NETWORK_USAGE);
+      await needWorkspace();
       if (what === 'path' && (!rest[1] || !rest[2])) throw new Error(NETWORK_USAGE);
       const top = flag('top') ? Number(flag('top')) : undefined;
       const out = await networkFor(root, what as NetworkAnalysis, { ...(what === 'path' ? { a: rest[1], b: rest[2] } : {}), ...(top ? { top } : {}) }, { withDerived: has('with-derived') });

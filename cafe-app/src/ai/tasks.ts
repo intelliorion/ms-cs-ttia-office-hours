@@ -29,7 +29,8 @@ export interface ExtractInput {
 }
 export interface ExtractOutput {
   nodes: { type: NodeType; label: string }[];
-  links: { from: string; to: string; rel: Relation; description: string; confidence: number }[];
+  /** field: the idea's text field the link was read in (challenge, current_process, ...), when the AI says. */
+  links: { from: string; to: string; rel: Relation; description: string; confidence: number; field?: string }[];
 }
 export interface ReviewSuggestInput {
   idea: IdeaText;
@@ -102,6 +103,7 @@ export const EXTRACT_SCHEMA: JsonSchema = {
           rel: { type: 'string', enum: AI_RELATIONS },
           description: { type: 'string', maxLength: 160 },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
+          field: { type: 'string', enum: ['challenge', 'current_process', 'outcomes', 'business_impact', 'beneficiaries', 'additional_context'] },
         },
       },
     },
@@ -250,6 +252,7 @@ export const extractTask: Task<ExtractOutput> = {
       // What each link means, from the ontology (rules/ontology.yaml), so the AI proposes links by their meaning, not by type pairs alone.
       `Links: "from" is "idea" or a node label; "to" is a node label. Allowed: ${AI_RELATIONS.filter((r) => r !== 'BUILT_WITH').map((r) => `${ALLOWED[r][0] === 'Idea' ? 'idea' : ALLOWED[r][0]} ${r} ${ALLOWED[r][1]} (${RELATION_MEANINGS[r].meaning})`).join('; ')}.`,
       'Give each link a short description (at most 160 characters) and a confidence from 0 to 1. Never propose people, emails, dates, stages or teams.',
+      'Give each link "field": the field of DATA.idea you read it in (challenge, current_process, outcomes, business_impact, beneficiaries or additional_context).',
       'People appear as codes such as [P1] and email addresses as <email>: never make either a label, and write a person as their code alone.',
     ], EXTRACT_SCHEMA, { idea: ideaData(idea), existing });
   },

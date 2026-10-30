@@ -98,3 +98,20 @@ export async function initWorkspace(root: string): Promise<{ created: string[]; 
   }
   return { created, moved, left };
 }
+
+/** Where the CLI says a workspace can be named: said wherever one is missing. */
+export const WORKSPACE_HINT = 'Name it with --workspace DIR or the CAFE_WORKSPACE variable (cafe init --workspace DIR makes a new one).';
+
+/**
+ * Why a folder cannot be read as a Café workspace, or undefined when it can: it must exist and hold the Café's setup
+ * (rules/stages.yaml or rules/settings.yaml) or its data (data/ideas, or ideas/ in an older layout). A command that
+ * reads a workspace stops on this, so a missing folder is never read as an empty graph ("top 0").
+ */
+export async function workspaceProblem(root: string): Promise<string | undefined> {
+  const stat = await fs.stat(root).catch(() => undefined);
+  if (!stat) return `There is no Café workspace at ${root}: the folder does not exist. ${WORKSPACE_HINT}`;
+  if (!stat.isDirectory()) return `${root} is a file, not a Café workspace. ${WORKSPACE_HINT}`;
+  const p = paths(root);
+  for (const f of [p.stages, p.settings, p.ideas, path.join(root, 'ideas')]) if (await exists(f)) return undefined;
+  return `${root} is not a Café workspace (it has no rules/stages.yaml, rules/settings.yaml or data/ideas). ${WORKSPACE_HINT}`;
+}

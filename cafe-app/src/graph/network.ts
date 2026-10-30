@@ -38,7 +38,7 @@ export class NetworkError extends Error {
 /* ---------- the node-link JSON ---------- */
 
 export interface NodeLinkNode { id: string; type: NodeType; label: string; attrs?: GNode['attrs'] }
-export interface NodeLinkEdge { source: string; target: string; key: string; rel: Relation; derived?: boolean; confirmed?: boolean; fact_source?: string; idea?: string }
+export interface NodeLinkEdge { source: string; target: string; key: string; rel: Relation; derived?: boolean; confirmed?: boolean; fact_source?: string; ideas?: string[] }
 export interface NodeLink {
   directed: true; multigraph: true;
   graph: { name: string; scope: 'stored' | 'with-derived'; exported?: string };
@@ -61,7 +61,7 @@ export function toNodeLink(graph: { nodes: GNode[]; edges: GEdge[] }, withDerive
     edges: edges.map((e) => ({
       source: e.from, target: e.to, key: e.rel, rel: e.rel,
       ...(e.derived ? { derived: true } : {}),
-      ...(full ? { confirmed: e.confirmed, fact_source: e.source, ...(e.idea ? { idea: e.idea } : {}) } : {}),
+      ...(full ? { confirmed: e.confirmed, fact_source: e.source, ...(e.ideas?.length ? { ideas: e.ideas } : {}) } : {}),
     })),
   };
 }
@@ -394,9 +394,10 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
     if (e.derived) continue;
     if (e.from === me && e.rel === 'NEEDS') mine.add(e.to);
   }
-  // Its systems: those its capabilities use for it (a link scoped to another idea is that idea's system, not this one's).
+  // Its systems: those its capabilities use for it. A link stated for another idea is that idea's system, and one stated
+  // for no idea is no idea's (the rules read it the same way), so neither is ranked as this one's.
   const cafeId = me.slice('idea:'.length);
-  for (const e of graph.edges) if (!e.derived && mine.has(e.from) && e.rel === 'USES_DATA' && (!e.idea || e.idea === cafeId)) mine.add(e.to);
+  for (const e of graph.edges) if (!e.derived && mine.has(e.from) && e.rel === 'USES_DATA' && e.ideas?.includes(cafeId)) mine.add(e.to);
   const centrality: Extract<IdeaNetwork, { available: true }>['centrality'] = [];
   for (const t of ['Capability', 'System'] as const) {
     const list: any[] = central.byType?.[t] ?? [];

@@ -1,4 +1,4 @@
-import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, setToolResolver, slug, type NodeType, type OperatorEdit } from './ontology';
+import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, nameKey, setToolResolver, slug, type NodeType, type OperatorEdit } from './ontology';
 
 /**
  * The registry: stable identity for the stars that keep coming back under other words. One entry per star, with its
@@ -10,10 +10,10 @@ import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, setToolResolver, slug, type N
 export interface RegistryEntry { id: string; label: string; aliases?: string[]; ref?: string }
 export type RegistryEntries = Partial<Record<NodeType, RegistryEntry[]>>;
 /** The sections entities.yaml holds, in file order. */
-export const REGISTRY_SECTIONS: NodeType[] = ['Tool', 'System', 'Team', 'Entity', 'Capability', 'PainPoint', 'Beneficiary'];
+export const REGISTRY_SECTIONS: NodeType[] = ['Tool', 'System', 'Team', 'Entity', 'Capability', 'PainPoint', 'Beneficiary', 'Category', 'Outcome', 'Support'];
 
 export interface Registry {
-  /** The star a label names, by its label or any alias (case, spacing and accents ignored), or undefined. */
+  /** The star a label names, by its label or any alias (case, spacing, accents and "&" / "and" ignored), or undefined. */
   resolve(type: NodeType, label: string): { id: string; label: string } | undefined;
   aliasesOf(id: string): string[];
   refOf(id: string): string | undefined;
@@ -52,13 +52,13 @@ export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[]): R
   const lookup = new Map<NodeType, Map<string, string>>();
   for (const [id, e] of byId) {
     let m = lookup.get(e.type); if (!m) lookup.set(e.type, (m = new Map()));
-    for (const name of [e.label, ...e.aliases]) { const k = slug(name); if (!m.has(k)) m.set(k, id); }
+    for (const name of [e.label, ...e.aliases]) { const k = nameKey(name); if (!m.has(k)) m.set(k, id); }
   }
   return {
     entries,
     version: fnv1a32(JSON.stringify([entries, edits.filter((e) => e.t === 'alias' && e.status === 'active')])),
     resolve(type, label) {
-      const id = lookup.get(type)?.get(slug(label));
+      const id = lookup.get(type)?.get(nameKey(label));
       return id ? { id, label: byId.get(id)!.label } : undefined;
     },
     aliasesOf: (id) => [...(byId.get(id)?.aliases ?? [])],

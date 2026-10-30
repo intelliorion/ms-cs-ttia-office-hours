@@ -1,4 +1,4 @@
-import { ALLOWED, DERIVED_RELATIONS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALLOWED, DERIVED_RELATIONS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -344,7 +344,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     }
     case 'unlink': {
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
-      if (a.source === 'operator') {
+      if (isOperatorSource(a.source)) {
         const made = (await readEdits(root)).filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);
         for (const e of made) await setEditStatus(root, e.id, 'undone');
         if (made.length) return { inverse: { t: 'edit-on', id: made[made.length - 1].id } };

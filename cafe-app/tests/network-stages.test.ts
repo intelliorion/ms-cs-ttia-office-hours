@@ -105,23 +105,28 @@ describe.skipIf(!PY)('NetworkX feeds the design duplicate check', () => {
 });
 
 describe.skipIf(!PY)('NetworkX in the CSIC hand-off', () => {
-  it('the JSON-LD carries the idea\'s network facts as labelled analysis, apart from @graph and links', async () => {
+  it('the JSON-LD carries the idea\'s network facts as one labelled Analysis node, its content a JSON literal, never links', async () => {
     const root = await workspace();
     await saveReview(root, 'CAFE-2026-003', { decision: 'csic', reason: 'Bigger than the Café' }, { clock, steps: DEFAULT_STEPS });
     const doc = JSON.parse(await readFile(path.join(await ideaDir(root, 'CAFE-2026-003'), 'csic-handoff.jsonld'), 'utf8'));
-    expect(doc.networkAnalysis).toMatchObject({ kind: 'analysis', by: expect.stringMatching(/^NetworkX 3\./), scope: 'stored facts' });
-    expect(doc.networkAnalysis.note).toMatch(/^Analysis, not stored facts/);
-    expect(doc.networkAnalysis.cluster.otherIdeas.map((x: any) => x['@id']).sort()).toEqual(['cafe:idea:CAFE-2026-001', 'cafe:idea:CAFE-2026-002']);
-    expect(doc.networkAnalysis.centrality[0]).toMatchObject({ '@id': 'cafe:capability:request-handling', measure: 'betweenness centrality', rank: 1 });
-    expect(doc.networkAnalysis.likelyMissingLinks[0]).toMatchObject({ rel: 'NEEDS', to: { '@id': 'cafe:capability:booking-update' }, status: 'suggestion, not applied' });
+    const node = doc['@graph'].find((n: any) => n['@type'] === 'Analysis');
+    expect(node).toMatchObject({ '@id': 'cafe:analysis/network', label: 'NetworkX network analysis (analysis, not stored facts)' });
+    expect(doc['@context'].content).toEqual({ '@id': 'https://creators-cafe.local/ontology#content', '@type': '@json' });
+    const a = node.content;
+    expect(a).toMatchObject({ kind: 'analysis', by: expect.stringMatching(/^NetworkX 3\./), scope: 'stored facts' });
+    expect(a.note).toMatch(/^Analysis, not stored facts/);
+    expect(a.cluster.otherIdeas.map((x: any) => x['@id']).sort()).toEqual(['cafe:idea:CAFE-2026-001', 'cafe:idea:CAFE-2026-002']);
+    expect(a.centrality[0]).toMatchObject({ '@id': 'cafe:capability:request-handling', measure: 'betweenness centrality', rank: 1 });
+    expect(a.likelyMissingLinks[0]).toMatchObject({ rel: 'NEEDS', to: { '@id': 'cafe:capability:booking-update' }, status: 'suggestion, not applied' });
     expect(doc['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-001')).toBe(false);
+    expect(Object.keys(doc).sort()).toEqual(['@context', '@graph']);
   });
 
   it('without Python the hand-off is written as today with the analysis marked unavailable', () => noPython(async () => {
     const root = await workspace();
     await saveReview(root, 'CAFE-2026-003', { decision: 'csic', reason: 'Bigger than the Café' }, { clock, steps: DEFAULT_STEPS });
     const doc = JSON.parse(await readFile(path.join(await ideaDir(root, 'CAFE-2026-003'), 'csic-handoff.jsonld'), 'utf8'));
-    expect(doc.networkAnalysis).toEqual({ kind: 'analysis', note: expect.any(String), unavailable: expect.stringMatching(/^Network analysis needs Python 3\.9/) });
+    expect(doc['@graph'].find((n: any) => n['@type'] === 'Analysis').content).toEqual({ kind: 'analysis', note: expect.any(String), unavailable: expect.stringMatching(/^Network analysis needs Python 3\.9/) });
     expect(doc['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-003')).toBe(true);
   }));
 });

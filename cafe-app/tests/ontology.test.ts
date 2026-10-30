@@ -119,7 +119,7 @@ describe('cafe ontology check', () => {
   });
 });
 
-import { exportJsonLd, fromJsonLd, subgraphOf, writeExport, CAFE_VOCAB } from '../src/graph/jsonld';
+import { exportInfo, exportJsonLd, fromJsonLd, subgraphOf, writeExport, CAFE_VOCAB } from '../src/graph/jsonld';
 import { buildGraph } from '../src/graph/build';
 import { sampleIdea } from './helpers';
 import { readdir } from 'node:fs/promises';
@@ -138,12 +138,16 @@ describe('JSON-LD export', () => {
     expect(doc['@context']['@vocab']).toBe(CAFE_VOCAB);
     expect(doc['@context'].NEEDS).toEqual({ '@id': `${CAFE_VOCAB}NEEDS`, '@type': '@id' });
     expect(doc['@context'].Idea).toBe(`${CAFE_VOCAB}Idea`);
-    expect(doc.scope).toBe('all');
+    expect(exportInfo(doc).scope).toBe('all');
     const idea = doc['@graph'].find((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-004')!;
     expect(idea['@type']).toBe('Idea'); expect(idea.label).toBe('Expense anomaly finder');
     expect(idea.NEEDS).toEqual([{ '@id': 'cafe:capability:duplicate-claim-spotting' }]);
     expect(idea.USES).toEqual([{ '@id': 'cafe:tool:dataiku' }]);
-    expect(doc.links.find((l: any) => l.rel === 'USES')).toMatchObject({ from: 'idea:CAFE-2026-004', to: 'tool:dataiku', source: 'rule:needs+built_with', derived: { rule: 'needs+built_with' } });
+    // Every link is a Link resource too, its ends IRIs, a derived one saying how in PROV-O.
+    expect(doc['@graph'].find((l: any) => l['@type'] === 'Link' && l.rel === 'USES')).toMatchObject({
+      from: 'cafe:idea:CAFE-2026-004', to: 'cafe:tool:dataiku', source: 'rule:needs+built_with', wasGeneratedBy: 'cafe:rule/needs%2Bbuilt_with',
+      wasDerivedFrom: ['cafe:link/idea%3ACAFE-2026-004%7CNEEDS%7Ccapability%3Aduplicate-claim-spotting', 'cafe:link/capability%3Aduplicate-claim-spotting%7CBUILT_WITH%7Ctool%3Adataiku'],
+    });
     const back = fromJsonLd(doc);
     expect(back.nodes).toEqual(graph.nodes);
     expect(back.edges).toEqual(graph.edges);
@@ -159,7 +163,7 @@ describe('JSON-LD export', () => {
     expect(sub.edges.some((e) => e.from === 'idea:CAFE-2026-006')).toBe(false);
     expect(subgraphOf(graph, 'CAFE-2026-999')).toEqual({ nodes: [], edges: [] });
     const doc = exportJsonLd(sub, { kind: 'idea', id: 'CAFE-2026-004' });
-    expect(doc.scope).toBe('CAFE-2026-004');
+    expect(exportInfo(doc).scope).toBe('CAFE-2026-004');
     expect(fromJsonLd(doc)).toEqual(sub);
   });
   it('writeExport puts a stamped file under data/exports; the hand-off writes the idea\'s subgraph beside csic-handoff.md', async () => {
@@ -175,7 +179,7 @@ describe('JSON-LD export', () => {
     await saveReview(root, 'CAFE-2026-004', { decision: 'csic', reason: 'Bigger than the Café' }, { clock: fixedClock('2026-10-26'), steps: DEFAULT_STEPS });
     const dir = await ideaDir(root, 'CAFE-2026-004');
     const handoff = JSON.parse(await readFile(path.join(dir, 'csic-handoff.jsonld'), 'utf8'));
-    expect(handoff.scope).toBe('CAFE-2026-004');
+    expect(exportInfo(handoff).scope).toBe('CAFE-2026-004');
     expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:tool:dataiku')).toBe(true);
     expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-006')).toBe(false);
   });

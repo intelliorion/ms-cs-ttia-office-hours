@@ -9,7 +9,7 @@ import { withTick } from '../checklist/checklist';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
 import { rebuildGraph } from '../graph/store';
-import { exportJsonLd, subgraphOf } from '../graph/jsonld';
+import { analysisNode, exportJsonLd, subgraphOf } from '../graph/jsonld';
 import { ideaNetwork, type IdeaNetwork } from '../graph/network';
 
 export const CRITERIA = [
@@ -124,7 +124,8 @@ export async function saveReview(
     const graph = await rebuildGraph(root);
     // With it, what NetworkX finds about the idea across the programme: analysis, labelled as such, apart from the stored facts.
     const doc = exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`);
-    await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify({ ...doc, networkAnalysis: handoffNetwork(await ideaNetwork(graph, idea.id)) }, null, 1));
+    const analysis = analysisNode('network', 'NetworkX network analysis (analysis, not stored facts)', handoffNetwork(await ideaNetwork(graph, idea.id)));
+    await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify({ ...doc, '@graph': [...doc['@graph'], analysis] }, null, 1));
   }
   await writeFileAtomic(path.join(dir, 'review.md'), renderReview(idea, review));
   await saveIdea(root, idea);
@@ -135,10 +136,11 @@ export async function saveReview(
 
 /**
  * The hand-off's network block: computed by NetworkX over the stored facts of the whole programme when the decision
- * was saved. It is analysis, not a fact anyone recorded, and is kept out of @graph and links for that reason.
+ * was saved. It is analysis, not a fact anyone recorded: one Analysis node whose content is a JSON literal, never
+ * triples about the stars, and never a Link.
  */
 export function handoffNetwork(n: IdeaNetwork): Record<string, unknown> {
-  const note = 'Analysis, not stored facts: computed by NetworkX over the stored facts of the whole Café graph when the decision was saved. Not part of @graph or links.';
+  const note = 'Analysis, not stored facts: computed by NetworkX over the stored facts of the whole Café graph when the decision was saved. Held as one JSON literal, never as links between the stars.';
   if (!n.available) return { kind: 'analysis', note, unavailable: n.reason };
   return {
     kind: 'analysis', note, by: `NetworkX ${n.networkx}`, scope: n.scope,

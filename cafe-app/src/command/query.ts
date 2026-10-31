@@ -643,7 +643,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           }))];
         }
       } else if (s.op === 'network') {
-        const done = networkStep(s, w.network?.(s), name, nodes);
+        const done = networkStep(s, w.network?.(s), name, nodes, edgeById);
         set = done.set;
         if (log) {
           network = [...(network ?? []), done.fact];
@@ -741,7 +741,7 @@ const n3 = (x: number) => Number(x).toFixed(3);
  * A network step: NetworkX's answer (run before the query) as the step's set, trace lines and facts. The trace says
  * "NetworkX <algorithm> over stored facts" (or "stored facts and derived links"). Suggestions are only returned.
  */
-function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: string) => string, nodes: Map<string, GNode>):
+function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: string) => string, nodes: Map<string, GNode>, edges: Map<string, GEdge> = new Map()):
   { set: string[]; lit: string[]; lines: StepTrace[]; fact: NetworkFact; suggestions: NetworkSuggestion[] } {
   const analysis = s.analysis ?? 'central';
   if (!run || 'error' in run) {
@@ -781,7 +781,13 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
     }
     const p = r.paths[0];
     lines.push({ text: `${head}: ${r.length} hop${r.length === 1 ? '' : 's'}${r.count > 1 ? ` (${r.count} paths that short)` : ''}`, size: p.stars.length });
-    for (const h of p.hops) lines.push({ text: h.rels.map((x: any) => `${name(x.from)} ${relWord(x.rel)} ${name(x.to)}`).join('; '), size: 1 });
+    // A hop along a derived link says how it is derived (its rule and the stated links it rests on), so the reply never guesses.
+    const how = (x: any) => {
+      const e = edges.get(`${x.from}|${x.rel}|${x.to}`);
+      if (!e?.derived) return '';
+      return ` (derived by ${e.derived.rule} from ${e.derived.inputs.map((id) => { const i = edges.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}${e.confirmed ? '' : '; not confirmed'})`;
+    };
+    for (const h of p.hops) lines.push({ text: h.rels.map((x: any) => `${name(x.from)} ${relWord(x.rel)} ${name(x.to)}${how(x)}`).join('; '), size: 1 });
     const ids = p.stars.map((x: any) => x.id);
     return { set: ids, lit: ids, lines, suggestions: [], fact: fact({ found: true, hops: r.length, pathsThatShort: r.count, paths: r.paths.map((q: any) => q.hops.map((h: any) => h.rels.map((x: any) => ({ from: x.from, rel: x.rel, to: x.to })))) }) };
   }

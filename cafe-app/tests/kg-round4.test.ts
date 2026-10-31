@@ -430,3 +430,12 @@ describe('cafe ontology fix: repoint or retire a stale edit, record a confirmati
     expect((await rebuildGraph(root)).edges.find((e) => e.id === 'capability:request-handling|USES_DATA|system:shared-mailbox')!.source).toBe('ai:fake:additional_context');
   });
 });
+
+describe('q17 (after fix): a NetworkX path hop along a derived link says how it is derived', () => {
+  it('the trace gives the rule and the stated links, so the reply never guesses the capability', () => {
+    const g = buildGraph(IDEAS, [ai({ from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:email', newNodes: EMAIL })]);
+    const run = { ok: { networkx: '3.7', scopeText: 'stored facts and derived links', results: { path: { found: true, length: 1, count: 1, paths: [{ stars: [{ id: 'idea:CAFE-2026-001' }, { id: 'system:email' }], hops: [{ from: 'idea:CAFE-2026-001', to: 'system:email', rels: [{ from: 'idea:CAFE-2026-001', rel: 'DEPENDS_ON', to: 'system:email' }] }] }] } } } };
+    const r = runQuery({ steps: [{ op: 'network', analysis: 'path', codes: ['idea:CAFE-2026-001', 'system:email'], derived: true }] } as Query, { graph: g, ideas: IDEAS, rounds: [], idOf: (c: string) => c, network: () => run as never });
+    expect(r.trace[1].text).toBe('Desk booking assistant depends on Email (derived by needs+uses_data from Desk booking assistant NEEDS Request handling, Request handling USES_DATA Email)');
+  });
+});

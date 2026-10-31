@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildGraph } from '../src/graph/build';
 import { DEFAULT_RULES, infer, readRuleList, type Rule } from '../src/graph/rules';
 import { makeRegistry, defaultEntries } from '../src/graph/registry';
-import { applyOntology, nameKey, nodeId, resetOntology, type AiLink, type OperatorEdit } from '../src/graph/ontology';
+import { compileOntology, nameKey, nodeId, type AiLink, type OperatorEdit } from '../src/graph/ontology';
 import { sampleIdea } from './helpers';
 
 /**
@@ -144,20 +144,22 @@ describe('fault 9: rules files as people write them', () => {
   });
   it('n-step chains run: a three-step chain derives along every link, scoped to the one idea all three are stated for', () => {
     // A workspace ontology may give a derived relation another pair: USES as Team → Capability ("the team's ideas need it").
-    applyOntology({ relations: { USES: { from: 'Team', to: 'Capability' } } });
-    try {
-      const r = readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] });
+    const { schema } = compileOntology({ relations: { USES: { from: 'Team', to: 'Capability' } } });
+    {
+      const r = readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] }, schema);
       expect(r.problems).toEqual([]);
       expect(r.rules[0]).toMatchObject({ chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], scope: 'same-idea' });
       const g = buildGraph(IDEAS, [], [], [], { rules: [] });
-      const out = infer(g.nodes, g.edges, r.rules);
+      const out = infer(g.nodes, g.edges, r.rules, schema);
       // Avery Chen is in GSS (001) and BSI (008): GSS needs 001's capabilities, BSI 008's, never crossed.
       const gss = out.find((e) => e.id === 'team:gss|USES|capability:deadline-tracking-alerting')!;
       expect(gss.derived).toMatchObject({ rule: 'team-needs', inputs: ['team:gss|HAS_MEMBER|person:avery-chen', 'person:avery-chen|SUBMITTED|idea:CAFE-2026-001', 'idea:CAFE-2026-001|NEEDS|capability:deadline-tracking-alerting'] });
       expect(gss.description).toBe('via Avery Chen and Vendor contract summariser');
       expect(out.find((e) => e.id === 'team:bsi|USES|capability:deadline-tracking-alerting')!.derived!.inputs[1]).toBe('person:avery-chen|SUBMITTED|idea:CAFE-2026-008');
       expect(out.some((e) => e.id === 'team:bsi|USES|capability:policy-question-answering')).toBe(false);
-    } finally { resetOntology(); }
+      // The built-in ontology, read at the same time, is untouched: USES stays Idea → Tool there.
+      expect(readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] }).problems).toHaveLength(1);
+    }
   });
   it('every derivation of an edge is kept: the surest as inputs, the rest as alternatives', () => {
     const two = sampleIdea({ ...faq, features: ['Policy question answering', 'Document text extraction'] });

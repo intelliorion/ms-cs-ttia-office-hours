@@ -6,7 +6,7 @@ import { listRounds } from '../round/store';
 import { buildGraph, BundleCache } from './build';
 import { onTouched } from '../memory/touch';
 import { appendEdit, nextEditId, readEdits } from './operator';
-import { MERGEABLE, canonLink, type AiLink, type GEdge, type GNode } from './ontology';
+import { canonLink, type AiLink, type GEdge, type GNode, type Schema } from './ontology';
 import { confirmAt } from '../ai/confirm';
 import { loadSettings } from '../round/store';
 import type { Clock } from '../clock';
@@ -59,11 +59,35 @@ export async function setAiLinkStatus(root: string, edgeId: string, status: AiLi
   const [from, rel, to] = edgeId.split('|');
   const hit = lines.filter(({ link: l }) => { if (!l) return false; const c = canonLink(l); return c.from === from && c.rel === rel && c.to === to; });
   if (!hit.length) throw new Error(`No AI link ${edgeId}`);
+  const day = at ?? new Date().toISOString().slice(0, 10);
   for (const l of hit) {
     l.link!.status = status;
-    if (status === 'confirmed') { l.link!.confirmedBy = 'operator'; l.link!.confirmedAt = at ?? new Date().toISOString().slice(0, 10); } else { delete l.link!.confirmedBy; delete l.link!.confirmedAt; }
+    if (status === 'confirmed') { l.link!.confirmedBy = 'operator'; l.link!.confirmedAt = day; } else { delete l.link!.confirmedBy; delete l.link!.confirmedAt; }
   }
+  // The Do it's own record: the build believes a confirmedBy only when this file has it (a hand-written one is refused).
+  if (status === 'confirmed') await appendConfirmation(root, { edge: `${from}|${rel}|${to}`, at: day, by: 'operator', ts: new Date().toISOString() });
   await writeLines(root, lines);
+}
+
+/**
+ * graph/confirmations.jsonl: one line per Do it that confirmed an AI link, written only by setAiLinkStatus. A link in
+ * ai-links.jsonl that says confirmedBy: operator with no Do it here is a confirmation nobody gave: the build counts the
+ * link as waiting and says so. (Both are plain files on the operator's machine: someone who edits both can still
+ * forge one; the point is that one edited line no longer can.)
+ */
+export interface Confirmation { edge: string; at: string; by: 'operator'; ts: string }
+const confirmationsFile = (root: string) => file(root, 'confirmations.jsonl');
+export async function readConfirmations(root: string): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const raw of ((await readText(confirmationsFile(root))) ?? '').split('\n')) {
+    if (!raw.trim()) continue;
+    try { const v = JSON.parse(raw) as Confirmation; if (v && typeof v.edge === 'string' && v.by === 'operator') { const [f, r, t] = v.edge.split('|'); const c = canonLink({ from: f, rel: r as AiLink['rel'], to: t } as AiLink); out.add(`${c.from}|${c.rel}|${c.to}`); } } catch { /* skipped */ }
+  }
+  return out;
+}
+export async function appendConfirmation(root: string, c: Confirmation): Promise<void> {
+  const text = (await readText(confirmationsFile(root))) ?? '';
+  await writeFileAtomic(confirmationsFile(root), `${text}${text && !text.endsWith('\n') ? '\n' : ''}${JSON.stringify(c)}\n`);
 }
 
 /**
@@ -91,7 +115,10 @@ const caches = new Map<string, BundleCache>();
 onTouched((t) => { const c = caches.get(t.root); if (c) for (const id of t.ideas) c.drop(id); });
 const cacheFor = (root: string) => { let c = caches.get(root); if (!c) caches.set(root, (c = new BundleCache())); return c; };
 
-export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
+/** A built graph: its stars and links, what the build could not take, and the ontology (Schema) it was built with. */
+export interface BuiltGraph { nodes: GNode[]; edges: GEdge[]; problems: LineProblem[]; schema: Schema }
+
+export async function rebuildGraph(root: string): Promise<BuiltGraph> {
   // The workspace's ontology first: the words and pairs every layer below reads. What it could not take is said with
   // the graph's problems, like the rules file's: in the app, never silent.
   const ontology = await loadOntology(root);
@@ -99,12 +126,13 @@ export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edge
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);
   // The rules file's problems (a broken file, a rule it cannot take) go with the graph's: said in the app, never silent.
-  const rules = await readRules(root);
+  const rules = await readRules(root, ontology.schema);
   const settings = await loadSettings(root).catch(() => ({}));
-  const { refused, ...graph } = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: rules.rules, cache: cacheFor(root), confirmAt: confirmAt(settings) });
+  const registry = await registryFrom(root, edits, ontology.schema);
+  const { refused, ...graph } = buildGraph(ideas, links, await listRounds(root), edits, { registry, rules: rules.rules, cache: cacheFor(root), confirmAt: confirmAt(settings), schema: ontology.schema, confirmations: await readConfirmations(root) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
-  return { ...graph, problems: [...problems, ...[...ontology.problems, ...rules.problems, ...refused].map((message) => ({ line: 0, message }))] };
+  return { ...graph, schema: ontology.schema, problems: [...problems, ...[...ontology.problems, ...rules.problems, ...registry.refused, ...refused].map((message) => ({ line: 0, message }))] };
 }
 
 /**
@@ -114,7 +142,7 @@ export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edge
 export async function mergeStars(root: string, from: string, into: string, clock: Clock): Promise<{ from: string; into: string; edits: string[] }> {
   const graph = await rebuildGraph(root);
   const a = graph.nodes.find((n) => n.id === from); const b = graph.nodes.find((n) => n.id === into);
-  if (!a || !b || a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) throw new Error('Those two stars cannot be merged');
+  if (!a || !b || a.id === b.id || a.type !== b.type || !graph.schema.mergeable.includes(a.type)) throw new Error('Those two stars cannot be merged');
   const mergeId = await nextEditId(root);
   await appendEdit(root, { id: mergeId, at: clock(), status: 'active', t: 'merge', from, into });
   const aliasId = await nextEditId(root);

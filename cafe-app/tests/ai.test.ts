@@ -61,7 +61,7 @@ describe('schema validator', () => {
     expect(() => extractTask.parse(probe)).toThrow(/invalid output/);
     expect(() => extractTask.parse('{"nodes":[],"links":[],"evil":1}')).toThrow(/invalid output/);
     expect(() => extractTask.parse('{"nodes":[],"links":[],"__proto__":{"x":1}}')).toThrow(/invalid output/);
-    expect(() => extractTask.parse('{"nodes":[{"type":"Tool","label":"x","hasOwnProperty":1}],"links":[]}')).toThrow(/invalid output/);
+    expect(() => extractTask.parse('{"nodes":[{"type":"Capability","label":"x","hasOwnProperty":1}],"links":[]}')).toThrow(/invalid output/);
     expect(extractTask.parse('{"nodes":[],"links":[]}')).toEqual({ nodes: [], links: [] });
   });
 

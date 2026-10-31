@@ -1,4 +1,4 @@
-import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, canonId, nameKey, setToolResolver, slug, typeOfId, type NodeType, type OperatorEdit } from './ontology';
+import { APPROVED_TOOLS, BUILTIN_SCHEMA, KNOWN_UNAPPROVED_TOOLS, TOOL_ALIASES, canonId, idMatchesType, nameKey, setToolResolver, slug, typeOfId, type NodeType, type OperatorEdit, type Schema } from './ontology';
 
 /**
  * The registry: stable identity for the stars that keep coming back under other words. One entry per star, with its
@@ -22,6 +22,13 @@ export interface Registry {
   entries: RegistryEntries;
   /** A hash of what it was made from: part of the bundle cache's key, so a new alias or entry recomputes the bundles. */
   version: string;
+  /** What it would not take, one line each (an id that lies about its section, an alias that makes a tool look approved). */
+  refused: string[];
+}
+
+/** The not-approved tool a name means (UiPath, Power Automate …), compared in the one normal form, or undefined. */
+export function unapprovedTool(name: string): string | undefined {
+  return KNOWN_UNAPPROVED_TOOLS.find((t) => nameKey(t, 'Tool') === nameKey(name, 'Tool'));
 }
 
 function fnv1a32(str: string): string {
@@ -30,19 +37,33 @@ function fnv1a32(str: string): string {
   return (h >>> 0).toString(16);
 }
 
-export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[]): Registry {
+export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[], schema: Schema = BUILTIN_SCHEMA): Registry {
   const byId = new Map<string, { type: NodeType; label: string; aliases: string[]; ref?: string }>();
+  const refused: string[] = [];
+  /** A name that would make a tool not on the approved list look like an approved one (or approved itself). */
+  const retired = (type: NodeType, name: string) => (type === 'Tool' ? unapprovedTool(name) : undefined);
   for (const type of Object.keys(entries) as NodeType[]) {
-    if (!NODE_TYPES.includes(type)) continue;
+    if (!REGISTRY_SECTIONS.includes(type) || !Array.isArray(entries[type])) continue;
     for (const e of entries[type] ?? []) {
       if (!e || typeof e.id !== 'string' || typeof e.label !== 'string' || !e.id.trim() || !e.label.trim()) continue;
-      byId.set(canonId(e.id.trim()), { type, label: e.label.trim(), aliases: (e.aliases ?? []).map(String).filter((a) => a.trim()), ...(e.ref ? { ref: String(e.ref) } : {}) });
+      // An id must carry its section's kind: "system:email" filed under Capability would make Email a capability.
+      if (!idMatchesType(e.id.trim(), type)) { refused.push(`entities.yaml: ${type}: "${e.id}" does not start with "${type.toLowerCase()}:" (not used by the build)`); continue; }
+      const bad = retired(type, e.label);
+      if (bad) { refused.push(`entities.yaml: Tool: "${e.id}" is ${bad}, which is not on the approved list (not used by the build)`); continue; }
+      const aliases = (Array.isArray(e.aliases) ? e.aliases : []).map(String).filter((a) => a.trim()).filter((a) => {
+        const r = retired(type, a);
+        if (r) refused.push(`entities.yaml: Tool: "${e.id}": alias "${a}" names ${r}, which is not on the approved list (not used by the build)`);
+        return !r;
+      });
+      byId.set(canonId(e.id.trim()), { type, label: e.label.trim(), aliases, ...(e.ref ? { ref: String(e.ref) } : {}) });
     }
   }
   for (const e of edits) {
     if (e.t !== 'alias' || e.status !== 'active' || !e.label.trim()) continue;
     const node = canonId(e.node);
-    const type = typeOfId(node); if (!type) continue;
+    const type = typeOfId(node, schema); if (!type) continue;
+    const r = retired(type, e.label);
+    if (r) { refused.push(`operator.jsonl ${e.id}: alias "${e.label}" on ${e.node} names ${r}, which is not on the approved list (refused by the build)`); continue; }
     const have = byId.get(node);
     if (have) { if (!have.aliases.includes(e.label)) have.aliases.push(e.label); continue; }
     byId.set(node, { type, label: (e.of ?? e.label).trim(), aliases: [e.label] });
@@ -54,7 +75,7 @@ export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[]): R
     for (const name of [e.label, ...e.aliases]) { const k = nameKey(name, e.type); if (!m.has(k)) m.set(k, id); }
   }
   return {
-    entries,
+    entries, refused,
     version: fnv1a32(JSON.stringify([entries, edits.filter((e) => e.t === 'alias' && e.status === 'active')])),
     resolve(type, label) {
       const id = lookup.get(type)?.get(nameKey(label, type));

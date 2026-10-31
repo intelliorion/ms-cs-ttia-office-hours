@@ -3,7 +3,7 @@ import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 import { readEdits } from './operator';
 import { defaultEntries, makeRegistry, setCurrentRegistry, type Registry, type RegistryEntries } from './registry';
-import type { OperatorEdit } from './ontology';
+import type { OperatorEdit, Schema } from './ontology';
 
 /** rules/entities.yaml as written, or undefined when it is absent or unreadable (the built-in tools then apply). */
 export async function readEntities(root: string): Promise<RegistryEntries | undefined> {
@@ -16,8 +16,8 @@ export async function readEntities(root: string): Promise<RegistryEntries | unde
 }
 
 /** The workspace's registry from edits already read: the entities file plus their alias edits. It becomes the one `canonicalTool` reads. */
-export async function registryFrom(root: string, edits: OperatorEdit[]): Promise<Registry> {
-  const r = makeRegistry(withBuiltinAliases((await readEntities(root)) ?? defaultEntries()), edits);
+export async function registryFrom(root: string, edits: OperatorEdit[], schema?: Schema): Promise<Registry> {
+  const r = makeRegistry(withBuiltinAliases((await readEntities(root)) ?? defaultEntries()), edits, schema);
   setCurrentRegistry(r);
   return r;
 }

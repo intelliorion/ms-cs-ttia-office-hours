@@ -1,4 +1,4 @@
-import { ALLOWED, DERIVED_RELATIONS, FORM_ONLY_RELATIONS, IDEA_SCOPED, KNOWN_UNAPPROVED_TOOLS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nameKey, nodeId, operatorLinkProblem, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { BUILTIN_SCHEMA, FORM_ONLY_RELATIONS, KNOWN_UNAPPROVED_TOOLS, NODE_LABELS, edgeId, type Schema, isOperatorSource, nameKey, nodeId, operatorLinkProblem, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -16,6 +16,9 @@ import { writeExport } from '../graph/jsonld';
 import { dataKey } from '../workspace/paths';
 import type { Registry } from '../graph/registry';
 
+/** The ontology a graph was built with (rebuildGraph's schema), else the built-in one. */
+const sch = (g: { schema?: Schema }): Schema => g.schema ?? BUILTIN_SCHEMA;
+
 /** What the app will do for one step of a command, once the operator says "Do it". */
 
 /** "An idea and a system or data can't be linked that way.": the kinds in words, each with its article. */
@@ -32,10 +35,10 @@ export function cantLink(a: NodeType, b: NodeType): string {
  * Other relations need no idea: `ideas` is empty.
  */
 export function linkScope(
-  graph: { nodes: GNode[]; edges: GEdge[] }, from: string, rel: Relation, to: string,
+  graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema }, from: string, rel: Relation, to: string,
   opts: { named?: string; focus?: string; title?: (id: string) => string } = {},
 ): { ideas: string[]; note?: string } | { problem: string } {
-  if (!IDEA_SCOPED.includes(rel)) return { ideas: [] };
+  if (!sch(graph).ideaScoped.includes(rel)) return { ideas: [] };
   const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
   const title = opts.title ?? ((i: string) => label(`idea:${i}`));
   const have = graph.edges.find((e) => e.id === edgeId(from, rel, to) && !e.derived);
@@ -55,12 +58,12 @@ export function linkScope(
  * the proposals (one per idea for a capability-level link) or the one line that says why not.
  */
 export function linkProposals(
-  graph: { nodes: GNode[]; edges: GEdge[] }, from: GNode, rel: Relation, to: GNode,
+  graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema }, from: GNode, rel: Relation, to: GNode,
   opts: { named?: string; focus?: string; title?: (id: string) => string; suffix?: string } = {},
 ): { proposals: Proposal[]; note?: string } | { problem: string } {
-  const bad = operatorLinkProblem(rel, from.type, to.type);
-  if (bad) return { problem: FORM_ONLY_RELATIONS.includes(rel) || DERIVED_RELATIONS.includes(rel) ? `${from.label} → ${to.label}: ${bad}.` : cantLink(from.type, to.type) };
-  if (!IDEA_SCOPED.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) return { problem: `${from.label} and ${to.label} are already linked.` };
+  const bad = operatorLinkProblem(rel, from.type, to.type, sch(graph));
+  if (bad) return { problem: FORM_ONLY_RELATIONS.includes(rel) || sch(graph).derived.includes(rel) ? `${from.label} → ${to.label}: ${bad}.` : cantLink(from.type, to.type) };
+  if (!sch(graph).ideaScoped.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) return { problem: `${from.label} and ${to.label} are already linked.` };
   const title = opts.title ?? ((i: string) => graph.nodes.find((n) => n.id === `idea:${i}`)?.label ?? i);
   // A capability-level link says which idea it is for: one proposal per idea, each stamped.
   const scope = linkScope(graph, from.id, rel, to.id, { named: opts.named, focus: opts.focus, title });
@@ -125,7 +128,7 @@ const word = (t: NodeType) => (t === 'Support' ? 'support request' : NODE_LABELS
 
 export interface ResolveContext {
   codes: Map<string, Coded>;
-  graph: { nodes: GNode[]; edges: GEdge[] };
+  graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema };
   ideas: Idea[];
   rounds: Round[];
   /** The workspace's registry (stable names and aliases), when the caller has it. */
@@ -139,6 +142,7 @@ export interface ResolveContext {
  * The AI proposes; this decides. A step that does not check out becomes a line saying why, and nothing is done.
  */
 export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { proposals: Proposal[]; problems: string[] } {
+  const S = sch(ctx.graph);
   const proposals: Proposal[] = []; const problems: string[] = [];
   const nodes = new Map(ctx.graph.nodes.map((n) => [n.id, n]));
   const star = (code?: string): GNode | undefined => {
@@ -200,6 +204,9 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
   };
 
   for (const s of steps) {
+    // The ontology this graph was built with decides which relations and kinds exist (the AI may name any).
+    if (s.rel && !Object.hasOwn(S.allowed, s.rel)) { problems.push(`There is no relation "${s.rel}" in this workspace's ontology.`); continue; }
+    if (s.type && !S.types.includes(s.type)) { problems.push(`There is no kind of star "${s.type}" in this workspace's ontology.`); continue; }
     if (s.op === 'stage') {
       const n = star(s.a);
       problems.push(`Stages only move by your hand: open ${n ? n.label : 'the idea'} and use its stage button.`);
@@ -231,13 +238,13 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         else missing(s);
         continue;
       }
-      const fits = (rel: Relation) => { const [f, t] = ALLOWED[rel]; return (a.type === f && b.type === t) || (b.type === f && a.type === t); };
-      if (s.rel && DERIVED_RELATIONS.includes(s.rel)) { problems.push(`${s.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules from what the graph holds, not linked by hand.`); continue; }
-      const choices = (s.rel ? [s.rel] : (Object.keys(ALLOWED) as Relation[])).filter(fits).filter((r) => !DERIVED_RELATIONS.includes(r));
+      const fits = (rel: Relation) => { const [f, t] = S.allowed[rel]; return (a.type === f && b.type === t) || (b.type === f && a.type === t); };
+      if (s.rel && S.derived.includes(s.rel)) { problems.push(`${s.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules from what the graph holds, not linked by hand.`); continue; }
+      const choices = (s.rel ? [s.rel] : (Object.keys(S.allowed) as Relation[])).filter(fits).filter((r) => !S.derived.includes(r));
       if (choices.includes('BUILT_WITH')) { problems.push('Tools are picked in the tool picker, so I left that link out.'); continue; }
       const rel = choices.filter((r) => r !== 'IN_ROUND')[0];
       if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
-      const [ft] = ALLOWED[rel];
+      const [ft] = S.allowed[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
       const checked = linkProposals(ctx.graph, from, rel, to, { focus: ctx.focusIdea, title });
       if ('problem' in checked) { problems.push(checked.problem); continue; }
@@ -279,7 +286,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
     } else if (s.op === 'add_star') {
       const name = s.name?.trim(); const type = s.type;
       if (!name || !type) { problems.push("I couldn't tell what kind of star to create, or its name."); continue; }
-      if (!OPERATOR_STARS.includes(type)) {
+      if (!S.operatorStars.includes(type)) {
         problems.push(OWNED_ELSEWHERE[type]?.(name) ?? (type === 'Person' ? "People come from the ideas' teams: add someone with a role, such as \"make X a member of Y\"." : 'Ideas come from the submissions.'));
         continue;
       }
@@ -320,14 +327,14 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       }
       const hit = ctx.registry?.resolve(type, name);
       const same = ctx.graph.nodes.find((n) => n.type === type && n.label.toLowerCase() === name.toLowerCase()) ?? (hit ? nodes.get(hit.id) : undefined);
-      const rel = (Object.keys(ALLOWED) as Relation[]).find((r) => { const [f, t] = ALLOWED[r]; return (f === home!.type && t === type) || (f === type && t === home!.type); });
+      const rel = (Object.keys(S.allowed) as Relation[]).find((r) => { const [f, t] = S.allowed[r]; return (f === home!.type && t === type) || (f === type && t === home!.type); });
       if (!rel) { problems.push(`A ${word(type)} can't be linked to a ${word(home.type)}.`); continue; }
       // A name the registry knows but no star carries yet is born with its registered id and label.
       const node = same?.id ?? hit?.id ?? nodeId(type, name);
       const label = same?.label ?? hit?.label ?? name;
-      const [from, to] = ALLOWED[rel][0] === home.type ? [home.id, node] : [node, home.id];
+      const [from, to] = S.allowed[rel][0] === home.type ? [home.id, node] : [node, home.id];
       // A capability-level link is stamped with its idea (the one named, on screen, or each idea that needs it).
-      const scoped = IDEA_SCOPED.includes(rel) ? scopeFor(from, rel, to, namedIdea) : { ideas: [] as string[] };
+      const scoped = S.ideaScoped.includes(rel) ? scopeFor(from, rel, to, namedIdea) : { ideas: [] as string[] };
       if ('problem' in scoped) {
         // A system new to the graph has no link yet: the "already" problem cannot apply; only "no idea needs it".
         problems.push(scoped.problem); continue;
@@ -358,7 +365,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         if (!on.length && !submitted.length) problems.push(`${a.label} is not on any idea's team.`);
         continue;
       }
-      if (!OPERATOR_STARS.includes(a.type)) {
+      if (!S.operatorStars.includes(a.type)) {
         problems.push(a.type === 'Idea' ? `Ideas are not removed: close ${a.label} with its stage button.`
             : OWNED_ELSEWHERE[a.type]!(a.label));
         continue;
@@ -372,7 +379,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
     } else if (s.op === 'merge') {
       const a = star(s.a); const b = star(s.b);
       if (!a || !b) { missing(s); continue; }
-      if (a.id === b.id || a.type !== b.type || !MERGEABLE.includes(a.type)) { problems.push(`${a.label} and ${b.label} can't be merged: only two stars of the same kind (not ideas, rounds or the division) can.`); continue; }
+      if (a.id === b.id || a.type !== b.type || !S.mergeable.includes(a.type)) { problems.push(`${a.label} and ${b.label} can't be merged: only two stars of the same kind (not ideas, rounds or the division) can.`); continue; }
       proposals.push({ label: `Merge ${a.label} into ${b.label} (its links move to ${b.label})`, action: { t: 'merge', from: a.id, into: b.id } });
     } else if (s.op === 'export') {
       const a = star(s.a); const idea = a ? ideaOf(a) : undefined;
@@ -417,7 +424,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
   const linkCheck = async (l: { from: string; rel: Relation; to: string }, born?: { node: string; type: NodeType }) => {
     const g = await rebuildGraph(root);
     const typeOf = (id: string) => (born && id === born.node ? born.type : g.nodes.find((n) => n.id === id)?.type);
-    const bad = operatorLinkProblem(l.rel, typeOf(l.from), typeOf(l.to));
+    const bad = operatorLinkProblem(l.rel, typeOf(l.from), typeOf(l.to), g.schema);
     if (bad) throw new Error(`Not done: ${bad}`);
   };
   switch (a.t) {
@@ -442,7 +449,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
       };
     }
     case 'add_star': {
-      if (!OPERATOR_STARS.includes(a.type)) throw new Error(`Not done: ${a.type === 'Idea' ? 'an idea comes only from the form' : `a ${a.type} is not made from the command bar`}`);
+      if (!(await rebuildGraph(root)).schema.operatorStars.includes(a.type)) throw new Error(`Not done: ${a.type === 'Idea' ? 'an idea comes only from the form' : `a ${a.type} is not made from the command bar`}`);
       await linkCheck(a.link, { node: a.node, type: a.type });
       // The star and its link are two edits, done and undone together.
       const star = await edit({ t: 'add', node: a.node, type: a.type, label: a.label });
@@ -451,7 +458,7 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     }
     case 'unlink': {
       // A derived link is the rules' to say: an unlink edit would hide it for nothing (it comes back), so it is refused.
-      if (DERIVED_RELATIONS.includes(a.rel)) throw new Error(`${a.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules: remove one of the stored links it rests on instead`);
+      if ((await rebuildGraph(root)).schema.derived.includes(a.rel)) throw new Error(`${a.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules: remove one of the stored links it rests on instead`);
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
       if (isOperatorSource(a.source)) {
         const made = (await readEdits(root)).filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);

@@ -1,5 +1,5 @@
-import { ALLOWED, DERIVED_RELATIONS, IDEA_SCOPED, NODE_DESCRIPTIONS, NODE_LABELS, NODE_TYPES, RELATION_MEANINGS, type Relation } from './ontology';
-import { namespaces } from './jsonld';
+import { BUILTIN_SCHEMA, type Relation, type Schema } from './ontology';
+import { SYMMETRIC, namespaces } from './jsonld';
 
 /**
  * The schema the export's data is written in, from the ontology as it stands (rules/ontology.yaml's declarations
@@ -21,7 +21,6 @@ const SH = 'http://www.w3.org/ns/shacl#';
 /** A Turtle string literal. */
 const lit = (s: string) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"`;
 const words = (r: string) => r.toLowerCase().replace(/_/g, ' ');
-const relations = () => Object.keys(ALLOWED) as Relation[];
 const prefixes = (vocab: string, data: string, extra = '') => [
   `@prefix rdf: <${RDF}> .`, `@prefix rdfs: <${RDFS}> .`, `@prefix owl: <${OWL}> .`, `@prefix xsd: <${XSD}> .`, `@prefix prov: <${PROV}> .`,
   `@prefix cafe: <${vocab}> .`, `@prefix star: <${data}> .`, ...(extra ? [extra] : []), '',
@@ -30,7 +29,9 @@ const prefixes = (vocab: string, data: string, extra = '') => [
 /** The ontology's IRI: the vocabulary namespace without its "#". */
 export const ontologyIri = (base?: string) => namespaces(base).vocab.replace(/#$/, '');
 
-export function vocabularyTurtle(base?: string): string {
+export function vocabularyTurtle(base?: string, schema: Schema = BUILTIN_SCHEMA): string {
+  const { types: NODE_TYPES, labels: NODE_LABELS, descriptions: NODE_DESCRIPTIONS, allowed: ALLOWED, derived: DERIVED_RELATIONS, ideaScoped: IDEA_SCOPED, meanings: RELATION_MEANINGS } = schema;
+  const relations = () => Object.keys(ALLOWED) as Relation[];
   const { vocab, data } = namespaces(base);
   const onto = `<${ontologyIri(base)}>`;
   const out: string[] = [prefixes(vocab, data)];
@@ -42,9 +43,9 @@ export function vocabularyTurtle(base?: string): string {
   for (const r of relations()) {
     const [from, to] = ALLOWED[r];
     const derived = DERIVED_RELATIONS.includes(r);
-    const kinds = ['rdf:Property', 'owl:ObjectProperty', ...(r === 'KIND_OF' ? ['owl:TransitiveProperty'] : [])].join(', ');
-    const note = derived ? ' Derived by the rules from stated facts, never stored.'
-      : IDEA_SCOPED.includes(r) ? ' Stated for the ideas it holds for: a plain triple only where it holds for every idea that needs the capability; per idea, a cafe:Link with cafe:statedFor.' : '';
+    const kinds = ['rdf:Property', 'owl:ObjectProperty', ...(r === 'KIND_OF' ? ['owl:TransitiveProperty'] : []), ...(SYMMETRIC.includes(r) ? ['owl:SymmetricProperty'] : [])].join(', ');
+    const note = (derived ? ' Derived by the rules from stated facts, never stored.' : '') + (SYMMETRIC.includes(r) ? ' Symmetric: written both ways.' : '') + ' A plain triple is a confirmed fact; one waiting for the operator\'s Do it is only a cafe:Link with cafe:confirmed false.' + (derived ? ''
+      : IDEA_SCOPED.includes(r) ? ' Stated for the ideas it holds for: a plain triple only where it holds for every idea that needs the capability; per idea, a cafe:Link with cafe:statedFor.' : '');
     out.push(`cafe:${r} a ${kinds} ;\n  rdfs:label ${lit(words(r))}@en ;\n  rdfs:comment ${lit(`${RELATION_MEANINGS[r]?.meaning ?? words(r)}.${note}`)}@en ;\n  rdfs:domain cafe:${from} ;\n  rdfs:range cafe:${to} ;\n  cafe:derived ${derived} ;\n  rdfs:isDefinedBy ${onto} .`);
   }
   const cls = (name: string, comment: string, sub?: string) => `cafe:${name} a rdfs:Class, owl:Class ;${sub ? `\n  rdfs:subClassOf ${sub} ;` : ''}\n  rdfs:label ${lit(name)}@en ;\n  rdfs:comment ${lit(comment)}@en ;\n  rdfs:isDefinedBy ${onto} .`;
@@ -66,11 +67,16 @@ export function vocabularyTurtle(base?: string): string {
   out.push(prop('alternative', 'owl:ObjectProperty', 'cafe:Link', 'cafe:Derivation', 'Another way a derived link is derived.'));
   out.push(prop('exportScope', 'owl:DatatypeProperty', 'cafe:Export', 'xsd:string', '"all", or the Café ID of the idea exported with what it touches.'));
   out.push(prop('attrs', 'owl:ObjectProperty', 'rdfs:Resource', 'rdfs:Resource', 'A star\'s attributes (an idea\'s stage, function, region and Café ID).'));
+  out.push(prop('quote', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:string', 'The passage of the idea\'s text an AI read the link in, as the AI quoted it.'));
+  out.push(prop('quoteFound', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:boolean', 'Whether the quote was found in the idea\'s text, in the field the source names (the app moves the source to the field it is in).'));
+  out.push(prop('readAt', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:dateTime', 'When the AI read the link.'));
   out.push(prop('content', 'owl:DatatypeProperty', 'cafe:Analysis', 'rdf:JSON', 'An analysis, as one JSON literal.'));
   return `${out.join('\n\n')}\n`;
 }
 
-export function shapesTurtle(base?: string): string {
+export function shapesTurtle(base?: string, schema: Schema = BUILTIN_SCHEMA): string {
+  const { types: NODE_TYPES, allowed: ALLOWED } = schema;
+  const relations = () => Object.keys(ALLOWED) as Relation[];
   const { vocab, data } = namespaces(base);
   const out: string[] = [prefixes(vocab, data, `@prefix sh: <${SH}> .`)];
   const label = `sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ]`;

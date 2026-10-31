@@ -7,7 +7,7 @@ import { LinkTable } from '../popouts/LinkTable';
 import { Details, History } from '../popouts/IdeaSections';
 import { ideaCardModel, ideaLinks, nodeLinks, type HistoryEntry } from '../popouts/ideaHelpers';
 import { NODE_COLOURS, throughFeatures } from '../universe/graphView';
-import { NODE_LABELS } from '../../../src/graph/ontology';
+import { NODE_LABELS } from '../state/ontologyView';
 import { ideasAround, inCommon, rightContext, type RightContext } from './contextHelpers';
 
 const TOP = { left: 'calc(var(--sw) - 460px)', top: 92, width: 440, height: 460 } as const;

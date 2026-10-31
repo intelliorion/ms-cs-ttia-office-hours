@@ -1,4 +1,4 @@
-import { ALL_RELATIONS, ALLOWED, DECLARED, DERIVED_RELATIONS, RELATION_MEANINGS, IDEA_SCOPED, NODE_LABELS, NODE_TYPES, nameKey, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { BUILTIN_SCHEMA, nameKey, type GEdge, type GNode, type NodeType, type Relation, type Schema } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -7,14 +7,14 @@ import type { JsonSchema } from '../ai/schema';
  * The questions the command bar can answer, as steps over a set of stars. The AI writes the steps; the app runs
  * them on the graph and the idea records, so every answer, count and lit star comes from the knowledge graph itself.
  */
-export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by', 'search', 'similar', 'network'] as const;
+export const QUERY_OPS = ['stars', 'follow', 'filter', 'role', 'intersect', 'path', 'rank', 'count_by', 'search', 'similar', 'network', 'links'] as const;
 /** The network step's analyses: NetworkX over the whole graph (src/graph/network.ts). */
 export const NETWORK_STEP_ANALYSES = ['central', 'clusters', 'path', 'isolated', 'suggest', 'cycles', 'stats'] as const;
 export type NetworkStepAnalysis = (typeof NETWORK_STEP_ANALYSES)[number];
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
-/** The kinds and relations a query may name: the ontology's live lists, so a kind or relation ontology.yaml declares is one too. */
-const RELATIONS: Relation[] = ALL_RELATIONS;
+/** Where a stored link came from, for the links step: provenance the assistant can query. */
+export const LINK_SOURCES = ['operator', 'ai', 'form'] as const;
 /** How many derived links a step names in the trace before "and N more". */
 const DERIVED_TRACE_MAX = 5;
 
@@ -29,37 +29,45 @@ export interface QueryStep {
   group?: boolean;
   /** network: which NetworkX analysis, and whether the links the rules derive are included (stored facts only by default). */
   analysis?: NetworkStepAnalysis; derived?: boolean;
+  /** links: keep the stored links that came from this source (the operator's edits, an AI read, the form). */
+  source?: (typeof LINK_SOURCES)[number];
   with?: QueryStep[];
 }
 export interface Query { steps: QueryStep[] }
 
-const STEP_PROPS: Record<string, JsonSchema> = {
-  op: { type: 'string', enum: QUERY_OPS },
-  type: { type: 'string', enum: NODE_TYPES },
-  codes: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 2, maxLength: 8 } },
-  last: { type: 'boolean' },
-  match: { type: 'string', minLength: 1, maxLength: 60 },
-  rel: { type: 'string', enum: RELATIONS },
-  dir: { type: 'string', enum: ['out', 'in', 'both'] },
-  stage: { type: 'string', maxLength: 40 }, function: { type: 'string', maxLength: 40 },
-  region: { type: 'string', maxLength: 40 }, round: { type: 'string', maxLength: 40 },
-  role: { type: 'string', enum: QUERY_ROLES },
-  by: { type: 'string', enum: COUNT_BY },
-  limit: { type: 'number', minimum: 1, maximum: 50 },
-  group: { type: 'boolean' },
-  analysis: { type: 'string', enum: NETWORK_STEP_ANALYSES },
-  derived: { type: 'boolean' },
-};
-const INNER_STEP: JsonSchema = { type: 'object', additionalProperties: false, required: ['op'], properties: STEP_PROPS };
-export const QUERY_SCHEMA: JsonSchema = {
-  type: 'object', additionalProperties: false, required: ['steps'],
-  properties: {
-    steps: {
-      type: 'array', minItems: 1, maxItems: 8,
-      items: { type: 'object', additionalProperties: false, required: ['op'], properties: { ...STEP_PROPS, with: { type: 'array', maxItems: 6, items: INNER_STEP } } },
+/** The JSON schema a query must meet, for one build's ontology: a kind or relation ontology.yaml declares may be named too. */
+export function querySchema(schema: Schema = BUILTIN_SCHEMA): JsonSchema {
+  const STEP_PROPS: Record<string, JsonSchema> = {
+    op: { type: 'string', enum: QUERY_OPS },
+    type: { type: 'string', enum: [...schema.types] },
+    codes: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 2, maxLength: 8 } },
+    last: { type: 'boolean' },
+    match: { type: 'string', minLength: 1, maxLength: 60 },
+    rel: { type: 'string', enum: [...schema.all] },
+    dir: { type: 'string', enum: ['out', 'in', 'both'] },
+    stage: { type: 'string', maxLength: 40 }, function: { type: 'string', maxLength: 40 },
+    region: { type: 'string', maxLength: 40 }, round: { type: 'string', maxLength: 40 },
+    role: { type: 'string', enum: QUERY_ROLES },
+    by: { type: 'string', enum: COUNT_BY },
+    limit: { type: 'number', minimum: 1, maximum: 50 },
+    group: { type: 'boolean' },
+    analysis: { type: 'string', enum: NETWORK_STEP_ANALYSES },
+    derived: { type: 'boolean' },
+    source: { type: 'string', enum: LINK_SOURCES },
+  };
+  const INNER_STEP: JsonSchema = { type: 'object', additionalProperties: false, required: ['op'], properties: STEP_PROPS };
+  return {
+    type: 'object', additionalProperties: false, required: ['steps'],
+    properties: {
+      steps: {
+        type: 'array', minItems: 1, maxItems: 8,
+        items: { type: 'object', additionalProperties: false, required: ['op'], properties: { ...STEP_PROPS, with: { type: 'array', maxItems: 6, items: INNER_STEP } } },
+      },
     },
-  },
-};
+  };
+}
+/** The query schema for the built-in ontology. */
+export const QUERY_SCHEMA: JsonSchema = querySchema();
 
 /** What the AI is told about the query steps. */
 export const QUERY_GUIDE = [
@@ -139,13 +147,11 @@ export const QUERY_GUIDE = [
  * The guide the agent reads: with Deep read off, the search and similar steps are left out (they do not exist for it).
  * The kinds and relations the workspace's ontology.yaml declared are listed with their meaning.
  */
-export const queryGuide = (deepRead: boolean): string[] => [
+export const queryGuide = (deepRead: boolean, schema: Schema = BUILTIN_SCHEMA): string[] => [
   ...(deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l))),
-  ...(DECLARED.types.length ? [`Kinds this workspace declared (rules/ontology.yaml): ${DECLARED.types.map((t) => `${t} (${NODE_LABELS[t]})`).join(', ')}.`] : []),
-  ...(DECLARED.relations.length ? [`Relations this workspace declared: ${DECLARED.relations.map((r) => `${ALLOWED_OF(r)} (${RELATION_MEANING(r)}${DERIVED_RELATIONS.includes(r) ? ', derived by the rules' : ''})`).join('; ')}.`] : []),
+  ...(schema.declared.types.length ? [`Kinds this workspace declared (rules/ontology.yaml): ${schema.declared.types.map((t) => `${t} (${schema.labels[t]})`).join(', ')}.`] : []),
+  ...(schema.declared.relations.length ? [`Relations this workspace declared: ${schema.declared.relations.map((r) => `${schema.allowed[r][0]} ${r} ${schema.allowed[r][1]} (${schema.meanings[r]?.meaning ?? ''}${schema.derived.includes(r) ? ', derived by the rules' : ''})`).join('; ')}.`] : []),
 ];
-const ALLOWED_OF = (r: Relation) => { const [f, t] = ALLOWED[r]; return `${f} ${r} ${t}`; };
-const RELATION_MEANING = (r: Relation) => RELATION_MEANINGS[r]?.meaning ?? '';
 
 export interface StepTrace { text: string; size: number }
 /** A derived-link line cut from the trace (past the first few), with the two stars it joins, so it can come back when the reply names both. */
@@ -223,6 +229,8 @@ export interface QueryWorld {
   memory?: QueryMemory;
   /** NetworkX's answer for a network step, prepared before the query runs. */
   network?: (s: QueryStep) => NetworkStepRun | undefined;
+  /** The ontology the graph was built with (its declared kinds and relations); the built-in one when absent. */
+  schema?: Schema;
 }
 
 const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
@@ -237,13 +245,17 @@ const SINGULAR: Record<NodeType, string> = {
   Outcome: 'desired outcome', Beneficiary: 'beneficiary', Category: 'use case category',
 };
 /** A kind in words; a kind ontology.yaml declared goes by its label. */
-const pluralOf = (t: NodeType) => PLURAL[t] ?? `${String(NODE_LABELS[t] ?? t).toLowerCase()}s`;
-const singularOf = (t: NodeType) => SINGULAR[t] ?? String(NODE_LABELS[t] ?? t).toLowerCase();
+const pluralOfIn = (t: NodeType, schema: Schema = BUILTIN_SCHEMA) => PLURAL[t] ?? `${String(schema.labels[t] ?? t).toLowerCase()}s`;
+const singularOfIn = (t: NodeType, schema: Schema = BUILTIN_SCHEMA) => SINGULAR[t] ?? String(schema.labels[t] ?? t).toLowerCase();
 const relWord = (r?: Relation) => (r ? r.toLowerCase().replace(/_/g, ' ') : 'any');
 /** The links a step walks: the stated ones, plus the derived ones only when the step asks for a derived rel. */
-const walkable = (edges: GEdge[], rel?: Relation) => (rel && DERIVED_RELATIONS.includes(rel) ? edges : edges.filter((e) => !e.derived));
+const walkableIn = (edges: GEdge[], rel?: Relation, schema: Schema = BUILTIN_SCHEMA) => (rel && schema.derived.includes(rel) ? edges : edges.filter((e) => !e.derived));
 
 export function runQuery(q: Query, w: QueryWorld): QueryResult {
+  const schema = w.schema ?? BUILTIN_SCHEMA;
+  const IDEA_SCOPED = schema.ideaScoped; const NODE_LABELS = schema.labels;
+  const pluralOf = (t: NodeType) => pluralOfIn(t, schema); const singularOf = (t: NodeType) => singularOfIn(t, schema);
+  const walkable = (edges: GEdge[], rel?: Relation) => walkableIn(edges, rel, schema);
   const nodes = new Map(w.graph.nodes.map((n) => [n.id, n]));
   const ideaById = new Map(w.ideas.map((i) => [`idea:${i.id}`, i]));
   const roundName = new Map(w.rounds.map((r) => [r.id, r.name]));
@@ -601,7 +613,7 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
   const lines: StepTrace[] = [];
   if (analysis === 'central') {
     const rows: any[] = ((s.type ? r.byType?.[s.type] : r.betweenness) ?? []).filter((x: any) => known(x.id));
-    lines.push({ text: `${head}: top ${rows.length} ${s.type ? pluralOf(s.type) : 'stars'}`, size: rows.length });
+    lines.push({ text: `${head}: top ${rows.length} ${s.type ? pluralOfIn(s.type) : 'stars'}`, size: rows.length });
     for (const x of rows) lines.push({ text: `${name(x.id)}: ${n3(x.betweenness)} (${x.ideas} idea${x.ideas === 1 ? '' : 's'}, ${x.links} links)`, size: x.ideas });
     const ids = rows.map((x) => x.id);
     return { set: ids, lit: ids, lines, suggestions: [], fact: fact({ measure: 'betweenness centrality', ...(s.type ? { type: s.type } : {}), top: rows.map((x) => ({ star: x.id, betweenness: x.betweenness, degree: x.degree, ideas: x.ideas })) }) };

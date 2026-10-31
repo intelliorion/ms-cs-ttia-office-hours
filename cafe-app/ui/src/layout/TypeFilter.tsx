@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
 import { NODE_COLOURS, LINK_COLOUR, UNCONFIRMED_COLOUR, DERIVED_COLOUR, ROLE_LEGEND, paletteFor, roleStyle } from '../universe/graphView';
-import { NODE_LABELS, NODE_TYPES } from '../../../src/graph/ontology';
+import { NODE_LABELS, NODE_TYPES } from '../state/ontologyView';
 
 /** "Show: All", or how many kinds are on when some are switched off. */
 export function showLabel(present: string[], hidden: string[]): string {

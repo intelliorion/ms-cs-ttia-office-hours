@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../state/store';
 import { useChat } from '../state/chat';
 import { NODE_COLOURS } from '../universe/graphView';
-import { NODE_LABELS } from '../../../src/graph/ontology';
+import { NODE_LABELS } from '../state/ontologyView';
 import { inboxCount } from '../popouts/inboxHelpers';
 import {
   KIND_WORD, STATUS_WORD, answerLight, canUndo, chipSegments, sentSegments, insertMention, mentionQuery, newPersonHit, searchStars, slashMatches, suggestionsFor, waitingCount,

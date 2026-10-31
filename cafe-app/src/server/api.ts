@@ -56,7 +56,8 @@ import { summary as memorySummary } from '../memory/index';
 import { rankIdeas } from '../memory/lookup';
 import { edgeId, APPROVED_TOOLS, retiredToolNote } from '../graph/ontology';
 import { aiReads, aiReadOf } from '../ai/reads';
-import { currentOntology } from '../graph/ontology';
+import { loadOntology } from '../graph/ontologyFile';
+import { ontologyOf } from '../graph/ontology';
 import {
   processDrop, applyRecords, undoRecord, chooseIdea, dismissItem, deleteItem, draftHeldReply, inboxView, reprocessItem, dropRecord, viewOf, type Resolve,
 } from '../inbox/flow';
@@ -90,6 +91,7 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     const [{ rounds, problems: roundProblems }, settings, st, list, { items: outbox, problems: outboxProblems }, reads] = await Promise.all([
       listRoundsChecked(root), loadSettings(root), steps(), listIdeas(root), listOutboxChecked(root), aiReads(root),
     ]);
+    const { ontology } = await loadOntology(root);
     const today = clock();
     return {
       today, workspace: root, dataFolder: paths(root).data, rounds, roundProblems, settings, steps: st, stageNames: STAGE_NAMES, closures: CLOSURE_LABELS, problems: list.problems, outboxProblems,
@@ -109,7 +111,7 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
       fields: { round: ROUND_FIELDS, settings: SETTING_FIELDS },
       approvedTools: APPROVED_TOOLS,
       // The workspace's ontology (rules/ontology.yaml): the UI takes its labels and colours from it.
-      ontology: currentOntology(),
+      ontology,
     };
   });
 
@@ -253,12 +255,12 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('POST', '/api/outbox/update', async ({ body }) => updateDraft(root, String(body.key), body));
 
   add('GET', '/api/graph', async () => {
-    const graph = await rebuildGraph(root);
+    const { schema, ...graph } = await rebuildGraph(root);
     const layout = await layoutFor(root, graph);
     // Operator edits whose stars are gone: skipped by the build, listed with the problems (never deleted).
-    const stale = staleEdits(graph.nodes, await readEdits(root));
+    const stale = staleEdits(graph.nodes, await readEdits(root), schema);
     // What waits on the operator: a derived edge waits on its inputs, so it is not counted twice.
-    return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
+    return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, ontology: ontologyOf(schema), unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
   });
   // NetworkX analyses the graph the app built: read-only. Stored facts unless withDerived=1. analysis is one name or a
   // comma list (the pop-out's overview); a path takes a and b (ids or labels).

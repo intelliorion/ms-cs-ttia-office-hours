@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { applyOntology } from '../../../src/graph/ontology';
+import { applyOntology } from './ontologyView';
 import { getState, getGraph, getAiStatus, getInbox, getMemory } from '../api';
 import type { DeepReadView, IdeaFilter } from '../popouts/deepReadHelpers';
 import type { AiStatus } from '../popouts/aiUi';

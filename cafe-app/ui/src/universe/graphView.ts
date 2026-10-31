@@ -1,5 +1,6 @@
 // Pure helpers for drawing the knowledge graph. No three.js here, so they test in node.
-import { NODE_COLOURS, type GEdge, type GNode, type NodeType } from '../../../src/graph/ontology';
+import type { GEdge, GNode, NodeType } from '../../../src/graph/ontology';
+import { NODE_COLOURS } from '../state/ontologyView';
 
 export { NODE_COLOURS };
 export type { GEdge, GNode, NodeType };

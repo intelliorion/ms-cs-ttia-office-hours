@@ -4,6 +4,11 @@ import type { GNode, NodeType } from '../graph/ontology';
 const LETTER: Record<NodeType, string> = {
   Person: 'P', Team: 'T', Entity: 'D', Idea: 'I', Round: 'R', Capability: 'C', PainPoint: 'K', System: 'S', Support: 'U', Tool: 'X', Outcome: 'O', Beneficiary: 'B', Category: 'G',
 };
+/**
+ * The code letter of a kind: its own, or Y for every kind the workspace's ontology.yaml declared (a Vendor is [Y1]),
+ * so a declared kind never codes as "undefined1". Y is counted across all declared kinds: codes stay unique.
+ */
+export const letterOf = (t: NodeType): string => LETTER[t] ?? 'Y';
 /** Always listed for the AI, mentioned or not, so "the travel bot" can still be found: none of these are people. */
 const ALWAYS: NodeType[] = ['Idea', 'Team', 'Entity', 'Round'];
 
@@ -58,19 +63,20 @@ export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean; s
 
   const codes = new Map<string, Coded>();
   const codeOf = new Map<string, string>();
-  const count: Partial<Record<NodeType, number>> = {};
+  const count: Record<string, number> = {};
   const live = new Map(nodes.map((x) => [x.id, x]));
   for (const [c, v] of opts.seed ?? []) {
     const k = Number(c.slice(1)) || 0;
-    count[v.type] = Math.max(count[v.type] ?? 0, k); // never reuse a code, even one whose star is gone
+    count[c[0]] = Math.max(count[c[0]] ?? 0, k); // never reuse a code, even one whose star is gone
     const now = live.get(v.id);
     if (now) { codes.set(c, { id: now.id, type: now.type, label: now.label }); codeOf.set(now.id, c); }
   }
   const code = (n: GNode) => {
     let c = codeOf.get(n.id);
     if (!c) {
-      count[n.type] = (count[n.type] ?? 0) + 1;
-      c = `${LETTER[n.type]}${count[n.type]}`;
+      const L = letterOf(n.type);
+      count[L] = (count[L] ?? 0) + 1;
+      c = `${L}${count[L]}`;
       codeOf.set(n.id, c); codes.set(c, { id: n.id, type: n.type, label: n.label });
     }
     return c;
@@ -87,7 +93,7 @@ export function hideNames(text: string, nodes: GNode[], opts: { all?: boolean; s
 /** The code a star already has, or a new one of its kind (a star a query found that the message never named). */
 export function codeFor(codes: Map<string, Coded>, n: GNode): string {
   for (const [c, v] of codes) if (v.id === n.id) return c;
-  const letter = LETTER[n.type];
+  const letter = letterOf(n.type);
   let k = 1; while (codes.has(`${letter}${k}`)) k++;
   codes.set(`${letter}${k}`, { id: n.id, type: n.type, label: n.label });
   return `${letter}${k}`;

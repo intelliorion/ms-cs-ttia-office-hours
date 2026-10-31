@@ -12,7 +12,7 @@ import { nodeId, type GNode } from '../graph/ontology';
 import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './names';
 import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
-import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type NetworkSuggestion, type Query, type QueryResult, type StepTrace } from './query';
+import { querySchema, plainReply, revealDerived, runQuery, type NetworkSuggestion, type Query, type QueryResult, type StepTrace } from './query';
 import { prepareNetwork, runNetwork, type NetworkRunOptions } from '../graph/network';
 import { NETWORK_RELATIONS, edgeId, type GEdge, type Relation } from '../graph/ontology';
 import { validate } from '../ai/schema';
@@ -159,7 +159,11 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
 async function answer(root: string, message: string, ai: Connector, clock: Clock, opts: RunOptions): Promise<ChatEntry> {
   // One deadline for the whole answer (every step, every AI call, NetworkX): the answer stops at it with what it has.
   const started = Date.now();
-  const budget = opts.deadlineMs ?? answerDeadlineMs(await loadSettings(root).catch(() => ({})));
+  // A settings file that cannot be read is said as itself: the AI is never asked (it reads the provider from it), and
+  // the answer is never blamed on it.
+  let settingsProblem = '';
+  const settings = await loadSettings(root).catch((e: Error) => { settingsProblem = String(e?.message ?? e).split('\n')[0]; return {}; });
+  const budget = opts.deadlineMs ?? answerDeadlineMs(settings);
   const deadline = started + budget;
   const timeLeft = () => deadline - Date.now();
   let outOfTime = false;
@@ -282,6 +286,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
   let lastFound: string[] = thread.last;
   let finalReply = '';
   try {
+    if (settingsProblem) throw Object.assign(new Error(settingsProblem), { settings: true });
     for (let step = 0; ; step++) {
       if (opts.stopped?.()) { entry.error = 'Stopped. Nothing was changed.'; break; }
       const left = AGENT_MAX_STEPS - step;
@@ -294,7 +299,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         if (ms < LAST_CALL_MIN_MS) { outOfTime = true; throw new Error('out of time'); }
         return ai.runWith(agentTask, {
           ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
-          stars: hidden.legend, vocabulary, steps: done, stepsLeft, deepRead, ...(note ? { note } : {}),
+          stars: hidden.legend, vocabulary, steps: done, stepsLeft, deepRead, schema: graph.schema, ...(note ? { note } : {}),
         }, { timeoutMs: ms });
       };
       const asked = await ask(left);
@@ -326,7 +331,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
       const thought = showNames(output.thought, hidden.codes);
 
       if (output.next === 'search') {
-        const errs = validate(QUERY_SCHEMA, output.query);
+        const errs = validate(querySchema(graph.schema), output.query);
         if (errs.length) { refuse('search', output.thought, `The query was malformed: ${errs.slice(0, 3).join('; ')}`); continue; }
         // The same steps again: not run, not traced twice; the agent is told its result is already in steps.
         const key = JSON.stringify(output.query);
@@ -336,7 +341,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
         // NetworkX runs out of process: its answers for the network steps are prepared first, like Deep read's.
         const network = await prepareNetwork(output.query as Query, graph, idOf, { timeoutMs: Math.max(1_000, Math.min(60_000, timeLeft() - LAST_CALL_MIN_MS)) });
-        const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
+        const r = runQuery(output.query as Query, { graph, schema: graph.schema, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
         if (r.suggestions) suggested.push(...r.suggestions);
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
         const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
@@ -397,7 +402,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         } else if (output.next === 'propose') {
           // The AI proposes; the app checks every action against the graph and the ideas before it shows a card.
           entry.kind = 'command';
-          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges }, ideas, rounds, registry: await loadRegistry(root), ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
+          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges, schema: graph.schema }, ideas, rounds, registry: await loadRegistry(root), ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
           // Nothing to apply: the reply is the question's answer (when the message asked one) and then what stood in the way, never the AI's sentence claiming a change it did not propose.
@@ -413,13 +418,15 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
     }
   } catch (e) {
     // A call cut short by the answer's deadline is the deadline's, not the AI's.
-    if (outOfTime || timeLeft() < 1_000) outOfTime = true;
+    if ((e as { settings?: boolean }).settings) entry.error = `rules/settings.yaml could not be read (${settingsProblem}), so the AI was not asked. Fix the file (it is YAML: a stray tab or an unclosed quote is the usual cause) and ask again. Nothing was changed.`;
+    else if (outOfTime || timeLeft() < 1_000) outOfTime = true;
     else entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
   }
   if (outOfTime) {
     const secs = Math.round(budget / 1000);
     entry.error = `This answer was stopped at its deadline of ${secs} s (assistant.deadlineSeconds in rules/settings.yaml), after ${results.length} search${results.length === 1 ? '' : 'es'}. Nothing was changed. What the steps found so far is below; ask again, or ask a narrower question.`;
-    if (!entry.reply.trim()) entry.reply = plainReply(results, codeName, coded);
+    // The plain reply is written in codes (the AI's language); the operator reads names.
+    if (!entry.reply.trim()) entry.reply = showNames(plainReply(results, codeName, coded), hidden.codes);
     traces.push({ trace: [{ text: `Stopped at the answer's deadline (${secs} s) after ${Math.round((Date.now() - started) / 1000)} s`, size: 0 }] });
   }
   // NetworkX's suggested links: proposals with Do it, the operator's to accept. The AI's own proposals come first.

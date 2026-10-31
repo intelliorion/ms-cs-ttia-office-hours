@@ -1,5 +1,6 @@
 // Pure helpers for the idea pop-out and the star card. No React here, so they test in node.
-import { NODE_LABELS, type GEdge, type GNode } from '../../../src/graph/ontology';
+import type { GEdge, GNode } from '../../../src/graph/ontology';
+import { NODE_LABELS } from '../state/ontologyView';
 import { emailChips, stageKey } from '../panels/filterIdeas';
 import { STAGE_RING, ringColour } from '../universe/graphView';
 

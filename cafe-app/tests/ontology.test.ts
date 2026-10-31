@@ -1,15 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import YAML from 'yaml';
-import { ALLOWED, NODE_COLOURS, NODE_LABELS, RELATION_MEANINGS, NODE_DESCRIPTIONS, BUILTIN_ONTOLOGY, applyOntology, currentOntology, resetOntology, DERIVED_RELATIONS, AI_RELATIONS } from '../src/graph/ontology';
+import { ALLOWED, NODE_COLOURS, NODE_LABELS, RELATION_MEANINGS, NODE_DESCRIPTIONS, BUILTIN_ONTOLOGY, BUILTIN_SCHEMA, compileOntology, ontologyOf, DERIVED_RELATIONS, AI_RELATIONS } from '../src/graph/ontology';
 import { loadOntology, readOntologyFile } from '../src/graph/ontologyFile';
 import { extractTask } from '../src/ai/tasks';
 import { writeYaml, writeFileAtomic } from '../src/workspace/files';
 import { paths } from '../src/workspace/paths';
 import { tmpWorkspace } from './helpers';
 
-afterEach(() => resetOntology());
 
 describe('the ontology as data', () => {
   it('the built-in ontology is what the constants derive from, and what init writes', async () => {
@@ -22,8 +21,10 @@ describe('the ontology as data', () => {
     }
     const root = await tmpWorkspace();
     expect(YAML.parse(await readFile(path.join(root, 'rules', 'ontology.yaml'), 'utf8'))).toEqual(BUILTIN_ONTOLOGY);
-    expect(await loadOntology(root)).toEqual({ ontology: BUILTIN_ONTOLOGY, problems: [] });
-    expect(currentOntology()).toEqual(BUILTIN_ONTOLOGY);
+    expect(await loadOntology(root)).toEqual({ schema: BUILTIN_SCHEMA, ontology: BUILTIN_ONTOLOGY, problems: [] });
+    expect(ontologyOf(BUILTIN_SCHEMA)).toEqual(BUILTIN_ONTOLOGY);
+    // The built-in tables are frozen: nothing can change them for every module.
+    expect(Object.isFrozen(NODE_LABELS)).toBe(true); expect(Object.isFrozen(ALLOWED)).toBe(true); expect(Object.isFrozen(BUILTIN_SCHEMA.types)).toBe(true);
   });
   it('a missing or unreadable file means the built-in ontology; a changed label, colour or meaning is applied in place', async () => {
     const root = await tmpWorkspace();
@@ -34,34 +35,34 @@ describe('the ontology as data', () => {
       nodes: { ...BUILTIN_ONTOLOGY.nodes, System: { ...BUILTIN_ONTOLOGY.nodes.System, label: 'System', colour: '#00ff00' } },
       relations: { ...BUILTIN_ONTOLOGY.relations, USES_DATA: { ...BUILTIN_ONTOLOGY.relations.USES_DATA, meaning: 'reads from the system' } },
     });
-    const { problems } = await loadOntology(root);
+    const { problems, schema } = await loadOntology(root);
     expect(problems).toEqual([]);
-    expect(NODE_LABELS.System).toBe('System'); expect(NODE_COLOURS.System).toBe('#00ff00');
-    expect(RELATION_MEANINGS.USES_DATA.meaning).toBe('reads from the system');
-    expect(ALLOWED.USES_DATA).toEqual(['Capability', 'System']);
-    resetOntology();
+    expect(schema.labels.System).toBe('System'); expect(schema.colours.System).toBe('#00ff00');
+    expect(schema.meanings.USES_DATA.meaning).toBe('reads from the system');
+    expect(schema.allowed.USES_DATA).toEqual(['Capability', 'System']);
+    // The workspace's words are its build's: the built-in tables, which every other module reads, are as they were.
     expect(NODE_LABELS.System).toBe('System or data');
     expect(file.nodes.System.label).toBe('System or data');
   });
   it('a new kind or relation is a declaration (the open schema); a bad pair is reported and ignored; the rest still applies', () => {
-    const problems = applyOntology({
+    const { problems, schema } = compileOntology({
       nodes: { Gadget: { label: 'Gadget', colour: '#fff', description: '' }, Idea: { label: 'Use case', colour: NODE_COLOURS.Idea, description: 'x' } },
       relations: { LOVES: { from: 'Idea', to: 'Idea', meaning: 'm', inverse: 'i', derived: false }, NEEDS: { from: 'Idea', to: 'Widget', meaning: 'm', inverse: 'i', derived: false } },
     } as any);
     expect(problems).toEqual(['ontology.yaml: NEEDS: unknown node type "Widget" (the pair is kept as built in)']);
-    expect(NODE_LABELS.Idea).toBe('Use case');
-    expect(ALLOWED.NEEDS).toEqual(['Idea', 'Capability']);
-    expect((ALLOWED as any).LOVES).toEqual(['Idea', 'Idea']);
-    expect((NODE_LABELS as any).Gadget).toBe('Gadget');
-    resetOntology();
+    expect(schema.labels.Idea).toBe('Use case');
+    expect(schema.allowed.NEEDS).toEqual(['Idea', 'Capability']);
+    expect((schema.allowed as any).LOVES).toEqual(['Idea', 'Idea']);
+    expect((schema.labels as any).Gadget).toBe('Gadget');
+    expect(schema.declared).toEqual({ types: ['Gadget'], relations: ['LOVES'] });
     expect((ALLOWED as any).LOVES).toBeUndefined();
     expect((NODE_LABELS as any).Gadget).toBeUndefined();
   });
   it('the extraction prompt tells the AI what each relation means, from the ontology', () => {
     const prompt = extractTask.prompt({ idea: { id: 'CAFE-2026-001', title: 'X' }, existing: { capabilities: [], systems: [], painPoints: [] } });
     for (const r of AI_RELATIONS.filter((x) => x !== 'BUILT_WITH')) expect(prompt).toContain(`${r} ${ALLOWED[r][1]} (${RELATION_MEANINGS[r].meaning})`);
-    applyOntology({ relations: { NEEDS: { ...BUILTIN_ONTOLOGY.relations.NEEDS, meaning: 'must be able to do this' } } } as any);
-    expect(extractTask.prompt({ idea: { id: 'CAFE-2026-001', title: 'X' }, existing: { capabilities: [], systems: [], painPoints: [] } })).toContain('NEEDS Capability (must be able to do this)');
+    // The extraction reads the built-in AI relations' meanings (the AI only ever makes built-in links).
+    expect(prompt).not.toContain('BUILT_WITH');
   });
 });
 
@@ -105,7 +106,7 @@ describe('cafe ontology check', () => {
       'ontology.yaml: node type "gadget": a new kind needs a name like "Vendor" (a capital, then letters or digits) (ignored)',
       'ontology.yaml: NEEDS: unknown node type "Gadget" (the pair is kept as built in)',
       'entities.yaml: Tool: duplicate id "tool:dataiku"',
-      'entities.yaml: System: "capability:wrong" does not start with "system:"',
+      'entities.yaml: System: "capability:wrong" does not start with "system:" (not used by the build)',
       'entities.yaml: System: "capability:wrong": alias "dss" is already A\'s',
       'entities.yaml: System: entry 3 has no id or label',
       'entities.yaml: unknown section "Widget"',

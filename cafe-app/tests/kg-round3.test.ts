@@ -1,3 +1,4 @@
+import { loadRegistry } from '../src/graph/registryFile';
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
@@ -291,8 +292,13 @@ describe('must 6: the rules and the checks that were still loose', () => {
     await writeFileAtomic(paths(root).entities, 'Tool:\n  - id: tool:copilot-studio\n    label: Copilot Studio\n    aliases: [UiPath]\n');
     await appendEdit(root, { id: 'op-1', at: '', status: 'active', t: 'alias', node: 'tool:power-apps', label: 'Power Automate', of: 'Power Apps' });
     const v = (await checkWorkspace(root)).violations;
-    expect(v).toContain('entities.yaml: Tool: "tool:copilot-studio": alias "UiPath" names UiPath, which is not on the approved list: an approved tool\'s name would make it look approved (remove it)');
-    expect(v).toContain('operator.jsonl op-1: alias "Power Automate" on tool:power-apps names Power Automate, which is not on the approved list: an approved tool\'s name would make it look approved (switch the edit off)');
+    expect(v).toContain('entities.yaml: Tool: "tool:copilot-studio": alias "UiPath" names UiPath, which is not on the approved list: an approved tool\'s name would make it look approved (not used by the build; remove it)');
+    expect(v).toContain('operator.jsonl op-1: alias "Power Automate" on tool:power-apps names Power Automate, which is not on the approved list (refused by the build)');
+    // And the build does not use either: UiPath and Power Automate are not names of an approved tool.
+    const reg = await loadRegistry(root);
+    expect(reg.resolve('Tool', 'UiPath')).toBeUndefined();
+    expect(reg.resolve('Tool', 'Power Automate')).toBeUndefined();
+    expect(reg.resolve('Tool', 'Copilot Studio')?.id).toBe('tool:copilot-studio');
   });
 
   it('two features of one tool pick that look like one thing are flagged', async () => {

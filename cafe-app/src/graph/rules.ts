@@ -1,5 +1,5 @@
 import YAML from 'yaml';
-import { ALLOWED, DERIVED_RELATIONS, edgeId, type GEdge, type GNode, type Relation } from './ontology';
+import { BUILTIN_SCHEMA, edgeId, type GEdge, type GNode, type Relation, type Schema } from './ontology';
 import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 
@@ -35,7 +35,6 @@ export const DEFAULT_RULES: Rule[] = [
 
 /** The stars two ideas can share for the shared-stars rule. */
 const SHARED_OVER: Relation[] = ['NEEDS', 'REPLACES', 'IN_CATEGORY'];
-const isRelation = (v: unknown): v is Relation => typeof v === 'string' && Object.hasOwn(ALLOWED, v);
 
 /** `enabled` as YAML people write it: false, no, off and 0 switch a rule off; true, yes, on and 1 (or nothing) keep it on. */
 export function enabledValue(v: unknown): boolean | undefined {
@@ -55,7 +54,9 @@ export interface ParsedRules { rules: Rule[]; problems: string[] }
  * dropped and said so; no file (or an empty one) means the defaults. A rule with no scope takes the scope of the
  * built-in rule of its name, else same-idea: a rule never spreads a fact across ideas unless the file says `any`.
  */
-export function readRuleList(file: unknown): ParsedRules {
+export function readRuleList(file: unknown, schema: Schema = BUILTIN_SCHEMA): ParsedRules {
+  const ALLOWED = schema.allowed; const DERIVED_RELATIONS = schema.derived;
+  const isRelation = (v: unknown): v is Relation => typeof v === 'string' && Object.hasOwn(ALLOWED, v);
   if (file === undefined || file === null) return { rules: DEFAULT_RULES, problems: [] };
   const list = typeof file === 'object' && Array.isArray((file as { rules?: unknown }).rules) ? (file as { rules: unknown[] }).rules : undefined;
   if (!list) return { rules: DEFAULT_RULES, problems: ['inference.yaml: there is no "rules:" list (the built-in rules apply until it is fixed)'] };
@@ -105,13 +106,13 @@ export function readRuleList(file: unknown): ParsedRules {
 }
 
 /** The rules a file holds (problems aside): parseRules(null) is the defaults. */
-export const parseRules = (file: unknown): Rule[] => readRuleList(file).rules;
+export const parseRules = (file: unknown, schema?: Schema): Rule[] => readRuleList(file, schema).rules;
 
 /**
  * rules/inference.yaml with what it could not take. A file YAML cannot read is an error, said by `cafe ontology check`
  * and with the graph's problems in the app; the built-in rules apply until it is fixed, never silently.
  */
-export async function readRules(root: string): Promise<ParsedRules> {
+export async function readRules(root: string, schema?: Schema): Promise<ParsedRules> {
   const text = await readText(paths(root).inference);
   if (text === undefined) return { rules: DEFAULT_RULES, problems: [] };
   let file: unknown;
@@ -119,9 +120,9 @@ export async function readRules(root: string): Promise<ParsedRules> {
     const first = String((e as Error).message ?? e).split('\n')[0];
     return { rules: DEFAULT_RULES, problems: [`inference.yaml could not be read (${first}): the built-in rules apply until it is fixed`] };
   }
-  return readRuleList(file);
+  return readRuleList(file, schema);
 }
-export async function loadRules(root: string): Promise<Rule[]> { return (await readRules(root)).rules; }
+export async function loadRules(root: string, schema?: Schema): Promise<Rule[]> { return (await readRules(root, schema)).rules; }
 
 /**
  * The ideas a stored edge is stated for. An edge with an Idea end is that idea's; otherwise the ideas recorded on it
@@ -164,7 +165,8 @@ const FIT_RANK = { scoped: 2, confirm: 1, loose: 0 } as const;
 interface Candidate { edge: GEdge; fit: 'scoped' | 'confirm' | 'loose'; anchor: string }
 
 /** The edges the enabled rules derive from the graph given, in id order. Edges already there (by id) are not derived again. */
-export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
+export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[], schema: Schema = BUILTIN_SCHEMA): GEdge[] {
+  const ALLOWED = schema.allowed; const DERIVED_RELATIONS = schema.derived;
   const type = new Map(nodes.map((n) => [n.id, n.type]));
   const labels = new Map(nodes.map((n) => [n.id, n.label]));
   const label = (id: string) => labels.get(id) ?? id;

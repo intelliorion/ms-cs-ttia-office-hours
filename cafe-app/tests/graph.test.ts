@@ -140,7 +140,13 @@ describe('hardening', () => {
       { from: 'idea:CAFE-2026-002', to: 'idea:fake', rel: 'NEEDS' as const, description: 'x', source: 'ai:challenge', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: 'idea:fake', type: 'Idea' as const, label: 'Fake' }] },
     ];
     const base = buildGraph([rfx], []);
-    expect(buildGraph([rfx], ai)).toEqual(base);
+    const { refused, ...got } = buildGraph([rfx], ai);
+    expect(got).toEqual({ nodes: base.nodes, edges: base.edges });
+    // Dropped and said so: the banner and check name each.
+    expect(refused).toEqual([
+      'ai-links.jsonl link 1 (person:evil SUBMITTED idea:CAFE-2026-002): SUBMITTED is not a link the AI may make (dropped by the build)',
+      'ai-links.jsonl link 2 (idea:CAFE-2026-002 NEEDS idea:fake): new star idea:fake is an Idea, which the AI may not make (dropped by the build)',
+    ]);
   });
 });
 

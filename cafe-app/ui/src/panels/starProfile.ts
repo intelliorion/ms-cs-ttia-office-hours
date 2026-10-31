@@ -1,4 +1,4 @@
-import { NODE_LABELS, NODE_DESCRIPTIONS } from '../../../src/graph/ontology';
+import { NODE_LABELS, NODE_DESCRIPTIONS } from '../state/ontologyView';
 
 /** What each kind of star is, in a line: the ontology's descriptions (rules/ontology.yaml). */
 export const STAR_ABOUT: Record<string, string> = NODE_DESCRIPTIONS;

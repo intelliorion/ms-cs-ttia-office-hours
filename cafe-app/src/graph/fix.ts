@@ -1,7 +1,8 @@
 import YAML from 'yaml';
-import { DERIVED_RELATIONS, canonEdit, canonLink, type AiLink, type GEdge, type OperatorEdit } from './ontology';
+import { canonEdit, canonLink, type AiLink, type GEdge, type OperatorEdit } from './ontology';
 import { readEdits, writeEdits } from './operator';
-import { readAiLinks, rebuildGraph, updateAiLinks } from './store';
+import { readAiLinks, readConfirmations, rebuildGraph, updateAiLinks } from './store';
+import { loadOntology } from './ontologyFile';
 import { buildGraph } from './build';
 import { registryFrom } from './registryFile';
 import { DEFAULT_RULES, readRules, readRuleList, type Rule } from './rules';
@@ -59,14 +60,14 @@ export async function planFix(root: string, stamp: Record<string, string[]> = {}
     if (!pick) {
       plan.ambiguous.push(u.needers.length
         ? `${u.where}: ${words(u.edge)}: ${u.needers.join(', ')} need ${u.from} and none confirms it: say which with --stamp ${key}=${u.needers.join(',')} (or a part of that list); left as it is`
-        : `${u.where}: ${words(u.edge)}: no idea needs ${u.from}; left as it is`);
+        : `${u.where}: ${words(u.edge)}: no idea ${u.from.startsWith('capability:') ? 'needs' : 'reaches'} ${u.from}; left as it is`);
       continue;
     }
     plan.stamps.push({ where: u.where, ...(u.where.startsWith('operator') ? { edit: key } : { line: Number(key.slice(5)) }), edge: u.edge, ideas: [...pick.ideas].sort(), why: pick.why });
   }
   for (const l of check.lowConfidence ?? []) plan.unconfirm.push({ line: l.line, edge: l.edge, confidence: l.confidence });
   for (const e of await readEdits(root)) {
-    if (e.status === 'active' && e.t === 'link' && DERIVED_RELATIONS.includes(e.rel)) plan.undo.push({ edit: e.id, what: `${e.from} ${e.rel} ${e.to}: ${e.rel} is derived by the rules, never stored by hand` });
+    if (e.status === 'active' && e.t === 'link' && graph.schema.derived.includes(e.rel)) plan.undo.push({ edit: e.id, what: `${e.from} ${e.rel} ${e.to}: ${e.rel} is derived by the rules, never stored by hand` });
   }
   // Ids in an older form: listed per line and edit, so the files read as the build reads them.
   const ends = (x: { from?: string; to?: string; into?: string; node?: string; newNodes?: { id: string }[] }) =>
@@ -142,10 +143,11 @@ function changeLink(l: AiLink, line: number, plan: FixPlan): AiLink[] {
 }
 
 async function simulate(root: string, plan: FixPlan): Promise<GEdge[]> {
-  const [{ ideas }, { links }, rounds, edits, rules] = await Promise.all([listIdeas(root), readAiLinks(root), listRounds(root), readEdits(root), readRules(root)]);
+  const { schema } = await loadOntology(root);
+  const [{ ideas }, { links }, rounds, edits, rules, confirmations] = await Promise.all([listIdeas(root), readAiLinks(root), listRounds(root), readEdits(root), readRules(root, schema), readConfirmations(root)]);
   const lineNos = await aiLineNumbers(root);
   const e2 = editsAfter(edits, plan);
-  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2), rules: rules.rules });
+  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2, schema), rules: rules.rules, schema, confirmations });
   return g.edges;
 }
 

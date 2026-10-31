@@ -94,7 +94,9 @@ describe('cafe ontology fix: dry run first, --apply writes, nothing guessed', ()
     const plan = await planFix(root);
     expect(plan.stamps).toEqual([expect.objectContaining({ edit: 'op-9', ideas: ['CAFE-2026-006'] })]);
     expect(plan.unconfirm).toEqual([{ line: 2, edge: 'capability:policy-question-answering|USES_DATA|system:email', confidence: 0.5 }]);
-    expect(plan.preview.waiting).toEqual(['idea:CAFE-2026-007|DEPENDS_ON|system:email']);
+    // The build already counts the 0.5 link as waiting (it is below the threshold and no Do it confirmed it): nothing more waits after the fix.
+    expect(plan.preview.waiting).toEqual([]);
+    expect((await rebuildGraph(root)).edges.find((e) => e.id === 'idea:CAFE-2026-007|DEPENDS_ON|system:email')?.confirmed).toBe(false);
     expect(fixLines(plan)[0]).toBe('Would fix (2); nothing is written without --apply:');
     // init writes every rule with its scope already: nothing to write out there.
     expect(plan.rules).toEqual([]);

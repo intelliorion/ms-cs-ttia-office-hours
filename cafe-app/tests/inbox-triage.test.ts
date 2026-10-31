@@ -154,7 +154,7 @@ describe('triageTask', () => {
 
   it('knownStars lists the matched idea\'s own stars first (graph node ids are idea:<ID>)', async () => {
     const root = await workspace();
-    const link = (idea: string, label: string) => ({ from: `idea:${idea}`, to: `capability:${label.toLowerCase()}`, rel: 'NEEDS' as const, description: 'x', source: 'test', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: `capability:${label.toLowerCase()}`, type: 'Capability' as const, label }] });
+    const link = (idea: string, label: string) => ({ from: `idea:${idea}`, to: `capability:${label.toLowerCase()}`, rel: 'NEEDS' as const, description: 'x', source: 'ai:test', confidence: 0.9, status: 'confirmed' as const, newNodes: [{ id: `capability:${label.toLowerCase()}`, type: 'Capability' as const, label }] });
     await appendAiLink(root, link('CAFE-2026-002', 'Beta star'));
     await appendAiLink(root, link('CAFE-2026-001', 'Zulu star'));
     const { calls, connector } = recorder(JSON.stringify(GOOD));

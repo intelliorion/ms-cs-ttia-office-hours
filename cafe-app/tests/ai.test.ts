@@ -358,7 +358,7 @@ describe('/api/ai routes', () => {
     await saveIdea(s.root, sampleIdea({ id: 'CAFE-2026-002', slug: 'two', title: 'Two', challenge: 'Two', dedupe_key: 'two' }));
     const one = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-001' })).json() as any;
     expect(one).toMatchObject({ added: 1, held: [] });
-    expect(one.suggestions.newNodes.map((n: any) => n.id)).toEqual(['capability:ticketing-and-status']);
+    expect(one.suggestions.newNodes.map((n: any) => n.id)).toEqual(['capability:ticketing-status']);
     const two = await (await post(s.base, '/api/ai/extract', { id: 'CAFE-2026-002' })).json() as any;
     expect(two).toMatchObject({ added: 1, held: [] });
     // The first link arrived confirmed, so its node is already known to the second extract.

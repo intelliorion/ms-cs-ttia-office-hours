@@ -44,7 +44,11 @@ function sendFile(res: http.ServerResponse, f: FileReply): void {
   });
   res.end(f.body);
 }
-export type AddRoute = (method: 'GET' | 'POST', route: string, handler: Handler) => void;
+/**
+ * A POST waits for the one before it (the write lock) unless the route says `exclusive: false`: one that changes no
+ * workspace file but its own, under its own lock (an assistant answer), so it never queues behind a slow write.
+ */
+export type AddRoute = (method: 'GET' | 'POST', route: string, handler: Handler, opts?: { exclusive?: boolean }) => void;
 
 const WEB_DIR = path.join(APP_DIR, 'web');
 const TYPES: Record<string, string> = {
@@ -77,11 +81,11 @@ function readBody(req: http.IncomingMessage): Promise<Buffer> {
 }
 
 export function createApp({ root, clock, connector, upkeep }: ServerOptions): http.Server {
-  const routes: { method: string; pattern: RegExp; keys: string[]; handler: Handler }[] = [];
-  const add: AddRoute = (method, route, handler) => {
+  const routes: { method: string; pattern: RegExp; keys: string[]; handler: Handler; exclusive: boolean }[] = [];
+  const add: AddRoute = (method, route, handler, opts) => {
     const keys: string[] = [];
     const pattern = new RegExp(`^${route.replace(/:(\w+)/g, (_m, k: string) => { keys.push(k); return '([^/]+)'; })}$`);
-    routes.push({ method, pattern, keys, handler });
+    routes.push({ method, pattern, keys, handler, exclusive: method === 'POST' && opts?.exclusive !== false });
   };
   const hooks = registerApi(add, { root, clock, connector, upkeep });
   // Every POST waits for the one before it, so two clicks cannot interleave their file writes.
@@ -131,12 +135,12 @@ export function createApp({ root, clock, connector, upkeep }: ServerOptions): ht
         res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         const line = (v: unknown) => { if (!gone) res.write(JSON.stringify(v) + '\n'); };
         const call = () => route.handler({ body, raw, params, query: Object.fromEntries(url.searchParams), headers: req.headers, progress: (e) => line({ type: 'progress', ...(e as object) }), stopped: () => gone });
-        try { line({ type: 'done', data: await (req.method === 'POST' ? exclusive(call) : call()) }); }
+        try { line({ type: 'done', data: await (route.exclusive ? exclusive(call) : call()) }); }
         catch (e) { line({ type: 'error', error: (e as Error).message }); }
         return res.end();
       }
       const call = () => route.handler({ body, raw, params, query: Object.fromEntries(url.searchParams), headers: req.headers });
-      const out = await (req.method === 'POST' ? exclusive(call) : call());
+      const out = await (route.exclusive ? exclusive(call) : call());
       return out instanceof FileReply ? sendFile(res, out) : send(res, 200, out);
     } catch (e) {
       const err = e as Error;

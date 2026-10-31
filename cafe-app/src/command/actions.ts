@@ -1,4 +1,4 @@
-import { ALLOWED, DERIVED_RELATIONS, IDEA_SCOPED, KNOWN_UNAPPROVED_TOOLS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nameKey, nodeId, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALLOWED, DERIVED_RELATIONS, FORM_ONLY_RELATIONS, IDEA_SCOPED, KNOWN_UNAPPROVED_TOOLS, MERGEABLE, NODE_LABELS, OPERATOR_STARS, edgeId, isOperatorSource, nameKey, nodeId, operatorLinkProblem, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import { appendEdit, nextEditId, readEdits, setEditStatus } from '../graph/operator';
 import { ideaDir, loadIdea, saveIdea } from '../ideas/store';
 import type { Idea, Person, PersonRole } from '../ideas/idea';
@@ -11,7 +11,7 @@ import type { CommandStep } from '../ai/tasks';
 import type { Coded } from './names';
 import type { Connector } from '../ai/connector';
 import { growIdea } from '../ai/grow';
-import { mergeStars, setAiLinkStatus } from '../graph/store';
+import { mergeStars, rebuildGraph, setAiLinkStatus } from '../graph/store';
 import { writeExport } from '../graph/jsonld';
 import { dataKey } from '../workspace/paths';
 import type { Registry } from '../graph/registry';
@@ -46,6 +46,35 @@ export function linkScope(
   const fresh = wanted.filter((i) => !have?.ideas?.includes(i));
   if (!fresh.length) return { problem: `${label(from)} already ${REL_WORD[rel] ?? 'is linked to'} ${label(to)} for ${wanted.map(title).join(', ')}.` };
   return { ideas: fresh, ...(fresh.length > 1 ? { note: `${label(from)} is needed by ${fresh.length} ideas: say Do it on each idea it holds for; a link holds only for the ideas it names.` } : {}) };
+}
+
+/**
+ * The checks every proposed link passes, whoever proposes it (the assistant's AI, NetworkX's Propose, a suggestion in
+ * an answer): the ontology's pair, no derived relation, nothing only the form, the rounds or the tool picker state
+ * (FORM_ONLY_RELATIONS), not a link already there, and the idea a capability-level link is for (linkScope). Returns
+ * the proposals (one per idea for a capability-level link) or the one line that says why not.
+ */
+export function linkProposals(
+  graph: { nodes: GNode[]; edges: GEdge[] }, from: GNode, rel: Relation, to: GNode,
+  opts: { named?: string; focus?: string; title?: (id: string) => string; suffix?: string } = {},
+): { proposals: Proposal[]; note?: string } | { problem: string } {
+  const bad = operatorLinkProblem(rel, from.type, to.type);
+  if (bad) return { problem: FORM_ONLY_RELATIONS.includes(rel) || DERIVED_RELATIONS.includes(rel) ? `${from.label} → ${to.label}: ${bad}.` : cantLink(from.type, to.type) };
+  if (!IDEA_SCOPED.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) return { problem: `${from.label} and ${to.label} are already linked.` };
+  const title = opts.title ?? ((i: string) => graph.nodes.find((n) => n.id === `idea:${i}`)?.label ?? i);
+  // A capability-level link says which idea it is for: one proposal per idea, each stamped.
+  const scope = linkScope(graph, from.id, rel, to.id, { named: opts.named, focus: opts.focus, title });
+  if ('problem' in scope) return { problem: scope.problem };
+  const relWord = `${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`;
+  const suffix = opts.suffix ?? '';
+  if (!scope.ideas.length) {
+    const onIdea = [from, to].some((n) => n.type === 'Idea') ? undefined : opts.focus;
+    return { proposals: [{ label: `Link ${from.label} → ${to.label}${relWord}${suffix}`, action: { t: 'link', from: from.id, rel, to: to.id, ...(onIdea ? { idea: onIdea } : {}) } }] };
+  }
+  return {
+    ...(scope.note ? { note: scope.note } : {}),
+    proposals: scope.ideas.map((idea) => ({ label: `Link ${from.label} → ${to.label}${relWord} for ${title(idea)}${suffix}`, action: { t: 'link' as const, from: from.id, rel, to: to.id, idea }, ...(scope.note ? { note: scope.note } : {}) })),
+  };
 }
 
 export type CommandAction =
@@ -210,17 +239,9 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
       const [ft] = ALLOWED[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
-      if (!IDEA_SCOPED.includes(rel) && ctx.graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) { problems.push(`${from.label} and ${to.label} are already linked.`); continue; }
-      // A capability-level link says which idea it is for: one proposal per idea, each stamped.
-      const scope = scopeFor(from.id, rel, to.id);
-      if ('problem' in scope) { problems.push(scope.problem); continue; }
-      const relWord = `${REL_WORD[rel] ? ` (${REL_WORD[rel]})` : ''}`;
-      if (!scope.ideas.length) {
-        const onIdea = [from, to].some((n) => n.type === 'Idea') ? undefined : ctx.focusIdea;
-        proposals.push({ label: `Link ${from.label} → ${to.label}${relWord}`, action: { t: 'link', from: from.id, rel, to: to.id, ...(onIdea ? { idea: onIdea } : {}) } });
-      } else for (const idea of scope.ideas) {
-        proposals.push({ label: `Link ${from.label} → ${to.label}${relWord} for ${title(idea)}`, action: { t: 'link', from: from.id, rel, to: to.id, idea }, ...(scope.note ? { note: scope.note } : {}) });
-      }
+      const checked = linkProposals(ctx.graph, from, rel, to, { focus: ctx.focusIdea, title });
+      if ('problem' in checked) { problems.push(checked.problem); continue; }
+      proposals.push(...checked.proposals);
     } else if (s.op === 'role') {
       const a = star(s.a); const b = star(s.b);
       // A person not yet in the graph comes by name: the same person if the name matches one, else a new one.
@@ -391,8 +412,16 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     await appendEdit(root, { id, at: clock(), status: 'active', ...e } as never);
     return { inverse: { t: 'edit-off' as const, id } };
   };
+  // Do it checks the link again, whatever card it came from (a proposal saved in the chat log is only data): the
+  // ontology's pair, no derived relation and nothing only the form, the rounds or the tool picker state.
+  const linkCheck = async (l: { from: string; rel: Relation; to: string }, born?: { node: string; type: NodeType }) => {
+    const g = await rebuildGraph(root);
+    const typeOf = (id: string) => (born && id === born.node ? born.type : g.nodes.find((n) => n.id === id)?.type);
+    const bad = operatorLinkProblem(l.rel, typeOf(l.from), typeOf(l.to));
+    if (bad) throw new Error(`Not done: ${bad}`);
+  };
   switch (a.t) {
-    case 'link': return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to, ...(a.idea ? { idea: a.idea } : {}) });
+    case 'link': await linkCheck(a); return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to, ...(a.idea ? { idea: a.idea } : {}) });
     case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
     case 'merge': { const r = await mergeStars(root, a.from, a.into, clock); return { inverse: { t: 'edits-off', ids: r.edits } }; }
     case 'alias': return edit({ t: 'alias', node: a.node, label: a.label, of: a.of });
@@ -413,6 +442,8 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
       };
     }
     case 'add_star': {
+      if (!OPERATOR_STARS.includes(a.type)) throw new Error(`Not done: ${a.type === 'Idea' ? 'an idea comes only from the form' : `a ${a.type} is not made from the command bar`}`);
+      await linkCheck(a.link, { node: a.node, type: a.type });
       // The star and its link are two edits, done and undone together.
       const star = await edit({ t: 'add', node: a.node, type: a.type, label: a.label });
       const link = await edit({ t: 'link', ...a.link, ...(a.idea ? { idea: a.idea } : {}) });

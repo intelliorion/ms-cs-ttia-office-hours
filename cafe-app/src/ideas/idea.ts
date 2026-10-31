@@ -78,7 +78,7 @@ export interface PrepUpdate {
   participation?: string;
   flag?: string;
   facts?: { question: string; answer: string }[];
-  link?: { from: string; to: string; rel: string; description: string; confidence: number; source: string; newNodes?: { id: string; type: string; label: string }[] };
+  link?: { from: string; to: string; rel: string; description: string; confidence: number; source: string; status?: string; idea?: string; newNodes?: { id: string; type: string; label: string }[] };
   undo?: { team?: Person[]; teamAfter?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string; replaced?: { question: string; answer: string; source?: string }[] };
 }
 

@@ -1,13 +1,12 @@
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, DERIVED_RELATIONS, NODE_TYPES, idMatchesType, nameKey, type GEdge, type GNode, type NodeType, type Relation } from './ontology';
-import { readOntologyFile } from './ontologyFile';
-import { applyOntology, resetOntology } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, DERIVED_RELATIONS, FORM_ONLY_RELATIONS, KNOWN_UNAPPROVED_TOOLS, operatorLinkProblem, MERGEABLE, NODE_TYPES, OPERATOR_STARS, aiSourceProblem, canonEdit, canonId, canonLink, idMatchesType, nameKey, type GEdge, type GNode, type NodeType, type Relation } from './ontology';
+import { loadOntology } from './ontologyFile';
 import { readEntities } from './registryFile';
 import { REGISTRY_SECTIONS } from './registry';
 import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 import { readEdits } from './operator';
 import { readAiLinks, rebuildGraph } from './store';
-import { staleEdits, type StaleEdit } from './build';
+import { formOnly, mergeProblem, staleEdits, type StaleEdit } from './build';
 import { confirmer, readRules, type Rule } from './rules';
 import { confirmAt } from '../ai/confirm';
 import { loadSettings } from '../round/store';
@@ -64,10 +63,7 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
   const out: string[] = [];
 
   // 1. The ontology file: applied the way the app applies it, which says what it cannot take.
-  resetOntology();
-  const ontology = await readOntologyFile(root);
-  if (ontology) out.push(...applyOntology(ontology));
-  else if ((await readText(paths(root).ontology)) !== undefined) out.push('ontology.yaml: could not be read (the built-in ontology applies)');
+  out.push(...(await loadOntology(root)).problems);
 
   // 2. The entities file: known sections, ids with the section's prefix, no duplicate ids or aliases.
   const entities = await readEntities(root);
@@ -81,10 +77,13 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
         if (ids.has(e.id)) out.push(`entities.yaml: ${section}: duplicate id "${e.id}"`); else ids.add(e.id);
         if (!e.id.startsWith(prefix)) out.push(`entities.yaml: ${section}: "${e.id}" does not start with "${prefix}"`);
         for (const a of [e.label, ...(e.aliases ?? [])]) {
-          const k = `${section}|${nameKey(String(a))}`;
+          const k = `${section}|${nameKey(String(a), section as NodeType)}`;
           const owner = aliases.get(k);
           if (owner && owner !== e.label) out.push(`entities.yaml: ${section}: "${e.id}": alias "${a}" is already ${owner}'s`);
           else aliases.set(k, e.label);
+          // A tool that is not (or no longer) approved is never another name of an approved one: it would look approved.
+          const retired = section === 'Tool' ? unapprovedTool(String(a)) : undefined;
+          if (retired) out.push(`entities.yaml: Tool: "${e.id}": ${a === e.label ? 'is' : `alias "${a}" names`} ${retired}, which is not on the approved list: an approved tool's name would make it look approved (remove it)`);
         }
       });
     }
@@ -113,7 +112,9 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
   const scopedRels = scopedRelations(rules.rules);
   const unscoped: Unscoped[] = []; const lowConfidence: LowConfidence[] = [];
   const threshold = confirmAt(await loadSettings(root).catch(() => ({})));
-  const { links, problems } = await readAiLinks(root);
+  const { links: rawLinks, problems } = await readAiLinks(root);
+  // Ids compared in today's normal form, as the build reads them (an id written in an older form names the same star).
+  const links = rawLinks.map(canonLink);
   for (const p of problems) out.push(`ai-links.jsonl line ${p.line}: could not be read`);
   // The file line of each link that parsed, in order: the n-th link read is on the n-th of these lines.
   const fileLines: number[] = [];
@@ -137,30 +138,50 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
     const unknown = [[l.from, ft], [l.to, tt]].filter(([, t]) => !t).map(([id]) => id);
     if (unknown.length) { out.push(`${at}: ${unknown.join(' and ')} ${unknown.length === 1 ? 'is' : 'are'} not in the graph or among the link's new stars (skipped by the build)`); return; }
     if (ft !== ALLOWED[l.rel][0] || tt !== ALLOWED[l.rel][1]) { out.push(`${at}: ${l.rel} goes ${pair(l.rel)}, not ${ft} → ${tt} (skipped by the build)`); return; }
-    if (!l.source?.trim()) out.push(`${at}: the link says nowhere where it came from (source is empty)`);
+    const bad = aiSourceProblem(l.source);
+    if (bad) { out.push(`${at}: ${bad} (dropped by the build)`); return; }
     if (scopedRels.includes(l.rel) && !l.idea) unscoped.push({ where: at, edge: `${l.from}|${l.rel}|${l.to}`, from: l.from, rel: l.rel, to: l.to, ...scopeCandidates(graph, l.from, l.to) });
-    if (l.status === 'confirmed' && l.confidence < threshold) lowConfidence.push({ line, edge: `${l.from}|${l.rel}|${l.to}`, confidence: l.confidence, ...(l.idea ? { idea: l.idea } : {}) });
+    if (l.status === 'confirmed' && l.confidence < threshold && l.confirmedBy !== 'operator') lowConfidence.push({ line, edge: `${l.from}|${l.rel}|${l.to}`, confidence: l.confidence, ...(l.idea ? { idea: l.idea } : {}) });
   });
-  const edits = await readEdits(root);
+  const edits = (await readEdits(root)).map(canonEdit);
   for (const e of edits) {
     if (e.status !== 'active') continue;
     const at = `operator.jsonl ${e.id}`;
     if (e.t === 'add') {
       if (!isType(e.type)) out.push(`${at}: unknown node type "${String(e.type)}" (refused by the build)`);
       else if (!idMatchesType(e.node, e.type)) out.push(`${at}: ${e.node} is a ${e.type} but its id does not start with "${e.type === 'Idea' ? 'idea' : e.type.toLowerCase()}:" (refused by the build)`);
+      else if (!OPERATOR_STARS.includes(e.type)) out.push(`${at}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`);
+    }
+    if (e.t === 'merge' && e.from !== e.into) {
+      const a = e.from.split(':')[0]; const b = e.into.split(':')[0];
+      if (a !== b || !MERGEABLE.some((m) => m.toLowerCase() === a)) out.push(`${at}: merge ${e.from} into ${e.into}: ${mergeProblem(e.from, e.into)} (refused by the build)`);
+    }
+    if (e.t === 'alias' && e.node.startsWith('tool:')) {
+      const retired = unapprovedTool(e.label);
+      if (retired) out.push(`${at}: alias "${e.label}" on ${e.node} names ${retired}, which is not on the approved list: an approved tool's name would make it look approved (switch the edit off)`);
     }
     if (e.t === 'link') {
       if (!isRelation(e.rel)) { out.push(`${at}: unknown relation "${String(e.rel)}"`); continue; }
       if (DERIVED_RELATIONS.includes(e.rel)) { out.push(`${at}: ${e.rel} is derived by the rules from what the graph holds, never stored by hand (refused by the build)`); continue; }
+      if (FORM_ONLY_RELATIONS.includes(e.rel)) { out.push(`${at}: link ${e.from} ${e.rel} ${e.to}: ${operatorLinkProblem(e.rel, undefined, undefined)} (refused by the build)`); continue; }
       const ft = typeOf.get(e.from); const tt = typeOf.get(e.to);
       if (ft && tt && (ft !== ALLOWED[e.rel][0] || tt !== ALLOWED[e.rel][1])) out.push(`${at}: ${e.rel} goes ${pair(e.rel)}, not ${ft} → ${tt} (skipped by the build)`);
       else if (ft && tt && scopedRels.includes(e.rel) && !e.idea) unscoped.push({ where: at, edge: `${e.from}|${e.rel}|${e.to}`, from: e.from, rel: e.rel, to: e.to, ...scopeCandidates(graph, e.from, e.to) });
     }
   }
+  // One name, two stars: two stars of one kind whose labels read the same in the one normal form (nameKey).
+  const byName = new Map<string, string[]>();
+  for (const n of graph.nodes) if (n.type !== 'Idea' && n.type !== 'Round') { const k = `${n.type}|${nameKey(n.label, n.type)}`; byName.set(k, [...(byName.get(k) ?? []), n.id]); }
+  for (const [k, ids] of byName) if (ids.length > 1) out.push(`graph: ${ids.join(' and ')}: two ${k.split('|')[0]} stars with one name ("${k.split('|')[1]}"): merge them`);
   return {
     violations: out, stale: staleEdits(graph.nodes, edits), unscoped, lowConfidence,
     checked: { nodes: graph.nodes.length, edges: graph.edges.filter((e) => !e.derived).length, derived: graph.edges.filter((e) => e.derived).length },
   };
+}
+
+/** The not-approved tool a name means (UiPath, Power Automate …), compared in the one normal form, or undefined. */
+function unapprovedTool(name: string): string | undefined {
+  return KNOWN_UNAPPROVED_TOOLS.find((t) => nameKey(t, 'Tool') === nameKey(name, 'Tool'));
 }
 
 /** One line per unscoped fact: what it is, what it does now, and the command that settles it. */
@@ -189,7 +210,7 @@ export function checkReport(r: CheckResult, strict: boolean): { lines: string[];
     lines.push(...unscoped.map(unscopedLine));
   }
   if (low.length) {
-    lines.push(`AI links confirmed below the confidence threshold (${low.length}): stored as confirmed without your Do it; cafe ontology fix --apply sets them back to waiting for it:`);
+    lines.push(`AI links stored as confirmed below the confidence threshold without your Do it (${low.length}): the build counts them as waiting for it; cafe ontology fix --apply writes them back as waiting:`);
     lines.push(...low.map((l) => `ai-links.jsonl line ${l.line}: ${l.edge.replace(/\|/g, ' ')} at ${l.confidence}${l.idea ? ` (${l.idea})` : ''}`));
   }
   return { lines, code: r.violations.length || (strict && (r.stale.length || unscoped.length || low.length)) ? 1 : 0 };

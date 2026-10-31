@@ -6,7 +6,9 @@ import { listRounds } from '../round/store';
 import { buildGraph, BundleCache } from './build';
 import { onTouched } from '../memory/touch';
 import { appendEdit, nextEditId, readEdits } from './operator';
-import { MERGEABLE, type AiLink, type GEdge, type GNode } from './ontology';
+import { MERGEABLE, canonLink, type AiLink, type GEdge, type GNode } from './ontology';
+import { confirmAt } from '../ai/confirm';
+import { loadSettings } from '../round/store';
 import type { Clock } from '../clock';
 import { registryFrom } from './registryFile';
 import { readRules } from './rules';
@@ -47,13 +49,20 @@ export async function appendAiLink(root: string, link: AiLink): Promise<void> {
   await writeLines(root, [...(await readLines(root)), { raw: '', n: 0, link }]);
 }
 
-/** Rewrites ai-links.jsonl with the new status for the link whose edge id matches. */
-export async function setAiLinkStatus(root: string, edgeId: string, status: AiLink['status']): Promise<void> {
+/**
+ * Rewrites ai-links.jsonl with the new status for the link whose edge id matches (ids compared in today's normal
+ * form, so a line written with an older id is found). Confirming is the operator's Do it, and is recorded as such:
+ * a link below the confidence threshold counts as confirmed only then.
+ */
+export async function setAiLinkStatus(root: string, edgeId: string, status: AiLink['status'], at?: string): Promise<void> {
   const lines = await readLines(root);
   const [from, rel, to] = edgeId.split('|');
-  const hit = lines.filter(({ link: l }) => l && l.from === from && l.rel === rel && l.to === to);
+  const hit = lines.filter(({ link: l }) => { if (!l) return false; const c = canonLink(l); return c.from === from && c.rel === rel && c.to === to; });
   if (!hit.length) throw new Error(`No AI link ${edgeId}`);
-  for (const l of hit) l.link!.status = status;
+  for (const l of hit) {
+    l.link!.status = status;
+    if (status === 'confirmed') { l.link!.confirmedBy = 'operator'; l.link!.confirmedAt = at ?? new Date().toISOString().slice(0, 10); } else { delete l.link!.confirmedBy; delete l.link!.confirmedAt; }
+  }
   await writeLines(root, lines);
 }
 
@@ -83,17 +92,19 @@ onTouched((t) => { const c = caches.get(t.root); if (c) for (const id of t.ideas
 const cacheFor = (root: string) => { let c = caches.get(root); if (!c) caches.set(root, (c = new BundleCache())); return c; };
 
 export async function rebuildGraph(root: string): Promise<{ nodes: GNode[]; edges: GEdge[]; problems: LineProblem[] }> {
-  // The workspace's ontology first: the words and pairs every layer below reads.
-  await loadOntology(root);
+  // The workspace's ontology first: the words and pairs every layer below reads. What it could not take is said with
+  // the graph's problems, like the rules file's: in the app, never silent.
+  const ontology = await loadOntology(root);
   const { ideas } = await listIdeas(root);
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);
   // The rules file's problems (a broken file, a rule it cannot take) go with the graph's: said in the app, never silent.
   const rules = await readRules(root);
-  const graph = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: rules.rules, cache: cacheFor(root) });
+  const settings = await loadSettings(root).catch(() => ({}));
+  const { refused, ...graph } = buildGraph(ideas, links, await listRounds(root), edits, { registry: await registryFrom(root, edits), rules: rules.rules, cache: cacheFor(root), confirmAt: confirmAt(settings) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
-  return { ...graph, problems: [...problems, ...rules.problems.map((message) => ({ line: 0, message }))] };
+  return { ...graph, problems: [...problems, ...[...ontology.problems, ...rules.problems, ...refused].map((message) => ({ line: 0, message }))] };
 }
 
 /**

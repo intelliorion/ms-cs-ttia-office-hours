@@ -152,8 +152,13 @@ export function confirmer(edges: GEdge[], typeOf: (id: string) => string | undef
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const better = (e: { confirmed: boolean; confidence: number }, was: { confirmed: boolean; confidence: number }) =>
-  (e.confirmed && !was.confirmed) || (e.confirmed === was.confirmed && e.confidence > was.confidence);
+/**
+ * Which of two derivations of one edge is its main one: a derivation stated for one same idea first (its inputs are the
+ * idea's own facts), then one through a fact the idea confirms, then any; then confirmed over not; then surer.
+ */
+const better = (e: { confirmed: boolean; confidence: number }, ef: number, was: { confirmed: boolean; confidence: number }, wf: number) =>
+  ef !== wf ? ef > wf : (e.confirmed && !was.confirmed) || (e.confirmed === was.confirmed && e.confidence > was.confidence);
+const FIT_RANK = { scoped: 2, confirm: 1, loose: 0 } as const;
 
 /** scoped: every link stated for one same idea; confirm: that, but for links stated for no idea; loose: neither. */
 interface Candidate { edge: GEdge; fit: 'scoped' | 'confirm' | 'loose'; anchor: string }
@@ -171,13 +176,17 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
   const scopeOf = new Map(edges.map((e) => [e.id, ideasOf(e, typeOf)]));
   const confirms = confirmer(edges, typeOf);
   const fits = (rel: Relation, from: string, to: string) => { const [f, t] = ALLOWED[rel]; return type.get(from) === f && type.get(to) === t; };
-  /** Every derivation of one edge is kept: the surest as its inputs, the others as alternatives. */
-  const keep = (e: GEdge, primary = true) => {
+  /** How each kept edge's main derivation fits its idea (FIT_RANK). */
+  const fitOf = new Map<string, number>();
+  /** Every derivation of one edge is kept: the best fitting and surest as its inputs, the others as alternatives. */
+  const keep = (e: GEdge, primary = true, fit = 2) => {
     const was = out.get(e.id);
-    if (!was) { out.set(e.id, e); return; }
+    if (!was) { out.set(e.id, e); fitOf.set(e.id, fit); return; }
     const key = (w: string[]) => w.join('\n');
     // A way that rests on a fact stated for no idea is only ever another way, never the edge's main derivation.
-    const best = primary && better(e, was) ? e : was;
+    const takes = primary && better(e, fit, was, fitOf.get(e.id) ?? 2);
+    const best = takes ? e : was;
+    if (takes) fitOf.set(e.id, fit);
     const ways = [was.derived!.inputs, ...(was.derived!.alternatives ?? []), e.derived!.inputs].filter((w) => key(w) !== key(best.derived!.inputs));
     const others = [...new Map(ways.map((w) => [key(w), w])).values()].sort((a, b) => key(a).localeCompare(key(b)));
     const ideas = [...new Set([...(was.ideas ?? []), ...(e.ideas ?? [])])].sort();
@@ -240,10 +249,10 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
         if (rule.scope === 'same-idea' && c.fit === 'confirm' && scopedIds.has(c.edge.id)) continue;
         // same-idea-first: an idea with a derivation stated for it takes only those; the others fall back to any.
         if (rule.scope === 'same-idea-first' && c.fit !== 'scoped' && anchored.has(c.anchor)) continue;
-        keep(c.edge);
+        keep(c.edge, true, FIT_RANK[c.fit]);
       }
       // Then the ways through a fact stated for no idea, for edges the idea's own facts derive too: one more way, never the main one.
-      if (rule.scope === 'same-idea') for (const c of found) if (c.fit === 'confirm' && scopedIds.has(c.edge.id)) keep(c.edge, false);
+      if (rule.scope === 'same-idea') for (const c of found) if (c.fit === 'confirm' && scopedIds.has(c.edge.id)) keep(c.edge, false, FIT_RANK[c.fit]);
     } else {
       // Every idea's shared stars; two ideas sharing at least `min` of them are similar, more shared is surer.
       const stars = new Map<string, Map<string, GEdge>>();
@@ -260,9 +269,12 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
         const id = edgeId(ideas[i], rule.then, ideas[j]);
         if (have.has(id)) continue;
         const inputs = shared.flatMap((s) => [a.get(s)!, b.get(s)!]);
+        // Confirmed when at least `min` of the shared stars are confirmed for both ideas: one unconfirmed extra star
+        // does not make a similarity that holds without it look uncertain.
+        const sure = shared.filter((s) => a.get(s)!.confirmed && b.get(s)!.confirmed).length;
         keep({
           id, from: ideas[i], to: ideas[j], rel: rule.then, description: `share ${shared.map(label).join(', ')}`, source: `rule:${rule.name}`,
-          confidence: round2(Math.min(1, shared.length / 3)), confirmed: inputs.every((e) => e.confirmed),
+          confidence: round2(Math.min(1, shared.length / 3)), confirmed: sure >= rule.min,
           derived: { rule: rule.name, inputs: inputs.map((e) => e.id) },
         });
       }

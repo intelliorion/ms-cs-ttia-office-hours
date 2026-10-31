@@ -13,6 +13,8 @@ import { loadRegistry } from '../graph/registryFile';
 import { rebuildGraph, readAiLinks, appendAiLink } from '../graph/store';
 import { edgeId, NODE_LABELS, type AiLink, type NodeType } from '../graph/ontology';
 import type { ReviewUpdates } from '../ai/tasks';
+import { confirmAt } from '../ai/confirm';
+import { loadSettings } from '../round/store';
 
 
 /** Where a proposal came from; older ones, from before there were sources, came from the decision. */
@@ -84,7 +86,8 @@ export async function planUpdates(
     if (u.graph?.nodes?.length || u.graph?.links?.length) {
       const graph = await graphNow();
       const matcher = await starMatcher(root, (u.graph.nodes ?? []).map((n) => n.label), graph.nodes);
-      const { links } = planAiLinks(idea.id, u.graph, graph, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root) });
+      // The same threshold as every AI read (settings graph.confirmAt): a link the AI is less sure of waits for Do it.
+      const { links } = planAiLinks(idea.id, u.graph, graph, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root), confirmAt: confirmAt(await loadSettings(root).catch(() => ({}))) });
       const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label;
       for (const l of links) {
         const id = edgeId(l.from, l.rel, l.to);
@@ -92,7 +95,7 @@ export async function planUpdates(
         const name = (nid: string) => fresh.get(nid)?.label ?? label(nid) ?? nid;
         const neu = [...fresh.values()].map((n) => `${n.label} (${NODE_LABELS[n.type as NodeType].toLowerCase()})`);
         add({ key: `link:${id}`, kind: 'link', link: { ...l, source: `ai:${provider}:review-answers` },
-          label: `${name(l.from)} ${REL_WORDS[l.rel] ?? l.rel} ${name(l.to)}${neu.length ? `; adds a new star: ${neu.join(', ')}` : ''}` });
+          label: `${name(l.from)} ${REL_WORDS[l.rel] ?? l.rel} ${name(l.to)}${neu.length ? `; adds a new star: ${neu.join(', ')}` : ''}${l.status === 'pending' ? ` (waits for your Do it in the universe: the AI is ${l.confidence} sure)` : ''}` });
       }
     }
   }
@@ -135,7 +138,10 @@ export async function applyUpdate(
     // The team answered our questions: the reply is in.
     await tickIf('s2d', !!(idea.sent?.E2 || idea.sent?.E2R));
   } else if (u.kind === 'link' && u.link) {
-    await appendAiLink(root, { ...(u.link as AiLink), status: 'confirmed' });
+    // As planned: confirmed only at or above the threshold; below it the link waits for the operator's Do it.
+    const l = u.link as AiLink;
+    const threshold = confirmAt(await loadSettings(root).catch(() => ({})));
+    await appendAiLink(root, { ...l, status: l.status === 'pending' || l.confidence < threshold ? 'pending' : 'confirmed' });
   }
 }
 

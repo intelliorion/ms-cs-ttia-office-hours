@@ -398,6 +398,8 @@ export interface SimilarStar {
   ideas?: { id: string; label: string }[];
   /** NetworkX predicts the idea needs the star (its closest peers do): the share of their weight, and who they are. */
   networkx?: { version: string; share: number; peers: string[] };
+  /** The star is another feature of this same pick: two features of one pick that look like one thing. */
+  samePick?: true;
 }
 
 /**
@@ -421,6 +423,17 @@ export async function similarStarsChecked(root: string, idea: Idea): Promise<{ s
   const others = stored.filter((e) => e.from === me && e.rel === 'NEEDS' && !mine.has(e.to))
     .map((e) => byId.get(e.to)).filter((n): n is NonNullable<typeof n> => n?.type === 'Capability');
   const out: SimilarStar[] = [];
+  // Within the pick: two features of this pick that look like one thing (half or more of their words shared), or
+  // that are one star already (the same name in the one normal form).
+  features.forEach((f, j) => {
+    for (const g of features.slice(0, j)) {
+      const same = nodeId('Capability', f) === nodeId('Capability', g);
+      if (!same && wordOverlap(f, g) < 0.5) continue;
+      if (out.some((o) => o.featureId === nodeId('Capability', f))) break;
+      out.push({ feature: f, featureId: nodeId('Capability', f), star: g, starId: nodeId('Capability', g), samePick: true });
+      break;
+    }
+  });
   for (const f of features) {
     const best = others.map((n) => ({ n, score: wordOverlap(f, n.label) })).filter((x) => x.score >= 0.5).sort((a, b) => b.score - a.score)[0];
     if (best && !out.some((o) => o.starId === best.n.id)) out.push({ feature: f, featureId: nodeId('Capability', f), star: best.n.label, starId: best.n.id });

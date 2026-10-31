@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Stage } from './layout/Stage';
 import { Panel } from './layout/Panel';
 import { TitleBar } from './layout/TitleBar';
+import { GraphBanner } from './layout/GraphBanner';
 import { RightPanels } from './panels/ContextPanels';
 import { Assistant } from './layout/Assistant';
 import { FocusBar } from './layout/FocusBar';
@@ -83,6 +84,7 @@ export default function App() {
         <ChangeNote />
         <Welcome onStart={() => openPopout({ kind: 'inbox' })} />
         <TitleBar />
+        <GraphBanner />
         {notice && !popout && leftView.kind !== 'idea' && <div className="notice" role="status">{notice.text}</div>}
         {!focus && <>
         <Panel title="Ideas" style={{ left: 20, top: 92, width: 440, height: 'calc(var(--sh) - 112px)' }}>

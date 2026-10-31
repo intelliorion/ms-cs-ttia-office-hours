@@ -1,4 +1,4 @@
-import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, nameKey, setToolResolver, slug, type NodeType, type OperatorEdit } from './ontology';
+import { APPROVED_TOOLS, NODE_TYPES, TOOL_ALIASES, canonId, nameKey, setToolResolver, slug, typeOfId, type NodeType, type OperatorEdit } from './ontology';
 
 /**
  * The registry: stable identity for the stars that keep coming back under other words. One entry per star, with its
@@ -13,7 +13,7 @@ export type RegistryEntries = Partial<Record<NodeType, RegistryEntry[]>>;
 export const REGISTRY_SECTIONS: NodeType[] = ['Tool', 'System', 'Team', 'Entity', 'Capability', 'PainPoint', 'Beneficiary', 'Category', 'Outcome', 'Support'];
 
 export interface Registry {
-  /** The star a label names, by its label or any alias (case, spacing, accents and "&" / "and" ignored), or undefined. */
+  /** The star a label names, by its label or any alias in the one normal form (nameKey), or undefined. */
   resolve(type: NodeType, label: string): { id: string; label: string } | undefined;
   aliasesOf(id: string): string[];
   refOf(id: string): string | undefined;
@@ -30,39 +30,38 @@ function fnv1a32(str: string): string {
   return (h >>> 0).toString(16);
 }
 
-const typeOfId = (id: string): NodeType | undefined => NODE_TYPES.find((t) => id.startsWith(`${t.toLowerCase()}:`));
-
 export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[]): Registry {
   const byId = new Map<string, { type: NodeType; label: string; aliases: string[]; ref?: string }>();
   for (const type of Object.keys(entries) as NodeType[]) {
     if (!NODE_TYPES.includes(type)) continue;
     for (const e of entries[type] ?? []) {
       if (!e || typeof e.id !== 'string' || typeof e.label !== 'string' || !e.id.trim() || !e.label.trim()) continue;
-      byId.set(e.id, { type, label: e.label.trim(), aliases: (e.aliases ?? []).map(String).filter((a) => a.trim()), ...(e.ref ? { ref: String(e.ref) } : {}) });
+      byId.set(canonId(e.id.trim()), { type, label: e.label.trim(), aliases: (e.aliases ?? []).map(String).filter((a) => a.trim()), ...(e.ref ? { ref: String(e.ref) } : {}) });
     }
   }
   for (const e of edits) {
     if (e.t !== 'alias' || e.status !== 'active' || !e.label.trim()) continue;
-    const type = typeOfId(e.node); if (!type) continue;
-    const have = byId.get(e.node);
+    const node = canonId(e.node);
+    const type = typeOfId(node); if (!type) continue;
+    const have = byId.get(node);
     if (have) { if (!have.aliases.includes(e.label)) have.aliases.push(e.label); continue; }
-    byId.set(e.node, { type, label: (e.of ?? e.label).trim(), aliases: [e.label] });
+    byId.set(node, { type, label: (e.of ?? e.label).trim(), aliases: [e.label] });
   }
   // One lookup table per type: the slug of the label and of every alias → the star.
   const lookup = new Map<NodeType, Map<string, string>>();
   for (const [id, e] of byId) {
     let m = lookup.get(e.type); if (!m) lookup.set(e.type, (m = new Map()));
-    for (const name of [e.label, ...e.aliases]) { const k = nameKey(name); if (!m.has(k)) m.set(k, id); }
+    for (const name of [e.label, ...e.aliases]) { const k = nameKey(name, e.type); if (!m.has(k)) m.set(k, id); }
   }
   return {
     entries,
     version: fnv1a32(JSON.stringify([entries, edits.filter((e) => e.t === 'alias' && e.status === 'active')])),
     resolve(type, label) {
-      const id = lookup.get(type)?.get(nameKey(label));
+      const id = lookup.get(type)?.get(nameKey(label, type));
       return id ? { id, label: byId.get(id)!.label } : undefined;
     },
-    aliasesOf: (id) => [...(byId.get(id)?.aliases ?? [])],
-    refOf: (id) => byId.get(id)?.ref,
+    aliasesOf: (id) => [...(byId.get(canonId(id))?.aliases ?? [])],
+    refOf: (id) => byId.get(canonId(id))?.ref,
     tools: () => [...byId.values()].filter((e) => e.type === 'Tool').map((e) => e.label),
   };
 }

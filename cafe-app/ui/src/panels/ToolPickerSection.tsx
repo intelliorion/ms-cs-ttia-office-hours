@@ -293,10 +293,12 @@ export interface SimilarStarView {
   feature: string; featureId: string; star: string; starId: string;
   ideas?: { id: string; label: string }[];
   networkx?: { version: string; share: number; peers: string[] };
+  samePick?: true;
 }
 
 /** The line for one look-alike: on the idea (the AI's), or across ideas with the ideas that need it and NetworkX's reason. */
 export function similarText(x: SimilarStarView): React.ReactNode {
+  if (x.samePick) return <><b>{x.feature}</b> looks like <b>{x.star}</b>, another feature of this pick.</>;
   if (!x.ideas?.length) return <><b>{x.feature}</b> looks like <b>{x.star}</b>, which the AI found in the submission.</>;
   return <><b>{x.feature}</b> looks like <b>{x.star}</b>, which {x.ideas.map((i) => i.label).join(', ')} already need{x.ideas.length === 1 ? 's' : ''}.
     {x.networkx && <> NetworkX predicts this idea needs it too: {Math.round(x.networkx.share * 100)} % of its closest peers by weight ({x.networkx.peers.join(', ')}) do.</>}</>;

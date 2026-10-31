@@ -13,14 +13,16 @@ import { codeFor, hideNames, showNames, type Coded, type LegendEntry } from './n
 import { maskEmails } from '../data/check';
 import { STAGE_NAMES } from '../rules/stages';
 import { QUERY_SCHEMA, plainReply, revealDerived, runQuery, type NetworkSuggestion, type Query, type QueryResult, type StepTrace } from './query';
-import { prepareNetwork } from '../graph/network';
-import { ALLOWED, DERIVED_RELATIONS, IDEA_SCOPED, edgeId, type Relation } from '../graph/ontology';
+import { prepareNetwork, runNetwork, type NetworkRunOptions } from '../graph/network';
+import { NETWORK_RELATIONS, edgeId, type GEdge, type Relation } from '../graph/ontology';
 import { validate } from '../ai/schema';
-import { applyAction, linkScope, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
+import { applyAction, linkProposals, resolveSteps, undoAction, type CommandAction, type CommandInverse } from './actions';
 import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
 import { loadRegistry } from '../graph/registryFile';
 import { graphChanges } from '../graph/diff';
+import { loadSettings } from '../round/store';
+import type { Settings } from '../round/round';
 
 export interface ChatAction {
   id: string; label: string; action: CommandAction;
@@ -52,6 +54,28 @@ export interface ChatEntry {
 export interface ChatThread { id: string; title: string; started: string; updated: number; codes: [string, Coded][]; last: string[] }
 
 const dir = (root: string) => paths(root).chat;
+
+/**
+ * The chat files are read, changed and written under one lock per workspace: an answer runs outside the server's
+ * write lock (it changes nothing in the workspace, so it never waits behind a slow write and no write waits behind
+ * it), and its own writes, and those of Do it, Cancel and Undo, still never interleave.
+ */
+const chatLocks = new Map<string, Promise<unknown>>();
+function chatLocked<T>(root: string, fn: () => Promise<T>): Promise<T> {
+  const before = chatLocks.get(root) ?? Promise.resolve();
+  const run = before.then(fn, fn);
+  chatLocks.set(root, run.catch(() => undefined));
+  return run;
+}
+
+/** The longest one answer may take, every step and AI call included: settings assistant.deadlineSeconds, else 90 s. */
+export const ANSWER_DEADLINE_S = 90;
+export function answerDeadlineMs(settings: Partial<Settings> | undefined): number {
+  const v = Number(settings?.assistant?.deadlineSeconds);
+  return (Number.isFinite(v) && v >= 10 && v <= 900 ? v : ANSWER_DEADLINE_S) * 1000;
+}
+/** Below this much time left an AI call is not started: the answer stops with what it has. */
+const LAST_CALL_MIN_MS = 8_000;
 const logFile = (root: string) => path.join(dir(root), 'log.jsonl');
 const threadsFile = (root: string) => path.join(dir(root), 'threads.json');
 
@@ -67,18 +91,22 @@ async function writeChat(root: string, entries: ChatEntry[]): Promise<void> {
   await writeFileAtomic(logFile(root), entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''));
 }
 async function save(root: string, entry: ChatEntry): Promise<ChatEntry> {
-  const all = await readChat(root);
-  const i = all.findIndex((e) => e.id === entry.id);
-  if (i === -1) all.push(entry); else all[i] = entry;
-  await writeChat(root, all);
-  return entry;
+  return chatLocked(root, async () => {
+    const all = await readChat(root);
+    const i = all.findIndex((e) => e.id === entry.id);
+    if (i === -1) all.push(entry); else all[i] = entry;
+    await writeChat(root, all);
+    return entry;
+  });
 }
 export async function readThreads(root: string): Promise<ChatThread[]> {
   try { const v = JSON.parse((await readText(threadsFile(root))) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 async function saveThread(root: string, t: ChatThread): Promise<void> {
-  const all = (await readThreads(root)).filter((x) => x.id !== t.id);
-  await writeFileAtomic(threadsFile(root), JSON.stringify([...all, t], null, 1));
+  await chatLocked(root, async () => {
+    const all = (await readThreads(root)).filter((x) => x.id !== t.id);
+    await writeFileAtomic(threadsFile(root), JSON.stringify([...all, t], null, 1));
+  });
 }
 
 /** The conversations, most recent first, for the list; and one conversation with its messages. */
@@ -110,6 +138,8 @@ export interface RunOptions {
   progress?: (p: Progress) => void;
   /** Set when the operator presses Stop: the agent finishes the step it is on and stops. */
   stopped?: () => boolean;
+  /** The whole answer's deadline (ms); settings assistant.deadlineSeconds (default 90 s) when absent. */
+  deadlineMs?: number;
 }
 
 /**
@@ -120,6 +150,12 @@ export interface RunOptions {
 export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, opts: RunOptions = {}): Promise<ChatEntry> {
   const message = text.trim().slice(0, COMMAND_MAX);
   if (!message) throw new Error('Type a message first');
+  // One deadline for the whole answer (every step, every AI call, NetworkX): the answer stops at it with what it has.
+  const started = Date.now();
+  const budget = opts.deadlineMs ?? answerDeadlineMs(await loadSettings(root).catch(() => ({})));
+  const deadline = started + budget;
+  const timeLeft = () => deadline - Date.now();
+  let outOfTime = false;
   const all = await readChat(root);
   const threads = await readThreads(root);
   const now = Date.now();
@@ -243,11 +279,17 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       if (opts.stopped?.()) { entry.error = 'Stopped. Nothing was changed.'; break; }
       const left = AGENT_MAX_STEPS - step;
       if (left <= 0) { entry.problems.push('I ran out of steps before I could finish. Try asking a narrower question.'); break; }
+      if (timeLeft() < LAST_CALL_MIN_MS) { outOfTime = true; break; }
       opts.progress?.({ stage: 'thinking', step });
-      const ask = (stepsLeft: number, note?: string) => ai.runWith(agentTask, {
-        ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
-        stars: hidden.legend, vocabulary, steps: done, stepsLeft, deepRead, ...(note ? { note } : {}),
-      });
+      // Each AI call gets the time the answer has left, never more than the task's own limit.
+      const ask = (stepsLeft: number, note?: string) => {
+        const ms = Math.min(agentTask.timeoutMs ?? 60_000, timeLeft());
+        if (ms < LAST_CALL_MIN_MS) { outOfTime = true; throw new Error('out of time'); }
+        return ai.runWith(agentTask, {
+          ...(history.length ? { history } : {}), message: hidden.text, ...(focus ? { focus } : {}),
+          stars: hidden.legend, vocabulary, steps: done, stepsLeft, deepRead, ...(note ? { note } : {}),
+        }, { timeoutMs: ms });
+      };
       const asked = await ask(left);
       const provider = asked.provider;
       let output: AgentOutput = asked.output;
@@ -286,7 +328,7 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
         const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
         const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
         // NetworkX runs out of process: its answers for the network steps are prepared first, like Deep read's.
-        const network = await prepareNetwork(output.query as Query, graph, idOf);
+        const network = await prepareNetwork(output.query as Query, graph, idOf, { timeoutMs: Math.max(1_000, Math.min(60_000, timeLeft() - LAST_CALL_MIN_MS)) });
         const r = runQuery(output.query as Query, { graph, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
         if (r.suggestions) suggested.push(...r.suggestions);
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
@@ -363,25 +405,30 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
       }
     }
   } catch (e) {
-    entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
+    // A call cut short by the answer's deadline is the deadline's, not the AI's.
+    if (outOfTime || timeLeft() < 1_000) outOfTime = true;
+    else entry.error = `The AI couldn't finish that (${(e as Error).message}). Try again, or make the change by hand.`;
+  }
+  if (outOfTime) {
+    const secs = Math.round(budget / 1000);
+    entry.error = `This answer was stopped at its deadline of ${secs} s (assistant.deadlineSeconds in rules/settings.yaml), after ${results.length} search${results.length === 1 ? '' : 'es'}. Nothing was changed. What the steps found so far is below; ask again, or ask a narrower question.`;
+    if (!entry.reply.trim()) entry.reply = plainReply(results, codeName, coded);
+    traces.push({ trace: [{ text: `Stopped at the answer's deadline (${secs} s) after ${Math.round((Date.now() - started) / 1000)} s`, size: 0 }] });
   }
   // NetworkX's suggested links: proposals with Do it, the operator's to accept. The AI's own proposals come first.
+  // Each is one this message's NetworkX run returned (by id), and passes the same checks as any proposed link.
   if (suggested.length && !entry.error) {
-    const have = new Set([...entry.actions.map((a) => (a.action.t === 'link' ? edgeId(a.action.from, a.action.rel, a.action.to) : '')), ...graph.edges.map((e) => e.id)]);
-    const stated = new Set(graph.edges.filter((e) => !e.derived && !IDEA_SCOPED.includes(e.rel)).map((e) => e.id));
+    const have = new Set(entry.actions.map((a) => (a.action.t === 'link' ? `${edgeId(a.action.from, a.action.rel, a.action.to)}#${a.action.idea ?? ''}` : '')));
     for (const x of suggested) {
-      const id = edgeId(x.from, x.rel, x.to);
-      if (have.has(id) && !IDEA_SCOPED.includes(x.rel)) continue;
-      if (stated.has(id) || !nodes.has(x.from) || !nodes.has(x.to)) continue;
-      // A capability-level link is stamped with the idea it is for: one proposal per idea that needs the capability.
-      const scope = linkScope(graph, x.from, x.rel, x.to);
-      if ('problem' in scope) continue;
-      have.add(id);
-      for (const idea of scope.ideas.length ? scope.ideas : [undefined]) {
-        entry.actions.push({
-          id: `a${entry.actions.length + 1}`, label: `Link ${label(x.from)} → ${label(x.to)} (${x.rel === 'NEEDS' ? 'needs' : 'uses the data'})${idea ? ` for ${label(`idea:${idea}`)}` : ''} · suggested by NetworkX`,
-          action: { t: 'link', from: x.from, rel: x.rel, to: x.to, ...(idea ? { idea } : {}) }, status: 'proposed', note: `Like ${x.why.split(': ').slice(1).join(': ')}`,
-        });
+      const from = nodes.get(x.from); const to = nodes.get(x.to);
+      if (!from || !to || !NETWORK_RELATIONS.includes(x.rel)) continue;
+      const checked = linkProposals(graph, from, x.rel, to, { suffix: ' · suggested by NetworkX' });
+      if ('problem' in checked) continue;
+      for (const p of checked.proposals) {
+        const key = p.action.t === 'link' ? `${edgeId(p.action.from, p.action.rel, p.action.to)}#${p.action.idea ?? ''}` : '';
+        if (have.has(key)) continue;
+        have.add(key);
+        entry.actions.push({ id: `a${entry.actions.length + 1}`, label: p.label, action: p.action, status: 'proposed', note: `Like ${x.why.split(': ').slice(1).join(': ')}` });
       }
     }
   }
@@ -390,48 +437,71 @@ export async function runCommand(root: string, text: string, ai: Connector, cloc
   if (results.length) entry.highlight = [...new Set(results.flatMap((r) => r.touched))].slice(0, LIT_MAX);
   entry.coded = { text: hidden.text, reply: finalReply, ...(results.length ? { found: lastFound.slice(0, RESULT_STARS).map((sid) => codeFor(hidden.codes, nodes.get(sid)!)) } : {}) };
   await saveThread(root, { ...thread, updated: now, codes: [...hidden.codes], last: lastFound });
-  // Changes left waiting in other conversations are not shown any more: cancel them, saying why.
-  for (const old of all) if (old.thread !== thread.id) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A new conversation replaced it'; }
-  await writeChat(root, all);
-  return save(root, entry);
+  // Changes left waiting in other conversations are not shown any more: cancel them, saying why. The log is read again
+  // here, under the chat lock: whatever was saved while this answer ran (another answer, a Do it) is kept.
+  return chatLocked(root, async () => {
+    const latest = await readChat(root);
+    for (const old of latest) if (old.thread !== thread.id) for (const a of old.actions) if (a.status === 'proposed') { a.status = 'cancelled'; a.note = 'A new conversation replaced it'; }
+    const i = latest.findIndex((e) => e.id === entry.id);
+    // Two answers started together could pick one id: the later one takes the next free id.
+    if (i !== -1) entry.id = `c${Math.max(0, ...latest.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
+    latest.push(entry);
+    await writeChat(root, latest);
+    return entry;
+  });
 }
 
 /**
  * A link the Network pop-out's Propose button sends: one message in the assistant with the link as a proposal, so it
  * goes through the same Do it as every other change. The app checks it first; nothing changes here.
  */
-export async function proposeLink(root: string, link: { from: string; rel: string; to: string; why?: string; thread?: string; idea?: string }, clock: Clock): Promise<ChatEntry> {
+export async function proposeLink(root: string, link: { from: string; rel: string; to: string; why?: string; thread?: string; idea?: string }, clock: Clock, opts: NetworkRunOptions = {}): Promise<ChatEntry> {
   const graph = await rebuildGraph(root);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   const from = nodes.get(link.from); const to = nodes.get(link.to); const rel = link.rel as Relation;
   if (!from || !to) throw new Error('One of those stars is not in the universe any more.');
-  const pair = ALLOWED[rel];
-  if (!pair || DERIVED_RELATIONS.includes(rel) || pair[0] !== from.type || pair[1] !== to.type) throw new Error(`${from.label} and ${to.label} can't be linked that way.`);
-  // A capability-level link is stamped with the idea it was suggested for (the one sent), else each idea that needs it.
+  // Only what NetworkX's link prediction proposes comes this way (an idea needs a capability, a capability uses a system).
+  if (!NETWORK_RELATIONS.includes(rel)) throw new Error(`${from.label} and ${to.label} can't be linked that way here: NetworkX only suggests that an idea needs a capability or that a capability uses a system's data.`);
+  // The same checks as every proposed link (the ontology's pair, nothing derived or the form's, not already there, the idea it is for).
   const named = link.idea?.replace(/^idea:/, '') || undefined;
-  const scope = linkScope(graph, from.id, rel, to.id, { named });
-  if ('problem' in scope) throw new Error(scope.problem);
-  if (!IDEA_SCOPED.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) throw new Error(`${from.label} and ${to.label} are already linked.`);
-  const ideaLabel = (i: string) => nodes.get(`idea:${i}`)?.label ?? i;
+  const checked = linkProposals(graph, from, rel, to, { named, suffix: ' · suggested by NetworkX' });
+  if ('problem' in checked) throw new Error(checked.problem);
+  // "Suggested by NetworkX" only when it is: the link must be among the suggestions NetworkX makes for the graph as it is now.
+  const hit = await networkSuggestion(graph, from.id, rel, to.id, opts);
+  if ('problem' in hit) throw new Error(hit.problem);
   const all = await readChat(root);
   const threads = await readThreads(root);
   const now = Date.now();
-  const relWord = rel === 'NEEDS' ? 'needs' : rel === 'USES_DATA' ? 'uses the data' : rel.toLowerCase().replace(/_/g, ' ');
+  const relWord = rel === 'NEEDS' ? 'needs' : 'uses the data of';
   const text = `Propose the link NetworkX suggested: ${from.label} ${relWord} ${to.label}`;
   const thread: ChatThread = threads.find((t) => t.id === link.thread)
     ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: text.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
-  const why = String(link.why ?? '').trim().slice(0, 400);
+  // The reason is NetworkX's own (its peers and what they share), never the words the request carried.
   const entry: ChatEntry = {
     id: `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`, thread: thread.id, at: clock(), ts: now, text, kind: 'command',
-    reply: `NetworkX suggests ${from.label} ${relWord} ${to.label}${why ? ` (${why})` : ''}. It is only a suggestion: nothing changes until you press Do it.${scope.note ? ` ${scope.note}` : ''}`,
-    actions: (scope.ideas.length ? scope.ideas : [undefined]).map((idea, i) => ({
-      id: `a${i + 1}`, label: `Link ${from.label} → ${to.label} (${relWord})${idea ? ` for ${ideaLabel(idea)}` : ''} · suggested by NetworkX`,
-      action: { t: 'link' as const, from: from.id, rel, to: to.id, ...(idea ? { idea } : {}) }, status: 'proposed' as const,
-    })),
+    reply: `NetworkX ${hit.networkx} suggests ${from.label} ${relWord} ${to.label} (${hit.why}). It is only a suggestion: nothing changes until you press Do it.${checked.note ? ` ${checked.note}` : ''}`,
+    actions: checked.proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' as const })),
     problems: [], steps: [], highlight: [from.id, to.id],
   };
   await saveThread(root, { ...thread, updated: now });
   return save(root, entry);
+}
+
+/**
+ * The NetworkX suggestion for this link on the graph as it stands (stored facts, else with the derived links), with
+ * its reason; or why it is not one (NetworkX does not suggest it, or could not run to say).
+ */
+async function networkSuggestion(graph: { nodes: GNode[]; edges: GEdge[] }, from: string, rel: Relation, to: string, opts: NetworkRunOptions): Promise<{ networkx: string; why: string } | { problem: string }> {
+  const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
+  for (const withDerived of [false, true]) {
+    let out: Awaited<ReturnType<typeof runNetwork>>;
+    try { out = await runNetwork(graph, ['suggest'], { top: 100_000 }, { ...opts, withDerived }); } catch (e) {
+      return { problem: `NetworkX could not run to confirm it suggests this link (${(e as Error).message}), so nothing was proposed.` };
+    }
+    const s = (out.results.suggest?.suggestions ?? []).find((x: any) => x.from?.id === from && x.rel === rel && x.to?.id === to);
+    if (s) return { networkx: out.networkx, why: `${Math.round(s.share * 100)} % of its closest peers by weight: ${s.because.map((b: any) => `${b.peer.label} (shares ${b.shared.map((y: any) => y.label).join(', ')})`).join('; ')}` };
+  }
+  return { problem: `NetworkX does not suggest that ${label(from)} ${rel === 'NEEDS' ? 'needs' : 'uses the data of'} ${label(to)} on the graph as it is now, so it is not proposed as its suggestion.` };
 }
 
 async function entryOf(root: string, id: string): Promise<ChatEntry> {

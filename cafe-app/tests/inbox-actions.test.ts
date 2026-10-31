@@ -150,8 +150,8 @@ describe('a matched reply: Safe applied at once, the rest waits for a Yes', () =
     // Graph: the links are confirmed on arrival, including the one that brings a new star; no person became a node.
     const g = await rebuildGraph(root);
     expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toMatchObject({ confirmed: true });
-    // Below 0.7 between existing stars: now also applied at once, confirmed (only conflict-held links wait).
-    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:catalogue-lookup')).toMatchObject({ confirmed: true });
+    // Below 0.7 between existing stars: applied at once, but waiting for the operator's Do it (the threshold of every AI read).
+    expect(g.edges.find((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:catalogue-lookup')).toMatchObject({ confirmed: false, confidence: 0.5 });
     expect(g.nodes.some((n) => n.id === 'painpoint:manual-request-triage')).toBe(true);
     const all = JSON.stringify((await readAiLinks(root)).links) + JSON.stringify(item.actions);
     expect(all).not.toMatch(/person-3/);
@@ -231,17 +231,17 @@ describe('Undo is field-level (Review Focus 5)', () => {
 
   it('graph_links (safe): undo removes the link; another link added since stays', async () => {
     const { root, item } = await setup();
-    await appendAiLink(root, link({ from: 'idea:CAFE-2026-002', to: 'capability:slot-finding', source: 'operator' }));
+    await appendAiLink(root, link({ from: 'idea:CAFE-2026-002', to: 'capability:slot-finding', source: 'ai:fake:challenge' }));
     await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
     const g = await rebuildGraph(root);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-001|NEEDS|capability:document-reading')).toBe(false);
     expect(g.edges.some((e) => e.id === 'idea:CAFE-2026-002|NEEDS|capability:slot-finding')).toBe(true);
   });
 
-  it('graph_links: links arrive confirmed; a link the operator removed after the apply stays removed, and Undo removes the rest', async () => {
+  it('graph_links: links at or above the threshold arrive confirmed, the one below waits; a link the operator removed after the apply stays removed, and Undo removes the rest', async () => {
     const { root, item } = await setup();
     const before = (await readAiLinks(root)).links;
-    expect(before.filter((l) => l.source.startsWith('ai:')).every((l) => l.status === 'confirmed')).toBe(true);
+    expect(before.filter((l) => l.source.startsWith('ai:')).map((l) => [l.confidence, l.status])).toEqual([[0.8, 'confirmed'], [0.5, 'pending'], [0.8, 'confirmed']]);
     await setAiLinkStatus(root, 'idea:CAFE-2026-001|NEEDS|capability:document-reading', 'removed');
     await undoRecord(root, item.id, rec(item, 'graph_links', (r) => r.kind === 'safe').id, clock);
     const links = (await readAiLinks(root)).links;

@@ -1,4 +1,4 @@
-import { DERIVED_RELATIONS, NODE_LABELS, slug, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { DERIVED_RELATIONS, IDEA_SCOPED, NODE_LABELS, nameKey, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -300,13 +300,14 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   /** The stars whose label or a registry alias is exactly the match (case, spacing and accents ignored): these win over containment and the nearest. */
   const exactIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
     if (!s.match) return { ids: [], note: '' };
-    const k = slug(s.match);
     let byAlias = false;
     const ids = from.filter((id) => {
       const n = nodes.get(id);
       if (!n || (s.type && n.type !== s.type) || !ideaFits(id, s)) return false;
-      if (slug(n.label) === k) return true;
-      const hit = String(n.attrs?.aliases ?? '').split(';').some((a) => a.trim() && slug(a) === k);
+      // The one normal form of a name (nameKey): "T&E policy", "T/E policy" and "travel & expense policies" are one.
+      const k = nameKey(s.match!, n.type);
+      if (nameKey(n.label, n.type) === k) return true;
+      const hit = String(n.attrs?.aliases ?? '').split(';').some((a) => a.trim() && nameKey(a, n.type) === k);
       if (hit) byAlias = true;
       return hit;
     });
@@ -327,10 +328,49 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return [...out];
   };
 
+  /**
+   * The idea scope a chain of follows carries, per star of the set (bug 12): a capability-level fact (USES_DATA,
+   * BUILT_WITH) holds only for the ideas it is stated for, as the rules read it, so a walk System ← USES_DATA ←
+   * Capability ← NEEDS ← Idea reaches only the ideas the USES_DATA link is stated for, never every idea that needs the
+   * capability. `from`: the ideas the walk came from (left behind at an idea); `allowed`: the ideas the scoped links
+   * crossed so far hold for (null: no scoped link crossed).
+   */
+  type Scope = { from: Set<string> | null; allowed: Set<string> | null };
+  const OPEN: Scope = { from: null, allowed: null };
+  const ideaOfStar = (id: string) => (nodes.get(id)?.type === 'Idea' ? id.slice('idea:'.length) : undefined);
+  const statedFor = (e: GEdge) => new Set(e.ideas ?? []);
+  /** The scope a star is reached with along one link from a star with scope `at`; null when the link does not hold for the walk. */
+  const cross = (at: Scope, e: GEdge, to: string): Scope | null => {
+    const fromIdea = ideaOfStar(e.from === to ? e.to : e.from);
+    const toIdea = ideaOfStar(to);
+    if (IDEA_SCOPED.includes(e.rel) && !e.derived) {
+      const base = at.allowed ?? at.from;
+      const holds = statedFor(e);
+      const allowed = base ? new Set([...base].filter((i) => holds.has(i))) : holds;
+      if (base && !allowed.size) return null;
+      return { from: at.from, allowed };
+    }
+    if (toIdea) {
+      if (at.allowed && !at.allowed.has(toIdea)) return null;
+      return { from: new Set([toIdea]), allowed: null };
+    }
+    if (fromIdea) return { from: new Set([fromIdea]), allowed: null };
+    return at;
+  };
+  const merge = (a: Scope | undefined, b: Scope): Scope => {
+    if (!a) return b;
+    const u = (x: Set<string> | null, y: Set<string> | null) => (x === null || y === null ? null : new Set([...x, ...y]));
+    return { from: u(a.from, b.from), allowed: u(a.allowed, b.allowed) };
+  };
+
   const run = (steps: QueryStep[], log: boolean): string[] => {
     let set: string[] = [];
+    /** Each star's idea scope (see Scope); a star not in it is open. Carried by follow and filter, reset by every other step. */
+    let scope = new Map<string, Scope>();
     for (const s of steps) {
       let text = '';
+      const carried = scope;
+      scope = new Map();
       if (s.op === 'stars') {
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
         const from = s.last ? (w.last ?? []).filter((id) => nodes.has(id)) : s.codes?.length ? coded : w.graph.nodes.map((n) => n.id);
@@ -345,16 +385,26 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
         const by = new Map<string, Set<string>>();
         const reach = (a: string, b: string) => { out.add(b); if (s.group) { const g = by.get(a); if (g) g.add(b); else by.set(a, new Set([b])); } };
+        let dropped = 0;
+        const step = (a: string, b: string, e: GEdge) => {
+          const next = cross(carried.get(a) ?? OPEN, e, b);
+          if (!next) { dropped++; return false; }
+          scope.set(b, merge(scope.get(b), next));
+          reach(a, b);
+          return true;
+        };
         for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
           let hit = false;
-          if (s.dir !== 'in' && from.has(e.from)) { reach(e.from, e.to); hit = true; }
-          if (s.dir !== 'out' && from.has(e.to)) { reach(e.to, e.from); hit = true; }
+          if (s.dir !== 'in' && from.has(e.from) && step(e.from, e.to, e)) hit = true;
+          if (s.dir !== 'out' && from.has(e.to) && step(e.to, e.from, e)) hit = true;
           if (hit && e.derived) used.push(e);
         }
         const keepType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
         set = [...out].filter(keepType);
-        text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}`;
+        // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace.
+        if (dropped) text += `, kept to the ideas each link is stated for (${dropped} link${dropped === 1 ? '' : 's'} stated for other ideas not followed)`;
+        text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}${text}`;
         if (s.group) {
           // Which star each result came from, in the set's order: the reply answers per capability, the trace shows each group.
           const grouped = [...from].filter((id) => by.has(id)).map((id) => ({ from: id, to: [...by.get(id)!].filter(keepType) })).filter((g) => g.to.length);
@@ -373,6 +423,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           reasons = [...(reasons ?? []), ...kept.map((e) => ({ from: e.from, to: e.to, rel: e.rel, why: `${e.description}${e.confirmed ? '' : ' (not confirmed: waiting for your Do it)'}` }))];
         }
       } else if (s.op === 'filter') {
+        scope = carried;
         const before = set;
         const exact = exactIn(s, before);
         set = exact.ids.length ? exact.ids : set.filter((id) => fits(id, s));

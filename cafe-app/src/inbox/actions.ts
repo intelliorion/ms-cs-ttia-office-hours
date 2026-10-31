@@ -19,6 +19,7 @@ import { mapHeader } from '../import/columns';
 import { draftEmail } from '../comms/outbox';
 import { buildGraph } from '../graph/build';
 import { appendAiLink, readAiLinks, setAiLinkStatus } from '../graph/store';
+import { confirmAt } from '../ai/confirm';
 import { edgeId, type AiLink } from '../graph/ontology';
 import { planAiLinks } from '../ai/apply';
 import { starMatcher } from '../memory/lookup';
@@ -239,7 +240,8 @@ async function planGraph(root: string, item: InboxItem, idea: Idea, out: Extract
   const graph = buildGraph(ideas, previous, [], [], { registry });
   // Deep read, when it has run: a star that only differs in wording from one already there is reused.
   const matcher = await starMatcher(root, filtered.nodes.map((n) => n.label), graph.nodes);
-  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry });
+  // The same threshold as every AI read (settings graph.confirmAt): a link the AI is less sure of waits for Do it.
+  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry, confirmAt: confirmAt(await loadSettings(root).catch(() => ({}))) });
   const sourced = links.map((l) => ({ ...l, source: `ai:${provider}:${item.file}` }));
   return { links: sourced };
 }

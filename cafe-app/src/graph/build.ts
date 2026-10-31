@@ -2,7 +2,7 @@ import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, DERIVED_RELATIONS, MERGEABLE, NODE_TYPES, NOT_APPROVED_NOTE, edgeId, idMatchesType, nodeId, operatorSource, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, CONFIRMED_AT, DERIVED_RELATIONS, MERGEABLE, NODE_TYPES, NOT_APPROVED_NOTE, OPERATOR_STARS, aiSourceProblem, operatorLinkProblem, canonEdit, canonLink, edgeId, foldedPersonId, idMatchesType, nodeId, operatorSource, type AiLink, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation } from './ontology';
 import { defaultEntries, makeRegistry, type Registry } from './registry';
 import { DEFAULT_RULES, infer, type Rule } from './rules';
 export { nodeId } from './ontology';
@@ -23,7 +23,15 @@ export interface BuildOptions {
   rules?: Rule[];
   /** Per-idea bundles kept between builds, keyed by the idea's content and the registry's version. */
   cache?: BundleCache;
+  /**
+   * The confidence at or above which an AI link counts as confirmed (settings graph.confirmAt; CONFIRMED_AT when
+   * absent). A link stored as confirmed below it counts as confirmed only when the operator's Do it confirmed it.
+   */
+  confirmAt?: number;
 }
+
+/** What the build refused or dropped on the way, one line each (also named by `cafe ontology check`). */
+export type Refused = string[];
 
 /** What one idea's record puts in the graph on its own: its star, its people, teams and form choices, its features and tools. */
 export interface Bundle { nodes: GNode[]; edges: GEdge[]; round?: string }
@@ -132,8 +140,10 @@ export function ideaBundle(idea: Idea, registry: Registry = DEFAULT_REGISTRY): B
   return { nodes, edges, ...(idea.round ? { round: idea.round } : {}) };
 }
 
-export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [], edits: OperatorEdit[] = [], opts: BuildOptions = {}): { nodes: GNode[]; edges: GEdge[] } {
+export function buildGraph(ideas: Idea[], aiLinksIn: AiLink[], rounds: Round[] = [], editsIn: OperatorEdit[] = [], opts: BuildOptions = {}): { nodes: GNode[]; edges: GEdge[]; refused: Refused } {
   const registry = opts.registry ?? DEFAULT_REGISTRY;
+  const refused: Refused = [];
+  const threshold = opts.confirmAt ?? CONFIRMED_AT;
   const nodes = new Map<string, GNode>();
   const edges = new Map<string, GEdge>();
   const node = (n: GNode) => { if (!nodes.has(n.id)) nodes.set(n.id, n); return n.id; };
@@ -176,34 +186,49 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
     }
   }
 
+  // Star ids written in an older form name the star their label names today (canonId); a person's accent-folded id
+  // from before people kept their accents names that person, when exactly one person folds to it.
+  const folded = new Map<string, string | null>();
+  for (const n of nodes.values()) if (n.type === 'Person') { const f = foldedPersonId(n.label); if (f !== n.id) folded.set(f, folded.has(f) ? null : n.id); }
+  const person = (id: string) => (id.startsWith('person:') && !nodes.has(id) && folded.get(id) ? folded.get(id)! : id);
+  const aiLinks = aiLinksIn.map(canonLink).map((l) => ({ ...l, from: person(l.from), to: person(l.to) }));
+  const edits = editsIn.map(canonEdit).map((e) => (e.t === 'link' || e.t === 'unlink' ? { ...e, from: person(e.from), to: person(e.to) }
+    : e.t === 'merge' ? { ...e, from: person(e.from), into: person(e.into) } : e.t === 'add' ? e : 'node' in e ? { ...e, node: person(e.node) } : e)) as OperatorEdit[];
+
   // The stars the operator added are there for the AI links too: the AI is shown every star, the operator's
   // included, and links to them (a policy the operator added, then found again by a read) must not be dropped.
   // Each add is applied again, in order, with the other edits below; a later remove still removes it.
   for (const e of edits) {
-    if (e.status === 'active' && e.t === 'add' && NODE_TYPES.includes(e.type) && idMatchesType(e.node, e.type) && e.label.trim()) node({ id: e.node, type: e.type, label: e.label.trim() });
+    if (e.status === 'active' && e.t === 'add' && OPERATOR_STARS.includes(e.type) && idMatchesType(e.node, e.type) && e.label.trim()) node({ id: e.node, type: e.type, label: e.label.trim() });
   }
 
-  for (const l of aiLinks) {
-    if (l.status === 'removed') continue;
-    if (!AI_RELATIONS.includes(l.rel)) continue;
+  aiLinks.forEach((l, i) => {
+    if (l.status === 'removed') return;
+    if (!AI_RELATIONS.includes(l.rel)) return;
+    // Where it came from is part of the fact: a link with no AI source (empty, or posing as the form or an edit) is dropped.
+    const bad = aiSourceProblem(l.source);
+    if (bad) { refused.push(`ai-links.jsonl link ${i + 1} (${l.from} ${l.rel} ${l.to}): ${bad} (dropped by the build)`); return; }
     // A new star must be a kind the AI may make, with an id that carries its kind ("capability:…" for a Capability).
-    if ((l.newNodes ?? []).some((n) => !AI_NODE_TYPES.includes(n.type) || !idMatchesType(n.id, n.type))) continue;
-    const pair = ALLOWED[l.rel]; if (!pair) continue;
+    if ((l.newNodes ?? []).some((n) => !AI_NODE_TYPES.includes(n.type) || !idMatchesType(n.id, n.type))) return;
+    const pair = ALLOWED[l.rel]; if (!pair) return;
     const fromKnown = nodes.has(l.from); const toKnown = nodes.has(l.to);
     const newNodes = new Map((l.newNodes ?? []).map((n) => [n.id, n]));
     const fromNew = newNodes.get(l.from); const toNew = newNodes.get(l.to);
-    if (!fromKnown && !fromNew) continue;
-    if (!toKnown && !toNew) continue;
-    if ((fromKnown ? nodes.get(l.from)!.type : fromNew!.type) !== pair[0]) continue;
-    if ((toKnown ? nodes.get(l.to)!.type : toNew!.type) !== pair[1]) continue;
+    if (!fromKnown && !fromNew) return;
+    if (!toKnown && !toNew) return;
+    if ((fromKnown ? nodes.get(l.from)!.type : fromNew!.type) !== pair[0]) return;
+    if ((toKnown ? nodes.get(l.to)!.type : toNew!.type) !== pair[1]) return;
     if (fromNew && !fromKnown) node(fromNew);
     if (toNew && !toKnown) node(toNew);
-    // A link that brings new nodes is a suggestion until the operator says yes, whatever its confidence.
-    const confirmed = l.status === 'confirmed' || (l.confidence >= CONFIRMED_AT && !(l.newNodes?.length));
+    // Nothing the AI is less sure of than the threshold is confirmed without the operator's Do it, whatever the file
+    // says; a link that brings new nodes is a suggestion until the operator says yes, whatever its confidence.
+    const confirmed = l.status === 'confirmed'
+      ? l.confidence >= threshold || l.confirmedBy === 'operator'
+      : l.status === 'pending' && l.confidence >= threshold && !(l.newNodes?.length);
     edge(l.from, l.rel, l.to, l.description, l.source, l.confidence, confirmed, l.idea);
-  }
+  });
 
-  applyEdits(nodes, edges, edits);
+  applyEdits(nodes, edges, edits, refused);
 
   // The last layer: what the rules derive from everything above. Recomputed every time, never read from disk.
   for (const e of infer([...nodes.values()], [...edges.values()], opts.rules ?? DEFAULT_RULES)) if (!edges.has(e.id)) edges.set(e.id, e);
@@ -217,6 +242,7 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
   return {
     nodes: [...nodes.values()].sort((a, b) => a.id.localeCompare(b.id)),
     edges: [...edges.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    refused,
   };
 }
 
@@ -224,6 +250,15 @@ export function buildGraph(ideas: Idea[], aiLinks: AiLink[], rounds: Round[] = [
 function addIdea(e: GEdge, idea: string): void {
   if (e.ideas?.includes(idea)) return;
   e.ideas = [...(e.ideas ?? []), idea].sort();
+}
+
+/** Why a star of this kind is not the operator's to add. */
+export const formOnly = (t: NodeType) => (t === 'Idea' ? 'an idea comes only from the form (a Café submission)' : t === 'Round' ? 'a round is made in the Rounds pop-out'
+  : t === 'Tool' ? 'a tool comes only from the tool picker' : t === 'Person' ? 'a person comes only from an idea\'s team' : `a ${t} comes only from the form`);
+/** Why a merge of two stars of different kinds (or of a kind never merged) is refused. */
+export function mergeProblem(from: string, into: string): string {
+  const a = from.split(':')[0]; const b = into.split(':')[0];
+  return a !== b ? `a ${a} and a ${b} are different kinds of star, and only stars of one kind merge` : `${a} stars are never merged`;
 }
 
 /** Two star ids of one mergeable kind (ids are "type:slug"): only such a merge is ever applied, so only such a merge is followed. */
@@ -243,14 +278,16 @@ function repoint(e: OperatorEdit, merged: Map<string, string>): OperatorEdit {
  * The operator's edits, in order, over what the form and the AI drew. An edit made after a merge at the merged star's
  * id follows the merge to the star kept. An edit whose stars are gone does nothing (staleEdits names it).
  */
-function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits: OperatorEdit[]): void {
+function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits: OperatorEdit[], refused: Refused = []): void {
   const merged = new Map<string, string>();
   for (const raw of edits) {
     if (raw.status !== 'active') continue;
     const e = raw.t === 'merge' ? raw : repoint(raw, merged);
     if (e.t === 'add') {
-      // A star of a kind the ontology does not know, or whose id lies about its kind, is refused (check names it).
-      if (!NODE_TYPES.includes(e.type) || !idMatchesType(e.node, e.type)) continue;
+      // A star of a kind the ontology does not know, or whose id lies about its kind, is refused (check names it); so
+      // is one of a kind only the form, the rounds or the tool picker make (an idea, a round, a person): no phantom idea.
+      if (!NODE_TYPES.includes(e.type) || !idMatchesType(e.node, e.type)) { refused.push(`operator.jsonl ${e.id}: add ${e.node}: ${NODE_TYPES.includes(e.type) ? `its id does not start with "${e.type === 'Idea' ? 'idea' : e.type.toLowerCase()}:"` : `unknown node type "${String(e.type)}"`} (refused by the build)`); continue; }
+      if (!OPERATOR_STARS.includes(e.type)) { refused.push(`operator.jsonl ${e.id}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`); continue; }
       if (!nodes.has(e.node) && e.label.trim()) nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
     } else if (e.t === 'remove') {
       if (!nodes.delete(e.node)) continue;
@@ -261,15 +298,19 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
     } else if (e.t === 'unlink') {
       edges.delete(edgeId(e.from, e.rel, e.to));
     } else if (e.t === 'link') {
-      // A derived relation is the rules' to state: one stored by hand is refused here and named by check.
-      const pair = ALLOWED[e.rel]; const from = nodes.get(e.from); const to = nodes.get(e.to);
-      if (!pair || DERIVED_RELATIONS.includes(e.rel) || !from || !to || from.type !== pair[0] || to.type !== pair[1]) continue;
+      // A derived relation is the rules' to state, and a role, round or tool pick the record's: one stored by hand is
+      // refused here and named by check.
+      const from = nodes.get(e.from); const to = nodes.get(e.to);
+      const bad = operatorLinkProblem(e.rel, from?.type, to?.type);
+      if (bad) { refused.push(`operator.jsonl ${e.id}: link ${e.from} ${e.rel} ${e.to}: ${bad} (refused by the build)`); continue; }
+      if (!from || !to) continue;
       const id = edgeId(e.from, e.rel, e.to);
       const there = edges.get(id);
       // The same fact stated for another idea: that idea is added to it (a capability another idea also uses the data of).
       if (there) { if (e.idea) addIdea(there, e.idea); continue; }
       edges.set(id, { id, from: e.from, to: e.to, rel: e.rel, description: 'Added by the operator', source: operatorSource(e.id, e.at), confidence: 1, confirmed: true, ...(e.idea ? { ideas: [e.idea] } : {}) });
     } else if (e.t === 'merge') {
+      if (e.from !== e.into && !sameKind(e.from, e.into)) { refused.push(`operator.jsonl ${e.id}: merge ${e.from} into ${e.into}: ${mergeProblem(e.from, e.into)} (refused by the build)`); continue; }
       if (e.from !== e.into && sameKind(e.from, e.into)) merged.set(e.from, e.into);
       const from = nodes.get(e.from); const into = nodes.get(follow(merged, e.into));
       if (!from || !into || from.id === into.id || from.type !== into.type || !MERGEABLE.includes(from.type)) continue;
@@ -297,8 +338,12 @@ export interface StaleEdit { id: string; what: string; missing: string[] }
  * star is not stale: it lands on the star kept). Adds and removes are left out: an add makes its star and a remove's
  * star is meant to be gone; a merge's own star is gone by design, so only the star it merges into must be there.
  */
-export function staleEdits(graphNodes: { id: string }[], edits: OperatorEdit[]): StaleEdit[] {
+export function staleEdits(graphNodes: { id: string; type?: NodeType; label?: string }[], rawEdits: OperatorEdit[]): StaleEdit[] {
   const have = new Set(graphNodes.map((n) => n.id));
+  const folded = new Map<string, string | null>();
+  for (const n of graphNodes) if (n.type === 'Person' && n.label) { const f = foldedPersonId(n.label); if (f !== n.id) folded.set(f, folded.has(f) ? null : n.id); }
+  const person = (id: string) => (id.startsWith('person:') && !have.has(id) && folded.get(id) ? folded.get(id)! : id);
+  const edits = rawEdits.map(canonEdit).map((e) => (e.t === 'link' || e.t === 'unlink' ? { ...e, from: person(e.from), to: person(e.to) } : e.t === 'merge' ? { ...e, into: person(e.into) } : e.t === 'add' ? e : 'node' in e ? { ...e, node: person(e.node) } : e)) as OperatorEdit[];
   const merged = new Map<string, string>();
   for (const e of edits) if (e.status === 'active' && e.t === 'merge' && e.from !== e.into && sameKind(e.from, e.into)) merged.set(e.from, e.into);
   const out: StaleEdit[] = [];

@@ -125,7 +125,9 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 20).map(String) : [],
     thread: body.thread ? String(body.thread) : undefined,
     progress, stopped,
-  }));
+    // An answer changes nothing in the workspace but the chat log (under its own lock): it never waits behind a slow
+    // write such as a decision suggestion or a deck, which once held a 60 s question for 15 minutes.
+  }), { exclusive: false });
   add('POST', '/api/chat/:id/do', async ({ params, body }) => doActions(root, params.id, body.actionId ? String(body.actionId) : undefined, clock, ai));
   add('POST', '/api/chat/:id/cancel', async ({ params, body }) => cancelActions(root, params.id, body.actionId ? String(body.actionId) : undefined));
   add('POST', '/api/chat/:id/undo', async ({ params, body }) => undoChatAction(root, params.id, String(body.actionId ?? ''), clock));

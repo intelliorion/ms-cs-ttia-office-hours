@@ -112,6 +112,28 @@ export function resetOntology(): void { applyOntology(clone(BUILTIN_ONTOLOGY)); 
  */
 export const IDEA_SCOPED: Relation[] = ['USES_DATA', 'BUILT_WITH'];
 
+/**
+ * Relations only the form, the rounds or the tool picker state: who submitted, leads, sponsors, builds or is on an
+ * idea lives in the idea's record (the assistant changes the record, never a link), the round in the round's file, a
+ * tool in the tool pick. An operator link of one of these is refused by the build and named by check.
+ */
+export const FORM_ONLY_RELATIONS: Relation[] = ['SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'IN_ROUND', 'BUILT_WITH'];
+/** The links NetworkX's link prediction proposes, and so the only ones its Propose route may carry. */
+export const NETWORK_RELATIONS: Relation[] = ['NEEDS', 'USES_DATA'];
+/** Why an operator link of this relation between these kinds is not one the ontology lets anyone store by hand, or undefined. */
+export function operatorLinkProblem(rel: Relation, fromType: string | undefined, toType: string | undefined): string | undefined {
+  const pair = ALLOWED[rel];
+  if (!pair) return `unknown relation "${String(rel)}"`;
+  if (DERIVED_RELATIONS.includes(rel)) return `${rel} is derived by the rules from what the graph holds, never stored by hand`;
+  if (FORM_ONLY_RELATIONS.includes(rel)) {
+    return rel === 'BUILT_WITH' ? 'BUILT_WITH comes only from the tool picker'
+      : rel === 'IN_ROUND' ? 'IN_ROUND comes only from the round the idea is put in'
+        : `${rel} comes only from the idea's record (its submitter and team), never from a link`;
+  }
+  if (fromType !== undefined && toType !== undefined && (fromType !== pair[0] || toType !== pair[1])) return `${rel} goes ${pair[0]} → ${pair[1]}, not ${fromType} → ${toType}`;
+  return undefined;
+}
+
 /** Relations the AI may propose. People links come only from the form. */
 export const AI_RELATIONS: Relation[] = ['REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA'];
 export const AI_NODE_TYPES: NodeType[] = ['PainPoint', 'Capability', 'Tool', 'System'];
@@ -159,6 +181,18 @@ export interface AiLink {
   status: 'pending' | 'confirmed' | 'removed'; newNodes?: GNode[];
   /** The idea the link was extracted for (the rules scope by it). */
   idea?: string;
+  /** Set when the operator's Do it confirmed the link (a link below the threshold counts as confirmed only then). */
+  confirmedBy?: 'operator'; confirmedAt?: string;
+}
+
+/**
+ * What is wrong with an AI link's source, or undefined: it must say which AI read it and where
+ * ("ai:<provider>" or "ai:<provider>:<field or file>"). Empty, or posing as the form or an operator edit, is dropped.
+ */
+export function aiSourceProblem(source: unknown): string | undefined {
+  if (typeof source !== 'string' || !source.trim()) return 'the link says nowhere where it came from (source is empty)';
+  if (!/^ai:[^:\s][^:]*(?::\S.*)?$/.test(source.trim())) return `its source "${source.slice(0, 60)}" is not an AI read (ai:<provider>:<where>)`;
+  return undefined;
 }
 
 function fnv1a32(str: string): number {
@@ -167,36 +201,122 @@ function fnv1a32(str: string): number {
   return h >>> 0;
 }
 /**
- * The id part of a label. A "+" or "#" closing a word is spelled out, so C++, C# and C stay three stars
- * ("c-plus-plus-coding", "c-sharp-coding", "c-coding"); every other mark (T+E, #42, &) is a separator, as it always
- * was, so no existing id changes.
+ * The id part of a label, for things that are not stars (screens, features in a design file, roadshow people). A "+"
+ * or "#" closing a word is spelled out, so C++, C# and C stay three; every other mark is a separator. Stars use
+ * nameKey (below), which is the one normal form of a star's name.
  */
 export const slug = (s: string) =>
   s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/(?<=[\p{L}\p{N}+])\+(?![\p{L}\p{N}])/gu, ' plus ').replace(/(?<=\p{L})#(?![\p{L}\p{N}])/gu, ' sharp ')
     .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || `h${fnv1a32(s).toString(16)}`;
+
 /**
- * The key two wordings of one name share, for the registry's lookup (never an id): case, accents and spacing aside,
- * "&" and a "+" between two words ("T+E") read as "and", so "Travel and Expense policy" finds "Travel & Expense
- * policy". A "+" or "#" closing a word (C++, C#) stays apart from the bare word, so distinct names never collapse.
+ * Word sequences that name the same thing, read wherever a star's name is normalised (id and lookup alike): T&E,
+ * T+E, T/E and "T and E" are Travel & Expense; "e-mail" is email. Whole words only, after "and" is dropped.
  */
-export const nameKey = (s: string) => slug(
-  s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/&/g, ' and ').replace(/(?<=[\p{L}\p{N}])\s*\+\s*(?=[\p{L}\p{N}])/gu, ' and '),
-);
+export const NAME_SYNONYMS: [string[], string[]][] = [
+  [['t', 'e'], ['travel', 'expense']],
+  [['tande'], ['travel', 'expense']],
+  [['travel', 'expenses'], ['travel', 'expense']],
+  [['e', 'mail'], ['email']],
+];
+/**
+ * The kinds whose last word loses a plural s ("Travel policies" → "travel policy"): systems and data sources, named
+ * freely as a thing or its documents. Capabilities and pain points are phrases whose plural can carry meaning, so not.
+ */
+export const PLURAL_FOLDED: NodeType[] = ['System'];
+/** Last words that end in s but are not plurals (or are names), kept as they are. */
+const NOT_PLURAL = new Set(['news', 'series', 'species', 'analytics', 'logistics', 'status', 'campus', 'canvas', 'atlas', 'alias', 'bias', 'chaos', 'lens', 'windows', 'teams', 'sales', 'ops', 'devops', 'aws', 'sms', 'kms', 'gps', 'dns', 'hris', 'ats', 'crm', 'means', 'physics', 'economics', 'ethics', 'metrics', 'basis', 'thesis', 'axis']);
+function singular(w: string): string {
+  if (w.length < 4 || NOT_PLURAL.has(w) || /\d/.test(w)) return w;
+  if (/ies$/.test(w)) return `${w.slice(0, -3)}y`;
+  if (/(sses|xes|ches|shes)$/.test(w)) return w.slice(0, -2);
+  if (/(ss|us|is|as|os)$/.test(w) || !w.endsWith('s')) return w;
+  return w.slice(0, -1);
+}
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+const decodeEntities = (s: string) => s.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
+  const k = e.toLowerCase();
+  if (ENTITIES[k] !== undefined) return ENTITIES[k];
+  const n = k.startsWith('#x') ? Number.parseInt(k.slice(2), 16) : k.startsWith('#') ? Number.parseInt(k.slice(1), 10) : NaN;
+  return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+});
+
+/**
+ * The one normal form of a star's name: its id is `type:` + this, and the registry looks names up by this, so one
+ * name can never give two stars. For every kind but people: HTML entities decoded (T&amp;E), accents, case, spacing
+ * and punctuation aside, dotted initials joined (G.S.S. is GSS), "&", "+" between words and the word "and" are one
+ * thing (T&E, T+E, T and E, T/E), the synonyms above, and for systems and data a plural last
+ * word ("Travel policies") is singular. A "+" or "#" closing a word (C++, C#) stays apart from the bare word.
+ * People are matched by their exact name (case and spacing aside), never by folding accents: Lucía Fernández and
+ * Lucia Fernandez are two people until the operator merges them.
+ */
+export function nameKey(s: string, type?: NodeType): string {
+  const raw = decodeEntities(String(s ?? ''));
+  if (type === 'Person') {
+    return raw.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || `h${fnv1a32(raw).toString(16)}`;
+  }
+  const t = raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/(?<=[\p{L}\p{N}+])\+(?![\p{L}\p{N}])/gu, ' plus ').replace(/(?<=\p{L})#(?![\p{L}\p{N}])/gu, ' sharp ')
+    .replace(/(?<![\p{L}\p{N}])((?:\p{L}\.){2,})(?![\p{L}\p{N}])/gu, (m) => m.replace(/\./g, ''));
+  let words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (words.length > 1) words = words.filter((w) => w !== 'and');
+  for (const [from, to] of NAME_SYNONYMS) {
+    for (let i = 0; i + from.length <= words.length; i++) {
+      if (from.every((w, k) => words[i + k] === w)) { words = [...words.slice(0, i), ...to, ...words.slice(i + from.length)]; i += to.length - 1; }
+    }
+  }
+  if (type && PLURAL_FOLDED.includes(type) && words.length) words[words.length - 1] = singular(words[words.length - 1]);
+  return words.join('-') || `h${fnv1a32(raw).toString(16)}`;
+}
+/** The kind a star id's prefix names ("painpoint:…" is a PainPoint), or undefined. */
+export const typeOfId = (id: string): NodeType | undefined => {
+  const p = String(id).split(':')[0];
+  return NODE_TYPES.find((t) => (t === 'Idea' ? 'idea' : t.toLowerCase()) === p);
+};
+/**
+ * A stored star id (an AI link's, an operator edit's, an entities.yaml entry's) in today's normal form, so an id
+ * written before nameKey was the one normal form ("system:t-e-policy", "capability:deadline-tracking-and-alerting")
+ * names the star its label names today. Ideas and rounds keep their ids; people too (their ids keep accents now,
+ * and the build finds an older accent-folded id by its person: see buildGraph).
+ */
+export function canonId(id: string): string {
+  const type = typeOfId(id);
+  if (!type || type === 'Idea' || type === 'Round' || type === 'Person') return id;
+  const rest = id.slice(id.indexOf(':') + 1);
+  if (!rest || /^h[0-9a-f]+$/.test(rest)) return id;
+  return `${type.toLowerCase()}:${nameKey(rest.replace(/-/g, ' '), type)}`;
+}
+/** An AI link with its star ids in today's normal form (canonId), the file line left as it is. */
+export function canonLink(l: AiLink): AiLink {
+  const f = canonId(l.from); const t = canonId(l.to);
+  const nn = l.newNodes?.map((n) => (typeof n?.id === 'string' ? { ...n, id: canonId(n.id) } : n));
+  if (f === l.from && t === l.to && (l.newNodes ?? []).every((n, i) => n === nn![i] || n.id === nn![i].id)) return l;
+  return { ...l, from: f, to: t, ...(nn ? { newNodes: nn } : {}) };
+}
+/** An operator edit with its star ids in today's normal form (canonId). */
+export function canonEdit(e: OperatorEdit): OperatorEdit {
+  if (e.t === 'link' || e.t === 'unlink') { const from = canonId(e.from); const to = canonId(e.to); return from === e.from && to === e.to ? e : { ...e, from, to }; }
+  if (e.t === 'merge') { const from = canonId(e.from); const into = canonId(e.into); return from === e.from && into === e.into ? e : { ...e, from, into }; }
+  if (e.t === 'rename' || e.t === 'remove' || e.t === 'alias' || e.t === 'add') { const node = canonId(e.node); return node === e.node ? e : { ...e, node }; }
+  return e;
+}
+/** The id an accent-folded person id had before people kept their accents ("person:lucia-fernandez" for Lucía Fernández). */
+export const foldedPersonId = (label: string) => `person:${slug(label)}`;
 /** Whether a star id carries its type's prefix ("capability:…" for a Capability): an id that lies about its kind is refused. */
 export const idMatchesType = (id: string, type: string) => typeof id === 'string' && id.startsWith(`${type === 'Idea' ? 'idea' : type.toLowerCase()}:`) && id.length > type.length + 1;
 export function nodeId(type: NodeType, label: string): string {
   if (type === 'Idea') return `idea:${label}`;
-  return `${type.toLowerCase()}:${slug(label)}`;
+  if (type === 'Round') return `round:${slug(label)}`;
+  return `${type.toLowerCase()}:${nameKey(label, type)}`;
 }
 export const edgeId = (from: string, rel: Relation, to: string) => `${from}|${rel}|${to}`;
 
 /** The Café's approved tools (app design section 6). Anything else is "not on the approved list". */
 export const APPROVED_TOOLS: string[] = ['Microsoft Copilot', 'Copilot Studio', 'Power Apps', 'Dataiku', 'custom app'];
 export const TOOL_ALIASES: Record<string, string> = {
-  'microsoft copilot': 'Microsoft Copilot', 'copilot': 'Microsoft Copilot', 'm365 copilot': 'Microsoft Copilot', 'microsoft 365 copilot': 'Microsoft Copilot',
+  'microsoft copilot': 'Microsoft Copilot', 'copilot': 'Microsoft Copilot', 'm365 copilot': 'Microsoft Copilot', 'microsoft 365 copilot': 'Microsoft Copilot', 'ms copilot': 'Microsoft Copilot',
   'copilot studio': 'Copilot Studio', 'microsoft copilot studio': 'Copilot Studio',
-  'power apps': 'Power Apps', 'powerapps': 'Power Apps', 'microsoft power apps': 'Power Apps',
+  'power apps': 'Power Apps', 'powerapps': 'Power Apps', 'microsoft power apps': 'Power Apps', 'power app': 'Power Apps',
   'dataiku': 'Dataiku', 'dataiku dss': 'Dataiku',
   'custom app': 'custom app', 'custom application': 'custom app', 'custom code': 'custom app', 'custom-built app': 'custom app', 'bespoke app': 'custom app',
 };

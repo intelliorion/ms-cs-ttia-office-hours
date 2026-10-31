@@ -152,10 +152,10 @@ describe('fault 9: rules files as people write them', () => {
       const g = buildGraph(IDEAS, [], [], [], { rules: [] });
       const out = infer(g.nodes, g.edges, r.rules);
       // Avery Chen is in GSS (001) and BSI (008): GSS needs 001's capabilities, BSI 008's, never crossed.
-      const gss = out.find((e) => e.id === 'team:gss|USES|capability:deadline-tracking-and-alerting')!;
-      expect(gss.derived).toMatchObject({ rule: 'team-needs', inputs: ['team:gss|HAS_MEMBER|person:avery-chen', 'person:avery-chen|SUBMITTED|idea:CAFE-2026-001', 'idea:CAFE-2026-001|NEEDS|capability:deadline-tracking-and-alerting'] });
+      const gss = out.find((e) => e.id === 'team:gss|USES|capability:deadline-tracking-alerting')!;
+      expect(gss.derived).toMatchObject({ rule: 'team-needs', inputs: ['team:gss|HAS_MEMBER|person:avery-chen', 'person:avery-chen|SUBMITTED|idea:CAFE-2026-001', 'idea:CAFE-2026-001|NEEDS|capability:deadline-tracking-alerting'] });
       expect(gss.description).toBe('via Avery Chen and Vendor contract summariser');
-      expect(out.find((e) => e.id === 'team:bsi|USES|capability:deadline-tracking-and-alerting')!.derived!.inputs[1]).toBe('person:avery-chen|SUBMITTED|idea:CAFE-2026-008');
+      expect(out.find((e) => e.id === 'team:bsi|USES|capability:deadline-tracking-alerting')!.derived!.inputs[1]).toBe('person:avery-chen|SUBMITTED|idea:CAFE-2026-008');
       expect(out.some((e) => e.id === 'team:bsi|USES|capability:policy-question-answering')).toBe(false);
     } finally { resetOntology(); }
   });

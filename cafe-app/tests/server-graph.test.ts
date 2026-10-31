@@ -61,7 +61,7 @@ describe('/api/graph', () => {
     close = async () => { s.server.closeAllConnections(); await new Promise((r) => s.server.close(() => r(null))); delete process.env.CAFE_AI_FAKE; };
     await saveIdea(s.root, sampleIdea({ challenge: 'Too many emails' }));
     await appendAiLink(s.root, {
-      from: 'idea:CAFE-2026-001', to: 'capability:workflow-routings', rel: 'NEEDS', description: 'seed', source: 'operator', confidence: 0.9, status: 'confirmed',
+      from: 'idea:CAFE-2026-001', to: 'capability:workflow-routings', rel: 'NEEDS', description: 'seed', source: 'ai:fake:seed', confidence: 0.9, status: 'confirmed',
       newNodes: [{ id: 'capability:workflow-routings', type: 'Capability', label: 'Workflow routings' }],
     });
     const post = async () => json(await fetch(`${s.base}/api/ai/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'CAFE-2026-001' }) }));

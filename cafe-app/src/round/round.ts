@@ -36,6 +36,8 @@ export interface Settings {
   deepRead?: { upkeep?: boolean; modelMirror?: string; modelMirrorToken?: string; offline?: boolean };
   /** The knowledge graph: an AI link below confirmAt (0 to 1, default 0.7) is stored waiting for the operator's Do it. */
   graph?: { confirmAt?: number };
+  /** The assistant: the most time one answer may take, every step and AI call included (seconds; default 90). */
+  assistant?: { deadlineSeconds?: number };
 }
 
 export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';

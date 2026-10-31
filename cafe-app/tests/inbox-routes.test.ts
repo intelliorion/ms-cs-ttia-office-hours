@@ -227,7 +227,7 @@ describe('/api/inbox: emails and notes', () => {
     expect(graph.edges.some((e: any) => e.id === id)).toBe(false);
   });
 
-  it('a link below 0.7 between existing stars is applied at once, confirmed; Undo removes it', async () => {
+  it('a link below 0.7 between existing stars is applied at once but waits for Do it (the threshold of every AI read); Undo removes it', async () => {
     const s = await server(triageConnector({
       what: 'Invoices may need reading.', understood: ['Invoices may need reading.'], uncertain: [], kind: 'update', ideaId: 'CAFE-2026-003', matchConfidence: 0.9,
       facts: { graph: { nodes: [{ type: 'Capability', label: 'Invoice reading' }], links: [{ from: 'idea', to: 'Invoice reading', rel: 'NEEDS', description: 'Maybe', confidence: 0.5 }] } },
@@ -239,7 +239,7 @@ describe('/api/inbox: emails and notes', () => {
     expect(g).toMatchObject({ kind: 'safe', status: 'applied', inverse: { t: 'remove-ai-links' } });
     const id = 'idea:CAFE-2026-003|NEEDS|capability:invoice-reading';
     let graph = await json(await fetch(`${s.base}/api/graph`));
-    expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: true });
+    expect(graph.edges.find((e: any) => e.id === id)).toMatchObject({ confirmed: false, confidence: 0.5 });
     await s.post(`/api/inbox/${item.id}/undo`, { recordId: g.id });
     graph = await json(await fetch(`${s.base}/api/graph`));
     expect(graph.edges.some((e: any) => e.id === id)).toBe(false);

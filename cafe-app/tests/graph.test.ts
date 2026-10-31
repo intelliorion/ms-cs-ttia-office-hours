@@ -108,7 +108,7 @@ describe('buildGraph', () => {
       { from: 'idea:CAFE-2026-002', to: 'capability:removed', rel: 'NEEDS' as const, description: 'no', source: 'ai:challenge', confidence: 0.9, status: 'removed' as const, newNodes: [{ id: 'capability:removed', type: 'Capability' as const, label: 'Removed' }] },
     ];
     const g = buildGraph([rfx], ai);
-    const e = g.edges.find((x) => x.to === 'capability:ticketing-and-status')!;
+    const e = g.edges.find((x) => x.to === 'capability:ticketing-status')!;
     expect(e.confirmed).toBe(false);
     expect(e.confidence).toBe(0.65);
     expect(g.nodes.some((n) => n.id === 'capability:x')).toBe(false);
@@ -117,7 +117,7 @@ describe('buildGraph', () => {
 
   it('is deterministic and handles an empty workspace', () => {
     expect(buildGraph([rfx, inv], [])).toEqual(buildGraph([inv, rfx], []));
-    expect(buildGraph([], [])).toEqual({ nodes: [], edges: [] });
+    expect(buildGraph([], [])).toEqual({ nodes: [], edges: [], refused: [] });
   });
 
   it('has a colour for every type', () => {
@@ -127,9 +127,11 @@ describe('buildGraph', () => {
 });
 
 describe('hardening', () => {
-  it('keeps non-ASCII names apart and folds accents', () => {
+  it('keeps non-ASCII names apart; a person is matched by the exact name (case aside), never by folding accents', () => {
     expect(nodeId('Person', '李雷')).not.toBe(nodeId('Person', '王芳'));
-    expect(nodeId('Person', 'José')).toBe(nodeId('Person', 'jose'));
+    expect(nodeId('Person', 'José')).not.toBe(nodeId('Person', 'jose'));
+    expect(nodeId('Person', 'José')).toBe(nodeId('Person', 'josé'));
+    expect(nodeId('System', 'Trável policy')).toBe(nodeId('System', 'travel policy'));
     expect(nodeId('Person', '***').length).toBeGreaterThan('person:'.length);
   });
   it('never lets AI links create people, ideas or people links', () => {
@@ -167,11 +169,12 @@ describe('store and layout', () => {
     for (const p of Object.values(l1)) expect(p.every(Number.isFinite)).toBe(true);
     await appendAiLink(root, { from: 'idea:CAFE-2026-002', to: 'capability:ticketing-and-status', rel: 'NEEDS', description: 'd', source: 'ai:challenge', confidence: 0.6, status: 'pending', newNodes: [{ id: 'capability:ticketing-and-status', type: 'Capability', label: 'Ticketing and status' }] });
     const g2 = await rebuildGraph(root);
-    const edge = g2.edges.find((e) => e.to === 'capability:ticketing-and-status')!;
+    // Written with the id of an older form ("-and-"), read in today's normal form.
+    const edge = g2.edges.find((e) => e.to === 'capability:ticketing-status')!;
     expect(edge.confirmed).toBe(false);
     const l3 = await layoutFor(root, g2);
     expect(l3['idea:CAFE-2026-002']).toEqual(l1['idea:CAFE-2026-002']);
-    expect(l3['capability:ticketing-and-status']).toBeDefined();
+    expect(l3['capability:ticketing-status']).toBeDefined();
     await setAiLinkStatus(root, edge.id, 'confirmed');
     const g3 = await rebuildGraph(root);
     expect(g3.edges.find((e) => e.id === edge.id)?.confirmed).toBe(true);
@@ -203,9 +206,9 @@ describe('store and layout', () => {
     expect(read.problems).toEqual([{ line: 2, message: expect.any(String) }]);
     const g = await rebuildGraph(root);
     expect(g.problems).toHaveLength(1);
-    expect(g.edges.some((e) => e.to === 'capability:ticketing-and-status')).toBe(true);
+    expect(g.edges.some((e) => e.to === 'capability:ticketing-status')).toBe(true);
     await appendAiLink(root, { ...link, to: 'capability:other', newNodes: [{ id: 'capability:other', type: 'Capability', label: 'Other' }] });
-    await setAiLinkStatus(root, 'idea:CAFE-2026-002|NEEDS|capability:ticketing-and-status', 'confirmed');
+    await setAiLinkStatus(root, 'idea:CAFE-2026-002|NEEDS|capability:ticketing-status', 'confirmed');
     const after = await readAiLinks(root);
     expect(after.links.map((l) => l.status)).toEqual(['confirmed', 'pending']);
     expect(after.problems).toHaveLength(1);

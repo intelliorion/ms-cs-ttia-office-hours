@@ -306,7 +306,7 @@ export function networkLines(o: NetworkAnswer): string[] {
     L.push(`By type: ${Object.entries(r.byType).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   } else if (o.analysis === 'central') {
     L.push(`Betweenness centrality, top ${r.betweenness.length}${r.sampled ? ' (estimated from a fixed sample)' : ''}:`);
-    r.betweenness.forEach((x: any, i: number) => L.push(`  ${i + 1}. ${named(x)}: ${score(x.betweenness)}, ${x.links} links, ${x.ideas} ideas`));
+    r.betweenness.forEach((x: any, i: number) => L.push(`  ${i + 1}. ${named(x)}: ${score(x.betweenness)}, ${x.links} links, ${x.ideas} idea${x.ideas === 1 ? '' : 's'}`));
     L.push(`Degree centrality, top ${r.degree.length}:`);
     r.degree.forEach((x: any, i: number) => L.push(`  ${i + 1}. ${named(x)}: ${score(x.degree)} (${x.links} links)`));
     L.push(`Per type (betweenness)${r.formChoices === 'left out' ? '; form choices (outcomes, support, categories, beneficiaries) left out: --with-form-choices keeps them' : ''}:`);

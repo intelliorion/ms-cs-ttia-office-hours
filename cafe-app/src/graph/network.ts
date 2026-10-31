@@ -157,7 +157,8 @@ export async function verifyVendored(dir = VENDOR_DIR): Promise<{ file: string; 
 
 /* ---------- running an analysis ---------- */
 
-export interface NetworkOptions { top?: number; a?: string; b?: string; types?: NodeType[]; limit?: number }
+/** formChoices: keep the form choices (outcomes, support, categories, beneficiaries) in central and suggest; left out by default. */
+export interface NetworkOptions { top?: number; a?: string; b?: string; types?: NodeType[]; limit?: number; formChoices?: boolean }
 export interface NetworkRunOptions { withDerived?: boolean; env?: NodeJS.ProcessEnv; timeoutMs?: number }
 export interface NetworkOutput {
   networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string;
@@ -283,7 +284,7 @@ export function networkLines(o: NetworkAnswer): string[] {
     r.betweenness.forEach((x: any, i: number) => L.push(`  ${i + 1}. ${named(x)}: ${score(x.betweenness)}, ${x.links} links, ${x.ideas} ideas`));
     L.push(`Degree centrality, top ${r.degree.length}:`);
     r.degree.forEach((x: any, i: number) => L.push(`  ${i + 1}. ${named(x)}: ${score(x.degree)} (${x.links} links)`));
-    L.push('Per type (betweenness):');
+    L.push(`Per type (betweenness)${r.formChoices === 'left out' ? '; form choices (outcomes, support, categories, beneficiaries) left out: --with-form-choices keeps them' : ''}:`);
     for (const [t, list] of Object.entries(r.byType as Record<string, any[]>)) L.push(`  ${t}: ${list.slice(0, 3).map((x) => `${x.label} ${score(x.betweenness)}`).join(', ')}`);
   } else if (o.analysis === 'clusters') {
     L.push(`${r.clusters.length} cluster${r.clusters.length === 1 ? '' : 's'} of ideas (${r.method}; modularity ${r.modularity}):`);
@@ -309,7 +310,7 @@ export function networkLines(o: NetworkAnswer): string[] {
     if (r.groupsApart) L.push(`${r.groupsApart} group${r.groupsApart === 1 ? '' : 's'} apart: ${r.apart.slice(0, 8).map((c: any) => `[${c.stars.map((s: any) => s.label).join(', ')}]`).join(' ')}`);
   } else if (o.analysis === 'suggest') {
     if (!r.suggestions.length) L.push('No link looks missing: no idea or capability has close peers with a link it lacks.');
-    else L.push(`Links that are probably missing (proposals only; nothing is changed): ${r.suggestions.length} of ${r.found}, from ${r.considered} candidates:`);
+    else L.push(`Links that are probably missing (proposals only; nothing is changed): ${r.suggestions.length} of ${r.found}, from ${r.considered} candidates (peers share ${r.minShared ?? 2}+ stars of the evidence; ${r.minPeers ?? 2}+ such peers back each):`);
     r.suggestions.forEach((s: any, i: number) => {
       L.push(`  ${i + 1}. ${s.from.label} ${relWords(s.rel)} ${s.to.label}: ${Math.round(s.share * 100)} % of its ${r.peers} closest peers by weight; Adamic-Adar ${s.adamicAdar}, Jaccard ${s.jaccard}`);
       for (const b of s.because) L.push(`     like ${b.peer.label} (shares ${b.shared.map((x: any) => x.label).join(', ')})`);

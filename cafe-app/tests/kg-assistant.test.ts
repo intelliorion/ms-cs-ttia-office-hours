@@ -5,7 +5,7 @@ import { appendAiLink, rebuildGraph } from '../src/graph/store';
 import { appendEdit } from '../src/graph/operator';
 import { buildGraph } from '../src/graph/build';
 import { makeRegistry, defaultEntries } from '../src/graph/registry';
-import { applyAction, resolveSteps } from '../src/command/actions';
+import { applyAction, linkProposals, resolveSteps } from '../src/command/actions';
 import { doActions, proposeLink } from '../src/command/chat';
 import { reviewInput } from '../src/review/suggestInput';
 import { fixedClock } from '../src/clock';
@@ -88,22 +88,24 @@ describe('fault 10 in the assistant: a tool is never aliased to another product'
 });
 
 describe('fault 13: an accepted NetworkX suggestion carries the idea it was suggested for', () => {
-  it('a capability→system suggestion sent for 006 is stamped 006; sent with no idea, one card per idea that needs the capability', async () => {
+  it('a capability→system link proposed for 006 is stamped 006; with no idea, one card per idea that needs the capability (the checks every proposed link passes)', async () => {
     const root = await tmpWorkspace();
     for (const i of IDEAS) await saveIdea(root, i);
     for (const l of LINKS) await appendAiLink(root, l);
-    const one = await proposeLink(root, { from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:contract-library', idea: 'CAFE-2026-006', why: 'peers use it' }, clock);
-    expect(one.actions.map((a) => a.action)).toEqual([{ t: 'link', from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:contract-library', idea: 'CAFE-2026-006' }]);
-    const each = await proposeLink(root, { from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:contract-library' }, clock);
-    expect(each.actions.map((a) => a.label)).toEqual([
+    const graph = await rebuildGraph(root);
+    const node = (id: string) => graph.nodes.find((n) => n.id === id)!;
+    const pqa = node('capability:policy-question-answering'); const lib = node('system:contract-library');
+    const one = linkProposals(graph, pqa, 'USES_DATA', lib, { named: 'CAFE-2026-006', suffix: ' · suggested by NetworkX' });
+    expect('proposals' in one && one.proposals.map((p) => p.action)).toEqual([{ t: 'link', from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:contract-library', idea: 'CAFE-2026-006' }]);
+    const each = linkProposals(graph, pqa, 'USES_DATA', lib, { suffix: ' · suggested by NetworkX' });
+    expect('proposals' in each && each.proposals.map((p) => p.label)).toEqual([
       'Link Policy question answering → Contract library (uses the data) for Travel policy assistant · suggested by NetworkX',
       'Link Policy question answering → Contract library (uses the data) for Procurement FAQ bot · suggested by NetworkX',
     ]);
-    await expect(proposeLink(root, { from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:contract-library', idea: 'CAFE-2026-001' }, clock)).rejects.toThrow(/does not need Policy question answering/);
-    // Do it on 006's card: 006 depends on the library, 007 does not.
-    await doActions(root, one.id, 'a1', clock);
-    const g = await rebuildGraph(root);
-    expect(g.edges.filter((e) => e.rel === 'DEPENDS_ON' && e.to === 'system:contract-library').map((e) => e.from).sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-006']);
+    expect(linkProposals(graph, pqa, 'USES_DATA', lib, { named: 'CAFE-2026-001' })).toEqual({ problem: expect.stringMatching(/does not need Policy question answering/) });
+    // On the Propose route it is refused: NetworkX does not suggest it (Policy question answering shares no system with
+    // Contract lookup, only an idea), so it cannot go out as NetworkX's suggestion.
+    await expect(proposeLink(root, { from: pqa.id, rel: 'USES_DATA', to: lib.id, idea: 'CAFE-2026-006' }, clock)).rejects.toThrow(/NetworkX does not suggest/);
   });
 });
 

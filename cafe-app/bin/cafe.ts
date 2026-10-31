@@ -8,7 +8,7 @@ import { importExport } from '../src/import/importRows';
 import { loadSteps } from '../src/rules/stages';
 import { systemClock } from '../src/clock';
 import { checkReport, checkWorkspace } from '../src/graph/check';
-import { writeExport } from '../src/graph/jsonld';
+import { writeExportFiles } from '../src/graph/jsonld';
 import { exportModel, importModel, modelStatus, sizeText, statusLines } from '../src/memory/model';
 import { loadSettings } from '../src/round/store';
 import { NETWORK_ANALYSES, networkCheck, networkFor, networkLines, writeNetworkxExport, type NetworkAnalysis } from '../src/graph/network';
@@ -19,7 +19,7 @@ const flag = (name: string): string | undefined => {
   return i > -1 ? argv[i + 1] : undefined;
 };
 /** Flags that take no value: the word after them is a positional, not their value. */
-const SWITCHES = ['--strict', '--json', '--with-derived', '--apply'];
+const SWITCHES = ['--strict', '--json', '--with-derived', '--with-form-choices', '--apply'];
 const positional = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1]?.startsWith('--') && !SWITCHES.includes(argv[i - 1])));
 const has = (name: string) => argv.includes(`--${name}`);
 const [command, ...rest] = positional;
@@ -34,8 +34,8 @@ async function needWorkspace(): Promise<void> {
 }
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--json]> [--workspace DIR] [--port N]';
-const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--json] [--top N] [--workspace DIR]`;
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--with-form-choices] [--json]> [--workspace DIR] [--port N]';
+const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--with-form-choices] [--json] [--top N] [--workspace DIR]`;
 const MODEL_USAGE = 'Usage: cafe model status | cafe model import <folder-or-zip> | cafe model export <zip>  [--workspace DIR]';
 
 async function main(): Promise<void> {
@@ -106,8 +106,8 @@ async function main(): Promise<void> {
         return;
       }
       const idea = flag('idea');
-      const file = await writeExport(root, idea ? { kind: 'idea', id: idea } : { kind: 'all' }, clock);
-      console.log(`Written: ${file}`);
+      const files = await writeExportFiles(root, idea ? { kind: 'idea', id: idea } : { kind: 'all' }, clock);
+      console.log(`Written: ${files.data}\nIts schema: ${files.vocabulary} (RDFS vocabulary) and ${files.shapes} (SHACL shapes), at ${files.base}`);
       return;
     }
     case 'model': {
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
       await needWorkspace();
       if (what === 'path' && (!rest[1] || !rest[2])) throw new Error(NETWORK_USAGE);
       const top = flag('top') ? Number(flag('top')) : undefined;
-      const out = await networkFor(root, what as NetworkAnalysis, { ...(what === 'path' ? { a: rest[1], b: rest[2] } : {}), ...(top ? { top } : {}) }, { withDerived: has('with-derived') });
+      const out = await networkFor(root, what as NetworkAnalysis, { ...(what === 'path' ? { a: rest[1], b: rest[2] } : {}), ...(top ? { top } : {}), ...(has('with-form-choices') ? { formChoices: true } : {}) }, { withDerived: has('with-derived') });
       if (has('json')) console.log(JSON.stringify(out, null, 2));
       else for (const l of networkLines(out)) console.log(l);
       return;

@@ -33,6 +33,8 @@ const OLD_PY = ['/usr/bin/python3'].find((p) => /^3\.(9|10|11)\./.test(spawnSync
  * Four ideas: three share capabilities (the third lacks Booking update, which both its peers need), a fourth whose
  * submitter's team has nothing else, so it sits apart. An AI link says Request handling uses the Shared mailbox.
  */
+/** A second peer of the travel and desk assistants: link prediction wants two peers that each share two capabilities. */
+const PEER = sampleIdea({ id: 'CAFE-2026-005', slug: 'rooms', title: 'Room booking helper', function: 'BSI', entity: 'CS', dedupe_key: 'e', features: ['Request handling', 'Policy answering', 'Booking update'], people: { submitter: 'Hana Kobayashi', team: [] } });
 const IDEAS = [
   sampleIdea({ id: 'CAFE-2026-001', slug: 'desk', title: 'Desk booking assistant', function: 'BSI', entity: 'CS', dedupe_key: 'a', features: ['Request handling', 'Booking update'],
     people: { submitter: 'Avery Chen', team: [{ name: 'Avery Chen', roles: ['lead'] }] } }),
@@ -149,17 +151,21 @@ describe.skipIf(!!SKIP)('NetworkX: the analyses', () => {
     expect(r.apart[0].stars.map((x: any) => x.id).sort()).toEqual(['idea:CAFE-2026-004', 'person:ingrid-solberg', 'team:tax']);
   });
 
-  it('suggest: the capability both closest peers need, with the peers and shared stars as the reason; the graph is not changed', async () => {
-    const before = (await rebuildGraph(root)).edges.length;
-    const r = (await networkFor(root, 'suggest')).results.suggest;
+  it('suggest: the capability two peers need (each sharing two capabilities), with the peers and shared stars as the reason; the graph is not changed', async () => {
+    // One peer alone is no evidence: with the fixture's three related ideas nothing is suggested; a second peer makes it.
+    expect((await networkFor(root, 'suggest')).results.suggest.suggestions).toEqual([]);
+    const root2 = await workspace(); await saveIdea(root2, PEER);
+    const before = (await rebuildGraph(root2)).edges.length;
+    const r = (await networkFor(root2, 'suggest')).results.suggest;
     // Two hold at 100 %: the travel assistant lacks Booking update and the desk assistant Policy answering, each needed by both its peers.
     expect(r.suggestions.slice(0, 2).map((x: any) => `${x.from.id} ${x.to.id}`).sort()).toEqual(['idea:CAFE-2026-001 capability:policy-answering', 'idea:CAFE-2026-003 capability:booking-update']);
     const top = r.suggestions.find((x: any) => x.from.id === 'idea:CAFE-2026-003');
     expect(top).toMatchObject({ from: { id: 'idea:CAFE-2026-003' }, rel: 'NEEDS', to: { id: 'capability:booking-update' }, share: 1 });
-    expect(top.because.map((b: any) => b.peer.id)).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-001']);
+    expect(top.because.map((b: any) => b.peer.id).sort()).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-005']);
     expect(top.because[0].shared.map((s: any) => s.id)).toEqual(['capability:policy-answering', 'capability:request-handling']);
     expect(top.adamicAdar).toBeGreaterThan(0); expect(top.jaccard).toBeGreaterThan(0);
-    expect((await rebuildGraph(root)).edges.length).toBe(before);
+    expect(r).toMatchObject({ minShared: 2, minPeers: 2, formChoices: 'left out' });
+    expect((await rebuildGraph(root2)).edges.length).toBe(before);
   });
 
   it('cycles: none along NEEDS, USES_DATA and DEPENDS_ON (derived links only with withDerived)', async () => {
@@ -196,7 +202,8 @@ describe.skipIf(!!SKIP)('NetworkX: the analyses', () => {
     const bad = spawnSync('python3', ['-I', '-S', NETWORK_SCRIPT, wheel], { input: JSON.stringify({ graph: { nodes: [], edges: [] }, analyses: ['nope'] }), encoding: 'utf8' });
     expect(JSON.parse(bad.stdout)).toEqual({ error: 'ValueError: unknown analysis nope' });
     expect(bad.stderr).toBe('');
-  });
+    // (Three Python runs in a row: slower than the default 20 s when the whole suite runs in parallel.)
+  }, 60_000);
 
   it.skipIf(!OLD_PY)('Python 3.9 (macOS\'s own) runs the older wheel and gets the same answers', async () => {
     clearNetworkCache();
@@ -257,7 +264,7 @@ describe.skipIf(!!SKIP)('NetworkX: resolving stars by name', () => {
 });
 
 describe.skipIf(!!SKIP)('NetworkX: the CLI', () => {
-  const cafe = (args: string[], env: NodeJS.ProcessEnv = process.env) => run(path.join(APP, 'node_modules', '.bin', 'tsx'), [path.join(APP, 'bin', 'cafe.ts'), ...args], { cwd: APP, env }).catch((e) => e as { stdout: string; stderr: string; code: number });
+  const cafe = (args: string[], env: NodeJS.ProcessEnv = process.env) => run(process.execPath, [path.join(APP, 'node_modules', 'tsx', 'dist', 'cli.mjs'), path.join(APP, 'bin', 'cafe.ts'), ...args], { cwd: APP, env, timeout: 60_000 }).catch((e) => e as { stdout: string; stderr: string; code: number });
 
   it('cafe network stats | central | path A B | suggest, plain and --json, saying the facts read', async () => {
     const root = await workspace();
@@ -268,10 +275,14 @@ describe.skipIf(!!SKIP)('NetworkX: the CLI', () => {
     expect(path_.stdout).toMatch(/Shortest path from Desk booking assistant to Shared mailbox: 1 hop/);
     expect(path_.stdout).toMatch(/Desk booking assistant depends on Shared mailbox/);
     expect(path_.stdout).toMatch(/stored facts and derived links/);
+    await saveIdea(root, PEER);
     const json = JSON.parse((await cafe(['network', 'suggest', '--json', '--workspace', root])).stdout);
     expect(json).toMatchObject({ analysis: 'suggest', scope: 'stored', scopeText: 'stored facts' });
     expect(json.results.suggest.suggestions.map((x: any) => x.to.id)).toContain('capability:booking-update');
-  });
+    const all = await cafe(['network', 'central', '--with-form-choices', '--workspace', root]);
+    expect(all.stdout).not.toMatch(/form choices \(outcomes, support, categories, beneficiaries\) left out/);
+    // Four CLI runs, each starting tsx and Python: under a full parallel run they take longer than the default 20 s.
+  }, 90_000);
 
   it('cafe network check, a wrong analysis, and a missing Python each say so plainly', async () => {
     const check = await cafe(['network', 'check']);
@@ -331,7 +342,7 @@ describe.skipIf(!!SKIP)('NetworkX: the API', () => {
   it('POST /api/network/propose puts the suggested link in the assistant as a proposal; only Do it makes it', async () => {
     const s = await startServer();
     try {
-      for (const i of IDEAS) await saveIdea(s.root, i);
+      for (const i of [...IDEAS, PEER]) await saveIdea(s.root, i);
       const post = (url: string, body: unknown) => fetch(`${s.base}${url}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const entry = await (await post('/api/network/propose', { from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:booking-update', why: 'like Procurement FAQ bot' })).json() as any;
       expect(entry).toMatchObject({ kind: 'command', actions: [{ status: 'proposed', label: 'Link Travel policy assistant → Booking update (needs) · suggested by NetworkX', action: { t: 'link', from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:booking-update' } }] });
@@ -386,7 +397,7 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
   }));
 
   it('"what links are probably missing?": suggestions come back as proposals with Do it; nothing is applied until then', () => withFake(async () => {
-    const root = await workspace();
+    const root = await workspace(); await saveIdea(root, PEER);
     const before = (await rebuildGraph(root)).edges.length;
     const e = await runCommand(root, 'what links are probably missing?', ai(), clock);
     expect(e.trace![0][0].text).toMatch(/^NetworkX link prediction \(Adamic-Adar, Jaccard\) over stored facts: \d+ links? probably missing, proposals only$/);

@@ -36,8 +36,18 @@ SEED = 42
 LEFT_OUT = {"Round", "Entity"}
 # The relations a dependency cycle could run along (DEPENDS_ON is derived: only there with derived links).
 CYCLE_RELS = {"NEEDS", "USES_DATA", "DEPENDS_ON"}
-# Links an operator can make by hand that link prediction proposes: (from type, relation, to type).
-SUGGESTABLE = [("Idea", "NEEDS", "Capability"), ("Capability", "USES_DATA", "System")]
+# Links an operator can make by hand that link prediction proposes: (from type, relation, to type, evidence types).
+# Two stars are peers on the evidence of the relation's kind only: two ideas by the capabilities and pain points they
+# share, two capabilities by the systems they use. Sharing a person, an outcome or an idea is no evidence that a
+# capability uses a system (that is how "Key term extraction uses Team onboarding checklists" came about).
+SUGGESTABLE = [("Idea", "NEEDS", "Capability", ("Capability", "PainPoint")), ("Capability", "USES_DATA", "System", ("System",))]
+# Form choices: a submitter picks them from a short list, so nearly every idea shares one. They would sit at the centre
+# of the network and make every pair of ideas look alike, so central and suggest leave them out unless asked.
+FORM_CHOICES = {"Outcome", "Support", "Category", "Beneficiary"}
+# A peer must share at least this many evidence stars, and a suggestion needs at least this many such peers: one peer
+# alone is a coincidence (it is how a capability that shares two systems with a busy one "should use" all of its others).
+MIN_SHARED = 2
+MIN_PEERS = 2
 # The kinds "central" reports one list for each.
 PER_TYPE = ["Capability", "System", "Person", "Team", "Tool", "PainPoint"]
 # Above this many stars betweenness is estimated from a fixed sample of starting points (seeded) to stay quick.
@@ -72,6 +82,13 @@ def load(payload):
     return full, g
 
 
+def core(g, opts):
+    """The analysis graph without the form choices, unless the caller asked for them (formChoices: true)."""
+    if opts.get("formChoices"):
+        return g
+    return g.subgraph([n for n, a in g.nodes(data=True) if a["type"] not in FORM_CHOICES]).copy()
+
+
 def star(g, n, **extra):
     a = g.nodes[n]
     out = {"id": n, "type": a["type"], "label": a["label"]}
@@ -101,6 +118,7 @@ def stats(full, g, opts):
 
 
 def central(full, g, opts):
+    g = core(g, opts)
     top = int(opts.get("top", 10))
     n = g.number_of_nodes()
     if n == 0:
@@ -133,6 +151,7 @@ def central(full, g, opts):
         "degree": [row(x) for x in ranked(dc, stars)[:top]],
         "byType": by_type,
         "sampled": sampled,
+        "formChoices": "included" if opts.get("formChoices") else "left out",
     }
 
 
@@ -249,29 +268,40 @@ def isolated(full, g, opts):
 
 def suggest(full, g, opts):
     """
-    Links that are probably missing. Link prediction on the undirected graph: Adamic-Adar and Jaccard between two
-    stars of the same kind (two ideas, two capabilities) measure how much they share. Each idea's closest peers (its
-    top three by Adamic-Adar) are then read: a capability most of them need (by weight) and it does not is suggested;
-    likewise a system most of a capability's closest peers use. Scoring an idea against a capability directly would
-    find nothing: an idea and a capability share no neighbours, since ideas link to capabilities and capabilities to
-    tools and systems. The peers and the stars each shares are the reason given with every suggestion.
+    Links that are probably missing. Link prediction on the evidence graph of each relation: two stars of the same kind
+    are peers on what they share of the relation's evidence (two ideas: capabilities and pain points; two capabilities:
+    systems), scored with NetworkX's Adamic-Adar index and Jaccard coefficient on that bipartite graph, and a pair is a
+    peer only when it shares MIN_SHARED evidence stars or more. Each star's closest peers (its top three by Adamic-Adar)
+    are then read: a target most of them have (by weight) and it lacks is suggested, when MIN_PEERS or more of them have
+    it. The pairs are always type-compatible (an idea and a capability, a capability and a system), and the form choices
+    are left out (formChoices: true keeps them). The peers and what each shares are the reason given.
     """
+    g = core(g, opts)
     top = int(opts.get("top", 10))
     k = int(opts.get("peers", 3))
+    min_shared = int(opts.get("minShared", MIN_SHARED))
+    min_peers = int(opts.get("minPeers", MIN_PEERS))
     key = by_label(g)
     out = []
     considered = 0
-    for ftype, rel, ttype in SUGGESTABLE:
+    for ftype, rel, ttype, evidence in SUGGESTABLE:
         sources = sorted((x for x in g.nodes if g.nodes[x]["type"] == ftype), key=key)
         linked = {x: {y for y in g[x] if g.nodes[y]["type"] == ttype and any(r["rel"] == rel and r["from"] == x for r in g[x][y]["rels"])} for x in sources}
-        pairs = [(a, b) for a, b in itertools.combinations(sources, 2) if set(g[a]) & set(g[b])]
+        ev = {x: {y for y in g[x] if g.nodes[y]["type"] in evidence} for x in sources}
+        # The evidence graph: the sources and their evidence stars, nothing else.
+        h = nx.Graph()
+        h.add_nodes_from(sources)
+        for x in sources:
+            for y in ev[x]:
+                h.add_edge(x, y)
+        pairs = [(a, b) for a, b in itertools.combinations(sources, 2) if len(ev[a] & ev[b]) >= min_shared]
         if not pairs:
             continue
         jac = {}
-        for a, b, s in nx.jaccard_coefficient(g, pairs):
+        for a, b, s in nx.jaccard_coefficient(h, pairs):
             jac[(a, b)] = jac[(b, a)] = s
         peers = {}
-        for a, b, s in nx.adamic_adar_index(g, pairs):
+        for a, b, s in nx.adamic_adar_index(h, pairs):
             peers.setdefault(a, []).append((b, s))
             peers.setdefault(b, []).append((a, s))
         for x in sources:
@@ -288,18 +318,19 @@ def suggest(full, g, opts):
                 considered += 1
                 support = sum(s for _, s in by)
                 share = support / mass
-                if share < 0.5:
+                if share < 0.5 or len(by) < min_peers:
                     continue
                 out.append({
                     "from": star(g, x), "rel": rel, "to": star(g, t),
-                    "adamicAdar": r4(support), "jaccard": r4(max(jac[(x, p)] for p, _ in by)), "share": r4(share),
+                    "adamicAdar": r4(support), "jaccard": r4(max(jac[(x, p)] for p, _ in by)), "share": r4(share), "peerCount": len(by),
                     "because": [
-                        {"peer": star(g, p), "adamicAdar": r4(s), "shared": [star(g, n) for n in sorted(set(g[x]) & set(g[p]), key=key)[:5]]}
+                        {"peer": star(g, p), "adamicAdar": r4(s), "shared": [star(g, n) for n in sorted(ev[x] & ev[p], key=key)[:5]]}
                         for p, s in by
                     ],
                 })
     out.sort(key=lambda s: (-s["share"], -s["adamicAdar"], s["from"]["label"].lower(), s["to"]["label"].lower()))
-    return {"suggestions": out[:top], "considered": considered, "found": len(out), "peers": k}
+    return {"suggestions": out[:top], "considered": considered, "found": len(out), "peers": k, "minShared": min_shared, "minPeers": min_peers,
+            "formChoices": "included" if opts.get("formChoices") else "left out"}
 
 
 def cycles(full, g, opts):

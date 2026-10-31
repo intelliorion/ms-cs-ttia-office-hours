@@ -268,7 +268,7 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     if (bad.length) throw new Error(`There is no analysis "${bad[0]}". Choose from ${NETWORK_ANALYSES.join(', ')}.`);
     const withDerived = /^(1|true|yes)$/i.test(String(query?.withDerived ?? ''));
     const top = query?.top ? Math.max(1, Math.min(50, Number(query.top) || 10)) : undefined;
-    const options = { ...(top ? { top } : {}), ...(query?.a ? { a: String(query.a) } : {}), ...(query?.b ? { b: String(query.b) } : {}) };
+    const options = { ...(top ? { top } : {}), ...(query?.a ? { a: String(query.a) } : {}), ...(query?.b ? { b: String(query.b) } : {}), ...(/^(1|true|yes)$/i.test(String(query?.formChoices ?? '')) ? { formChoices: true } : {}) };
     if (list.length === 1) return networkFor(root, list[0], options, { withDerived });
     return { ...(await networkMany(root, list, options, { withDerived })), analyses: list };
   });

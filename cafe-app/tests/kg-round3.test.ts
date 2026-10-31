@@ -25,6 +25,8 @@ const PY = spawnSync('python3', ['-c', 'print(1)'], { encoding: 'utf8' }).stdout
 const ai = (l: Partial<AiLink> & Pick<AiLink, 'from' | 'rel' | 'to'>): AiLink => ({ description: '', source: 'ai:fake:challenge', confidence: 0.9, status: 'confirmed', ...l });
 
 /** Four ideas like the practice workspace's: three share capabilities, the fourth sits apart. */
+/** A second peer of the travel and desk assistants: link prediction wants two peers that each share two capabilities. */
+const PEER = sampleIdea({ id: 'CAFE-2026-005', slug: 'rooms', title: 'Room booking helper', function: 'BSI', entity: 'CS', dedupe_key: 'e', features: ['Request handling', 'Policy answering', 'Booking update'], people: { submitter: 'Hana Kobayashi', team: [] } });
 const IDEAS = [
   sampleIdea({ id: 'CAFE-2026-001', slug: 'desk', title: 'Desk booking assistant', function: 'BSI', entity: 'CS', dedupe_key: 'a', features: ['Request handling', 'Booking update'],
     people: { submitter: 'Avery Chen', team: [{ name: 'Avery Chen', roles: ['lead'] }] } }),
@@ -57,7 +59,7 @@ describe('must 1: a proposal "suggested by NetworkX" is one NetworkX suggested, 
   });
 
   it.skipIf(!PY)('a NEEDS link NetworkX does not suggest is refused as its suggestion; one it does suggest is proposed with NetworkX\'s own reason', async () => {
-    const root = await workspace();
+    const root = await workspace(); await saveIdea(root, PEER);
     await expect(proposeLink(root, { from: 'idea:CAFE-2026-004', rel: 'NEEDS', to: 'capability:booking-update', why: 'made up' }, clock))
       .rejects.toThrow(/NetworkX does not suggest that Lonely ledger tool needs Booking update/);
     const e = await proposeLink(root, { from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:booking-update', why: 'made up' }, clock);
@@ -439,5 +441,35 @@ describe('should 8: an open schema, and a system counted with its kinds (KIND_OF
     expect(caps.final).toEqual(['capability:request-handling']);
     expect(caps.trace[1].text).toMatch(/with Shared mailbox as a kind of Email/);
     expect((await checkWorkspace(root)).violations).toEqual([]);
+  });
+});
+
+describe.skipIf(!PY)('should 10: NetworkX ranks capabilities, systems, people and teams; link prediction needs evidence of the relation\'s kind', () => {
+  it('form choices are left out of centrality by default (formChoices: true keeps them)', async () => {
+    const { runNetwork } = await import('../src/graph/network');
+    const ideas = IDEAS.map((i) => ({ ...i, outcomes: ['Save Time'], support: ['Agent Design Guidance'] }));
+    const g = buildGraph(ideas, []);
+    const off = (await runNetwork(g, ['central'], { top: 20 })).results.central;
+    expect(off.formChoices).toBe('left out');
+    expect(off.betweenness.map((x: any) => x.type)).not.toEqual(expect.arrayContaining(['Outcome']));
+    expect(off.betweenness.some((x: any) => ['Outcome', 'Support', 'Category', 'Beneficiary'].includes(x.type))).toBe(false);
+    const on = (await runNetwork(g, ['central'], { top: 20, formChoices: true })).results.central;
+    expect(on.betweenness.some((x: any) => x.type === 'Outcome')).toBe(true);
+  });
+
+  it('a capability that shares two systems with one busy capability is not told to use all of its others (the retest\'s "Key term extraction uses Team onboarding checklists")', async () => {
+    const { runNetwork } = await import('../src/graph/network');
+    const idea = sampleIdea({ id: 'CAFE-2026-005', features: ['Key term extraction', 'Document text extraction', 'Task completion tracking'], dedupe_key: 'k' });
+    const sys = (cap: string, s: string): AiLink => ai({ from: `capability:${cap}`, rel: 'USES_DATA', to: `system:${s}`, idea: 'CAFE-2026-005', newNodes: [{ id: `system:${s}`, type: 'System', label: s.replace(/-/g, ' ') }] });
+    const g = buildGraph([idea], [
+      sys('key-term-extraction', 'contract-library'), sys('key-term-extraction', 'meeting-note'),
+      sys('document-text-extraction', 'contract-library'), sys('document-text-extraction', 'meeting-note'), sys('document-text-extraction', 'team-onboarding-checklist'),
+      sys('task-completion-tracking', 'meeting-note'), sys('task-completion-tracking', 'team-onboarding-checklist'),
+    ]);
+    const r = (await runNetwork(g, ['suggest'], { top: 50 })).results.suggest;
+    expect(r.suggestions.filter((x: any) => x.from.id === 'capability:key-term-extraction')).toEqual([]);
+    // With the old rule (one peer, any shared neighbour) it was suggested: minPeers 1 and minShared 1 bring it back.
+    const loose = (await runNetwork(g, ['suggest'], { top: 50, minPeers: 1, minShared: 1 } as any)).results.suggest;
+    expect(loose.suggestions.some((x: any) => x.from.id === 'capability:key-term-extraction' && x.to.id === 'system:team-onboarding-checklist')).toBe(true);
   });
 });

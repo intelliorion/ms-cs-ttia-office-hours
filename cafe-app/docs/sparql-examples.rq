@@ -1,0 +1,142 @@
+# SPARQL over `cafe export`: the queries a newcomer writes first, written so they give the app's answers.
+#
+# Load the export's .jsonld (JSON-LD, safe mode; everything is in the default graph) into any SPARQL store, for
+# example oxigraph or rdflib, with its -vocabulary.ttl beside it if you want the RDFS schema too. Every query below
+# runs as it stands on an export of the practice workspace after `cafe ontology fix --apply`; the comment under
+# each one gives that answer and the app's own answer to the same question, so you can check you are reading the
+# data the way the app does. Queries are separated by lines starting "# ---"; tests/sparql-examples.test.ts runs
+# every one of them.
+#
+# Three things to know before you write your own:
+# 1. A plain triple (?idea cafe:NEEDS ?capability) is a CONFIRMED fact. A link waiting for the operator's Do it
+#    (an AI link below the confidence threshold) is only a reified cafe:Link with cafe:confirmed false. The app
+#    counts those too and says "not confirmed"; a plain-triple query leaves them out (N1, N9).
+# 2. A capability's data (cafe:USES_DATA) holds for the ideas it is stated for. It is a plain triple only where it
+#    holds for every idea that needs the capability; per idea it is a cafe:Link with cafe:statedFor, and what it
+#    gives each idea is the derived plain triple ?idea cafe:DEPENDS_ON ?system (N2, N3).
+# 3. Other names of a star are skos:altLabel ("T&E policy" for the Travel & Expense policy, N5). SIMILAR_TO is
+#    symmetric (owl:SymmetricProperty) and written both ways (N4).
+
+PREFIX cafe: <https://example.invalid/creators-cafe/ontology#>
+PREFIX star: <https://example.invalid/creators-cafe/id/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+
+# --- N1 Which ideas depend on email? (confirmed facts only)
+SELECT ?idea WHERE { ?i cafe:DEPENDS_ON star:system:email ; rdfs:label ?idea } ORDER BY ?idea
+# Answer: Expense anomaly finder; Meeting notes to actions; Onboarding checklist helper.
+#   The app: those three and Procurement FAQ bot, which it says is not confirmed (it rests on an AI link at 0.6 waiting for Do it).
+
+# --- N1b The same with the links waiting for Do it, each with its status (the app's answer)
+SELECT ?idea ?confirmed WHERE {
+  ?k a cafe:Link ; cafe:rel cafe:DEPENDS_ON ; cafe:from ?i ; cafe:to star:system:email ; cafe:confirmed ?confirmed .
+  ?i rdfs:label ?idea } ORDER BY ?idea
+# Answer: Expense anomaly finder true; Meeting notes to actions true; Onboarding checklist helper true; Procurement FAQ bot false.
+#   The app: the same four, Procurement FAQ bot "not confirmed".
+
+# --- N2 Which systems does Document text extraction use, and for which idea? (per idea: the Link form)
+SELECT ?system ?forIdea WHERE {
+  ?k a cafe:Link ; cafe:rel cafe:USES_DATA ; cafe:from star:capability:document-text-extraction ; cafe:to ?s ; cafe:statedFor ?i .
+  ?s rdfs:label ?system . ?i rdfs:label ?forIdea } ORDER BY ?system ?forIdea
+# Answer: Contract library (Vendor contract summariser); Email (Onboarding checklist helper); Meeting notes (Meeting notes to actions);
+#   Procurement FAQ document, Procurement policy (Procurement FAQ bot); Team onboarding checklists (Onboarding checklist helper);
+#   Travel & Expense policy (Travel policy assistant). The app: the same seven, per idea.
+
+# --- N2b The naive plain-triple form: only what holds for every idea that needs the capability
+SELECT ?system WHERE { star:capability:document-text-extraction cafe:USES_DATA ?s . ?s rdfs:label ?system } ORDER BY ?system
+# Answer: (no rows): no system is used by Document text extraction for every one of the five ideas that need it.
+#   This is the trap of the naive query: use N2, or DEPENDS_ON per idea.
+
+# --- N3 How many idea-system dependencies are there? (the derived plain triple, confirmed)
+SELECT (COUNT(*) AS ?n) WHERE { ?i cafe:DEPENDS_ON ?s }
+# Answer: 19. The app: 21 DEPENDS_ON links, 2 of them not confirmed (19 confirmed).
+
+# --- N3b Re-derive every dependency from the stated links, as the rules do (a capability's data joined per idea)
+SELECT (COUNT(DISTINCT CONCAT(STR(?i), STR(?s))) AS ?n) WHERE {
+  ?a a cafe:Link ; cafe:rel cafe:NEEDS ; cafe:from ?i ; cafe:to ?c . FILTER NOT EXISTS { ?a prov:wasGeneratedBy ?r }
+  ?b a cafe:Link ; cafe:rel cafe:USES_DATA ; cafe:from ?c ; cafe:to ?s ; cafe:statedFor ?i . }
+# Answer: 21: the app's 21, re-derived from the stated links in SPARQL.
+
+# --- N4 Which ideas are similar to the Procurement FAQ bot? (written both ways: no UNION needed)
+SELECT ?idea WHERE { star:idea:CAFE-2026-007 cafe:SIMILAR_TO ?x . ?x rdfs:label ?idea } ORDER BY ?idea
+# Answer: Travel policy assistant.
+#   The app: Travel policy assistant, and Desk booking assistant and Vendor contract summariser, which it says are not confirmed.
+
+# --- N4b The same with the similarities that rest on a link waiting for Do it (either end of the Link)
+SELECT ?idea ?confirmed WHERE {
+  ?k a cafe:Link ; cafe:rel cafe:SIMILAR_TO ; cafe:from ?a ; cafe:to ?b ; cafe:confirmed ?confirmed .
+  FILTER(?a = star:idea:CAFE-2026-007 || ?b = star:idea:CAFE-2026-007)
+  BIND(IF(?a = star:idea:CAFE-2026-007, ?b, ?a) AS ?x) ?x rdfs:label ?idea } ORDER BY ?idea
+# Answer: Desk booking assistant false; Travel policy assistant true; Vendor contract summariser false. The app: the same.
+
+# --- N5 Find the T&E policy by any of its names
+SELECT ?star ?label WHERE { ?star rdfs:label|skos:altLabel "T&E policy" ; rdfs:label ?label }
+# Answer: star:system:travel-expense-policy, "Travel & Expense policy". The app resolves "T&E policy" to the same star.
+
+# --- N6 How many ideas are there?
+SELECT (COUNT(?i) AS ?n) WHERE { ?i a cafe:Idea }
+# Answer: 7. The app: 7 ideas.
+
+# --- N7 Who is in GSS? (submitted from it, or added to it by the operator)
+SELECT ?person WHERE { star:team:gss cafe:HAS_MEMBER ?p . ?p rdfs:label ?person } ORDER BY ?person
+# Answer: Alex Wang; Avery Chen; Ingrid Solberg; Kwame Mensah; Lucía Fernández. The app: the same (Alex Wang by the operator's op-10).
+
+# --- N8 What stage is each idea at? (attributes hang off cafe:attrs)
+SELECT ?idea ?stage WHERE { ?i a cafe:Idea ; rdfs:label ?idea ; cafe:attrs ?a . ?a cafe:stageLabel ?stage } ORDER BY ?idea
+# Answer: All seven at Review and Select. The app: the same.
+
+# --- N9 Which capability is needed by the most ideas? (confirmed only)
+SELECT ?capability (COUNT(?i) AS ?n) WHERE { ?i cafe:NEEDS ?c . ?c rdfs:label ?capability } GROUP BY ?capability ORDER BY DESC(?n) ?capability LIMIT 3
+# Answer: Document text extraction 4; Request handling 3; Key term extraction 2 (confirmed only).
+#   The app counts the links waiting for Do it too and says how many are: see N9b.
+
+# --- N9b The same counting the links waiting for Do it too (the app's count, which says how many are not confirmed)
+SELECT ?capability (COUNT(DISTINCT ?i) AS ?n) (SUM(IF(?ok, 0, 1)) AS ?notConfirmed) WHERE {
+  ?k a cafe:Link ; cafe:rel cafe:NEEDS ; cafe:from ?i ; cafe:to ?c ; cafe:confirmed ?ok . ?c rdfs:label ?capability }
+  GROUP BY ?capability ORDER BY DESC(?n) ?capability LIMIT 3
+# Answer: Document text extraction 5 (1 not confirmed); Request handling 4 (1); Deadline tracking and alerting 3 (2).
+#   The app: Document text extraction 5, Request handling 4, then Deadline tracking and alerting and Record update 3 each, with the same "not confirmed" counts.
+
+# --- N10 Which ideas have no tool picked yet?
+SELECT ?idea WHERE { ?i a cafe:Idea ; rdfs:label ?idea . FILTER NOT EXISTS { ?i cafe:USES ?t } } ORDER BY ?idea
+# Answer: Desk booking assistant; Expense anomaly finder; Meeting notes to actions; Onboarding checklist helper; Procurement FAQ bot;
+#   Vendor contract summariser. The app: the same six (only Travel policy assistant has a tool, Copilot Studio).
+
+# --- N11 Which capabilities use the Travel & Expense policy, and for which ideas?
+SELECT ?capability ?forIdea WHERE {
+  ?k a cafe:Link ; cafe:rel cafe:USES_DATA ; cafe:from ?c ; cafe:to star:system:travel-expense-policy ; cafe:statedFor ?i .
+  ?c rdfs:label ?capability . ?i rdfs:label ?forIdea } ORDER BY ?capability ?forIdea
+# Answer: Document text extraction (Travel policy assistant); Policy compliance checking (Expense anomaly finder);
+#   Policy question answering (Travel policy assistant). The app: the same.
+
+# --- N12 How does the app know Expense anomaly finder depends on the Travel & Expense policy? (PROV-O)
+SELECT ?input ?rule WHERE {
+  ?k a cafe:Link ; cafe:from star:idea:CAFE-2026-004 ; cafe:rel cafe:DEPENDS_ON ; cafe:to star:system:travel-expense-policy ;
+     prov:wasDerivedFrom ?in ; prov:wasGeneratedBy ?r .
+  ?in cafe:from ?f ; cafe:rel ?rel ; cafe:to ?t . ?f rdfs:label ?fl . ?t rdfs:label ?tl . ?r rdfs:label ?rule
+  BIND(CONCAT(?fl, " ", STRAFTER(STR(?rel), "#"), " ", ?tl) AS ?input) } ORDER BY ?input
+# Answer: Expense anomaly finder NEEDS Policy compliance checking; Policy compliance checking USES_DATA Travel & Expense policy; rule needs+uses_data.
+#   The app's trace gives the same derivation.
+
+# --- N13 Which team owns the Procurement FAQ bot?
+SELECT ?team WHERE { ?t cafe:OWNS star:idea:CAFE-2026-007 ; rdfs:label ?team }
+# Answer: GSS. The app: GSS, derived from its submitter Kwame Mensah's team.
+
+# --- N14 Are any plain triples unconfirmed? (none: a plain triple is a confirmed fact)
+SELECT ?i ?c WHERE { ?i cafe:NEEDS ?c . ?k a cafe:Link ; cafe:from ?i ; cafe:rel cafe:NEEDS ; cafe:to ?c ; cafe:confirmed false }
+# Answer: (no rows): every plain triple is confirmed.
+
+# --- P1 Which links did the operator add by hand, and when?
+SELECT ?from ?rel ?to ?source WHERE {
+  ?k a cafe:Link ; cafe:from ?f ; cafe:rel ?r ; cafe:to ?t ; cafe:source ?source . FILTER(STRSTARTS(?source, "operator:"))
+  ?f rdfs:label ?from . ?t rdfs:label ?to . BIND(STRAFTER(STR(?r), "#") AS ?rel) } ORDER BY ?source
+# Answer: GSS HAS_MEMBER Alex Wang (op-10, 2026-10-27); Expense anomaly finder REPLACES time consuming (op-12) and Inaccurate result (op-14);
+#   Policy question answering USES_DATA Travel & Expense policy (op-9, 2026-10-26). The app's links step: the same four.
+
+# --- P2 Where did the AI read that the Expense anomaly finder's claims checks use the rules spreadsheet?
+SELECT ?source ?quote ?readAt WHERE {
+  ?k a cafe:Link ; cafe:from star:capability:anomaly-detection-in-claims ; cafe:rel cafe:USES_DATA ; cafe:to star:system:rules-spreadsheet ; cafe:source ?source .
+  OPTIONAL { ?k cafe:quote ?quote } OPTIONAL { ?k cafe:readAt ?readAt } }
+# Answer: source ai:claude:additional_context (corrected by cafe ontology fix from "challenge": the rules spreadsheet is named in the
+#   additional context); no quote or time: this link was read before passages were kept. A link read since carries cafe:quote and cafe:readAt.

@@ -108,7 +108,9 @@ export const QUERY_GUIDE = [
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
   'A trace line or reason marked "not confirmed", and every link in a result\'s unconfirmed list, rests on a link the operator has not confirmed (an AI link waiting for Do it): say so in the reply for that idea or link, never state it as settled; a count that includes one says how many of it are not confirmed.',
-  'A trace line "Not followed: X needs C, which uses S for Y only" means X has no such dependency: never say X needs nothing that uses S.',
+  'A trace line "Not followed, so no depends on link for them: X (needs C, which uses S for Y only)" means X has no such dependency: say why, and never say X needs nothing that uses S.',
+  'A trace line "exactly: <name>, known as ..." names the registry\'s star for the words: an approved tool or a registered system. When it says no idea\'s record has it yet,',
+  '  say that tool (or system) is in no idea yet, that it is not the same as any other star (Copilot is Microsoft Copilot, not Copilot Studio), and never offer to make it another star\'s alias.',
   '- links: provenance. The stored links touching the set (or the stars in codes; two codes: the links between them; neither: the whole graph), narrowed by rel and by source',
   '  (operator: added by hand, with the edit and its date; ai: read by the AI, with the field, the passage it quoted and when; form: from the submission). Its result lists links with where each came from.',
   '  Use it for "which links did the operator add", "where did this link come from", "what did the AI read for [I1]".',
@@ -394,7 +396,18 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   type Scope = { from: Set<string> | null; allowed: Set<string> | null };
   const OPEN: Scope = { from: null, allowed: null };
   const ideaOfStar = (id: string) => (nodes.get(id)?.type === 'Idea' ? id.slice('idea:'.length) : undefined);
-  const statedFor = (e: GEdge) => new Set(e.ideas ?? []);
+  /**
+   * The ideas a capability-level link holds for: those it is stated for; for a link stated for no idea (unscoped),
+   * the ideas the rules let it hold for (those whose own facts confirm it: a derived link that rests on it, any way).
+   */
+  const confirmedFor = new Map<string, Set<string>>();
+  for (const d of w.graph.edges) {
+    if (!d.derived) continue;
+    const idea = ideaOfStar(d.from) ?? ideaOfStar(d.to);
+    if (!idea) continue;
+    for (const id of [...d.derived.inputs, ...(d.derived.alternatives ?? []).flat()]) { let x = confirmedFor.get(id); if (!x) confirmedFor.set(id, (x = new Set())); x.add(idea); }
+  }
+  const statedFor = (e: GEdge) => (e.ideas?.length ? new Set(e.ideas) : new Set(confirmedFor.get(e.id) ?? []));
   /** The scope a star is reached with along one link from a star with scope `at`; null when the link does not hold for the walk. */
   const cross = (at: Scope, e: GEdge, to: string): Scope | null => {
     const fromIdea = ideaOfStar(e.from === to ? e.to : e.from);
@@ -437,7 +450,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         // because its label contains the word. A name it knows for a star the graph does not hold starts from nothing.
         const known = !s.codes?.length && !s.last && s.match && !exact.ids.length ? registered(s) : undefined;
         set = exact.ids.length ? exact.ids : known ? (nodes.has(known.id) ? [known.id] : []) : from.filter((id) => fits(id, s));
-        if (known) exact.note = nodes.has(known.id) ? ` (exactly: ${known.label}, known as "${s.match}")` : ` (exactly: ${known.label}, known as "${s.match}"; no idea's record has it yet, so it is not in the graph: nothing named like it is meant)`;
+        if (known) exact.note = nodes.has(known.id) ? ` (exactly: ${known.label}, known as "${s.match}")` : ` (exactly: ${known.label}, known as "${s.match}"; no idea's record has it yet, so it is not in the graph; it is not any other star${known.id.startsWith('tool:') ? ', and an approved tool is never another tool\'s alias' : ''})`;
         const near = set.length || s.codes?.length || known ? { ids: [], note: '' } : nearestIn(s, from);
         if (near.ids.length) set = near.ids;
         text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
@@ -488,19 +501,22 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         // "no" never reads as "it needs nothing that uses it".
         if (s.dir === 'in' && (s.rel === 'DEPENDS_ON' || s.rel === 'USES') && log) {
           const via: Relation = s.rel === 'DEPENDS_ON' ? 'USES_DATA' : 'BUILT_WITH';
-          const misses: string[] = [];
+          const verb = s.rel === 'DEPENDS_ON' ? 'uses' : 'is built with';
+          /** Per idea the walk did not reach: each capability it needs that uses the system for other ideas (or none). */
+          const misses = new Map<string, string[]>();
           for (const end of from) {
             for (const u of w.graph.edges) {
               if (u.derived || u.rel !== via || u.to !== end) continue;
+              const forIdeas = [...statedFor(u)].map((i) => `idea:${i}`).filter((i) => nodes.has(i));
               for (const n of w.graph.edges) {
                 if (n.derived || n.rel !== 'NEEDS' || n.to !== u.from || kept.has(n.from)) continue;
-                const forIdeas = (u.ideas ?? []).map((i) => `idea:${i}`).filter((i) => nodes.has(i));
-                misses.push(`${name(n.from)} needs ${name(u.from)}, which ${s.rel === 'DEPENDS_ON' ? 'uses' : 'is built with'} ${name(end)} ${forIdeas.length ? `for ${forIdeas.map(name).join(', ')} only` : 'for no idea (unscoped)'}: no ${relWord(s.rel)} link for ${name(n.from)}`);
+                const why = `${name(u.from)}, which ${verb} ${name(end)} ${forIdeas.length ? `for ${forIdeas.map(name).join(', ')} only` : 'for no idea (stated for none)'}`;
+                misses.set(n.from, [...new Set([...(misses.get(n.from) ?? []), why])]);
               }
             }
           }
-          const uniq = [...new Set(misses)];
-          if (uniq.length) after.push({ text: `Not followed: ${uniq.slice(0, DERIVED_TRACE_MAX).join('; ')}${uniq.length > DERIVED_TRACE_MAX ? `; and ${uniq.length - DERIVED_TRACE_MAX} more` : ''}`, size: uniq.length });
+          const lines = [...misses].sort((a, b) => name(a[0]).localeCompare(name(b[0]))).map(([idea, whys]) => `${name(idea)} (needs ${whys.join('; and ')})`);
+          if (lines.length) after.push({ text: `Not followed, so no ${relWord(s.rel)} link for them: ${lines.slice(0, 10).join('; ')}${lines.length > 10 ? `; and ${lines.length - 10} more` : ''}`, size: lines.length });
         }
         // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace.
         if (dropped) text += `, kept to the ideas each link is stated for (${dropped} link${dropped === 1 ? '' : 's'} stated for other ideas not followed)`;

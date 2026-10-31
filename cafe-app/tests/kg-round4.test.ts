@@ -239,7 +239,7 @@ describe('item 3: "not confirmed" survives everywhere', () => {
   it('an idea that needs a capability using the system for another idea only is said not to depend on it (q25: the bot and the travel policy)', () => {
     const r = runQuery({ steps: [{ op: 'stars', codes: ['system:email'] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } as Query, world(g));
     expect(r.final).toEqual(['idea:CAFE-2026-001']);
-    expect(r.trace.find((t) => t.text.startsWith('Not followed:'))!.text).toContain('Procurement FAQ bot needs Request handling, which uses Email for Desk booking assistant only: no depends on link for Procurement FAQ bot');
+    expect(r.trace.find((t) => t.text.startsWith('Not followed'))!.text).toBe('Not followed, so no depends on link for them: Procurement FAQ bot (needs Request handling, which uses Email for Desk booking assistant only); Travel policy assistant (needs Request handling, which uses Email for Desk booking assistant only)');
   });
   it('the decision AI is told which graph facts are not confirmed (suggestInput)', async () => {
     const root = await tmpWorkspace();
@@ -387,5 +387,16 @@ describe('the hypothetical idea (c5c): a capability fact proposed with the idea 
       { t: 'link', from: 'idea:CAFE-2026-008', rel: 'NEEDS', to: 'capability:request-handling' },
       expect.objectContaining({ t: 'link', from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:expense-system', idea: 'CAFE-2026-008' }),
     ]);
+  });
+});
+
+describe('f48: a capability fact stated for no idea is followed for the ideas the rules let it hold for', () => {
+  it('op-9 (Policy answering uses the policy, no idea) counts for the travel assistant, whose own facts confirm it', () => {
+    const idea = sampleIdea({ id: 'CAFE-2026-006', slug: 't', title: 'Travel policy assistant', dedupe_key: 't', features: ['Policy answering', 'Text extraction'], people: { submitter: 'Lu Fe', team: [] } });
+    const links = [ai({ from: 'capability:text-extraction', rel: 'USES_DATA', to: 'system:travel-policy', idea: 'CAFE-2026-006', newNodes: [{ id: 'system:travel-policy', type: 'System', label: 'Travel policy' }] })];
+    const op9 = { id: 'op-9', at: '2026-10-26', status: 'active' as const, t: 'link' as const, from: 'capability:policy-answering', rel: 'USES_DATA' as const, to: 'system:travel-policy' };
+    const g = buildGraph([idea], links, [], [op9]);
+    const r = runQuery({ steps: [{ op: 'stars', codes: ['system:travel-policy'] }, { op: 'follow', rel: 'USES_DATA', dir: 'in', type: 'Capability' }, { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea', group: true }] } as Query, { graph: g, ideas: [idea], rounds: [], idOf: (c: string) => c });
+    expect(r.groups!.map((x) => `${x.from} ${x.to.join(',')}`).sort()).toEqual(['capability:policy-answering idea:CAFE-2026-006', 'capability:text-extraction idea:CAFE-2026-006']);
   });
 });

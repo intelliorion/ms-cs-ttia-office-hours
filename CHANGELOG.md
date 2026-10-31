@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-10-31 (Café app: every route gated by the ontology, an open schema, RDF with its schema)
+
+A second adversarial retest scored the graph 6/10. Each fault it logged is now pinned by a test
+(`tests/kg-round3.test.ts`, `rdf-schema.test.ts`, and the ones they extend).
+
+- **Every route is gated by the ontology, in the build.** A link "suggested by NetworkX" must be among NetworkX's
+  current suggestions (NEEDS or USES_DATA only) and passes the same checks as the assistant's (`linkProposals`); its
+  reason is NetworkX's own. Do it checks every card again. The build refuses, and `cafe ontology check` names: an
+  operator `add` of an idea, round, person or tool; an operator SUBMITTED, LEADS, SPONSORS, BUILDS, RELATED, IN_ROUND
+  or BUILT_WITH link; a merge of two kinds; an AI link whose source is empty or not an AI read. `/api/graph` lists each
+  refusal; a banner over the universe shows them and any `ontology.yaml` or `inference.yaml` problem.
+- **One threshold.** Answers (review updates) and the inbox plan AI links with `graph: confirmAt`, as reads do; the
+  build counts a link below it as confirmed only when the operator's Do it confirmed it (`confirmedBy`).
+- **One name, one star.** The id and the lookup key are one normal form (`nameKey`): entities decoded, "&", "+" and
+  "and" alike, T&E, T/E, TandE and "Travel & Expenses" are Travel & Expense, e-mail is email, G.S.S. is GSS, a system's
+  plural last word singular; people by exact name, accents kept. Older ids are read in the normal form; `cafe ontology
+  fix` writes them so. The C6 name table is a test. "MS Copilot" and "Power App" are tool aliases.
+- **Rules:** the main derivation is the same-idea one; SIMILAR_TO is confirmed when two shared stars are confirmed for
+  both ideas. **Design:** two features of one pick that look alike are flagged. **Check:** an alias naming a
+  not-approved tool, two stars with one name.
+- **The assistant:** a `follow` over several hops keeps to the ideas each capability-level link is stated for. One
+  deadline per answer (`assistant: { deadlineSeconds: 90 }`), with a clear message and the trace so far; an answer
+  runs outside the server's write lock. The fifteen-minute answers were the Mac's idle "Maintenance Sleep" freezing
+  the process (`pmset -g log` matches each one); every AI call now holds `caffeinate -i` while it runs. The 28
+  questions of the retest answer in 7 to 22 s, the T&E one in 9.4 s.
+- **Open schema.** `ontology.yaml` may declare a new kind (`Vendor`) and relation (from, to, meaning, derived); the
+  rules may chain them; the check validates the declarations. `KIND_OF` (System → System): a mailbox that is a kind of
+  Email counts as Email in the rules and in `follow`.
+- **RDF with its schema.** `cafe export` writes an RDFS vocabulary and SHACL shapes beside the JSON-LD, at
+  `export: { base }` (default `https://example.invalid/creators-cafe/`; vocabulary `…/ontology#`, stars `…/id/`).
+  pyshacl and rdf-validate-shacl (new dev dependency, with n3) find zero violations in the practice workspace's export.
+  A capability-level fact is a plain triple only where it holds for every idea; the per-idea `DEPENDS_ON` is plain, so
+  a one-hop SPARQL query gives the app's answer and the two-hop path never reads a fact for an idea it is not true of.
+- **NetworkX:** centrality and link prediction leave the form choices out by default (`--with-form-choices`); link
+  prediction compares ideas by capabilities and pain points and capabilities by systems, two shared stars per peer and
+  two peers per suggestion ("Key term extraction uses Team onboarding checklists" is gone).
+- README, the X-ray page and x-ray.md say so.
+
 ## 2026-10-30 (Café app: the knowledge graph reasons per idea)
 
 An adversarial test of the graph's reasoning found eleven faults; each is now pinned by a test that failed before

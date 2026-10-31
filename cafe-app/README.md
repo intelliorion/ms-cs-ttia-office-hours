@@ -185,6 +185,17 @@ asks what you meant. Each step shows live as it happens ("Looking up who leads P
 ends a message after the step it is on. If a search finds nothing it tries another way before saying the graph does not
 hold it, and a request like "find duplicate capabilities and merge them" is a search first, then merges for what it found.
 
+**No answer takes minutes.** One deadline covers the whole answer, every step and AI call included:
+`assistant: { deadlineSeconds: 90 }` in `rules/settings.yaml` (10 to 900; 90 by default). Each AI call gets only the
+time left; at the deadline the answer stops with "This answer was stopped at its deadline of 90 s …", what the steps
+found so far and the trace. Why a 60-second question once took fifteen minutes: the Mac had gone into idle
+"Maintenance Sleep" (`pmset -g log`), which freezes every process for about fifteen minutes; the AI call timed out
+correctly once the machine woke. Every AI call now keeps the machine awake while it runs (`caffeinate -i -w <pid>` on
+macOS; `CAFE_NO_CAFFEINATE=1` turns it off). An answer also changes nothing but the chat log, so it runs outside the
+server's write lock and never waits behind a slow write (a decision suggestion or a deck). A `follow` over several hops keeps to the ideas each capability-level link is stated for, as the rules do
+("which ideas use the email data" from Email back through a capability reaches only the ideas that capability uses
+Email for), and says how many links it did not follow.
+
 **A conversation keeps its context.** "Who leads them?", "and which of those are in BSI?" and "do the same for GSS" work:
 the agent gets the conversation so far, a star keeps the same code all through it, and a follow-up can start from what
 the last answer found, computed on the graph. **New chat** starts fresh; **⋯** lists earlier chats to reopen with their
@@ -577,6 +588,16 @@ that needs the capability), so accepting it gives that idea, and only that idea,
 
 - **Stored facts by default.** The analysis reads every link without `derived` (the form, the AI's links, your
   edits); `--with-derived` or the pop-out's switch adds what the rules derive. Every output says which.
+- **What holds the programme together, not the form's tick boxes.** Centrality and link prediction leave the form
+  choices (outcomes, support requested, categories, beneficiaries) out by default, since nearly every idea shares one;
+  `--with-form-choices` (`?formChoices=1`) keeps them. The rankings are capabilities, systems, people and teams.
+- **Suggestions need evidence of their own kind.** Two ideas are peers by the capabilities and pain points they share,
+  two capabilities by the systems they use (never by a person or an idea they share); a peer must share two such stars
+  and a suggestion needs two such peers. NetworkX's Adamic-Adar and Jaccard score the pairs on that evidence graph.
+- **"Suggested by NetworkX" only when it is.** Propose (the pop-out, `POST /api/network/propose`) checks the link is
+  among NetworkX's current suggestions (by id) and only an idea needs a capability or a capability uses a system's
+  data; the reason shown is NetworkX's own. The link then passes the same checks as any proposed link, and Do it
+  checks it again.
 - **You keep the last word.** NetworkX never changes the graph. A suggested link becomes a proposal in the assistant
   and is made only when you press Do it.
 - **Behind a firm block.** Nothing is downloaded. The official pure-Python wheels ship in `cafe-app/vendor/networkx/`
@@ -602,7 +623,13 @@ identities, one section per kind (`Tool`, `System`, `Team`, `Entity`, `Capabilit
 tools and their aliases, which used to live only in code. Wherever a star is born (a form's team, feature or tool, a
 star the AI proposes, a star you add or rename, the Import's read of new ideas) its label is looked up here first, by
 label or alias, ignoring case, spacing, accents and "&" against "and" (so "Travel and Expense policy" and "T+E policy"
-find "Travel & Expense policy"; "travel policy" is one star with it once it is an alias). Then the
+find "Travel & Expense policy"; "travel policy" is one star with it once it is an alias). The lookup key and the id
+are one normal form (`nameKey`), so one name can never give two stars: HTML entities decoded (`T&amp;E`), accents,
+case and punctuation aside, dotted initials joined (G.S.S. is GSS), "&", "+" between words and the word "and" one
+thing, T&E, T/E, TandE and "Travel & Expenses" read as Travel & Expense, e-mail as email, and a system's plural last
+word singular ("Travel policies"). C++, C# and C stay three. People are matched by their exact name (case and
+spacing aside), never by folding accents: Lucía Fernández and Lucia Fernandez are two people until you merge them.
+An id written in an older form ("system:t-e-policy") is read in the normal form; `cafe ontology fix` writes it so. Then the
 exact label, then Deep read's nearest star (when an index exists), then a new star. The star's details show **Also known
 as** and **Reference**. A **merge** records the merged label as an alias of the star kept, so the twin cannot come back
 at the next import or re-read; the assistant's `alias X as Y` records one by hand. Aliases are edits in
@@ -659,9 +686,16 @@ named or open on the left, else one card per idea that needs the capability, Do 
 proposed when no idea needs the capability. Your links are sourced `operator:<edit id>@<date>`; an AI link records the
 form field it was read in (`ai:claude:challenge`, `ai:claude:current_process`, ...; `ai:<provider>:<file>` from an
 Import, `ai:<provider>:review-answers` from the review). An AI link below the confidence threshold (`graph:
-confirmAt` in `rules/settings.yaml`, default 0.7) is stored waiting for your Do it, not confirmed. Aliases cannot make
+confirmAt` in `rules/settings.yaml`, default 0.7) is stored waiting for your Do it, not confirmed, whichever path wrote
+it (a read, an Import, an answer, the inbox); and the build counts a link below it as confirmed only when your Do it
+confirmed it (`confirmedBy: operator`), whatever the file says. The build refuses, and the check names: an operator
+`add` of an idea, round, person or tool (only the form, the Rounds pop-out, a team or the tool picker make those); an
+operator link of SUBMITTED, LEADS, SPONSORS, BUILDS, RELATED, IN_ROUND or BUILT_WITH (the record's, the round's or the
+tool pick's); a merge of two kinds; an AI link whose source is empty or not an AI read (`ai:<provider>:<where>`).
+`/api/graph` lists each refusal, and a banner over the universe shows them with any `ontology.yaml` or `inference.yaml`
+problem. Aliases cannot make
 one tool another product: "also know Copilot Studio as UiPath" (or Power Automate, or any other tool star) is refused.
-Identity keeps distinct names apart: C++, C# and C are three stars; ids are otherwise as they were.
+Identity keeps distinct names apart and one name together (the normal form above).
 `edges.jsonl` holds the derived links too, flagged. Demand's **Systems depended on** and **Tools in use** beams, the
 idea's **Similar ideas** block (with the shared stars as the why), and the assistant's `follow`/`rank` with a derived
 relation ("which ideas depend on the expense system", "what does GSS own") all come from here; the trace says "derived
@@ -676,8 +710,25 @@ the idea's Connections say when the AI last read its text and whether the text c
 **The ontology as data.** `rules/ontology.yaml` (written by `init`) is what each kind of star is (label, colour,
 description) and what each link means (from, to, meaning, inverse, derived). The app applies it over the built-in
 ontology, so the panels, the universe and the extraction prompt (which tells the AI what each link means, not only
-which kinds it joins) use your words. Only the kinds and relations the code knows can be changed; anything else is
-reported by the check and ignored.
+which kinds it joins) use your words. The schema is open: a name the ontology does not know is a declaration, with no
+code. A new kind needs a name like `Vendor` and a label (colour and description optional; you make and merge its
+stars in the assistant); a new relation needs from, to, a meaning and `derived: true` or `false`. A stated
+Capability-level relation is idea-scoped like USES_DATA. `inference.yaml` may chain any stated relations, declared
+ones included, into any derived one. The check names every declaration that does not hold.
+
+```yaml
+nodes:
+  Vendor: { label: Vendor, colour: "#334455" }
+relations:
+  SUPPLIED_BY: { from: Capability, to: Vendor, meaning: the capability is supplied by this vendor, derived: false }
+  RELIES_ON_VENDOR: { from: Idea, to: Vendor, meaning: the idea relies on this vendor, derived: true }
+# and in inference.yaml: - { name: needs+supplied_by, chain: [NEEDS, SUPPLIED_BY], then: RELIES_ON_VENDOR }
+```
+
+**Kinds of a system.** `KIND_OF` (System → System) says a system is a kind of another ("the procurement mailbox is
+a kind of email"). A rule's chain that ends at a kind also ends at what it is a kind of, the KIND_OF link among its
+inputs, so an idea that depends on a mailbox depends on Email; a `follow` from Email along a relation also starts from
+its kinds and says so. "Which ideas do not depend on any email system" counts the mailboxes.
 
 ```bash
 npm run cafe -- ontology check --workspace ~/cafe-workspace   # files and graph against the ontology; prints violations, fixes nothing
@@ -707,6 +758,17 @@ properties; each link is also a `cafe:Link` resource whose ends are node IRIs, w
 and `statedFor` (the ideas); a derived link has `prov:wasGeneratedBy` its rule (a `prov:Activity`) and
 `prov:wasDerivedFrom` the links it rests on, other ways as `cafe:alternative`; the `cafe:export` node has the scope and
 `prov:generatedAtTime`. The export is local and holds people's names as the files do.
+
+**The schema comes with the data.** Beside every export the app writes `<stamp>-vocabulary.ttl`, an RDFS vocabulary
+(a class per kind, a property per relation with `rdfs:domain`, `rdfs:range`, label and the meaning as comment, the
+derived ones marked, KIND_OF transitive), and `<stamp>-shapes.ttl`, SHACL shapes (every star's label, each relation's
+subject and object kinds, each Link's ends, relation, source, confidence 0 to 1 and confirmed, each derived link's
+rule). The vocabulary is at `<base>ontology#` (prefix `cafe:`) and the stars at `<base>id/` (prefix `star:`), with
+`export: { base: … }` in `rules/settings.yaml`, `https://example.invalid/creators-cafe/` by default (an honest
+placeholder; set your own). pyshacl and rdf-validate-shacl find zero violations in the practice workspace's export. A
+capability-level fact is a plain triple only where it holds for every idea that needs the capability; per idea it is
+a Link with `statedFor`, and what it gives the idea is the plain triple the rules derive (`?idea cafe:DEPENDS_ON
+?system`), so a plain SPARQL query gives the app's answer and never reads a fact for an idea it is not true of.
 
 Every command that reads a workspace (`import`, `ontology`, `export`, `network`) stops with one line when the folder
 is missing or is not a Café workspace, naming `--workspace` and `CAFE_WORKSPACE` (it used to read the missing default

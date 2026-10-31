@@ -184,6 +184,18 @@ which the app never reads back. The ontology file says what may link to what, so
 check`; `cafe ontology fix` brings an older workspace in line, dry run first), and the export is JSON-LD that RDF
 tools read as written: the default graph, links as resources with node IRIs, PROV-O for derivation.
 
+Every route into the graph is gated by the ontology, in the build itself: an operator cannot add an idea, a round, a
+person or a tool, nor store a SUBMITTED, LEADS, BUILT_WITH or derived link by hand; an AI link must say which AI read
+it where; nothing below the confidence threshold counts as confirmed without the operator's Do it, whoever wrote the
+file; a NetworkX suggestion is proposed as one only when NetworkX makes it on the graph as it is. One name is one star:
+the id and the lookup key are one normal form (T&E, T/E, T and E and "Travel & Expenses" are Travel & Expense; people
+by their exact name, accents kept). The schema is open: `ontology.yaml` may declare a new kind or relation and the
+rules may chain it, with no code; `KIND_OF` makes a mailbox count as an email system. The export carries its schema,
+an RDFS vocabulary and SHACL shapes at a configurable base (`https://example.invalid/creators-cafe/` by default), and
+validates against them with pyshacl and rdf-validate-shacl; a per-idea fact is a plain triple only where it holds for
+every idea, so naive SPARQL never reads a fact for an idea it is not true of, and the per-idea consequence (idea
+DEPENDS_ON system) is a plain triple.
+
 **Deep read.** The text itself: the challenge, the current process, the emails, the designs, chunked and embedded
 on the CPU with a small local model. It answers "what did people write" and "which ideas read alike", and it keeps
 itself current by re-reading only the ideas that changed.
@@ -270,7 +282,8 @@ poor at everything below, because a passage is not a fact.
 | Question the operator actually asks | Plain RAG | This app | Which layer |
 |---|---|---|---|
 | Who submitted the Procurement FAQ bot, and what stage is it at? | Guesses from whichever passage mentions it | Reads the link and the record | Property graph |
-| Which ideas would need rework if the travel policy is rewritten? | Finds passages that mention "policy"; cannot tell dependency from mention | Follows NEEDS then USES_DATA, derived by rule, each hop shown | Knowledge graph |
+| Which ideas would need rework if the travel policy is rewritten? | Finds passages that mention "policy"; cannot tell dependency from mention | Follows NEEDS then USES_DATA for the same idea, derived by rule, each hop shown | Knowledge graph |
+| Which ideas do not depend on any email system? | Cannot answer a negation | DEPENDS_ON from Email and its kinds (KIND_OF: a mailbox is an email system), the rest of the ideas | Knowledge graph |
 | Is "T&E policy" the same thing as "Travel & Expense policy"? | Two strings, two retrievals, maybe two answers | One star, by the registry, so one answer | Knowledge graph |
 | Which pain point is replaced most often, and does any of those ideas lack a lead? | Cannot count or rank across documents | Rank step over REPLACES, then roles from the records | Property graph |
 | Which team owns an idea that has no lead yet? | Nothing to retrieve: it is not written anywhere | OWNS derived from membership plus submission | Knowledge graph |
@@ -310,7 +323,12 @@ used, and only pure-Python algorithms run (no numpy, no scipy). Results are cach
   (or the pop-out's switch) adds what the rules derive. Every output says which, because derived links are
   conclusions, not observations, and an analysis should not count them twice.
 - **Human last control.** NetworkX never writes the graph. A suggested link is a proposal the operator accepts with
-  the assistant's Do it.
+  the assistant's Do it, and it is labelled "suggested by NetworkX" only when it is among NetworkX's current
+  suggestions.
+- **Rankings and suggestions that mean something.** Centrality and link prediction leave the form choices (outcomes,
+  support, categories, beneficiaries) out by default (`--with-form-choices` keeps them), so the rankings are
+  capabilities, systems, people and teams. Link prediction compares two ideas by the capabilities and pain points they
+  share and two capabilities by the systems they use, needs two shared stars per peer and two peers per suggestion.
 - **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
   `GET /api/network`, a network step in the assistant ("which capability holds the most ideas together", traced as
   "NetworkX betweenness centrality over stored facts"), the Network pop-out, the decision suggestion (the idea's

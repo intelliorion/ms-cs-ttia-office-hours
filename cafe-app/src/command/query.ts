@@ -1,4 +1,4 @@
-import { DERIVED_RELATIONS, IDEA_SCOPED, NODE_LABELS, nameKey, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
+import { ALL_RELATIONS, ALLOWED, DECLARED, DERIVED_RELATIONS, RELATION_MEANINGS, IDEA_SCOPED, NODE_LABELS, NODE_TYPES, nameKey, type GEdge, type GNode, type NodeType, type Relation } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -13,8 +13,8 @@ export const NETWORK_STEP_ANALYSES = ['central', 'clusters', 'path', 'isolated',
 export type NetworkStepAnalysis = (typeof NETWORK_STEP_ANALYSES)[number];
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
-const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
-const RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY', ...DERIVED_RELATIONS];
+/** The kinds and relations a query may name: the ontology's live lists, so a kind or relation ontology.yaml declares is one too. */
+const RELATIONS: Relation[] = ALL_RELATIONS;
 /** How many derived links a step names in the trace before "and N more". */
 const DERIVED_TRACE_MAX = 5;
 
@@ -92,7 +92,7 @@ export const QUERY_GUIDE = [
   '  the peers and shared stars behind it: the app shows them as proposals with Do it, so never propose them yourself and never say they are made; cycles: dependency cycles;',
   '  stats: size, density, components. Its result lists network: the facts in codes. Say they come from NetworkX. Use rank for "the most linked", network for "holds together".',
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
-  'Capability BUILT_WITH Tool, Capability USES_DATA System, Idea IN_ROUND Round, Idea ASKS_FOR Support,',
+  'Capability BUILT_WITH Tool, Capability USES_DATA System, System KIND_OF System (a mailbox is a kind of email system), Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
@@ -105,6 +105,7 @@ export const QUERY_GUIDE = [
   'For similar, like, same as, overlaps with [I1]: follow SIMILAR_TO first; its result gives reasons (the shared stars of each link). SIMILAR_TO hits are facts with reasons: "By shared stars: X (shared …)".',
   '  Deep read: a similar step after it adds readings with a score; the reply keeps them apart: "… By reading, also: Y." (no second part when Deep read is off or found nothing).',
   'A follow or rank with no rel walks the stated links only. For what people WROTE use search, not the derived links.',
+  'A system counts its kinds (KIND_OF, dir in): a follow from Email along a relation also starts from every system that is a kind of Email (a mailbox), and the rules derive DEPENDS_ON on Email for an idea that depends on a mailbox; the trace says so.',
   'A capability (or pain point, outcome, category) shared by two teams or functions, and which ideas: start from one side\'s ideas (stars type Idea with function, or the team star then follow OWNS dir out),',
   '  follow NEEDS to capabilities, intersect with the same steps for the other side, then follow NEEDS (dir in, type Idea) with group: true, all in ONE query, so its groups say which ideas need each shared capability.',
   '  Never run the same steps twice: a result already in steps is the answer; one hop more goes in a new query. Answer per capability: "X: [I1], [I3]; Y: [I2], [I4]".',
@@ -134,8 +135,17 @@ export const QUERY_GUIDE = [
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
 ];
 
-/** The guide the agent reads: with Deep read off, the search and similar steps are left out (they do not exist for it). */
-export const queryGuide = (deepRead: boolean): string[] => (deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l)));
+/**
+ * The guide the agent reads: with Deep read off, the search and similar steps are left out (they do not exist for it).
+ * The kinds and relations the workspace's ontology.yaml declared are listed with their meaning.
+ */
+export const queryGuide = (deepRead: boolean): string[] => [
+  ...(deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l))),
+  ...(DECLARED.types.length ? [`Kinds this workspace declared (rules/ontology.yaml): ${DECLARED.types.map((t) => `${t} (${NODE_LABELS[t]})`).join(', ')}.`] : []),
+  ...(DECLARED.relations.length ? [`Relations this workspace declared: ${DECLARED.relations.map((r) => `${ALLOWED_OF(r)} (${RELATION_MEANING(r)}${DERIVED_RELATIONS.includes(r) ? ', derived by the rules' : ''})`).join('; ')}.`] : []),
+];
+const ALLOWED_OF = (r: Relation) => { const [f, t] = ALLOWED[r]; return `${f} ${r} ${t}`; };
+const RELATION_MEANING = (r: Relation) => RELATION_MEANINGS[r]?.meaning ?? '';
 
 export interface StepTrace { text: string; size: number }
 /** A derived-link line cut from the trace (past the first few), with the two stars it joins, so it can come back when the reply names both. */
@@ -226,6 +236,9 @@ const SINGULAR: Record<NodeType, string> = {
   Tool: 'tool', System: 'system or data', Round: 'round', Support: 'support request',
   Outcome: 'desired outcome', Beneficiary: 'beneficiary', Category: 'use case category',
 };
+/** A kind in words; a kind ontology.yaml declared goes by its label. */
+const pluralOf = (t: NodeType) => PLURAL[t] ?? `${String(NODE_LABELS[t] ?? t).toLowerCase()}s`;
+const singularOf = (t: NodeType) => SINGULAR[t] ?? String(NODE_LABELS[t] ?? t).toLowerCase();
 const relWord = (r?: Relation) => (r ? r.toLowerCase().replace(/_/g, ' ') : 'any');
 /** The links a step walks: the stated ones, plus the derived ones only when the step asks for a derived rel. */
 const walkable = (edges: GEdge[], rel?: Relation) => (rel && DERIVED_RELATIONS.includes(rel) ? edges : edges.filter((e) => !e.derived));
@@ -236,7 +249,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   const roundName = new Map(w.rounds.map((r) => [r.id, r.name]));
   const personByLabel = new Map(w.graph.nodes.filter((n) => n.type === 'Person').map((n) => [n.label, n.id]));
   const name = (id: string) => nodes.get(id)?.label ?? id;
-  const kinds = (t?: NodeType) => (t ? PLURAL[t] : 'stars');
+  const kinds = (t?: NodeType) => (t ? pluralOf(t) : 'stars');
 
   const ideaFits = (id: string, s: QueryStep) => {
     if (!(s.stage || s.function || s.region || s.round)) return true;
@@ -379,12 +392,24 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         const near = set.length || s.codes?.length ? { ids: [], note: '' } : nearestIn(s, from);
         if (near.ids.length) set = near.ids;
         text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
-          : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? SINGULAR[s.type] : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
+          : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? singularOf(s.type) : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
         text += exact.note + near.note;
       } else if (s.op === 'follow') {
         const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
         const by = new Map<string, Set<string>>();
-        const reach = (a: string, b: string) => { out.add(b); if (s.group) { const g = by.get(a); if (g) g.add(b); else by.set(a, new Set([b])); } };
+        /** A kind of a star in the set (a mailbox, for Email) stands for it: what links to the kind links to the star. */
+        const kindOf = new Map<string, string>();
+        if (s.rel && s.rel !== 'KIND_OF') {
+          const kinds = new Map<string, string[]>();
+          for (const e of w.graph.edges) if (e.rel === 'KIND_OF' && !e.derived) kinds.set(e.to, [...(kinds.get(e.to) ?? []), e.from]);
+          const queue = [...from];
+          while (queue.length) {
+            const x = queue.shift()!;
+            for (const k of kinds.get(x) ?? []) if (!from.has(k)) { from.add(k); kindOf.set(k, kindOf.get(x) ?? x); carried.set(k, carried.get(x) ?? OPEN); queue.push(k); }
+          }
+        }
+        const root = (id: string) => kindOf.get(id) ?? id;
+        const reach = (a: string, b: string) => { out.add(b); if (s.group) { const r = root(a); const g = by.get(r); if (g) g.add(b); else by.set(r, new Set([b])); } };
         let dropped = 0;
         const step = (a: string, b: string, e: GEdge) => {
           const next = cross(carried.get(a) ?? OPEN, e, b);
@@ -404,6 +429,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         set = [...out].filter(keepType);
         // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace.
         if (dropped) text += `, kept to the ideas each link is stated for (${dropped} link${dropped === 1 ? '' : 's'} stated for other ideas not followed)`;
+        if (kindOf.size) text += `, with ${[...kindOf.keys()].map(name).join(', ')} as ${kindOf.size === 1 ? 'a kind' : 'kinds'} of ${[...new Set(kindOf.values())].map(name).join(', ')}`;
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}${text}`;
         if (s.group) {
           // Which star each result came from, in the set's order: the reply answers per capability, the trace shows each group.
@@ -411,7 +437,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           if (log) {
             groups = [...(groups ?? []), ...grouped];
             const kind = nodes.get([...from][0] ?? '')?.type;
-            trace.push({ text: `${text}, per ${kind ? SINGULAR[kind] : 'star'}`, size: set.length });
+            trace.push({ text: `${text}, per ${kind ? singularOf(kind) : 'star'}`, size: set.length });
             for (const g of grouped) trace.push({ text: `${name(g.from)}: ${g.to.map(name).join(', ')}`, size: g.to.length });
           }
           text = '';
@@ -512,7 +538,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         const cut = all.length > top ? all[top - 1].n : -1;
         ranked = all.filter((x, i) => i < top || (cut > 0 && x.n === cut));
         set = ranked.map((r) => r.id);
-        text = `Rank by ${s.rel ? `${relWord(s.rel)} ` : ''}${s.type ? `distinct ${PLURAL[s.type]} linked` : 'distinct stars linked'}, top ${top}${ranked.length > top ? ` (${ranked.length} with ties)` : ''}`;
+        text = `Rank by ${s.rel ? `${relWord(s.rel)} ` : ''}${s.type ? `distinct ${pluralOf(s.type)} linked` : 'distinct stars linked'}, top ${top}${ranked.length > top ? ` (${ranked.length} with ties)` : ''}`;
       } else if (s.op === 'network') {
         const done = networkStep(s, w.network?.(s), name, nodes);
         set = done.set;
@@ -575,7 +601,7 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
   const lines: StepTrace[] = [];
   if (analysis === 'central') {
     const rows: any[] = ((s.type ? r.byType?.[s.type] : r.betweenness) ?? []).filter((x: any) => known(x.id));
-    lines.push({ text: `${head}: top ${rows.length} ${s.type ? PLURAL[s.type] : 'stars'}`, size: rows.length });
+    lines.push({ text: `${head}: top ${rows.length} ${s.type ? pluralOf(s.type) : 'stars'}`, size: rows.length });
     for (const x of rows) lines.push({ text: `${name(x.id)}: ${n3(x.betweenness)} (${x.ideas} idea${x.ideas === 1 ? '' : 's'}, ${x.links} links)`, size: x.ideas });
     const ids = rows.map((x) => x.id);
     return { set: ids, lit: ids, lines, suggestions: [], fact: fact({ measure: 'betweenness centrality', ...(s.type ? { type: s.type } : {}), top: rows.map((x) => ({ star: x.id, betweenness: x.betweenness, degree: x.degree, ideas: x.ideas })) }) };

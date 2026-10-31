@@ -176,6 +176,19 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
   const scopeOf = new Map(edges.map((e) => [e.id, ideasOf(e, typeOf)]));
   const confirms = confirmer(edges, typeOf);
   const fits = (rel: Relation, from: string, to: string) => { const [f, t] = ALLOWED[rel]; return type.get(from) === f && type.get(to) === t; };
+  // KIND_OF, stored: each star's parents, so a chain that ends at a kind (a mailbox) also ends at what it is a kind of.
+  const parents = new Map<string, GEdge[]>();
+  for (const e of byRel.get('KIND_OF') ?? []) if (!e.derived) parents.set(e.from, [...(parents.get(e.from) ?? []), e]);
+  /** Every star a star is a kind of, transitively, each with the KIND_OF links that lead there (no cycles). */
+  const supersOf = (id: string): [string, GEdge[]][] => {
+    const out: [string, GEdge[]][] = []; const seen = new Set([id]);
+    const queue: [string, GEdge[]][] = [[id, []]];
+    while (queue.length) {
+      const [x, via] = queue.shift()!;
+      for (const e of parents.get(x) ?? []) if (!seen.has(e.to)) { seen.add(e.to); const p: [string, GEdge[]] = [e.to, [...via, e]]; out.push(p); queue.push(p); }
+    }
+    return out;
+  };
   /** How each kept edge's main derivation fits its idea (FIT_RANK). */
   const fitOf = new Map<string, number>();
   /** Every derivation of one edge is kept: the best fitting and surest as its inputs, the others as alternatives. */
@@ -208,31 +221,37 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[]): GEdge[] {
         const k = path.length;
         if (k === rule.chain.length) {
           const a = path[0]; const z = path[k - 1];
-          if (!fits(rule.then, a.from, z.to)) return;
-          const id = edgeId(a.from, rule.then, z.to);
-          if (have.has(id)) return;
-          // The ideas every stated link shares; a link stated for no idea is left out here and marks the path "confirm".
-          const stated = path.map((e) => scopeOf.get(e.id)!).filter((s) => s.length);
-          const shared = stated.length ? [...stated.reduce((acc, s) => acc.filter((x) => s.includes(x)))] : [];
-          const fit: Candidate['fit'] = !shared.length ? 'loose' : stated.length === path.length ? 'scoped' : 'confirm';
-          if (rule.scope === 'same-idea' && fit === 'loose') return;
-          // A link stated for no idea joins only for an idea whose own facts reach its far end.
-          if (rule.scope === 'same-idea' && fit === 'confirm') {
-            const open = path.filter((e) => !scopeOf.get(e.id)!.length);
-            const ok = shared.filter((i) => open.every((e) => confirms(i, e.to, e.id)));
-            if (!ok.length) return;
-            shared.splice(0, shared.length, ...ok);
+          // The chain's end, and every star its end is a kind of (KIND_OF, followed up): an idea that depends on a
+          // mailbox depends on email too. The KIND_OF links are inputs of the derivation, never part of its idea scope.
+          for (const [end, kinds] of [[z.to, []] as [string, GEdge[]], ...supersOf(z.to)]) {
+            if (!fits(rule.then, a.from, end)) continue;
+            const id = edgeId(a.from, rule.then, end);
+            if (have.has(id)) continue;
+            // The ideas every stated link shares; a link stated for no idea is left out here and marks the path "confirm".
+            const stated = path.map((e) => scopeOf.get(e.id)!).filter((s) => s.length);
+            const shared = stated.length ? [...stated.reduce((acc, s) => acc.filter((x) => s.includes(x)))] : [];
+            const fit: Candidate['fit'] = !shared.length ? 'loose' : stated.length === path.length ? 'scoped' : 'confirm';
+            if (rule.scope === 'same-idea' && fit === 'loose') continue;
+            // A link stated for no idea joins only for an idea whose own facts reach its far end.
+            if (rule.scope === 'same-idea' && fit === 'confirm') {
+              const open = path.filter((e) => !scopeOf.get(e.id)!.length);
+              const ok = shared.filter((i) => open.every((e) => confirms(i, e.to, e.id)));
+              if (!ok.length) continue;
+              shared.splice(0, shared.length, ...ok);
+            }
+            const anchor = typeOf(a.from) === 'Idea' ? a.from : typeOf(end) === 'Idea' ? end : a.from;
+            const all = [...path, ...kinds];
+            found.push({
+              fit, anchor,
+              edge: {
+                id, from: a.from, to: end, rel: rule.then,
+                description: `via ${path.slice(0, -1).map((e) => label(e.to)).join(' and ')}${kinds.length ? `, ${label(z.to)} being a kind of ${label(end)}` : ''}`, source: `rule:${rule.name}`,
+                confidence: round2(Math.min(...all.map((e) => e.confidence))), confirmed: all.every((e) => e.confirmed),
+                ...(fit !== 'loose' ? { ideas: [...shared].sort() } : {}),
+                derived: { rule: rule.name, inputs: all.map((e) => e.id) },
+              },
+            });
           }
-          const anchor = typeOf(a.from) === 'Idea' ? a.from : typeOf(z.to) === 'Idea' ? z.to : a.from;
-          found.push({
-            fit, anchor,
-            edge: {
-              id, from: a.from, to: z.to, rel: rule.then, description: `via ${path.slice(0, -1).map((e) => label(e.to)).join(' and ')}`, source: `rule:${rule.name}`,
-              confidence: round2(Math.min(...path.map((e) => e.confidence))), confirmed: path.every((e) => e.confirmed),
-              ...(fit !== 'loose' ? { ideas: [...shared].sort() } : {}),
-              derived: { rule: rule.name, inputs: path.map((e) => e.id) },
-            },
-          });
           return;
         }
         const next = k === 0 ? byRel.get(rule.chain[0]) ?? [] : starts[k].get(path[k - 1].to) ?? [];

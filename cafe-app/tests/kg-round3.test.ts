@@ -364,3 +364,80 @@ describe('must 7: no answer takes minutes', () => {
     } finally { release(); s.server.closeAllConnections(); s.server.close(); }
   });
 });
+
+describe('should 8: an open schema, and a system counted with its kinds (KIND_OF)', () => {
+  const ONTOLOGY = [
+    'nodes:',
+    '  Vendor: { label: Vendor, colour: "#334455", description: A company that supplies a capability. }',
+    'relations:',
+    '  SUPPLIED_BY: { from: Capability, to: Vendor, meaning: the capability is supplied by this vendor, inverse: supplies, derived: false }',
+    '  RELIES_ON_VENDOR: { from: Idea, to: Vendor, meaning: the idea relies on this vendor (derived), derived: true }',
+  ].join('\n');
+  const RULES = [
+    'rules:',
+    '  - { name: needs+uses_data, chain: [NEEDS, USES_DATA], then: DEPENDS_ON, scope: same-idea }',
+    '  - { name: needs+supplied_by, chain: [NEEDS, SUPPLIED_BY], then: RELIES_ON_VENDOR, scope: same-idea }',
+  ].join('\n');
+
+  it('ontology.yaml declares a kind and two relations; a rule chains them; the operator\'s facts make the derived link; check holds it to the schema', async () => {
+    const root = await workspace();
+    await writeFileAtomic(paths(root).ontology, ONTOLOGY);
+    await writeFileAtomic(paths(root).inference, RULES);
+    await appendEdit(root, { id: 'op-1', at: '2026-10-30', status: 'active', t: 'add', node: 'vendor:acme', type: 'Vendor' as any, label: 'Acme' });
+    await appendEdit(root, { id: 'op-2', at: '2026-10-30', status: 'active', t: 'link', from: 'capability:booking-update', rel: 'SUPPLIED_BY' as any, to: 'vendor:acme', idea: 'CAFE-2026-002' });
+    const g = await rebuildGraph(root);
+    expect(g.nodes.find((n) => n.id === 'vendor:acme')).toMatchObject({ type: 'Vendor', label: 'Acme' });
+    const d = g.edges.filter((e) => (e.rel as string) === 'RELIES_ON_VENDOR');
+    // Scoped as every capability-level fact: 002's link holds for 002, not for 001 that also needs Booking update.
+    expect(d.map((e) => [e.from, e.to, e.derived?.rule])).toEqual([['idea:CAFE-2026-002', 'vendor:acme', 'needs+supplied_by']]);
+    const c = await checkWorkspace(root);
+    expect(c.violations).toEqual([]);
+    expect(c.checked.derived).toBeGreaterThan(0);
+    // A link of the declared relation between the wrong kinds is refused like any other.
+    await appendEdit(root, { id: 'op-3', at: '2026-10-30', status: 'active', t: 'link', from: 'idea:CAFE-2026-001', rel: 'SUPPLIED_BY' as any, to: 'vendor:acme' });
+    expect((await checkWorkspace(root)).violations).toEqual(['operator.jsonl op-3: SUPPLIED_BY goes Capability → Vendor, not Idea → Vendor (skipped by the build)']);
+  });
+
+  it('declarations that do not hold are named by check and ignored', async () => {
+    const root = await workspace();
+    await writeFileAtomic(paths(root).ontology, [
+      'nodes:', '  vendor: { label: v }', '  Painpoint: { label: P }', '  Gadget: {}',
+      'relations:', '  supplied: { from: Capability, to: System, meaning: m }', '  NEW_ONE: { from: Capability, to: Widget, meaning: m }',
+      '  NO_MEANING: { from: Capability, to: System }', '  ODD: { from: Capability, to: System, meaning: m, derived: maybe }',
+    ].join('\n'));
+    expect((await checkWorkspace(root)).violations).toEqual([
+      'ontology.yaml: node type "vendor": a new kind needs a name like "Vendor" (a capital, then letters or digits) (ignored)',
+      'ontology.yaml: node type "Painpoint": its ids would start with "painpoint:", which another kind uses (ignored)',
+      'ontology.yaml: node type "Gadget": a new kind needs a label (ignored)',
+      'ontology.yaml: relation "supplied": a new relation needs a name like "SUPPLIED_BY" (capitals, digits and _) (ignored)',
+      'ontology.yaml: relation "NEW_ONE": unknown node type "Widget" (ignored)',
+      'ontology.yaml: relation "NO_MEANING": a new relation needs a meaning (ignored)',
+      'ontology.yaml: relation "ODD": derived must be true or false (ignored)',
+    ]);
+    // A rule over an undeclared relation is dropped, said so.
+    await writeFileAtomic(paths(root).inference, 'rules:\n  - { name: r, chain: [NEEDS, SUPPLIED_BY], then: DEPENDS_ON }\n');
+    expect((await checkWorkspace(root)).violations).toContain('inference.yaml: r: unknown relation "SUPPLIED_BY" (dropped)');
+  });
+
+  it('a mailbox that is a kind of email: the rules derive DEPENDS_ON email, and "which ideas do not depend on email" counts it', async () => {
+    const root = await workspace();
+    // 001's Request handling uses the shared mailbox; the operator says a shared mailbox is a kind of email system.
+    await appendEdit(root, { id: 'op-1', at: '2026-10-30', status: 'active', t: 'add', node: 'system:email', type: 'System', label: 'Email' });
+    await appendEdit(root, { id: 'op-2', at: '2026-10-30', status: 'active', t: 'link', from: 'system:shared-mailbox', rel: 'KIND_OF', to: 'system:email' });
+    const g = await rebuildGraph(root);
+    const dep = g.edges.find((e) => e.id === 'idea:CAFE-2026-001|DEPENDS_ON|system:email')!;
+    expect(dep.derived).toMatchObject({ rule: 'needs+uses_data', inputs: ['idea:CAFE-2026-001|NEEDS|capability:request-handling', 'capability:request-handling|USES_DATA|system:shared-mailbox', 'system:shared-mailbox|KIND_OF|system:email'] });
+    expect(dep.description).toBe('via Request handling, Shared mailbox being a kind of Email');
+    expect(dep.ideas).toEqual(['CAFE-2026-001']);
+    const world = { graph: g, ideas: IDEAS, rounds: [], idOf: () => undefined };
+    const deps = runQuery({ steps: [{ op: 'stars', type: 'System', match: 'Email' }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] }, world);
+    expect(deps.final).toEqual(['idea:CAFE-2026-001']);
+    const notDeps = IDEAS.map((i) => `idea:${i.id}`).filter((id) => !deps.final.includes(id));
+    expect(notDeps).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003', 'idea:CAFE-2026-004']);
+    // A follow along a stated relation from Email also starts from its kinds, and says so.
+    const caps = runQuery({ steps: [{ op: 'stars', type: 'System', match: 'Email' }, { op: 'follow', rel: 'USES_DATA', dir: 'in', type: 'Capability' }] }, world);
+    expect(caps.final).toEqual(['capability:request-handling']);
+    expect(caps.trace[1].text).toMatch(/with Shared mailbox as a kind of Email/);
+    expect((await checkWorkspace(root)).violations).toEqual([]);
+  });
+});

@@ -108,7 +108,7 @@ export interface Proposal {
 
 const REL_WORD: Partial<Record<Relation, string>> = {
   HAS_TEAM: 'has the team', HAS_MEMBER: 'has the member', REPLACES: 'replaces', NEEDS: 'needs', USES_DATA: 'uses the data', ASKS_FOR: 'asks for',
-  WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category',
+  WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category', KIND_OF: 'is a kind of',
 };
 const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor', builder: 'builder', member: 'a team member' };
 /** Labels the form owns: ideas and people are renamed in their own files, rounds in the Rounds pop-out. */

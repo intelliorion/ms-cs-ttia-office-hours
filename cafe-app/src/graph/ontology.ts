@@ -1,15 +1,16 @@
 export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round' | 'Support' | 'Outcome' | 'Beneficiary' | 'Category';
 export const NODE_TYPES: NodeType[] = ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'];
 export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'LEADS' | 'SPONSORS' | 'BUILDS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY'
-  | 'DEPENDS_ON' | 'USES' | 'OWNS' | 'SIMILAR_TO';
+  | 'KIND_OF' | 'DEPENDS_ON' | 'USES' | 'OWNS' | 'SIMILAR_TO';
 
 /**
  * The ontology as data: what each kind of star is and what each link means. The built-in one below is what
  * `rules/ontology.yaml` starts as; a workspace's file is applied over it in place (`applyOntology`), so every module
- * that reads NODE_LABELS, NODE_COLOURS, ALLOWED or RELATION_MEANINGS sees the workspace's words. Only the names known
- * here can be changed: a type or relation the code does not know is reported and ignored.
+ * that reads NODE_TYPES, NODE_LABELS, NODE_COLOURS, ALLOWED or RELATION_MEANINGS sees the workspace's words. The
+ * schema is open: the file may declare a new kind of star (a name, its label) and a new relation (from, to, meaning,
+ * derived or not), with no code. A built-in name keeps its kind and whether it is derived; the file changes its words.
  */
-export interface NodeDef { label: string; colour: string; description: string }
+export interface NodeDef { label: string; colour: string; description: string; operator?: boolean }
 export interface RelationDef { from: NodeType; to: NodeType; meaning: string; inverse: string; derived: boolean }
 export interface Ontology { nodes: Record<NodeType, NodeDef>; relations: Record<Relation, RelationDef> }
 
@@ -46,6 +47,7 @@ export const BUILTIN_ONTOLOGY: Ontology = {
     WANTS: { from: 'Idea', to: 'Outcome', meaning: 'the submitter picked this desired outcome', inverse: 'is wanted by', derived: false },
     BENEFITS: { from: 'Idea', to: 'Beneficiary', meaning: 'the submitter said these people would benefit', inverse: 'benefits from', derived: false },
     IN_CATEGORY: { from: 'Idea', to: 'Category', meaning: 'the submitter put the idea in this use case category', inverse: 'holds the idea', derived: false },
+    KIND_OF: { from: 'System', to: 'System', meaning: 'the system is a kind of this one (a mailbox is an email system): what depends on it depends on the other too', inverse: 'has the kind', derived: false },
     DEPENDS_ON: { from: 'Idea', to: 'System', meaning: 'the idea depends on this system: a capability it needs uses the system\'s data (derived)', inverse: 'is depended on by', derived: true },
     USES: { from: 'Idea', to: 'Tool', meaning: 'the idea uses this tool: a capability it needs is built with it (derived)', inverse: 'is used by', derived: true },
     OWNS: { from: 'Team', to: 'Idea', meaning: 'the team owns the idea: one of its members submitted it (derived)', inverse: 'is owned by', derived: true },
@@ -66,23 +68,70 @@ export const RELATION_MEANINGS: Record<Relation, { meaning: string; inverse: str
 export const DERIVED_RELATIONS: Relation[] = (Object.keys(BUILTIN_ONTOLOGY.relations) as Relation[]).filter((r) => BUILTIN_ONTOLOGY.relations[r].derived);
 
 const isType = (v: unknown): v is NodeType => typeof v === 'string' && NODE_TYPES.includes(v as NodeType);
-const isRelation = (v: unknown): v is Relation => typeof v === 'string' && Object.hasOwn(BUILTIN_ONTOLOGY.relations, v);
+const isRelation = (v: unknown): v is Relation => typeof v === 'string' && Object.hasOwn(ALLOWED, v);
+
+/** The built-in kinds and relations: what resetOntology keeps. */
+const BUILTIN_TYPES: NodeType[] = [...NODE_TYPES];
+const BUILTIN_RELATIONS = Object.keys(BUILTIN_ONTOLOGY.relations) as Relation[];
+/** The stated relations (not derived), the built-in ones and any the workspace declared: live, for schemas and guides. */
+export const STATED_RELATIONS: Relation[] = BUILTIN_RELATIONS.filter((r) => !BUILTIN_ONTOLOGY.relations[r].derived);
+/** Every relation, stated then derived: live. */
+export const ALL_RELATIONS: Relation[] = [...STATED_RELATIONS, ...DERIVED_RELATIONS];
+/** What the workspace's ontology.yaml declared beyond the built-in ontology (the open schema), until the next reset. */
+export const DECLARED: { types: NodeType[]; relations: Relation[] } = { types: [], relations: [] };
+const TYPE_NAME = /^[A-Z][A-Za-z0-9]{1,31}$/;
+const RELATION_NAME = /^[A-Z][A-Z0-9_]{1,39}$/;
+/** The colour a declared kind gets when the file gives none. */
+const DECLARED_COLOUR = '#94a3b8';
 
 /**
- * Applies an ontology file over the constants, in place. Returns the problems: an unknown type or relation (ignored),
- * a pair naming an unknown type (the built-in pair is kept). Whether a relation is derived is the code's, not the file's.
+ * Applies an ontology file over the constants, in place. A built-in kind or relation takes the file's words (and a
+ * relation its pair, when both kinds are known); whether a built-in relation is derived is the code's, never the
+ * file's. A name the ontology does not know is a declaration: a kind needs a name like "Vendor" and a label; a
+ * relation a name like "SUPPLIED_BY", from and to (known or declared kinds), a meaning, and derived: true or false.
+ * Returns the problems, one line each (a declaration that does not hold is ignored, said so).
  */
 export function applyOntology(o: Partial<{ nodes: Record<string, Partial<NodeDef>>; relations: Record<string, Partial<RelationDef>> }>): string[] {
   const problems: string[] = [];
+  const known = new Set(NODE_TYPES.map((t) => (t === 'Idea' ? 'idea' : t.toLowerCase())));
   for (const [t, d] of Object.entries(o.nodes ?? {})) {
-    if (!isType(t)) { problems.push(`ontology.yaml: unknown node type "${t}" (ignored)`); continue; }
+    if (!isType(t)) {
+      // A new kind of star: its id prefix is its name in lower case, so it must not clash with a kind already there.
+      if (!TYPE_NAME.test(t)) { problems.push(`ontology.yaml: node type "${t}": a new kind needs a name like "Vendor" (a capital, then letters or digits) (ignored)`); continue; }
+      if (known.has(t.toLowerCase())) { problems.push(`ontology.yaml: node type "${t}": its ids would start with "${t.toLowerCase()}:", which another kind uses (ignored)`); continue; }
+      if (!d || typeof d !== 'object' || typeof d.label !== 'string' || !d.label.trim()) { problems.push(`ontology.yaml: node type "${t}": a new kind needs a label (ignored)`); continue; }
+      const nt = t as NodeType;
+      NODE_TYPES.push(nt); DECLARED.types.push(nt); known.add(t.toLowerCase());
+      NODE_LABELS[nt] = d.label.trim();
+      NODE_COLOURS[nt] = typeof d.colour === 'string' && /^#[0-9a-f]{3,8}$/i.test(d.colour) ? d.colour : DECLARED_COLOUR;
+      NODE_DESCRIPTIONS[nt] = typeof d.description === 'string' ? d.description : '';
+      // The operator makes, merges and removes stars of a declared kind from the command bar (operator: false: never).
+      if (d.operator !== false) { OPERATOR_STARS.push(nt); MERGEABLE.push(nt); }
+      continue;
+    }
     if (!d || typeof d !== 'object') continue;
     if (typeof d.label === 'string' && d.label.trim()) NODE_LABELS[t] = d.label.trim();
     if (typeof d.colour === 'string' && /^#[0-9a-f]{3,8}$/i.test(d.colour)) NODE_COLOURS[t] = d.colour;
     if (typeof d.description === 'string') NODE_DESCRIPTIONS[t] = d.description;
   }
   for (const [r, d] of Object.entries(o.relations ?? {})) {
-    if (!isRelation(r)) { problems.push(`ontology.yaml: unknown relation "${r}" (ignored)`); continue; }
+    if (!isRelation(r)) {
+      if (!RELATION_NAME.test(r)) { problems.push(`ontology.yaml: relation "${r}": a new relation needs a name like "SUPPLIED_BY" (capitals, digits and _) (ignored)`); continue; }
+      if (!d || typeof d !== 'object') { problems.push(`ontology.yaml: relation "${r}": a new relation needs from, to, meaning and derived (ignored)`); continue; }
+      const bad = [d.from, d.to].find((x) => !isType(x));
+      if (bad !== undefined || d.from === undefined || d.to === undefined) { problems.push(`ontology.yaml: relation "${r}": ${bad === undefined ? 'from and to are needed' : `unknown node type "${String(bad)}"`} (ignored)`); continue; }
+      if (typeof d.meaning !== 'string' || !d.meaning.trim()) { problems.push(`ontology.yaml: relation "${r}": a new relation needs a meaning (ignored)`); continue; }
+      const derived = d.derived === true || d.derived === ('true' as never) || d.derived === ('yes' as never);
+      if (d.derived !== undefined && !derived && d.derived !== false && d.derived !== ('false' as never) && d.derived !== ('no' as never)) { problems.push(`ontology.yaml: relation "${r}": derived must be true or false (ignored)`); continue; }
+      const rel = r as Relation;
+      ALLOWED[rel] = [d.from as NodeType, d.to as NodeType];
+      RELATION_MEANINGS[rel] = { meaning: d.meaning.trim(), inverse: typeof d.inverse === 'string' && d.inverse.trim() ? d.inverse.trim() : `is the far end of ${r}` };
+      DECLARED.relations.push(rel);
+      if (derived) { DERIVED_RELATIONS.push(rel); ALL_RELATIONS.push(rel); } else { STATED_RELATIONS.push(rel); ALL_RELATIONS.splice(STATED_RELATIONS.length - 1, 0, rel); }
+      // A stated capability-level fact says which idea it is for, as USES_DATA does (the rules read it per idea).
+      if (!derived && d.from === 'Capability' && d.to !== 'Idea') IDEA_SCOPED.push(rel);
+      continue;
+    }
     if (!d || typeof d !== 'object') continue;
     if (d.from !== undefined || d.to !== undefined) {
       const from = d.from ?? ALLOWED[r][0]; const to = d.to ?? ALLOWED[r][1];
@@ -103,8 +152,18 @@ export function currentOntology(): Ontology {
     relations: Object.fromEntries((Object.keys(ALLOWED) as Relation[]).map((r) => [r, { from: ALLOWED[r][0], to: ALLOWED[r][1], meaning: RELATION_MEANINGS[r].meaning, inverse: RELATION_MEANINGS[r].inverse, derived: DERIVED_RELATIONS.includes(r) }])) as Record<Relation, RelationDef>,
   };
 }
-/** Back to the built-in ontology (tests, and a workspace with no file). */
-export function resetOntology(): void { applyOntology(clone(BUILTIN_ONTOLOGY)); }
+/** Back to the built-in ontology (tests, and a workspace with no file): declared kinds and relations go. */
+export function resetOntology(): void {
+  const keep = <T,>(list: T[], allowed: (x: T) => boolean) => { const kept = list.filter(allowed); list.splice(0, list.length, ...kept); };
+  for (const t of DECLARED.types) { delete NODE_LABELS[t]; delete NODE_COLOURS[t]; delete NODE_DESCRIPTIONS[t]; }
+  for (const r of DECLARED.relations) { delete ALLOWED[r]; delete RELATION_MEANINGS[r]; }
+  const types = new Set(DECLARED.types); const rels = new Set(DECLARED.relations);
+  keep(NODE_TYPES, (t) => !types.has(t)); keep(OPERATOR_STARS, (t) => !types.has(t)); keep(MERGEABLE, (t) => !types.has(t));
+  keep(DERIVED_RELATIONS, (r) => !rels.has(r)); keep(STATED_RELATIONS, (r) => !rels.has(r)); keep(ALL_RELATIONS, (r) => !rels.has(r)); keep(IDEA_SCOPED, (r) => !rels.has(r));
+  DECLARED.types.length = 0; DECLARED.relations.length = 0;
+  void BUILTIN_TYPES;
+  applyOntology(clone(BUILTIN_ONTOLOGY));
+}
 
 /**
  * Capability-level facts that must say which idea they are for: the rules read them per idea, so the assistant

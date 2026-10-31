@@ -43,18 +43,19 @@ describe('the ontology as data', () => {
     expect(NODE_LABELS.System).toBe('System or data');
     expect(file.nodes.System.label).toBe('System or data');
   });
-  it('unknown types, relations and bad pairs are reported and ignored; the rest still applies', () => {
+  it('a new kind or relation is a declaration (the open schema); a bad pair is reported and ignored; the rest still applies', () => {
     const problems = applyOntology({
       nodes: { Gadget: { label: 'Gadget', colour: '#fff', description: '' }, Idea: { label: 'Use case', colour: NODE_COLOURS.Idea, description: 'x' } },
-      relations: { LOVES: { from: 'Idea', to: 'Idea', meaning: 'm', inverse: 'i', derived: false }, NEEDS: { from: 'Idea', to: 'Gadget', meaning: 'm', inverse: 'i', derived: false } },
+      relations: { LOVES: { from: 'Idea', to: 'Idea', meaning: 'm', inverse: 'i', derived: false }, NEEDS: { from: 'Idea', to: 'Widget', meaning: 'm', inverse: 'i', derived: false } },
     } as any);
-    expect(problems).toEqual([
-      'ontology.yaml: unknown node type "Gadget" (ignored)',
-      'ontology.yaml: unknown relation "LOVES" (ignored)',
-      'ontology.yaml: NEEDS: unknown node type "Gadget" (the pair is kept as built in)',
-    ]);
+    expect(problems).toEqual(['ontology.yaml: NEEDS: unknown node type "Widget" (the pair is kept as built in)']);
     expect(NODE_LABELS.Idea).toBe('Use case');
     expect(ALLOWED.NEEDS).toEqual(['Idea', 'Capability']);
+    expect((ALLOWED as any).LOVES).toEqual(['Idea', 'Idea']);
+    expect((NODE_LABELS as any).Gadget).toBe('Gadget');
+    resetOntology();
+    expect((ALLOWED as any).LOVES).toBeUndefined();
+    expect((NODE_LABELS as any).Gadget).toBeUndefined();
   });
   it('the extraction prompt tells the AI what each relation means, from the ontology', () => {
     const prompt = extractTask.prompt({ idea: { id: 'CAFE-2026-001', title: 'X' }, existing: { capabilities: [], systems: [], painPoints: [] } });
@@ -86,7 +87,7 @@ describe('cafe ontology check', () => {
   it('a broken workspace: every violation named, nothing fixed', async () => {
     const root = await tmpWorkspace();
     await importExport(root, FIXTURE, { clock: fixedClock('2026-10-26'), steps: DEFAULT_STEPS });
-    await writeYaml(paths(root).ontology, { nodes: { Gadget: { label: 'G', colour: '#fff', description: '' } }, relations: { NEEDS: { from: 'Idea', to: 'Gadget' } } });
+    await writeYaml(paths(root).ontology, { nodes: { gadget: { label: 'G', colour: '#fff', description: '' } }, relations: { NEEDS: { from: 'Idea', to: 'Gadget' } } });
     await writeYaml(paths(root).entities, {
       Tool: [{ id: 'tool:dataiku', label: 'Dataiku', aliases: ['dss'] }, { id: 'tool:dataiku', label: 'Dataiku again', aliases: [] }],
       System: [{ id: 'system:a', label: 'A', aliases: ['dss'] }, { id: 'capability:wrong', label: 'Wrong prefix', aliases: ['dss'] }, { label: 'No id' }],
@@ -101,7 +102,7 @@ describe('cafe ontology check', () => {
     const { violations, stale } = await checkWorkspace(root);
     expect(stale).toEqual([{ id: 'op-1', what: 'alias "Nothing" on capability:gone', missing: ['capability:gone'] }]);
     expect(violations).toEqual([
-      'ontology.yaml: unknown node type "Gadget" (ignored)',
+      'ontology.yaml: node type "gadget": a new kind needs a name like "Vendor" (a capital, then letters or digits) (ignored)',
       'ontology.yaml: NEEDS: unknown node type "Gadget" (the pair is kept as built in)',
       'entities.yaml: Tool: duplicate id "tool:dataiku"',
       'entities.yaml: System: "capability:wrong" does not start with "system:"',

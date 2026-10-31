@@ -1,4 +1,4 @@
-import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, APPROVED_TOOLS, RELATION_MEANINGS, type NodeType, type Relation } from '../graph/ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, ALLOWED, APPROVED_TOOLS, NODE_TYPES, RELATION_MEANINGS, STATED_RELATIONS, type NodeType, type Relation } from '../graph/ontology';
 import { CRITERIA, DECISION_LABELS } from '../review/review';
 import type { Decision } from '../ideas/idea';
 import { AiError, parseChecked, trimStrings, type JsonSchema } from './schema';
@@ -1648,11 +1648,12 @@ export const ACTIONS_SCHEMA: JsonSchema = {
     properties: {
       op: { type: 'string', enum: COMMAND_OPS },
       a: CODE, b: CODE,
-      rel: { type: 'string', enum: ['HAS_TEAM', 'HAS_MEMBER', 'SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'REPLACES', 'NEEDS', 'BUILT_WITH', 'USES_DATA', 'IN_ROUND', 'ASKS_FOR', 'WANTS', 'BENEFITS', 'IN_CATEGORY'] },
+      // The ontology's live lists: a relation or kind ontology.yaml declares can be proposed too.
+      rel: { type: 'string', enum: STATED_RELATIONS },
       role: { type: 'string', enum: COMMAND_ROLES },
       ideas: { type: 'array', maxItems: 30, items: CODE },
       name: { type: 'string', minLength: 1, maxLength: 60 },
-      type: { type: 'string', enum: ['Entity', 'Team', 'Person', 'Idea', 'PainPoint', 'Capability', 'Tool', 'System', 'Round', 'Support', 'Outcome', 'Beneficiary', 'Category'] },
+      type: { type: 'string', enum: NODE_TYPES },
     },
   },
 };

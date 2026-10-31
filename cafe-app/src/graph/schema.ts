@@ -97,8 +97,10 @@ export function shapesTurtle(base?: string): string {
     '  sh:property [ sh:path prov:wasDerivedFrom ; sh:nodeKind sh:IRI ] .',
   ].join('\n'));
   out.push([
+    // What rests on other links is another way (a Derivation) or a derived link, which names its rule.
     'cafe:DerivedLinkShape a sh:NodeShape ;', '  sh:targetSubjectsOf prov:wasDerivedFrom ;',
-    '  sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ; sh:message "a derived link names the rule that derived it" ] .',
+    '  sh:or ( [ sh:class cafe:Derivation ] [ sh:class cafe:Link ; sh:property [ sh:path prov:wasGeneratedBy ; sh:minCount 1 ] ] ) ;',
+    '  sh:message "a derived link names the rule that derived it" .',
   ].join('\n'));
   out.push([
     'cafe:ExportShape a sh:NodeShape ;', '  sh:targetClass cafe:Export ;',

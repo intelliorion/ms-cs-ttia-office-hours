@@ -24,6 +24,8 @@ const ai = (l: Partial<AiLink> & Pick<AiLink, 'from' | 'rel' | 'to'>): AiLink =>
 const links: AiLink[] = [
   ai({ from: 'capability:document-text-extraction', rel: 'USES_DATA', to: 'system:email', idea: 'CAFE-2026-003', newNodes: [{ id: 'system:email', type: 'System', label: 'Email' }] }),
   ai({ from: 'capability:policy-question-answering', rel: 'USES_DATA', to: 'system:procurement-mailbox', idea: 'CAFE-2026-007', newNodes: [{ id: 'system:procurement-mailbox', type: 'System', label: 'Procurement mailbox' }] }),
+  // 007 also reads Email through Document text extraction: its DEPENDS_ON Email is derived two ways (an alternative).
+  ai({ from: 'capability:document-text-extraction', rel: 'USES_DATA', to: 'system:email', idea: 'CAFE-2026-007' }),
 ];
 const graph = buildGraph(ideas, links, [], [{ id: 'op-1', at: '2026-10-30', status: 'active', t: 'link', from: 'system:procurement-mailbox', rel: 'KIND_OF', to: 'system:email' }]);
 
@@ -51,6 +53,7 @@ describe('should 9: the export comes with its schema (RDFS and SHACL) and valida
 
   it('rdf-validate-shacl: the whole export conforms to the shapes, zero violations; a broken one does not', async () => {
     const doc = exportJsonLd(graph, { kind: 'all' }, '2026-10-30T00:00:00.000Z');
+    expect(graph.edges.find((e) => e.id === 'idea:CAFE-2026-007|DEPENDS_ON|system:email')!.derived!.alternatives).toHaveLength(1);
     const ok = await validate(await nquads(doc));
     expect(ok.results).toEqual([]);
     expect(ok.conforms).toBe(true);
@@ -71,11 +74,11 @@ describe('should 9: the export comes with its schema (RDFS and SHACL) and valida
     const app = graph.edges.filter((e) => e.rel === 'DEPENDS_ON' && e.to === 'system:email').map((e) => graph.nodes.find((n) => n.id === e.from)!.label).sort();
     expect(app).toEqual(['Onboarding checklist helper', 'Procurement FAQ bot']);
     expect(labels('SELECT DISTINCT ?l WHERE { ?i c:DEPENDS_ON ?s . ?s rdfs:label "Email" . ?i rdfs:label ?l }')).toEqual(app);
-    // The retest's naive path (NEEDS then USES_DATA): Document text extraction is needed by all three, but uses Email for 003 only.
+    // The retest's naive path (NEEDS then USES_DATA): Document text extraction is needed by all three, but uses Email for 003 and 007 only.
     const naive = labels('SELECT DISTINCT ?l WHERE { ?i c:NEEDS ?c . ?c c:USES_DATA ?s . ?s rdfs:label "Email" . ?i rdfs:label ?l }');
     expect(naive.every((l) => app.includes(l))).toBe(true);
     expect(naive).not.toContain('Travel policy assistant');
     // The per-idea facts are all there, reified: a Link stated for the idea.
-    expect(labels('SELECT DISTINCT ?l WHERE { ?k a c:Link ; c:rel c:USES_DATA ; c:from ?c ; c:to ?s ; c:statedFor ?i . ?i c:NEEDS ?c . ?s rdfs:label "Email" . ?i rdfs:label ?l }')).toEqual(['Onboarding checklist helper']);
+    expect(labels('SELECT DISTINCT ?l WHERE { ?k a c:Link ; c:rel c:USES_DATA ; c:from ?c ; c:to ?s ; c:statedFor ?i . ?i c:NEEDS ?c . ?s rdfs:label "Email" . ?i rdfs:label ?l }')).toEqual(['Onboarding checklist helper', 'Procurement FAQ bot']);
   });
 });

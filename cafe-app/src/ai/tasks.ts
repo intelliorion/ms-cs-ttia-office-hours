@@ -1752,6 +1752,7 @@ export const agentTask: Task<AgentOutput> = {
       '  A message that asks for a change AND asks a question ("add X to [I1], then tell me which ideas depend on [S1]"): search for the question first, then propose,',
       '  with the question\'s answer in answer (as for answer: from the steps, numbers as found) and only the change in reply. The app shows answer whatever becomes of the change,',
       '  so never put the answer in reply, and never put the change in answer.',
+      '  A capability\'s data link (USES_DATA) holds only for the idea it is stated for (the app stamps the idea on it): never say it applies to every idea that needs the capability.',
       '- clarify: you cannot tell what they want; reply asks one short question.',
       'reply is required with answer, propose and clarify: the operator sees reply, never thought. An answer with no reply is sent back.',
       'A reply that says which team owns or submitted an idea states it from a step that returned that team (follow OWNS, dir in, type Team, or a role step\'s team), never from memory.',

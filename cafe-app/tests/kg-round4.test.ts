@@ -374,3 +374,18 @@ describe('item 4: a cluster is passed on only when the groups are real', () => {
     expect(n.available && n.cluster?.others.map((x) => x.id).sort()).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
   }, 60_000);
 });
+
+describe('the hypothetical idea (c5c): a capability fact proposed with the idea that needs it is for that idea', () => {
+  it('"X needs C, and for this idea C uses S" proposes both, the second stamped for X, even when another idea has it already', async () => {
+    const { resolveSteps } = await import('../src/command/actions');
+    const hypo = sampleIdea({ id: 'CAFE-2026-008', slug: 'h', title: 'Hypothetical claims checker', dedupe_key: 'h', people: { submitter: 'Hy Po', team: [] } });
+    const g = buildGraph([...IDEAS, hypo], [ai({ from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:expense-system', newNodes: [{ id: 'system:expense-system', type: 'System', label: 'Expense system' }] })]);
+    const codes = new Map([['I8', { id: 'idea:CAFE-2026-008', type: 'Idea' as const, label: 'Hypothetical claims checker' }], ['C1', { id: 'capability:request-handling', type: 'Capability' as const, label: 'Request handling' }], ['S1', { id: 'system:expense-system', type: 'System' as const, label: 'Expense system' }]]);
+    const r = resolveSteps([{ op: 'link', a: 'I8', b: 'C1', rel: 'NEEDS' }, { op: 'link', a: 'C1', b: 'S1', rel: 'USES_DATA' }], { codes, graph: g, ideas: [...IDEAS, hypo], rounds: [] });
+    expect(r.problems).toEqual([]);
+    expect(r.proposals.map((p) => p.action)).toEqual([
+      { t: 'link', from: 'idea:CAFE-2026-008', rel: 'NEEDS', to: 'capability:request-handling' },
+      expect.objectContaining({ t: 'link', from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:expense-system', idea: 'CAFE-2026-008' }),
+    ]);
+  });
+});

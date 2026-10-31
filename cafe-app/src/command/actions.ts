@@ -203,6 +203,15 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
     proposals.push({ label: `${person.label} is no longer ${ROLE_WORD[role]} on ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: person.label, role, drop: true } });
   };
 
+  // An idea this message also says needs a capability ("X needs C, and for this idea C uses S"): a capability-level
+  // link from C in the same message is for that idea, as if the NEEDS were already there (it is proposed beside it).
+  const neededHere = new Map<string, string[]>();
+  for (const s of steps) {
+    if (s.op !== 'link') continue;
+    const a = s.a ? ctx.codes.get(s.a.replace(/^\[|\]$/g, '')) : undefined; const b = s.b ? ctx.codes.get(s.b.replace(/^\[|\]$/g, '')) : undefined;
+    const idea = [a, b].find((x) => x?.type === 'Idea'); const cap = [a, b].find((x) => x?.type === 'Capability');
+    if (idea && cap && (!s.rel || s.rel === 'NEEDS')) neededHere.set(cap.id, [...(neededHere.get(cap.id) ?? []), idea.id.slice('idea:'.length)]);
+  }
   for (const s of steps) {
     // The ontology this graph was built with decides which relations and kinds exist (the AI may name any).
     if (s.rel && !Object.hasOwn(S.allowed, s.rel)) { problems.push(`There is no relation "${s.rel}" in this workspace's ontology.`); continue; }
@@ -246,7 +255,10 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
       const [ft] = S.allowed[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
-      const checked = linkProposals(ctx.graph, from, rel, to, { focus: ctx.focusIdea, title });
+      const here = S.ideaScoped.includes(rel) ? neededHere.get(from.id) : undefined;
+      const named = here?.length === 1 && here[0] !== ctx.focusIdea ? here[0] : undefined;
+      const g = named ? { ...ctx.graph, edges: [...ctx.graph.edges, { id: `idea:${named}|NEEDS|${from.id}`, from: `idea:${named}`, rel: 'NEEDS' as Relation, to: from.id, description: '', source: 'proposed', confidence: 1, confirmed: false }] } : ctx.graph;
+      const checked = linkProposals(g, from, rel, to, { focus: ctx.focusIdea, named, title });
       if ('problem' in checked) { problems.push(checked.problem); continue; }
       proposals.push(...checked.proposals);
     } else if (s.op === 'role') {

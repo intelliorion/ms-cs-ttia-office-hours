@@ -400,3 +400,33 @@ describe('f48: a capability fact stated for no idea is followed for the ideas th
     expect(r.groups!.map((x) => `${x.from} ${x.to.join(',')}`).sort()).toEqual(['capability:policy-answering idea:CAFE-2026-006', 'capability:text-extraction idea:CAFE-2026-006']);
   });
 });
+
+describe('cafe ontology fix: repoint or retire a stale edit, record a confirmation, correct a source field: only as told', () => {
+  it('lists the stale edit with candidates, changes nothing unasked, and repoints, retires or confirms only as told', async () => {
+    const { planFix, applyFix, fixLines } = await import('../src/graph/fix');
+    const root = await workspace();
+    await saveIdea(root, sampleIdea({ ...IDEAS[0], additional_context: 'Requests also come in through the shared mailbox.' }));
+    await appendAiLink(root, ai({ from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:shared-mailbox', newNodes: [{ id: 'system:shared-mailbox', type: 'System', label: 'Shared mailbox' }] }));
+    await appendAiLink(root, ai({ from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:email', confidence: 0.3, confirmedBy: 'operator', newNodes: EMAIL }));
+    await appendEdit(root, { id: 'op-1', at: '2026-10-26', status: 'active', t: 'link', from: 'capability:request-routing', rel: 'USES_DATA', to: 'system:shared-mailbox', idea: 'CAFE-2026-001' });
+    await appendEdit(root, { id: 'op-2', at: '2026-10-26', status: 'active', t: 'link', from: 'capability:gone', rel: 'USES_DATA', to: 'system:shared-mailbox', idea: 'CAFE-2026-001' });
+    const dry = await planFix(root);
+    expect(dry.stale.map((x) => [x.edit, x.candidates[0]?.id])).toEqual([['op-1', 'capability:request-handling'], ['op-2', 'capability:request-handling']]);
+    expect(dry.fields).toEqual([{ line: 1, edge: 'capability:request-handling|USES_DATA|system:shared-mailbox', was: 'challenge', now: 'additional_context', by: 'label' }]);
+    expect(dry.forged).toEqual([{ line: 2, edge: 'capability:request-handling|USES_DATA|system:email', confidence: 0.3 }]);
+    const lines = fixLines(dry);
+    expect(lines.some((l) => l.includes('--repoint op-1=capability:request-handling (Request handling)'))).toBe(true);
+    expect(lines.some((l) => l.includes('--confirm line-2'))).toBe(true);
+    const plan = await planFix(root, {}, { repoint: { 'op-1': 'capability:request-handling' }, retire: ['op-2'], confirm: [2] });
+    const done = await applyFix(root, plan, fixedClock('2026-10-31'));
+    expect(done).toEqual(expect.arrayContaining([
+      'operator.jsonl op-1: repointed from capability:request-routing to capability:request-handling (Request handling)',
+      'operator.jsonl op-2: switched off (link capability:gone USES_DATA system:shared-mailbox), kept in the log',
+      'ai-links.jsonl line 2: your Do it recorded (cafe ontology fix --confirm)',
+    ]));
+    const after = await checkWorkspace(root);
+    expect(after.stale).toEqual([]);
+    expect((await rebuildGraph(root)).edges.find((e) => e.id === 'capability:request-handling|USES_DATA|system:email')!.confirmed).toBe(true);
+    expect((await rebuildGraph(root)).edges.find((e) => e.id === 'capability:request-handling|USES_DATA|system:shared-mailbox')!.source).toBe('ai:fake:additional_context');
+  });
+});

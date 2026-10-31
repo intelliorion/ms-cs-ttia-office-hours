@@ -202,3 +202,175 @@ describe('item 2: the assistant says what went wrong as it is', () => {
     expect(e.error).not.toMatch(/couldn't finish/);
   });
 });
+
+/* ---------- items 3 to 5 ---------- */
+import { spawnSync } from 'node:child_process';
+import { buildGraph } from '../src/graph/build';
+import { runQuery, type Query } from '../src/command/query';
+import { exportJsonLd } from '../src/graph/jsonld';
+import { vocabularyTurtle } from '../src/graph/schema';
+import { runNetwork, cycleRelations } from '../src/graph/network';
+import { reviewInput } from '../src/review/suggestInput';
+import { placeQuote, planAiLinks } from '../src/ai/apply';
+import { defaultEntries, makeRegistry } from '../src/graph/registry';
+import { checkReport, unscopedLine } from '../src/graph/check';
+
+const PY = spawnSync('python3', ['-c', 'print(1)'], { encoding: 'utf8' }).stdout?.trim();
+const THREE = [
+  ...IDEAS,
+  sampleIdea({ id: 'CAFE-2026-003', slug: 'travel', title: 'Travel policy assistant', function: 'GSS', entity: 'CS', dedupe_key: 'c', features: ['Policy answering'], outcomes: ['Save Time'], people: { submitter: 'Lucia Fernandez', team: [] } }),
+];
+const world = (g: ReturnType<typeof buildGraph>, extra: Partial<Parameters<typeof runQuery>[1]> = {}) => ({ graph: g, ideas: THREE, rounds: [], idOf: (c: string) => c, ...extra });
+
+describe('item 3: "not confirmed" survives everywhere', () => {
+  // 003 needs Request handling only by an AI link at 0.6, waiting for Do it (the f49 answer said all four were confirmed).
+  const links: AiLink[] = [ai({ from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:request-handling', confidence: 0.6, idea: 'CAFE-2026-003' }), ai({ from: 'capability:request-handling', rel: 'USES_DATA', to: 'system:email', idea: 'CAFE-2026-001', newNodes: EMAIL })];
+  const g = buildGraph(THREE, links);
+  it('a plain follow over a link waiting for Do it says so, in the trace and in the facts the AI gets (qa-fix f49)', () => {
+    const r = runQuery({ steps: [{ op: 'stars', codes: ['capability:request-handling'] }, { op: 'follow', rel: 'NEEDS', dir: 'in', type: 'Idea' }] } as Query, world(g));
+    expect(r.final.sort()).toEqual(['idea:CAFE-2026-001', 'idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
+    expect(r.trace.map((t) => t.text)).toContain('Not confirmed (waiting for your Do it): Travel policy assistant needs Request handling (0.6)');
+    expect(r.unconfirmed).toEqual([{ from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:request-handling', confidence: 0.6 }]);
+  });
+  it('a ranking that counts a link waiting for Do it says how many of each count are not confirmed', () => {
+    const r = runQuery({ steps: [{ op: 'stars', type: 'Capability' }, { op: 'rank', rel: 'NEEDS', dir: 'in', limit: 3 }] } as Query, world(g));
+    expect(r.trace.some((t) => t.text === 'Not confirmed in these counts (waiting for your Do it): Request handling 1 of 3')).toBe(true);
+  });
+  it('an idea that needs a capability using the system for another idea only is said not to depend on it (q25: the bot and the travel policy)', () => {
+    const r = runQuery({ steps: [{ op: 'stars', codes: ['system:email'] }, { op: 'follow', rel: 'DEPENDS_ON', dir: 'in', type: 'Idea' }] } as Query, world(g));
+    expect(r.final).toEqual(['idea:CAFE-2026-001']);
+    expect(r.trace.find((t) => t.text.startsWith('Not followed:'))!.text).toContain('Procurement FAQ bot needs Request handling, which uses Email for Desk booking assistant only: no depends on link for Procurement FAQ bot');
+  });
+  it('the decision AI is told which graph facts are not confirmed (suggestInput)', async () => {
+    const root = await tmpWorkspace();
+    for (const i of THREE) await saveIdea(root, i);
+    for (const l of links) await appendAiLink(root, l);
+    const { input, basis } = await reviewInput(root, 'CAFE-2026-003');
+    expect(input.graph?.find((x) => x.label === 'Request handling')).toMatchObject({ confirmed: false });
+    expect(basis).toMatch(/graph links? \(1 not confirmed\)/);
+  });
+  it('the export writes plain triples for confirmed facts only; an unconfirmed one is a Link with confirmed false', () => {
+    const doc = exportJsonLd(g, { kind: 'all' });
+    const idea3 = doc['@graph'].find((n: any) => n['@id'] === 'star:idea:CAFE-2026-003')!;
+    expect(idea3.NEEDS ?? []).not.toContainEqual({ '@id': 'star:capability:request-handling' });
+    expect(doc['@graph'].find((n: any) => n['@type'] === 'Link' && n.from === 'star:idea:CAFE-2026-003' && n.rel === 'NEEDS' && n.to === 'star:capability:request-handling')).toMatchObject({ confirmed: false });
+  });
+  it.skipIf(!PY)('NetworkX: suggestions rest on confirmed links only; a system counts the ideas that depend on it', async () => {
+    const out = await runNetwork(g, ['central', 'suggest'], { top: 50, types: ['System'] });
+    const email = out.results.central.byType.System.find((x: any) => x.id === 'system:email');
+    expect(email.ideas).toBe(1);
+    expect(out.results.suggest.evidence).toBe('confirmed links only');
+  }, 60_000);
+});
+
+describe('item 4: NetworkX earns its place, honestly', () => {
+  it.skipIf(!PY)('clusters leave out form choices and give a plain verdict from modularity', async () => {
+    const g = buildGraph(THREE, []);
+    const out = await runNetwork(g, ['clusters'], {});
+    const c = out.results.clusters;
+    expect(c.method).toMatch(/form choices, people and teams left out/);
+    expect(['no-groups', 'some-groups', 'clear-groups']).toContain(c.verdict);
+    expect(c.verdictText).toMatch(/groups|grouping/);
+    for (const k of c.clusters) for (const b of k.binding) expect(['Capability', 'PainPoint']).toContain(b.type);
+  }, 60_000);
+  it('cycles: with the built-in ontology nothing can form one, said so; a declared loop of kinds can', async () => {
+    expect(cycleRelations(BUILTIN_SCHEMA)).toEqual([]);
+    const { schema } = compileOntology({ nodes: { Vendor: { label: 'Vendor' } }, relations: { SUPPLIED_BY: { from: 'System', to: 'Vendor', meaning: 'm', derived: false }, RUNS: { from: 'Vendor', to: 'System', meaning: 'm', derived: false } } });
+    expect(cycleRelations(schema).sort()).toEqual(['RUNS', 'SUPPLIED_BY']);
+    if (PY) {
+      const out = await runNetwork(buildGraph(THREE, []), ['cycles'], {});
+      expect(out.results.cycles).toMatchObject({ applicable: false });
+    }
+  }, 60_000);
+  it('a path does not run through a form-choice hub (q17: Priya Nair to the Expense system through Reduce Manual Effort)', () => {
+    const two = [
+      sampleIdea({ id: 'CAFE-2026-001', slug: 'a', title: 'A idea', dedupe_key: 'a', outcomes: ['Save Time'], features: ['Cap one'], people: { submitter: 'Ann Lee', team: [] } }),
+      sampleIdea({ id: 'CAFE-2026-002', slug: 'b', title: 'B idea', dedupe_key: 'b', outcomes: ['Save Time'], features: ['Cap two'], people: { submitter: 'Bo Kim', team: [] } }),
+    ];
+    const g = buildGraph(two, []);
+    const r = runQuery({ steps: [{ op: 'path', codes: ['person:ann-lee', 'idea:CAFE-2026-002'] }] } as Query, { graph: g, ideas: two, rounds: [], idOf: (c: string) => c });
+    expect(r.path ?? []).not.toContain('outcome:save-time');
+  });
+});
+
+describe('item 5: newcomer-safe RDF and verifiable provenance', () => {
+  const two = [
+    sampleIdea({ id: 'CAFE-2026-001', slug: 'a', title: 'A idea', dedupe_key: 'a', features: ['Cap one', 'Cap two'], people: { submitter: 'Ann Lee', team: [] } }),
+    sampleIdea({ id: 'CAFE-2026-002', slug: 'b', title: 'B idea', dedupe_key: 'b', features: ['Cap one', 'Cap two'], people: { submitter: 'Bo Kim', team: [] } }),
+  ];
+  it('SIMILAR_TO is symmetric: declared so and written both ways', () => {
+    const doc = exportJsonLd(buildGraph(two, []), { kind: 'all' });
+    const a = doc['@graph'].find((n: any) => n['@id'] === 'star:idea:CAFE-2026-001')!;
+    const b = doc['@graph'].find((n: any) => n['@id'] === 'star:idea:CAFE-2026-002')!;
+    expect(a.SIMILAR_TO).toEqual([{ '@id': 'star:idea:CAFE-2026-002' }]);
+    expect(b.SIMILAR_TO).toEqual([{ '@id': 'star:idea:CAFE-2026-001' }]);
+    expect(vocabularyTurtle()).toMatch(/cafe:SIMILAR_TO a rdf:Property, owl:ObjectProperty, owl:SymmetricProperty/);
+  });
+  it('aliases are skos:altLabel, so "T&E policy" is found by its name', () => {
+    const registry = makeRegistry(defaultEntries(), [{ id: 'op-1', at: '', status: 'active', t: 'alias', node: 'system:travel-expense-policy', label: 'T&E policy', of: 'Travel & Expense policy' }]);
+    const g = buildGraph(two, [ai({ from: 'capability:cap-one', rel: 'USES_DATA', to: 'system:travel-expense-policy', newNodes: [{ id: 'system:travel-expense-policy', type: 'System', label: 'Travel & Expense policy' }] })], [], [], { registry });
+    const doc = exportJsonLd(g, { kind: 'all' });
+    expect(doc['@graph'].find((n: any) => n['@id'] === 'star:system:travel-expense-policy')).toMatchObject({ altLabel: ['T&E policy'] });
+    expect(doc['@context'].altLabel).toEqual({ '@id': 'http://www.w3.org/2004/02/skos/core#altLabel', '@container': '@set' });
+  });
+  it('an AI fact carries the passage it was read in and when; a quote in another field moves the source there (apply.ts:156)', () => {
+    const idea = sampleIdea({ challenge: 'Claims are checked by hand.', additional_context: 'We keep the anomaly rules in a small rules spreadsheet.' });
+    expect(placeQuote('the anomaly rules in a small rules spreadsheet', 'challenge', idea as never)).toEqual({ field: 'additional_context', found: true });
+    expect(placeQuote('something nobody wrote', 'challenge', idea as never)).toEqual({ field: 'challenge', found: false });
+    const out = { nodes: [{ type: 'System' as const, label: 'Rules spreadsheet' }, { type: 'Capability' as const, label: 'Rule checks' }], links: [
+      { from: 'idea', to: 'Rule checks', rel: 'NEEDS' as const, description: 'd', confidence: 0.9, field: 'challenge', quote: 'Claims are checked by hand' },
+      { from: 'Rule checks', to: 'Rules spreadsheet', rel: 'USES_DATA' as const, description: 'd', confidence: 0.9, field: 'challenge', quote: 'anomaly rules in a small rules spreadsheet' },
+    ] };
+    const plan = planAiLinks(idea.id, out, buildGraph([idea], []), [], 'claude', { text: idea as never, at: '2026-10-31T10:00:00.000Z' });
+    expect(plan.links.map((l) => [l.source, l.quote, l.readAt])).toEqual([
+      ['ai:claude:challenge', 'Claims are checked by hand', '2026-10-31T10:00:00.000Z'],
+      ['ai:claude:additional_context', 'anomaly rules in a small rules spreadsheet', '2026-10-31T10:00:00.000Z'],
+    ]);
+    const g = buildGraph([idea], plan.links.map((l) => ({ ...l, status: 'confirmed' as const })));
+    const e = g.edges.find((x) => x.rel === 'USES_DATA')!;
+    expect(e).toMatchObject({ quote: 'anomaly rules in a small rules spreadsheet', readAt: '2026-10-31T10:00:00.000Z' });
+    const link = exportJsonLd(g, { kind: 'all' })['@graph'].find((n: any) => n['@type'] === 'Link' && n.rel === 'USES_DATA')!;
+    expect(link).toMatchObject({ quote: 'anomaly rules in a small rules spreadsheet', quoteFound: true, readAt: '2026-10-31T10:00:00.000Z', source: 'ai:claude:additional_context' });
+  });
+  it('provenance is queryable: which links the operator added, and where one link came from (q45)', () => {
+    const edits = [{ id: 'op-1', at: '2026-10-26', status: 'active' as const, t: 'link' as const, from: 'idea:CAFE-2026-001', rel: 'REPLACES' as const, to: 'painpoint:slow', idea: 'CAFE-2026-001' },
+      { id: 'op-0', at: '2026-10-26', status: 'active' as const, t: 'add' as const, node: 'painpoint:slow', type: 'PainPoint' as const, label: 'Slow' }];
+    const g = buildGraph(two, [ai({ from: 'capability:cap-one', rel: 'USES_DATA', to: 'system:email', quote: 'by email', newNodes: EMAIL })], [], [edits[1], edits[0]]);
+    const r = runQuery({ steps: [{ op: 'links', source: 'operator' }] } as Query, { graph: g, ideas: two, rounds: [], idOf: (c: string) => c });
+    expect(r.links!.map((l) => [l.from, l.rel, l.to, l.edit, l.at])).toEqual([['idea:CAFE-2026-001', 'REPLACES', 'painpoint:slow', 'op-1', '2026-10-26']]);
+    expect(r.trace.map((t) => t.text)).toContain('A idea replaces Slow: added by the operator (op-1, 2026-10-26) for CAFE-2026-001');
+    const one = runQuery({ steps: [{ op: 'links', codes: ['capability:cap-one', 'system:email'] }] } as Query, { graph: g, ideas: two, rounds: [], idOf: (c: string) => c });
+    expect(one.trace.map((t) => t.text).find((t) => t.startsWith('Cap one uses data Email'))).toMatch(/read by the AI \(fake\) in challenge: "by email"/);
+  });
+  it('the registry wins over containment: Microsoft Copilot is not Copilot Studio (q27, q47)', () => {
+    const idea = sampleIdea({ features: ['Policy answering'], tools: { 'Policy answering': 'Copilot Studio' } });
+    const g = buildGraph([idea], []);
+    const registry = makeRegistry(defaultEntries(), []);
+    for (const match of ['Microsoft Copilot', 'Copilot', 'M365 Copilot']) {
+      const r = runQuery({ steps: [{ op: 'stars', type: 'Tool', match }, { op: 'follow', rel: 'USES', dir: 'in', type: 'Idea' }] } as Query, { graph: g, ideas: [idea], rounds: [], idOf: (c: string) => c, registry });
+      expect(r.final).toEqual([]);
+      expect(r.trace[0].text).toMatch(/exactly: Microsoft Copilot, known as .*not in the graph/);
+    }
+    const studio = runQuery({ steps: [{ op: 'stars', type: 'Tool', match: 'Copilot Studio' }, { op: 'follow', rel: 'USES', dir: 'in', type: 'Idea' }] } as Query, { graph: g, ideas: [idea], rounds: [], idOf: (c: string) => c, registry });
+    expect(studio.final).toEqual(['idea:CAFE-2026-001']);
+  });
+  it('check.ts:53: an unscoped fact about a system says no idea reaches the system, not "needs the capability"', () => {
+    const line = unscopedLine({ where: 'operator.jsonl op-402', edge: 'system:expense-system|SUPPLIED_BY|vendor:acme', from: 'system:expense-system', rel: 'SUPPLIED_BY' as never, to: 'vendor:acme', needers: [], confirming: [] });
+    expect(line).toMatch(/No idea reaches system:expense-system yet/);
+    expect(line).not.toMatch(/capability/);
+    void checkReport;
+  });
+});
+
+describe('item 4: a cluster is passed on only when the groups are real', () => {
+  it.skipIf(!PY)('two groups that share nothing are clear groups; each idea\'s stage input names its own', async () => {
+    const { ideaNetwork } = await import('../src/graph/network');
+    const mk = (n: number, caps: string[]) => sampleIdea({ id: `CAFE-2026-00${n}`, slug: `i${n}`, title: `Idea ${n}`, dedupe_key: `k${n}`, features: caps, people: { submitter: `Person ${n}`, team: [] } });
+    const ideas = [mk(1, ['Cap a', 'Cap b']), mk(2, ['Cap a', 'Cap b']), mk(3, ['Cap a', 'Cap b']), mk(4, ['Cap c', 'Cap d']), mk(5, ['Cap c', 'Cap d']), mk(6, ['Cap c', 'Cap d'])];
+    const g = buildGraph(ideas, []);
+    const out = await runNetwork(g, ['clusters'], {});
+    expect(out.results.clusters.verdict).toBe('clear-groups');
+    const n = await ideaNetwork(g, 'CAFE-2026-001');
+    expect(n.available && n.cluster?.others.map((x) => x.id).sort()).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-003']);
+  }, 60_000);
+});

@@ -168,11 +168,12 @@ describe.skipIf(!!SKIP)('NetworkX: the analyses', () => {
     expect((await rebuildGraph(root2)).edges.length).toBe(before);
   });
 
-  it('cycles: none along NEEDS, USES_DATA and DEPENDS_ON (derived links only with withDerived)', async () => {
+  it('cycles: with the built-in ontology no relation can form one, and the analysis says it has nothing to look for', async () => {
     const stored = await networkFor(root, 'cycles');
     const derived = await networkFor(root, 'cycles', {}, { withDerived: true });
-    expect(stored.results.cycles).toMatchObject({ count: 0, cycles: [] });
-    expect(derived.results.cycles.links).toBeGreaterThan(stored.results.cycles.links);
+    expect(stored.results.cycles).toMatchObject({ applicable: false, count: 0, cycles: [], relations: [] });
+    expect(stored.results.cycles.why).toMatch(/^no relation in this ontology can form a cycle/);
+    expect(networkLines(stored)[0]).toMatch(/^Nothing to look for: no relation in this ontology can form a cycle/);
     expect(derived.scopeText).toBe('stored facts and derived links');
     expect(networkLines(derived).at(-1)).toMatch(/stored facts and derived links$/);
   });
@@ -377,9 +378,11 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
   it('"which ideas naturally group together?" and "is anything isolated?" answer from Louvain and the components', () => withFake(async () => {
     const root = await workspace();
     const groups = await runCommand(root, 'which ideas naturally group together?', ai(), clock);
-    expect(groups.trace![0][0].text).toBe('NetworkX Louvain communities over stored facts: 1 cluster of ideas, joined by the stars they share');
-    expect(groups.trace![0][1].text).toBe('Cluster 1: Desk booking assistant, Procurement FAQ bot, Travel policy assistant, bound by Request handling, Booking update, Policy answering');
-    expect(groups.reply).toMatch(/1 group \(NetworkX 3\.\S+, stored facts\): 1\) Desk booking assistant, Procurement FAQ bot, Travel policy assistant/);
+    // One group is no grouping: NetworkX's modularity says so, and the reply says there are no clear groups.
+    expect(groups.trace![0][0].text).toBe('NetworkX Louvain communities over stored facts: no clear groups: the ideas fall into one group or none, so there is nothing to tell apart');
+    expect(groups.trace![0][1].text).toBe('1 tentative group (not a finding, shown for reference):');
+    expect(groups.trace![0][2].text).toBe('Cluster 1: Desk booking assistant, Procurement FAQ bot, Travel policy assistant, bound by Request handling, Booking update, Policy answering');
+    expect(groups.reply).toMatch(/^No clear groups \(NetworkX 3\.\S+, stored facts\): the ideas fall into one group or none/);
     const alone = await runCommand(root, 'is anything isolated?', ai(), clock);
     expect(alone.reply).toMatch(/Not connected to the rest .*: Lonely ledger tool, TAX\./);
   }));

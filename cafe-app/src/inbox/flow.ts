@@ -221,12 +221,14 @@ export async function processItem(
   const { apply, hold } = checkProposals(ctx, plan.actions);
   const kept = recordsOf(triaged).filter((r) => r.status !== 'pending' && r.action.t !== 'ask_idea');
   // Kept records (applied, undone, dropped by you) are not proposed again, nor is what a resolve rewrote.
-  const seen = new Set(kept.flatMap((r) => [JSON.stringify(r.action), ...(r.resolvedFrom ? [JSON.stringify(r.resolvedFrom)] : [])]));
+  // The same action read again is the same action: when the AI read it (readAt) is not part of what it is.
+  const same = (a: unknown) => JSON.stringify(a, (k, v) => (k === 'readAt' ? undefined : v));
+  const seen = new Set(kept.flatMap((r) => [same(r.action), ...(r.resolvedFrom ? [same(r.resolvedFrom)] : [])]));
   let n = kept.reduce((mx, r) => Math.max(mx, Number(r.id.slice(1)) || 0), 0);
   const needsHand = !!tr.needsHand;
   const fresh: ActionRecord[] = [
-    ...apply.filter((a) => !seen.has(JSON.stringify(a))).map((action) => ({ id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending' as const, label: labelOf(action) })),
-    ...hold.filter((h) => !seen.has(JSON.stringify(h.action))).map((h) => ({
+    ...apply.filter((a) => !seen.has(same(a))).map((action) => ({ id: `a${++n}`, action, kind: kindOf(action, { needsHand }), status: 'pending' as const, label: labelOf(action) })),
+    ...hold.filter((h) => !seen.has(same(h.action))).map((h) => ({
       id: `a${++n}`, action: h.action, kind: 'ok' as const, status: 'pending' as const, label: labelOf(h.action),
       held: { rule: h.rule, why: h.why, ...(h.existing ? { existing: h.existing } : {}), ...(h.node ? { node: h.node } : {}) },
     })),
@@ -330,7 +332,7 @@ export async function readNewIdeas(root: string, id: string, ideaIds: string[], 
       const before = await rebuildGraph(root);
       const { provider, output } = await extractCoded(root, connector, idea, before.nodes);
       const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
-      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root), confirmAt: confirmAt(await loadSettings(root)) });
+      const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root), confirmAt: confirmAt(await loadSettings(root)), text: idea as unknown as Record<string, unknown> });
       if (planned.links.length) {
         const item = await load(root, id);
         const { ideas } = await listIdeas(root);

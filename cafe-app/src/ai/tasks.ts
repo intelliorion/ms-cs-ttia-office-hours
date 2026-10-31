@@ -42,7 +42,7 @@ export interface ReviewSuggestInput {
   progress?: { builderNamed: boolean; replyReceived: boolean; attendanceConfirmed: boolean };
   flags?: string[];
   /** What the knowledge graph holds for the idea: its pain points, capabilities and systems, and how many other ideas need each. */
-  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  graph?: { type: string; label: string; alsoNeededBy?: number; confirmed?: boolean; note?: string }[];
   /** The to-do list from the last suggestion, in its own words, so a re-evaluation keeps the items and marks them met. */
   todo?: { need: string; ask: string }[];
   /**
@@ -52,7 +52,7 @@ export interface ReviewSuggestInput {
   network?: ReviewNetwork;
 }
 export type ReviewNetwork =
-  | { by: string; cluster: { otherIdeas: string[]; boundBy: string[] } | null; centrality: { star: string; type: string; rank: string; ideas: number }[]; likelyMissing: { link: string; because: string }[] }
+  | { by: string; grouping?: string; cluster: { otherIdeas: string[]; boundBy: string[] } | null; centrality: { star: string; type: string; rank: string; ideas: number }[]; likelyMissing: { link: string; because: string }[] }
   | { unavailable: string };
 /** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
 export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
@@ -275,7 +275,8 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'from their emails (answers), what has happened since (progress), flags, and what the knowledge graph holds for it (graph: its pain points,',
       'capabilities and systems, and how many other ideas need each, which bears on reuse), and network: what NetworkX found across the whole programme',
       '(its cluster of related ideas, how central its capabilities and systems are, links it probably lacks); network is analysis, weigh it for reuse and theme',
-      'but never treat a likely missing link as a fact, and if network says unavailable, decide without it. Later information outranks the form: an answer that',
+      'but never treat a likely missing link as a fact, and if network says unavailable, decide without it. A graph item with confirmed: false rests on an AI link',
+      'the operator has not confirmed: weigh it as a possibility, never as a fact. Later information outranks the form: an answer that',
       'names a builder, the data or a live system changes the criteria. Tick each criterion true only if DATA supports it:',
       ...CRITERIA.map((c) => `- ${c.id}: ${c.text}`),
       'Suggest one decision:',
@@ -609,7 +610,7 @@ export interface ToolPickInput {
   /** For the updates the answers justify, as the decision has them: the form's participation, the flags, the graph. */
   form?: { participation?: string };
   flags?: string[];
-  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  graph?: { type: string; label: string; alsoNeededBy?: number; confirmed?: boolean; note?: string }[];
   /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
   data?: DataBrief;
 }
@@ -760,7 +761,7 @@ export interface DesignStepInput {
   /** For the updates the answers justify, as the decision has them: the form's participation, the flags, the graph. */
   form?: { participation?: string };
   flags?: string[];
-  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  graph?: { type: string; label: string; alsoNeededBy?: number; confirmed?: boolean; note?: string }[];
   /** The confirmed data understanding (Understand the data), names coded. Only a confirmed one is sent. */
   data?: DataBrief;
   /** The design was started with "Design anyway": what the readiness check found missing then. */
@@ -1947,7 +1948,7 @@ export interface DataStepInput {
   guidance: string;
   form?: { participation?: string };
   flags?: string[];
-  graph?: { type: string; label: string; alsoNeededBy?: number }[];
+  graph?: { type: string; label: string; alsoNeededBy?: number; confirmed?: boolean; note?: string }[];
 }
 export interface DataStepSummary { text: string; input: string; output: string; knowledge: string; rules: string; gapsClosed: string[] }
 export interface DataStepOutput {

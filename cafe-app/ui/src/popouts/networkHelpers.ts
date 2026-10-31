@@ -6,9 +6,9 @@ export interface NetView {
   results: {
     stats?: { nodes: number; links: number; density: number; components: number; largestComponent: number; averageClustering: number; analysed: { nodes: number; links: number } };
     central?: { betweenness: (NetStar & { betweenness: number; degree: number; links: number; ideas: number })[]; sampled: boolean };
-    clusters?: { clusters: { ideas: NetStar[]; binding: (NetStar & { ideas: number })[]; weight: number }[]; alone: NetStar[]; modularity: number };
+    clusters?: { clusters: { ideas: NetStar[]; binding: (NetStar & { ideas: number })[]; weight: number }[]; alone: NetStar[]; modularity: number; verdict?: 'no-groups' | 'some-groups' | 'clear-groups'; verdictText?: string };
     isolated?: { components: number; main: number; outside: NetStar[] };
-    suggest?: { suggestions: { from: NetStar; rel: string; to: NetStar; share: number; adamicAdar: number; jaccard: number; because: { peer: NetStar; shared: NetStar[] }[] }[]; found: number };
+    suggest?: { suggestions: { from: NetStar; rel: string; to: NetStar; share: number; adamicAdar: number; jaccard: number; because: { peer: NetStar; shared: NetStar[] }[] }[]; found: number; evidence?: string };
   };
 }
 export const NETWORK_ANALYSES = ['stats', 'central', 'clusters', 'isolated', 'suggest'];

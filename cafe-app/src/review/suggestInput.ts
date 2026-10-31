@@ -59,13 +59,17 @@ export async function reviewInput(
   const graphFacts = [...linked].map((sid) => {
     const n = nodes.get(sid)!;
     const others = [...ideasOf(sid)].filter((x) => x !== me).length;
-    return { type: n.type, label: n.label, ...(others ? { alsoNeededBy: others } : {}) };
+    // A fact that rests only on a link nobody confirmed (an AI link waiting for Do it) is sent as such, never as a fact.
+    const sure = graph.edges.some((e) => e.confirmed && ((e.from === me && e.to === sid) || (e.to === me && e.from === sid)));
+    return { type: n.type, label: n.label, ...(others ? { alsoNeededBy: others } : {}), ...(sure ? {} : { confirmed: false, note: 'not confirmed: an AI link waiting for the operator\'s Do it; do not treat it as a fact' }) };
   });
+  const unsure = graphFacts.filter((f) => f.confirmed === false).length;
 
   // The decision suggestion also reads what NetworkX finds across the programme (stored facts; names coded like the rest).
   const net = opts.network ? await ideaNetwork(graph, idea.id) : undefined;
   const network: ReviewSuggestInput['network'] = !net ? undefined : !net.available ? { unavailable: net.reason } : {
     by: `NetworkX ${net.networkx} over ${net.scope}`,
+    grouping: net.grouping.text,
     cluster: net.cluster ? { otherIdeas: net.cluster.others.map((x) => x.label), boundBy: net.cluster.boundBy.map((b) => `${coded(b.label)} (${b.type}, ${b.ideas} ideas)`) } : null,
     centrality: net.centrality.map((c) => ({ star: c.label, type: c.type, rank: `${c.rank} of ${c.of}`, ideas: c.ideas })),
     likelyMissing: net.suggestions.map((x) => ({ link: `${x.rel === 'NEEDS' ? 'needs' : 'uses the data'} ${x.to.label}`, because: `${Math.round(x.share * 100)} % of its closest peers by weight have it: ${x.peers.map((p) => p.label).join(', ')}` })),
@@ -89,9 +93,9 @@ export async function reviewInput(
     progress.replyReceived ? 'a reply received' : '',
     progress.attendanceConfirmed ? 'attendance confirmed' : '',
     idea.flags.length ? plural(idea.flags.length, 'flag') : '',
-    graphFacts.length ? plural(graphFacts.length, 'graph link') : '',
+    graphFacts.length ? `${plural(graphFacts.length, 'graph link')}${unsure ? ` (${unsure} not confirmed)` : ''}` : '',
     !net ? '' : net.available
-      ? `NetworkX network analysis (${net.cluster ? `a cluster with ${plural(net.cluster.others.length, 'other idea')}` : 'no cluster'}, ${plural(net.centrality.length, 'centrality rank')}, ${plural(net.suggestions.length, 'likely missing link')})`
+      ? `NetworkX network analysis (${net.cluster ? `a cluster with ${plural(net.cluster.others.length, 'other idea')}` : net.grouping.verdict === 'no-groups' ? 'no clear groups' : 'no cluster'}, ${plural(net.centrality.length, 'centrality rank')}, ${plural(net.suggestions.length, 'likely missing link')})`
       : `no network analysis (unavailable: ${net.reason.split(/(?<=\.) /)[0].replace(/\.$/, '')})`,
   ].filter(Boolean);
   // What an imported email found but the operator has not said yes to yet: not part of the idea, so not read; say so.

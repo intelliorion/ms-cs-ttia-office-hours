@@ -16,6 +16,21 @@ const contentWords = (s: string) => tokens(s).filter((w) => !STOP.has(w));
 /** The idea's text fields the extract reads: a link names the one it came from, and its source records it. */
 export const FIELDS = ['challenge', 'current_process', 'outcomes', 'business_impact', 'beneficiaries', 'additional_context'];
 
+/** Words only, for comparing a quote with the text it came from (case, accents, punctuation and spacing aside). */
+const plain = (s: string) => ` ${String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' email ').replace(/<email>/g, ' email ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+/**
+ * Where a quoted passage really is in the idea's text: the field the AI named when it is there, else the first field
+ * that holds it (the source is corrected to it), else not found (the field the AI named is kept, said not found).
+ */
+export function placeQuote(quote: string | undefined, named: string, text: Partial<Record<string, unknown>> | undefined): { field: string; found?: boolean } {
+  const q = plain(quote ?? '');
+  if (!quote || q.trim().length < 3 || !text) return { field: named };
+  const has = (f: string) => plain(Array.isArray(text[f]) ? (text[f] as unknown[]).join(' ') : String(text[f] ?? '')).includes(q);
+  if (has(named)) return { field: named, found: true };
+  const other = FIELDS.find((f) => f !== named && has(f));
+  return other ? { field: other, found: true } : { field: named, found: false };
+}
+
 /** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {
   const labels = (t: NodeType) => nodes.filter((n) => n.type === t).map((n) => n.label).slice(0, 200);
@@ -56,6 +71,10 @@ export function planAiLinks(
     confirmAt?: number;
     /** Where the AI read it when the link does not say (the extract names the form field per link). */
     origin?: string;
+    /** The idea's text fields, so each link's quoted passage is checked against the field it names. */
+    text?: Partial<Record<string, unknown>>;
+    /** When the AI read it (ISO time); now when absent. */
+    at?: string;
   } = {},
 ): { links: AiLink[]; newNodes: GNode[]; near: Record<string, string> } {
   const ideaNode = nodeId('Idea', ideaId);
@@ -153,11 +172,16 @@ export function planAiLinks(
     const extra = [l.from, l.to].map((x) => folded.get(key(x))).filter((x): x is string => !!x);
     const description = `${l.description}${extra.length ? ` (${extra.join(', ')})` : ''}${unapproved ? NOT_APPROVED_NOTE : ''}`;
     // Where it was read: the form field the AI names for the link, else the caller's origin.
-    const field = l.field && FIELDS.includes(l.field) ? l.field : opts.origin ?? 'form';
+    const named = l.field && FIELDS.includes(l.field) ? l.field : opts.origin ?? 'form';
+    // The passage it read, checked: a quote found in another field moves the source there; one found nowhere is said so.
+    const placed = placeQuote(l.quote, named, opts.text);
+    const field = placed.field;
     const status = opts.status === 'confirmed' && opts.confirmAt !== undefined && l.confidence < opts.confirmAt ? 'pending' : opts.status ?? 'pending';
     links.push({
       from: from.id, to: to.id, rel: l.rel, description, confidence: l.confidence,
       source: `ai:${provider}:${field}`, status, idea: ideaId,
+      ...(l.quote?.trim() ? { quote: l.quote.trim().slice(0, 300), ...(placed.found === false ? { quoteFound: false } : {}) } : {}),
+      readAt: opts.at ?? new Date().toISOString(),
       ...(newNodes.length ? { newNodes } : {}),
     });
   }

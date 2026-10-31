@@ -73,8 +73,10 @@ export function NetworkPopout() {
             </section>
 
             <section className="sec" data-testid="network-clusters">
-              <h3>Ideas that group together <span className="sec-n">Louvain communities · {r.clusters?.clusters.length ?? 0} cluster{r.clusters?.clusters.length === 1 ? '' : 's'}</span></h3>
-              <div className="net-clusters">
+              <h3>Ideas that group together <span className="sec-n">Louvain communities · modularity {(r.clusters?.modularity ?? 0).toFixed(2)}</span></h3>
+              {r.clusters?.verdictText && <p className="hint" data-testid="network-verdict">{r.clusters.verdict === 'no-groups' ? 'No clear groups' : r.clusters.verdict === 'some-groups' ? 'Some grouping' : 'Clear groups'}: {r.clusters.verdictText.replace(/^[^:]*: /, '')}</p>}
+              {r.clusters?.verdict === 'no-groups' && (r.clusters?.clusters.length ?? 0) > 0 && <p className="hint">Tentative groups below, for reference only: they are not a finding.</p>}
+              <div className={`net-clusters${r.clusters?.verdict === 'no-groups' ? ' tentative' : ''}`}>
                 {(r.clusters?.clusters ?? []).map((c, i) => (
                   <div key={i} className="net-cluster" data-cluster={i + 1}>
                     <button className="net-cluster-h" data-action="network-light-cluster" title="Light this cluster in the universe" onClick={() => light(clusterIds(c))}>Cluster {i + 1} · {c.ideas.length} ideas <span>Light them</span></button>
@@ -92,7 +94,7 @@ export function NetworkPopout() {
             </section>
 
             <section className="sec" data-testid="network-suggest">
-              <h3>Links that are probably missing <span className="sec-n">link prediction · Adamic-Adar, Jaccard · proposals only</span></h3>
+              <h3>Links that are probably missing <span className="sec-n">link prediction · Adamic-Adar, Jaccard · {r.suggest?.evidence ?? 'confirmed links only'} · proposals only</span></h3>
               {!r.suggest?.suggestions.length && <p className="hint">No link looks missing.</p>}
               <ul className="net-sugg">
                 {(r.suggest?.suggestions ?? []).map((s) => {

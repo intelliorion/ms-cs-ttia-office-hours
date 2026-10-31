@@ -5,9 +5,9 @@ import { readFile } from 'node:fs/promises';
 import { APP_DIR, paths } from '../workspace/paths';
 import { writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from './store';
-import { slug, type GEdge, type GNode, type NodeType, type Relation } from './ontology';
+import { BUILTIN_SCHEMA, slug, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
 import type { Clock } from '../clock';
-import type { NetworkStepRun, Query, QueryStep } from '../command/query';
+import { cycleCapable, type NetworkStepRun, type Query, type QueryStep } from '../command/query';
 
 /**
  * NetworkX for whole-network analysis: the app builds the graph (build.ts, rules.ts), NetworkX analyses it.
@@ -61,7 +61,9 @@ export function toNodeLink(graph: { nodes: GNode[]; edges: GEdge[] }, withDerive
     edges: edges.map((e) => ({
       source: e.from, target: e.to, key: e.rel, rel: e.rel,
       ...(e.derived ? { derived: true } : {}),
-      ...(full ? { confirmed: e.confirmed, fact_source: e.source, ...(e.ideas?.length ? { ideas: e.ideas } : {}) } : {}),
+      // Whether the operator stands behind it: link prediction reads confirmed links only.
+      confirmed: e.confirmed,
+      ...(full ? { fact_source: e.source, ...(e.ideas?.length ? { ideas: e.ideas } : {}) } : {}),
     })),
   };
 }
@@ -158,7 +160,7 @@ export async function verifyVendored(dir = VENDOR_DIR): Promise<{ file: string; 
 /* ---------- running an analysis ---------- */
 
 /** formChoices: keep the form choices (outcomes, support, categories, beneficiaries) in central and suggest; left out by default. */
-export interface NetworkOptions { top?: number; a?: string; b?: string; types?: NodeType[]; limit?: number; formChoices?: boolean }
+export interface NetworkOptions { top?: number; a?: string; b?: string; types?: NodeType[]; limit?: number; formChoices?: boolean; unconfirmed?: boolean }
 export interface NetworkRunOptions { withDerived?: boolean; env?: NodeJS.ProcessEnv; timeoutMs?: number }
 export interface NetworkOutput {
   networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string;
@@ -175,11 +177,34 @@ export function clearNetworkCache(): void { resultCache.clear(); pythonCache.cle
 const lastLine = (s: string) => s.trim().split(/\r?\n/).at(-1)!.slice(0, 200);
 const malformed = (r: Ran) => new NetworkError(`NetworkX did not answer in the expected form${r.err.trim() ? `: ${lastLine(r.err)}` : ''}.`, 'failed');
 
+/**
+ * The stated relations that can form a cycle given the ontology: those on a loop of kinds (a declared Vendor → System
+ * relation with SUPPLIED_BY System → Vendor), or from a kind to itself. KIND_OF is left out: the build refuses a loop
+ * of kinds. With the built-in ontology there is none, and the cycle analysis says it has nothing to look for.
+ */
+export const cycleRelations = (schema: Schema = BUILTIN_SCHEMA): Relation[] => cycleCapable(schema);
+
+/** For each star, the distinct ideas it touches: by a stated link, or by a link the rules derive (a system's dependants). */
+function ideaCounts(graph: { nodes: GNode[]; edges: GEdge[] }): Record<string, number> {
+  const isIdea = new Set(graph.nodes.filter((n) => n.type === 'Idea').map((n) => n.id));
+  const m = new Map<string, Set<string>>();
+  const add = (star: string, idea: string) => { let x = m.get(star); if (!x) m.set(star, (x = new Set())); x.add(idea); };
+  for (const e of graph.edges) {
+    if (isIdea.has(e.from) && !isIdea.has(e.to)) add(e.to, e.from);
+    if (isIdea.has(e.to) && !isIdea.has(e.from)) add(e.from, e.to);
+  }
+  return Object.fromEntries([...m].map(([k, v]) => [k, v.size]));
+}
+
 /** Runs the analyses on the graph. Results are cached per graph version (a hash of the node-link JSON) and question. */
-export async function runNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, analyses: NetworkAnalysis[], options: NetworkOptions = {}, opts: NetworkRunOptions = {}): Promise<NetworkOutput> {
+export async function runNetwork(graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema }, analyses: NetworkAnalysis[], options: NetworkOptions = {}, opts: NetworkRunOptions = {}): Promise<NetworkOutput> {
   for (const a of analyses) if (!NETWORK_ANALYSES.includes(a)) throw new NetworkError(`There is no analysis "${a}". Choose one of ${NETWORK_ANALYSES.join(', ')}.`, 'input');
   const withDerived = !!opts.withDerived;
-  const payload = JSON.stringify({ graph: toNodeLink(graph, withDerived), analyses, options });
+  const extra = {
+    ...(analyses.includes('central') ? { ideaCount: ideaCounts(graph) } : {}),
+    ...(analyses.includes('cycles') ? { cycleRelations: cycleRelations(graph.schema) } : {}),
+  };
+  const payload = JSON.stringify({ graph: toNodeLink(graph, withDerived), analyses, options: { ...options, ...extra } });
   const env = opts.env ?? process.env;
   const py = await findPython(env);
   const key = createHash('sha1').update(`${py.cmd}|${py.version}|${payload}`).digest('hex');
@@ -287,7 +312,8 @@ export function networkLines(o: NetworkAnswer): string[] {
     L.push(`Per type (betweenness)${r.formChoices === 'left out' ? '; form choices (outcomes, support, categories, beneficiaries) left out: --with-form-choices keeps them' : ''}:`);
     for (const [t, list] of Object.entries(r.byType as Record<string, any[]>)) L.push(`  ${t}: ${list.slice(0, 3).map((x) => `${x.label} ${score(x.betweenness)}`).join(', ')}`);
   } else if (o.analysis === 'clusters') {
-    L.push(`${r.clusters.length} cluster${r.clusters.length === 1 ? '' : 's'} of ideas (${r.method}; modularity ${r.modularity}):`);
+    L.push(`Verdict: ${r.verdictText ?? `modularity ${r.modularity}`}.`);
+    L.push(`${r.clusters.length} cluster${r.clusters.length === 1 ? '' : 's'} of ideas (${r.method}; modularity ${r.modularity})${r.verdict === 'no-groups' ? ', shown for reference only' : ''}:`);
     r.clusters.forEach((c: any, i: number) => {
       L.push(`  ${i + 1}. ${c.ideas.map((x: any) => x.label).join(', ')}`);
       if (c.binding.length) L.push(`     bound by: ${c.binding.map((b: any) => `${b.label} (${b.type}, ${b.ideas} ideas)`).join(', ')}`);
@@ -310,13 +336,14 @@ export function networkLines(o: NetworkAnswer): string[] {
     if (r.groupsApart) L.push(`${r.groupsApart} group${r.groupsApart === 1 ? '' : 's'} apart: ${r.apart.slice(0, 8).map((c: any) => `[${c.stars.map((s: any) => s.label).join(', ')}]`).join(' ')}`);
   } else if (o.analysis === 'suggest') {
     if (!r.suggestions.length) L.push('No link looks missing: no idea or capability has close peers with a link it lacks.');
-    else L.push(`Links that are probably missing (proposals only; nothing is changed): ${r.suggestions.length} of ${r.found}, from ${r.considered} candidates (peers share ${r.minShared ?? 2}+ stars of the evidence; ${r.minPeers ?? 2}+ such peers back each):`);
+    else L.push(`Links that are probably missing (proposals only; nothing is changed): ${r.suggestions.length} of ${r.found}, from ${r.considered} candidates (evidence: ${r.evidence ?? 'confirmed links only'}; peers share ${r.minShared ?? 2}+ stars of the evidence; ${r.minPeers ?? 2}+ such peers back each):`);
     r.suggestions.forEach((s: any, i: number) => {
       L.push(`  ${i + 1}. ${s.from.label} ${relWords(s.rel)} ${s.to.label}: ${Math.round(s.share * 100)} % of its ${r.peers} closest peers by weight; Adamic-Adar ${s.adamicAdar}, Jaccard ${s.jaccard}`);
       for (const b of s.because) L.push(`     like ${b.peer.label} (shares ${b.shared.map((x: any) => x.label).join(', ')})`);
     });
   } else if (o.analysis === 'cycles') {
-    L.push(r.count ? `${r.count} dependency cycle${r.count === 1 ? '' : 's'} along ${r.relations.join(', ')}:` : `No dependency cycles along ${r.relations.join(', ')} (${r.links} links checked).`);
+    if (r.applicable === false) L.push(`Nothing to look for: ${r.why}.`);
+    else L.push(r.count ? `${r.count} cycle${r.count === 1 ? '' : 's'} along ${r.relations.join(', ')}:` : `No cycles along ${r.relations.join(', ')} (${r.links} links checked).`);
     r.cycles.forEach((c: any[], i: number) => L.push(`  ${i + 1}. ${c.map((x) => x.label).join(' → ')} → ${c[0].label}`));
   }
   L.push(`NetworkX ${o.networkx} (Python ${o.python}), ${o.scopeText}${o.cached ? ', from the cache' : ''}`);
@@ -373,6 +400,8 @@ export type IdeaNetwork =
     available: true; networkx: string; scope: 'stored facts';
     /** The other ideas in its Louvain cluster and the stars that bind the cluster; none when it shares nothing. */
     cluster: { others: { id: string; label: string }[]; boundBy: { id: string; type: NodeType; label: string; ideas: number }[] } | null;
+    /** NetworkX's modularity and what it means: below 0.3 the groups are not real structure, and no cluster is given. */
+    grouping: { modularity: number; verdict: string; text: string };
     /** Each of its capabilities and systems: betweenness rank among stars of its kind (1 = holds the most together). */
     centrality: { id: string; type: NodeType; label: string; rank: number; of: number; betweenness: number; ideas: number }[];
     /** Links it probably lacks (its closest peers have them), proposals only. */
@@ -404,9 +433,12 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
     const list: any[] = central.byType?.[t] ?? [];
     list.forEach((x, i) => { if (mine.has(x.id)) centrality.push({ id: x.id, type: t, label: x.label, rank: i + 1, of: list.length, betweenness: x.betweenness, ideas: x.ideas }); });
   }
-  const c = (clusters.clusters as any[]).find((k) => k.ideas.some((x: any) => x.id === me));
+  // A cluster is only a fact worth passing on when the grouping is real (modularity 0.3 or more).
+  const real = clusters.verdict !== 'no-groups';
+  const c = real ? (clusters.clusters as any[]).find((k) => k.ideas.some((x: any) => x.id === me)) : undefined;
   return {
     available: true, networkx: out.networkx, scope: 'stored facts',
+    grouping: { modularity: clusters.modularity, verdict: clusters.verdict, text: clusters.verdictText },
     cluster: c ? { others: c.ideas.filter((x: any) => x.id !== me).map((x: any) => ({ id: x.id, label: x.label })), boundBy: c.binding.map((b: any) => ({ id: b.id, type: b.type, label: b.label, ideas: b.ideas })) } : null,
     centrality,
     suggestions: (suggest.suggestions as any[]).filter((s) => s.from.id === me).slice(0, 5).map((s) => ({
@@ -420,7 +452,7 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
 export function ideaNetworkLine(n: IdeaNetwork): string {
   if (!n.available) return 'network analysis unavailable';
   const parts = [
-    n.cluster ? `a cluster with ${n.cluster.others.length} other idea${n.cluster.others.length === 1 ? '' : 's'}` : 'no cluster',
+    n.cluster ? `a cluster with ${n.cluster.others.length} other idea${n.cluster.others.length === 1 ? '' : 's'}` : n.grouping.verdict === 'no-groups' ? 'no clear groups' : 'no cluster',
     `${n.centrality.length} centrality rank${n.centrality.length === 1 ? '' : 's'}`,
     `${n.suggestions.length} likely missing link${n.suggestions.length === 1 ? '' : 's'}`,
   ];

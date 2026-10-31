@@ -1391,3 +1391,4 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .graph-banner{position:absolute;left:480px;right:480px;top:52px;z-index:6;border:1px solid rgba(var(--rgb-danger),.5);border-left:3px solid var(--danger);border-radius:4px;padding:6px 12px;background:rgba(var(--rgb-danger),.10);font-size:13px;line-height:1.4}
 .graph-banner ul{margin:6px 0 0;padding-left:18px;max-height:200px;overflow:auto}
 .graph-banner .link{background:none;border:0;color:var(--danger);text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+.net-clusters.tentative { opacity: 0.6; }

@@ -55,9 +55,10 @@ describe('planAiLinks with Deep read', () => {
     expect(p.links.map((l) => l.to)).toEqual(['capability:match-invoices', 'system:vendor-register', 'painpoint:missed-notice-dates']);
     expect(p.newNodes.map((n) => n.id)).toEqual(['capability:match-invoices', 'system:vendor-register', 'painpoint:missed-notice-dates']);
     expect(p.near).toEqual({});
-    // Byte for byte what the old call returned, plus the empty near map.
+    // Byte for byte what the old call returned (when the AI read it aside), plus the empty near map.
     const { near: _n, ...rest } = p;
-    expect(rest).toEqual((({ links, newNodes }) => ({ links, newNodes }))(planAiLinks('CAFE-2026-001', out, graph, [], 'fake', { status: 'confirmed' })));
+    const noTime = <T,>(v: T): T => JSON.parse(JSON.stringify(v, (k, x) => (k === 'readAt' ? undefined : x)));
+    expect(noTime(rest)).toEqual(noTime((({ links, newNodes }) => ({ links, newNodes }))(planAiLinks('CAFE-2026-001', out, graph, [], 'fake', { status: 'confirmed' }))));
   });
 });
 

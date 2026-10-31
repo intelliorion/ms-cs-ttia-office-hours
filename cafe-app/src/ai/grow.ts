@@ -58,7 +58,7 @@ export async function growIdea(root: string, ai: Connector, id: string): Promise
   // Deep read, when it has run: a star that only differs in wording is reused; a near one is held for the operator.
   const matcher = await starMatcher(root, output.nodes.map((n) => n.label), before.nodes);
   // A link the AI is less sure of than the threshold (settings graph.confirmAt, 0.7) waits for the operator's Do it.
-  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root), confirmAt: confirmAt(await loadSettings(root)) });
+  const planned = planAiLinks(idea.id, output, before, (await readAiLinks(root)).links, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry: await loadRegistry(root), confirmAt: confirmAt(await loadSettings(root)), text: idea as unknown as Record<string, unknown> });
   const { ideas } = await listIdeas(root);
   const ctx: ConflictContext = {
     idea, ideas, nodes: before.nodes, peoplePresent: [], design: await readDesign(root, idea.id).catch(() => null),

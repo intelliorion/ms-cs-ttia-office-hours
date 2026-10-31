@@ -1,7 +1,10 @@
 import YAML from 'yaml';
-import { canonEdit, canonLink, type AiLink, type GEdge, type OperatorEdit } from './ontology';
+import { canonId, canonEdit, canonLink, type AiLink, type GEdge, type OperatorEdit } from './ontology';
 import { readEdits, writeEdits } from './operator';
-import { readAiLinks, readConfirmations, rebuildGraph, updateAiLinks } from './store';
+import { appendConfirmation, readAiLinks, readConfirmations, rebuildGraph, updateAiLinks } from './store';
+import { placeQuote } from '../ai/apply';
+import { confirmAt } from '../ai/confirm';
+import { loadSettings } from '../round/store';
 import { loadOntology } from './ontologyFile';
 import { buildGraph } from './build';
 import { registryFrom } from './registryFile';
@@ -37,15 +40,57 @@ export interface FixPlan {
   ids: { where: string; line?: number; edit?: string; was: string[]; now: string[] }[];
   /** Derived links that go, and that come, once the plan is applied (computed in memory for the dry run). */
   preview: { gone: string[]; added: string[]; waiting: string[] };
+  /**
+   * Stale operator edits (their star is gone): never changed without the operator's say. Each lists the stars it could
+   * be repointed to (the stars of its kind its idea has, closest in words first); --repoint op-N=<star id> repoints it,
+   * --retire op-N switches it off (kept in the log).
+   */
+  stale: { edit: string; what: string; missing: string[]; candidates: { id: string; label: string }[] }[];
+  repoint: { edit: string; from: string; to: string; label: string }[];
+  retire: { edit: string; what: string }[];
+  /** AI links whose source names a field the passage is not in: the field it is in (the source is corrected to it). */
+  fields: { line: number; edge: string; was: string; now: string; by: 'quote' | 'label' }[];
+  /** AI links that say the operator confirmed them with no Do it recorded: --confirm line-N records your Do it now. */
+  forged: { line: number; edge: string; confidence: number }[];
+  confirm: { line: number; edge: string }[];
 }
+
+/** The operator's say on stale edits and unrecorded confirmations: repoint, retire, confirm. */
+export interface FixChoices { repoint?: Record<string, string>; retire?: string[]; confirm?: number[] }
+
+const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2));
+/** How many words two names share (for ordering the stars a stale edit could be repointed to). */
+const overlap = (a: string, b: string) => { const x = wordsOf(a); return [...wordsOf(b)].filter((w) => x.has(w)).length; };
 
 const words = (id: string) => id.replace(/\|/g, ' ');
 
 /** The plan for a workspace. `stamp` names the ideas for an unscoped fact by its edit id (op-9) or AI line (line-12). */
-export async function planFix(root: string, stamp: Record<string, string[]> = {}): Promise<FixPlan> {
+export async function planFix(root: string, stamp: Record<string, string[]> = {}, choices: FixChoices = {}): Promise<FixPlan> {
   const check = await checkWorkspace(root);
   const graph = await rebuildGraph(root);
-  const plan: FixPlan = { stamps: [], ambiguous: [], unconfirm: [], undo: [], rules: [], ids: [], preview: { gone: [], added: [], waiting: [] } };
+  const plan: FixPlan = { stamps: [], ambiguous: [], unconfirm: [], undo: [], rules: [], ids: [], preview: { gone: [], added: [], waiting: [] }, stale: [], repoint: [], retire: [], fields: [], forged: [], confirm: [] };
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const allEdits = await readEdits(root);
+  // Stale edits: listed with what they could be repointed to; changed only as the operator says.
+  for (const st of check.stale) {
+    const e = allEdits.find((x) => x.id === st.id);
+    const idea = e && e.t === 'link' ? e.idea : undefined;
+    const cands = st.missing.flatMap((m) => {
+      const kind = m.split(':')[0];
+      const mine = idea ? new Set(graph.edges.filter((x) => x.from === `idea:${idea}` && !x.derived).map((x) => x.to)) : undefined;
+      return graph.nodes.filter((n) => n.id.startsWith(`${kind}:`) && (!mine || mine.has(n.id)))
+        .map((n) => ({ id: n.id, label: n.label, score: overlap(m.slice(kind.length + 1).replace(/-/g, ' '), n.label) }))
+        .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label)).slice(0, 4).map(({ id, label }) => ({ id, label }));
+    });
+    plan.stale.push({ edit: st.id, what: st.what, missing: st.missing, candidates: cands });
+    const to = choices.repoint?.[st.id];
+    if (to) {
+      if (!byId.has(to)) plan.ambiguous.push(`operator.jsonl ${st.id}: --repoint ${st.id}=${to}: ${to} is not in the graph; left as it is`);
+      else if (st.missing.length !== 1 || to.split(':')[0] !== st.missing[0].split(':')[0]) plan.ambiguous.push(`operator.jsonl ${st.id}: --repoint ${st.id}=${to}: it must name one star of the same kind as ${st.missing.join(', ')}; left as it is`);
+      else plan.repoint.push({ edit: st.id, from: st.missing[0], to, label: byId.get(to)!.label });
+    } else if (choices.retire?.includes(st.id)) plan.retire.push({ edit: st.id, what: st.what });
+  }
+  for (const id of [...Object.keys(choices.repoint ?? {}), ...(choices.retire ?? [])]) if (!check.stale.some((x) => x.id === id)) plan.ambiguous.push(`operator.jsonl ${id}: not a stale edit; --repoint and --retire are only for those`);
   const ideaIds = new Set(graph.nodes.filter((n) => n.type === 'Idea').map((n) => n.id.slice('idea:'.length)));
 
   for (const u of check.unscoped ?? []) {
@@ -66,6 +111,37 @@ export async function planFix(root: string, stamp: Record<string, string[]> = {}
     plan.stamps.push({ where: u.where, ...(u.where.startsWith('operator') ? { edit: key } : { line: Number(key.slice(5)) }), edge: u.edge, ideas: [...pick.ideas].sort(), why: pick.why });
   }
   for (const l of check.lowConfidence ?? []) plan.unconfirm.push({ line: l.line, edge: l.edge, confidence: l.confidence });
+  // AI links whose source names a field the passage (or, read before passages were kept, the star's own name) is not in.
+  {
+    const { ideas } = await listIdeas(root);
+    const text = new Map(ideas.map((i) => [i.id, i as unknown as Record<string, unknown>]));
+    const confirmations = await readConfirmations(root);
+    const threshold = confirmAt(await loadSettings(root).catch(() => ({})));
+    const lineNos0 = await aiLineNumbers(root);
+    (await readAiLinks(root)).links.forEach((raw, i) => {
+      const l = canonLink(raw); const line = lineNos0[i];
+      const edge = `${l.from}|${l.rel}|${l.to}`;
+      if (l.status === 'confirmed' && l.confirmedBy === 'operator' && typeof l.confidence === 'number' && l.confidence < threshold && !confirmations.has(edge)) {
+        plan.forged.push({ line, edge, confidence: l.confidence });
+        if (choices.confirm?.includes(line)) plan.confirm.push({ line, edge });
+      }
+      const m = /^ai:([^:]+):(.+)$/.exec(String(l.source ?? ''));
+      const t = l.idea ? text.get(l.idea) : undefined;
+      if (!m || !t || l.status === 'removed') return;
+      const named = m[2];
+      if (l.quote) {
+        const placed = placeQuote(l.quote, named, t);
+        if (placed.field !== named) plan.fields.push({ line, edge, was: named, now: placed.field, by: 'quote' });
+        return;
+      }
+      // No passage kept: the star's own name (the far end, not the idea) is looked for in the text, a whole-word match.
+      const far = l.to.startsWith('idea:') ? l.from : l.to;
+      const star = far ? (byId.get(far)?.label ?? l.newNodes?.find((n) => n.id === far)?.label) : undefined;
+      if (!star) return;
+      const placed = placeQuote(star, named, t);
+      if (placed.found && placed.field !== named) plan.fields.push({ line, edge, was: named, now: placed.field, by: 'label' });
+    });
+  }
   for (const e of await readEdits(root)) {
     if (e.status === 'active' && e.t === 'link' && graph.schema.derived.includes(e.rel)) plan.undo.push({ edit: e.id, what: `${e.from} ${e.rel} ${e.to}: ${e.rel} is derived by the rules, never stored by hand` });
   }
@@ -118,7 +194,15 @@ function editsAfter(edits: OperatorEdit[], plan: FixPlan, clock?: Clock): Operat
   const extra: OperatorEdit[] = [];
   for (let e of edits) {
     if (plan.ids.some((x) => x.edit === e.id)) e = canonEdit(e);
-    if (plan.undo.some((u) => u.edit === e.id)) { out.push({ ...e, status: 'undone' }); continue; }
+    if (plan.undo.some((u) => u.edit === e.id) || plan.retire.some((u) => u.edit === e.id)) { out.push({ ...e, status: 'undone' }); continue; }
+    const rp = plan.repoint.find((x) => x.edit === e.id);
+    if (rp) {
+      const at = clock ? clock() : 'dry-run';
+      const swap = (id: string) => (canonId(id) === rp.from || id === rp.from ? rp.to : id);
+      if (e.t === 'link' || e.t === 'unlink') { out.push({ ...e, from: swap(e.from), to: swap(e.to), ...(e.t === 'link' ? { repointed: { at, was: [rp.from] } } : {}) } as OperatorEdit); continue; }
+      if ('node' in e) { out.push({ ...e, node: swap(e.node) } as OperatorEdit); continue; }
+      if (e.t === 'merge') { out.push({ ...e, into: swap(e.into) }); continue; }
+    }
     const s = plan.stamps.find((x) => x.edit === e.id);
     if (s && e.t === 'link') {
       const stamped = clock ? clock() : 'dry-run';
@@ -137,17 +221,20 @@ function linksAfter(links: AiLink[], lines: number[], plan: FixPlan): AiLink[] {
 }
 function changeLink(l: AiLink, line: number, plan: FixPlan): AiLink[] {
   let x = plan.ids.some((y) => y.line === line) ? canonLink(l) : l;
-  if (plan.unconfirm.some((u) => u.line === line)) x = { ...x, status: 'pending' };
+  if (plan.unconfirm.some((u) => u.line === line) && !plan.confirm.some((c) => c.line === line)) x = { ...x, status: 'pending' };
+  const f = plan.fields.find((y) => y.line === line);
+  if (f) x = { ...x, source: x.source.replace(/^(ai:[^:]+:).+$/, `$1${f.now}`) };
   const s = plan.stamps.find((y) => y.line === line);
   return s ? s.ideas.map((idea) => ({ ...x, idea })) : [x];
 }
 
 async function simulate(root: string, plan: FixPlan): Promise<GEdge[]> {
+  const extra = new Set(plan.confirm.map((c) => c.edge));
   const { schema } = await loadOntology(root);
   const [{ ideas }, { links }, rounds, edits, rules, confirmations] = await Promise.all([listIdeas(root), readAiLinks(root), listRounds(root), readEdits(root), readRules(root, schema), readConfirmations(root)]);
   const lineNos = await aiLineNumbers(root);
   const e2 = editsAfter(edits, plan);
-  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2, schema), rules: rules.rules, schema, confirmations });
+  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2, schema), rules: rules.rules, schema, confirmations: new Set([...confirmations, ...extra]) });
   return g.edges;
 }
 
@@ -162,15 +249,22 @@ async function aiLineNumbers(root: string): Promise<number[]> {
 /** Writes the plan: the operator log, the AI links and the rules file. Returns one line per change made. */
 export async function applyFix(root: string, plan: FixPlan, clock: Clock): Promise<string[]> {
   const done: string[] = [];
-  if (plan.stamps.some((s) => s.edit) || plan.undo.length || plan.ids.some((x) => x.edit)) {
+  for (const c of plan.confirm) {
+    await appendConfirmation(root, { edge: c.edge, at: clock(), by: 'operator', ts: new Date().toISOString() });
+    done.push(`ai-links.jsonl line ${c.line}: your Do it recorded (cafe ontology fix --confirm)`);
+  }
+  if (plan.stamps.some((s) => s.edit) || plan.undo.length || plan.ids.some((x) => x.edit) || plan.repoint.length || plan.retire.length) {
     const edits = await readEdits(root);
     await writeEdits(root, editsAfter(edits, plan, clock));
+    for (const r of plan.repoint) done.push(`operator.jsonl ${r.edit}: repointed from ${r.from} to ${r.to} (${r.label})`);
+    for (const r of plan.retire) done.push(`operator.jsonl ${r.edit}: switched off (${r.what}), kept in the log`);
     for (const x of plan.ids.filter((y) => y.edit)) done.push(`${x.where}: ${x.was.join(', ')} written as ${x.now.join(', ')}`);
     for (const s of plan.stamps.filter((x) => x.edit)) done.push(`operator.jsonl ${s.edit}: stamped ${s.ideas.join(', ')}`);
     for (const u of plan.undo) done.push(`operator.jsonl ${u.edit}: switched off (${u.what})`);
   }
-  if (plan.unconfirm.length || plan.stamps.some((s) => s.line) || plan.ids.some((x) => x.line)) {
+  if (plan.unconfirm.length || plan.stamps.some((s) => s.line) || plan.ids.some((x) => x.line) || plan.fields.length) {
     await updateAiLinks(root, (l, line) => changeLink(l, line, plan));
+    for (const f of plan.fields) done.push(`ai-links.jsonl line ${f.line}: source field ${f.was} corrected to ${f.now} (the ${f.by === 'quote' ? 'quoted passage' : "star's name"} is there)`);
     for (const x of plan.ids.filter((y) => y.line)) done.push(`${x.where}: ${x.was.join(', ')} written as ${x.now.join(', ')}`);
     for (const u of plan.unconfirm) done.push(`ai-links.jsonl line ${u.line}: waiting for your Do it (${u.confidence})`);
     for (const s of plan.stamps.filter((x) => x.line)) done.push(`ai-links.jsonl line ${s.line}: stamped ${s.ideas.join(', ')}`);
@@ -197,8 +291,10 @@ export async function applyFix(root: string, plan: FixPlan, clock: Clock): Promi
 /** What the CLI prints for a plan, dry run or applied. */
 export function fixLines(plan: FixPlan, applied?: string[]): string[] {
   const L: string[] = [];
-  const n = plan.stamps.length + plan.unconfirm.length + plan.undo.length + plan.rules.length + plan.ids.length;
-  if (!n && !plan.ambiguous.length) return ['Nothing to fix: the workspace is in line with the graph\'s reasoning.'];
+  const n = plan.stamps.length + plan.unconfirm.length + plan.undo.length + plan.rules.length + plan.ids.length + plan.repoint.length + plan.retire.length + plan.fields.length + plan.confirm.length;
+  const waitingOnYou = plan.stale.filter((s) => !plan.repoint.some((r) => r.edit === s.edit) && !plan.retire.some((r) => r.edit === s.edit));
+  const forgedLeft = plan.forged.filter((f) => !plan.confirm.some((c) => c.line === f.line));
+  if (!n && !plan.ambiguous.length && !waitingOnYou.length && !forgedLeft.length) return ['Nothing to fix: the workspace is in line with the graph\'s reasoning.'];
   if (applied) L.push(applied.length ? `Fixed (${applied.length}):` : 'Nothing was changed.');
   else L.push(n ? `Would fix (${n}); nothing is written without --apply:` : 'Nothing to fix without your say:');
   if (applied) L.push(...applied.map((x) => `  ${x}`));
@@ -208,6 +304,18 @@ export function fixLines(plan: FixPlan, applied?: string[]): string[] {
     for (const u of plan.undo) L.push(`  operator.jsonl ${u.edit}: switch off: ${u.what}`);
     for (const r of plan.rules) L.push(`  ${r}`);
     for (const x of plan.ids) L.push(`  ${x.where}: write ${x.was.join(', ')} as ${x.now.join(', ')} (the build already reads it so)`);
+    for (const f of plan.fields) L.push(`  ai-links.jsonl line ${f.line}: ${words(f.edge)}: source field ${f.was} → ${f.now} (the ${f.by === 'quote' ? 'quoted passage' : "star's name"} is in ${f.now}, not ${f.was})`);
+    for (const r of plan.repoint) L.push(`  operator.jsonl ${r.edit}: repoint ${r.from} → ${r.to} (${r.label}), as you said`);
+    for (const r of plan.retire) L.push(`  operator.jsonl ${r.edit}: switch off (${r.what}), as you said; kept in the log`);
+    for (const c of plan.confirm) L.push(`  ai-links.jsonl line ${c.line}: ${words(c.edge)}: record your Do it, as you said`);
+  }
+  if (waitingOnYou.length) {
+    L.push(`Stale edits, waiting on your say (${waitingOnYou.length}): their star is gone, so the build skips them. Repoint or switch off each:`);
+    for (const s of waitingOnYou) L.push(`  operator.jsonl ${s.edit}: ${s.what}: ${s.missing.join(', ')} is not in the graph. ${s.candidates.length ? `Repoint: ${s.candidates.map((c) => `--repoint ${s.edit}=${c.id} (${c.label})`).join(' or ')}; or ` : ''}--retire ${s.edit}`);
+  }
+  if (forgedLeft.length) {
+    L.push(`AI links that say you confirmed them, with no Do it recorded (${forgedLeft.length}): they count as waiting. If you did confirm one, say so:`);
+    for (const f of forgedLeft) L.push(`  ai-links.jsonl line ${f.line}: ${words(f.edge)} at ${f.confidence}: --confirm line-${f.line}`);
   }
   if (plan.ambiguous.length) { L.push(`Left for you (${plan.ambiguous.length}):`); L.push(...plan.ambiguous.map((x) => `  ${x}`)); }
   const { gone, added, waiting } = plan.preview;

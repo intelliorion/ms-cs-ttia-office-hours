@@ -261,7 +261,7 @@ export interface GEdge {
  */
 export type OperatorEdit = { id: string; at: string; status: 'active' | 'undone' } & (
   /** stamped: the date `cafe ontology fix` gave a link made with no idea the idea it is for. */
-  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string; stamped?: string }
+  | { t: 'link'; from: string; rel: Relation; to: string; idea?: string; stamped?: string; repointed?: { at: string; was: string[] } }
   | { t: 'unlink'; from: string; rel: Relation; to: string }
   | { t: 'rename'; node: string; label: string }
   | { t: 'merge'; from: string; into: string }

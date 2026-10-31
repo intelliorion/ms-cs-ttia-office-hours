@@ -51,13 +51,13 @@ describe.skipIf(!PY)('NetworkX feeds the decision suggestion', () => {
     const { input, basis } = await reviewInput(root, 'CAFE-2026-003', [], { network: true });
     const n = input.network as Extract<ReviewSuggestInput['network'], { by: string }>;
     expect(n.by).toMatch(/^NetworkX 3\.\S+ over stored facts$/);
-    expect(n.cluster!.otherIdeas.sort()).toEqual(['Desk booking assistant', 'Procurement FAQ bot', 'Room booking helper']);
-    expect(n.cluster!.boundBy[0]).toBe('Request handling (Capability, 4 ideas)');
-    expect(n.cluster!.boundBy.some((b) => /^\[P\d+\] \(Person, 2 ideas\)$/.test(b))).toBe(true);
+    // These ideas all share Request handling: one group, which is no grouping; no cluster is passed on as a finding.
+    expect(n.grouping).toMatch(/^no clear groups/);
+    expect(n.cluster).toBeNull();
     expect(n.centrality).toEqual(expect.arrayContaining([{ star: 'Request handling', type: 'Capability', rank: '1 of 3', ideas: 4 }, expect.objectContaining({ star: 'Shared mailbox', type: 'System', rank: '1 of 1' })]));
     expect(n.likelyMissing[0]).toEqual({ link: 'needs Booking update', because: '100 % of its closest peers by weight have it: Procurement FAQ bot, Room booking helper' });
     expect(JSON.stringify(input)).not.toMatch(NAMES);
-    expect(basis).toBe('Based on the form, a builder named, 3 graph links and NetworkX network analysis (a cluster with 3 other ideas, 3 centrality ranks, 1 likely missing link)');
+    expect(basis).toBe('Based on the form, a builder named, 3 graph links and NetworkX network analysis (no clear groups, 3 centrality ranks, 1 likely missing link)');
     // The other stages that read reviewInput only for its codes are as they were.
     expect((await reviewInput(root, 'CAFE-2026-003')).input.network).toBeUndefined();
   });
@@ -66,8 +66,8 @@ describe.skipIf(!PY)('NetworkX feeds the decision suggestion', () => {
     const root = await workspace();
     let seen: ReviewSuggestInput | undefined;
     const prep = await suggestPrep(root, 'CAFE-2026-003', async (input) => { seen = input; return { provider: 'fake', output: { decision: 'ask', reason: 'Ask', criteria: { feasible: true, builder: true, data: false, theme: true, reuse: true }, needs: [], updates: { builder: '', builderCanAttend: false, participation: '', resolvedFlags: [], facts: [], graph: { nodes: [], links: [] } }, learned: [] } as any }; }, clock);
-    expect(seen!.network).toMatchObject({ cluster: { otherIdeas: expect.any(Array) } });
-    expect(prep.basis).toMatch(/NetworkX network analysis \(a cluster with 2 other ideas/);
+    expect(seen!.network).toMatchObject({ grouping: expect.stringMatching(/groups|grouping/) });
+    expect(prep.basis).toMatch(/NetworkX network analysis \((no clear groups|a cluster with \d+ other ideas?)/);
   });
 
   it('without Python the suggestion is made as today and the basis says network analysis was unavailable', () => noPython(async () => {
@@ -117,7 +117,8 @@ describe.skipIf(!PY)('NetworkX in the CSIC hand-off', () => {
     const a = node.content;
     expect(a).toMatchObject({ kind: 'analysis', by: expect.stringMatching(/^NetworkX 3\./), scope: 'stored facts' });
     expect(a.note).toMatch(/^Analysis, not stored facts/);
-    expect(a.cluster.otherIdeas.map((x: any) => x['@id']).sort()).toEqual(['star:idea:CAFE-2026-001', 'star:idea:CAFE-2026-002', 'star:idea:CAFE-2026-005']);
+    expect(a.grouping.verdict).toMatch(/^no clear groups/);
+    expect(a.cluster).toBeNull();
     expect(a.centrality[0]).toMatchObject({ '@id': 'star:capability:request-handling', measure: 'betweenness centrality', rank: 1 });
     expect(a.likelyMissingLinks[0]).toMatchObject({ rel: 'NEEDS', to: { '@id': 'star:capability:booking-update' }, status: 'suggestion, not applied' });
     expect(doc['@graph'].some((n: any) => n['@id'] === 'star:idea:CAFE-2026-001')).toBe(false);

@@ -174,7 +174,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
     ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: message.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
-  const [{ ideas }, rounds] = await Promise.all([listIdeas(root), listRounds(root)]);
+  const [{ ideas }, rounds, registry] = await Promise.all([listIdeas(root), listRounds(root), loadRegistry(root)]);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   // Names to code: every star, plus people the ideas' records name who are not stars yet (a builder named in an email).
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
@@ -341,7 +341,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
         // NetworkX runs out of process: its answers for the network steps are prepared first, like Deep read's.
         const network = await prepareNetwork(output.query as Query, graph, idOf, { timeoutMs: Math.max(1_000, Math.min(60_000, timeLeft() - LAST_CALL_MIN_MS)) });
-        const r = runQuery(output.query as Query, { graph, schema: graph.schema, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
+        const r = runQuery(output.query as Query, { graph, schema: graph.schema, registry, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
         if (r.suggestions) suggested.push(...r.suggestions);
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
         const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
@@ -369,6 +369,10 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
             ...(stale.length ? { stale: stale.map((id) => codeFor(hidden.codes, nodes.get(`idea:${id}`)!)) } : {}),
             // A scoped search's reading of the records (current process …) for the ideas with no such passage: quote each.
             ...(r.records ? { records: r.records.map((x) => ({ idea: codeFor(hidden.codes, nodes.get(x.idea)!), field: x.field, text: coded(x.text).slice(0, HIT_MAX) })) } : {}),
+            // The stated links the walk crossed that nobody confirmed: the reply must say so for each.
+            ...(r.unconfirmed ? { unconfirmed: r.unconfirmed.slice(0, 30).map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), rel: x.rel, to: codeFor(hidden.codes, nodes.get(x.to)!), confidence: x.confidence, status: 'not confirmed: waiting for the operator\'s Do it' })) } : {}),
+            // Provenance: each link found and where it came from (the operator's edit and date, the AI's field and passage, the form).
+            ...(r.links ? { links: r.links.slice(0, 40).map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), rel: x.rel, to: codeFor(hidden.codes, nodes.get(x.to)!), kind: x.kind, ...(x.edit ? { edit: x.edit } : {}), ...(x.at ? { at: x.at } : {}), ...(x.field ? { field: x.field } : {}), ...(x.quote ? { quote: coded(x.quote), quoteFound: x.quoteFound } : {}), ...(x.ideas ? { ideas: x.ideas.map((i) => (nodes.get(`idea:${i}`) ? codeFor(hidden.codes, nodes.get(`idea:${i}`)!) : i)) } : {}), confirmed: x.confirmed, confidence: x.confidence })), ...(r.links.length > 40 ? { linksTotal: r.links.length } : {}) } : {}),
             // NetworkX's facts in codes, with the stars they name; suggestions are proposals the app shows with Do it.
             ...(r.network ? { network: r.network.map((f) => { const c = codeNetwork(f.facts); return { analysis: f.analysis, ...(f.error ? { error: f.error } : { by: `NetworkX ${f.networkx}`, scope: f.scope, facts: c.facts, named: c.named }) }; }) } : {}),
           },
@@ -402,7 +406,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         } else if (output.next === 'propose') {
           // The AI proposes; the app checks every action against the graph and the ideas before it shows a card.
           entry.kind = 'command';
-          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges, schema: graph.schema }, ideas, rounds, registry: await loadRegistry(root), ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
+          const { proposals, problems } = resolveSteps(output.actions ?? [], { codes: hidden.codes, graph: { nodes: [...nodes.values()], edges: graph.edges, schema: graph.schema }, ideas, rounds, registry, ...(focusNode?.type === 'Idea' ? { focusIdea: focusNode.id.slice(5) } : {}) });
           entry.actions = proposals.map((p, i) => ({ id: `a${i + 1}`, label: p.label, action: p.action, status: 'proposed' }));
           entry.problems.push(...problems);
           // Nothing to apply: the reply is the question's answer (when the message asked one) and then what stood in the way, never the AI's sentence claiming a change it did not propose.

@@ -34,7 +34,7 @@ async function needWorkspace(): Promise<void> {
 }
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--with-form-choices] [--json]> [--workspace DIR] [--port N]';
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--with-form-choices] [--json]> [--workspace DIR] [--port N]';
 const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--with-form-choices] [--json] [--top N] [--workspace DIR]`;
 const MODEL_USAGE = 'Usage: cafe model status | cafe model import <folder-or-zip> | cafe model export <zip>  [--workspace DIR]';
 
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'ontology': {
-      if (rest[0] !== 'check' && rest[0] !== 'fix') throw new Error('Usage: cafe ontology check [--strict] | cafe ontology fix [--apply] [--stamp op-N=ID[,ID]]  [--workspace DIR]');
+      if (rest[0] !== 'check' && rest[0] !== 'fix') throw new Error('Usage: cafe ontology check [--strict] | cafe ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] [--workspace DIR]');
       await needWorkspace();
       if (rest[0] === 'fix') {
         // A dry run unless --apply: what it would change and how the derived links would change.
@@ -84,7 +84,16 @@ async function main(): Promise<void> {
           if (!m) throw new Error(`--stamp ${s}: write it as op-9=CAFE-2026-006 (or several ideas with commas)`);
           stamp[m[1]] = m[2].split(',').map((x) => x.trim()).filter(Boolean);
         }
-        const plan = await planFix(root, stamp);
+        // The operator's say on what fix never decides alone: a stale edit repointed or switched off, a confirmation recorded.
+        const repoint: Record<string, string> = {};
+        for (const s of flags('repoint')) {
+          const m = /^(op-\d+)=(\S+)$/.exec(s);
+          if (!m) throw new Error(`--repoint ${s}: write it as op-2=capability:document-text-extraction`);
+          repoint[m[1]] = m[2];
+        }
+        const retire = flags('retire');
+        const confirm = flags('confirm').map((x) => { const m = /^line-(\d+)$/.exec(x); if (!m) throw new Error(`--confirm ${x}: write it as line-12`); return Number(m[1]); });
+        const plan = await planFix(root, stamp, { repoint, retire, confirm });
         const applied = has('apply') ? await applyFix(root, plan, clock) : undefined;
         for (const l of fixLines(plan, applied)) console.log(l);
         return;

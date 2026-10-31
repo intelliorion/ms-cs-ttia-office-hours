@@ -144,6 +144,7 @@ export function handoffNetwork(n: IdeaNetwork): Record<string, unknown> {
   if (!n.available) return { kind: 'analysis', note, unavailable: n.reason };
   return {
     kind: 'analysis', note, by: `NetworkX ${n.networkx}`, scope: n.scope,
+    grouping: { modularity: n.grouping.modularity, verdict: n.grouping.text },
     cluster: n.cluster ? { otherIdeas: n.cluster.others.map((x) => ({ '@id': starIri(x.id), label: x.label })), boundBy: n.cluster.boundBy.map((b) => ({ '@id': starIri(b.id), '@type': b.type, label: b.label, ideas: b.ideas })) } : null,
     centrality: n.centrality.map((c) => ({ '@id': starIri(c.id), '@type': c.type, label: c.label, measure: 'betweenness centrality', score: c.betweenness, rank: c.rank, of: c.of, ideas: c.ideas })),
     likelyMissingLinks: n.suggestions.map((x) => ({ rel: x.rel, to: { '@id': starIri(x.to.id), '@type': x.to.type, label: x.to.label }, share: x.share, adamicAdar: x.adamicAdar, jaccard: x.jaccard, peers: x.peers.map((p) => p.label), status: 'suggestion, not applied' })),

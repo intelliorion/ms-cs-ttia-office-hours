@@ -2,6 +2,7 @@ import { BUILTIN_SCHEMA, nameKey, type GEdge, type GNode, type NodeType, type Re
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
+import type { Registry } from '../graph/registry';
 
 /**
  * The questions the command bar can answer, as steps over a set of stars. The AI writes the steps; the app runs
@@ -97,15 +98,20 @@ export const QUERY_GUIDE = [
   '  central: the stars that hold the most ideas together (betweenness centrality), top limit (default 5), type narrows it to Capability, System, Person, Team, Tool or PainPoint;',
   '  clusters: which ideas naturally group together, with the stars that bind each group; path: how the two stars in codes are connected, with the link on each hop;',
   '  isolated: ideas, teams or systems not connected to the rest; suggest: links that are probably missing (an idea and a capability, a capability and a system), each with',
-  '  the peers and shared stars behind it: the app shows them as proposals with Do it, so never propose them yourself and never say they are made; cycles: dependency cycles;',
+  '  the peers and shared stars behind it (confirmed links only): the app shows them as proposals with Do it, so never propose them yourself and never say they are made;',
   '  stats: size, density, components. Its result lists network: the facts in codes. Say they come from NetworkX. Use rank for "the most linked", network for "holds together".',
+  '  clusters gives a verdict from modularity: when it says no clear groups (below 0.3), say so plainly and never present the groups as real.',
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, System KIND_OF System (a mailbox is a kind of email system), Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
-  'A trace line or reason marked "not confirmed" rests on a link the operator has not confirmed (an AI link below the confidence threshold, waiting for Do it): say so in the reply for that idea, never state it as settled.',
+  'A trace line or reason marked "not confirmed", and every link in a result\'s unconfirmed list, rests on a link the operator has not confirmed (an AI link waiting for Do it): say so in the reply for that idea or link, never state it as settled; a count that includes one says how many of it are not confirmed.',
+  'A trace line "Not followed: X needs C, which uses S for Y only" means X has no such dependency: never say X needs nothing that uses S.',
+  '- links: provenance. The stored links touching the set (or the stars in codes; two codes: the links between them; neither: the whole graph), narrowed by rel and by source',
+  '  (operator: added by hand, with the edit and its date; ai: read by the AI, with the field, the passage it quoted and when; form: from the submission). Its result lists links with where each came from.',
+  '  Use it for "which links did the operator add", "where did this link come from", "what did the AI read for [I1]".',
   'Which team owns, whose idea, which function or team is behind [I1]: follow OWNS (dir in, type Team) from the idea; it is derived from the submitter\'s team, so it exists even when no lead is recorded.',
   '  Do not work ownership out through a lead\'s HAS_MEMBER link.',
   'A question about what is affected, needs rework, depends on, breaks, or would be hit if a system, data source or tool changes, is retired or is rewritten: start from that star (match by label; the registry\'s aliases',
@@ -141,6 +147,7 @@ export const QUERY_GUIDE = [
   '- which ideas are similar to [I1]: [{"op":"stars","codes":["I1"]},{"op":"follow","rel":"SIMILAR_TO","type":"Idea"}]',
   '  then, for more candidates once Deep read has run: [{"op":"similar","codes":["I1"],"limit":5}]',
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
+  '- how many links did the operator add by hand, and which: [{"op":"links","source":"operator"}]; where does [C1] uses data [S1] come from: [{"op":"links","codes":["C1","S1"]}]',
 ];
 
 /**
@@ -149,6 +156,8 @@ export const QUERY_GUIDE = [
  */
 export const queryGuide = (deepRead: boolean, schema: Schema = BUILTIN_SCHEMA): string[] => [
   ...(deepRead ? QUERY_GUIDE : QUERY_GUIDE.filter((l) => !/Deep read|"op":"search"|"op":"similar"/.test(l))),
+  // Cycles only where the ontology lets one form (a relation on a loop of kinds): with the built-in one there is none.
+  ...(cycleCapable(schema).length ? [`  cycles (network analysis): loops along ${cycleCapable(schema).join(', ')}, the relations of this ontology that can form one.`] : []),
   ...(schema.declared.types.length ? [`Kinds this workspace declared (rules/ontology.yaml): ${schema.declared.types.map((t) => `${t} (${schema.labels[t]})`).join(', ')}.`] : []),
   ...(schema.declared.relations.length ? [`Relations this workspace declared: ${schema.declared.relations.map((r) => `${schema.allowed[r][0]} ${r} ${schema.allowed[r][1]} (${schema.meanings[r]?.meaning ?? ''}${schema.derived.includes(r) ? ', derived by the rules' : ''})`).join('; ')}.`] : []),
 ];
@@ -214,7 +223,17 @@ export interface QueryResult {
   /** What each network step found with NetworkX, and the links it suggests (proposals only). */
   network?: NetworkFact[];
   suggestions?: NetworkSuggestion[];
+  /** The stated links the walk crossed that nobody confirmed (AI links waiting for Do it): the reply says so for each. */
+  unconfirmed?: { from: string; rel: Relation; to: string; confidence: number }[];
+  /** links: the stored links found, with where each came from. */
+  links?: LinkFact[];
   trace: StepTrace[];
+}
+/** One stored link and its provenance, for the links step. */
+export interface LinkFact {
+  from: string; rel: Relation; to: string; source: string; kind: 'operator' | 'ai' | 'form' | 'rule'; confirmed: boolean; confidence: number;
+  /** The operator's edit and its date; the AI read's field, passage and time; the form's column. */
+  edit?: string; at?: string; field?: string; quote?: string; quoteFound?: boolean; ideas?: string[];
 }
 
 export interface QueryWorld {
@@ -231,6 +250,8 @@ export interface QueryWorld {
   network?: (s: QueryStep) => NetworkStepRun | undefined;
   /** The ontology the graph was built with (its declared kinds and relations); the built-in one when absent. */
   schema?: Schema;
+  /** The registry (rules/entities.yaml and alias edits): a name it knows wins over a label that merely contains the words. */
+  registry?: Pick<Registry, 'resolve'>;
 }
 
 const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
@@ -308,6 +329,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   let ranked: QueryResult['ranked']; let counts: QueryResult['counts']; let path: string[] | undefined; let hits: QueryHit[] | undefined;
   let peopleFacts: QueryResult['people']; let reasons: QueryResult['reasons']; let groups: QueryResult['groups']; let records: QueryRecord[] | undefined;
   let network: NetworkFact[] | undefined; let suggestions: NetworkSuggestion[] | undefined;
+  let unconfirmed: QueryResult['unconfirmed']; let linkFacts: LinkFact[] | undefined;
   /** "the submitter and lead of [idea], and the member of [idea]": one person's roles, grouped by idea, in words. */
   const roleWords = (roles: { idea: string; role: string }[]): string => {
     const byIdea = new Map<string, string[]>();
@@ -322,6 +344,15 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     return { ids, note: ids.length ? ` (nearest: ${ids.map(name).join(', ')})` : '' };
   };
 
+  /** The star the registry knows by this name (label or alias, in the one normal form), for the kinds the step allows. */
+  const registered = (s: QueryStep): { id: string; label: string } | undefined => {
+    if (!w.registry || !s.match) return undefined;
+    for (const t of s.type ? [s.type] : (['Tool', 'System', 'Capability', 'Team', 'PainPoint'] as NodeType[])) {
+      const hit = w.registry.resolve(t, s.match);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
   /** The stars whose label or a registry alias is exactly the match (case, spacing and accents ignored): these win over containment and the nearest. */
   const exactIn = (s: QueryStep, from: string[]): { ids: string[]; note: string } => {
     if (!s.match) return { ids: [], note: '' };
@@ -394,20 +425,26 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
     let scope = new Map<string, Scope>();
     for (const s of steps) {
       let text = '';
+      /** Lines said after the step's own line (what was not confirmed, what was not followed). */
+      const after: StepTrace[] = [];
       const carried = scope;
       scope = new Map();
       if (s.op === 'stars') {
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
         const from = s.last ? (w.last ?? []).filter((id) => nodes.has(id)) : s.codes?.length ? coded : w.graph.nodes.map((n) => n.id);
         const exact = s.codes?.length ? { ids: [], note: '' } : exactIn(s, from);
-        set = exact.ids.length ? exact.ids : from.filter((id) => fits(id, s));
-        const near = set.length || s.codes?.length ? { ids: [], note: '' } : nearestIn(s, from);
+        // The registry wins over containment: "Copilot" is Microsoft Copilot, an approved tool, never Copilot Studio
+        // because its label contains the word. A name it knows for a star the graph does not hold starts from nothing.
+        const known = !s.codes?.length && !s.last && s.match && !exact.ids.length ? registered(s) : undefined;
+        set = exact.ids.length ? exact.ids : known ? (nodes.has(known.id) ? [known.id] : []) : from.filter((id) => fits(id, s));
+        if (known) exact.note = nodes.has(known.id) ? ` (exactly: ${known.label}, known as "${s.match}")` : ` (exactly: ${known.label}, known as "${s.match}"; no idea's record has it yet, so it is not in the graph: nothing named like it is meant)`;
+        const near = set.length || s.codes?.length || known ? { ids: [], note: '' } : nearestIn(s, from);
         if (near.ids.length) set = near.ids;
         text = s.last ? `Start from the previous answer${s.type || s.match || ideaFilterWords(s) ? `, keeping ${kinds(s.type)}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}` : ''}`
           : s.codes?.length ? `Start from ${coded.map(name).join(', ') || 'nothing I know'}` : `Start from every ${s.type ? singularOf(s.type) : 'star'}${s.match ? ` named like "${s.match}"` : ''}${ideaFilterWords(s)}`;
         text += exact.note + near.note;
       } else if (s.op === 'follow') {
-        const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = [];
+        const from = new Set(set); const out = new Set<string>(); const used: GEdge[] = []; const waiting: GEdge[] = [];
         const by = new Map<string, Set<string>>();
         /** A kind of a star in the set (a mailbox, for Email) stands for it: what links to the kind links to the star. */
         const kindOf = new Map<string, string>();
@@ -436,9 +473,35 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           if (s.dir !== 'in' && from.has(e.from) && step(e.from, e.to, e)) hit = true;
           if (s.dir !== 'out' && from.has(e.to) && step(e.to, e.from, e)) hit = true;
           if (hit && e.derived) used.push(e);
+          if (hit && !e.derived && !e.confirmed) waiting.push(e);
         }
         const keepType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
         set = [...out].filter(keepType);
+        // A stated link the walk crossed that nobody confirmed (an AI link waiting for Do it): said, per link, like a derived one's.
+        const kept = new Set(set);
+        const unsure = waiting.filter((e) => kept.has(e.from) || kept.has(e.to));
+        if (unsure.length) {
+          after.push({ text: `Not confirmed (waiting for your Do it): ${unsure.slice(0, DERIVED_TRACE_MAX).map((e) => `${name(e.from)} ${relWord(e.rel)} ${name(e.to)} (${e.confidence})`).join('; ')}${unsure.length > DERIVED_TRACE_MAX ? `; and ${unsure.length - DERIVED_TRACE_MAX} more` : ''}`, size: unsure.length });
+          if (log) unconfirmed = [...(unconfirmed ?? []), ...unsure.map((e) => ({ from: e.from, rel: e.rel, to: e.to, confidence: e.confidence }))];
+        }
+        // An idea that needs a capability using this system (or tool) for other ideas only gets no dependency: said, so
+        // "no" never reads as "it needs nothing that uses it".
+        if (s.dir === 'in' && (s.rel === 'DEPENDS_ON' || s.rel === 'USES') && log) {
+          const via: Relation = s.rel === 'DEPENDS_ON' ? 'USES_DATA' : 'BUILT_WITH';
+          const misses: string[] = [];
+          for (const end of from) {
+            for (const u of w.graph.edges) {
+              if (u.derived || u.rel !== via || u.to !== end) continue;
+              for (const n of w.graph.edges) {
+                if (n.derived || n.rel !== 'NEEDS' || n.to !== u.from || kept.has(n.from)) continue;
+                const forIdeas = (u.ideas ?? []).map((i) => `idea:${i}`).filter((i) => nodes.has(i));
+                misses.push(`${name(n.from)} needs ${name(u.from)}, which ${s.rel === 'DEPENDS_ON' ? 'uses' : 'is built with'} ${name(end)} ${forIdeas.length ? `for ${forIdeas.map(name).join(', ')} only` : 'for no idea (unscoped)'}: no ${relWord(s.rel)} link for ${name(n.from)}`);
+              }
+            }
+          }
+          const uniq = [...new Set(misses)];
+          if (uniq.length) after.push({ text: `Not followed: ${uniq.slice(0, DERIVED_TRACE_MAX).join('; ')}${uniq.length > DERIVED_TRACE_MAX ? `; and ${uniq.length - DERIVED_TRACE_MAX} more` : ''}`, size: uniq.length });
+        }
         // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace.
         if (dropped) text += `, kept to the ideas each link is stated for (${dropped} link${dropped === 1 ? '' : 's'} stated for other ideas not followed)`;
         if (kindOf.size) text += `, with ${[...kindOf.keys()].map(name).join(', ')} as ${kindOf.size === 1 ? 'a kind' : 'kinds'} of ${[...new Set(kindOf.values())].map(name).join(', ')}`;
@@ -532,17 +595,21 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         text = 'Keep only what a second search also found';
       } else if (s.op === 'path') {
         const [a, b] = (s.codes ?? []).map(w.idOf);
-        path = a && b && nodes.has(a) && nodes.has(b) ? shortestPath(walkable(w.graph.edges), a, b) : [];
+        // Not through a form choice, a round or the division: an outcome half the ideas picked joins everything to everything.
+        const hub = (id: string) => id !== a && id !== b && ['Outcome', 'Support', 'Category', 'Beneficiary', 'Round', 'Entity'].includes(nodes.get(id)?.type ?? '');
+        path = a && b && nodes.has(a) && nodes.has(b) ? shortestPath(walkable(w.graph.edges).filter((e) => !hub(e.from) && !hub(e.to)), a, b) : [];
         set = path;
         text = path.length ? `Shortest chain: ${path.map(name).join(' — ')}` : 'No chain of links between them';
       } else if (s.op === 'rank') {
         // Distinct stars linked, never links: a person who submitted, leads and builds one idea counts it once.
         const n = new Map(set.map((id) => [id, new Set<string>()]));
+        /** Of the stars each one is counted for, those reached only by links nobody confirmed. */
+        const sure = new Map(set.map((id) => [id, new Set<string>()]));
         const fitsType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
         for (const e of walkable(w.graph.edges, s.rel)) {
           if (s.rel && e.rel !== s.rel) continue;
-          if (s.dir !== 'in' && n.has(e.from) && fitsType(e.to)) n.get(e.from)!.add(e.to);
-          if (s.dir !== 'out' && n.has(e.to) && fitsType(e.from)) n.get(e.to)!.add(e.from);
+          if (s.dir !== 'in' && n.has(e.from) && fitsType(e.to)) { n.get(e.from)!.add(e.to); if (e.confirmed) sure.get(e.from)!.add(e.to); }
+          if (s.dir !== 'out' && n.has(e.to) && fitsType(e.from)) { n.get(e.to)!.add(e.from); if (e.confirmed) sure.get(e.to)!.add(e.from); }
         }
         const all = [...n].map(([id, k]) => ({ id, n: k.size })).sort((x, y) => y.n - x.n || name(x.id).localeCompare(name(y.id)));
         const top = s.limit ?? 10;
@@ -551,6 +618,14 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         ranked = all.filter((x, i) => i < top || (cut > 0 && x.n === cut));
         set = ranked.map((r) => r.id);
         text = `Rank by ${s.rel ? `${relWord(s.rel)} ` : ''}${s.type ? `distinct ${pluralOf(s.type)} linked` : 'distinct stars linked'}, top ${top}${ranked.length > top ? ` (${ranked.length} with ties)` : ''}`;
+        const unsureRanks = ranked.filter((r) => (n.get(r.id)!.size - sure.get(r.id)!.size) > 0);
+        if (unsureRanks.length) {
+          after.push({ text: `Not confirmed in these counts (waiting for your Do it): ${unsureRanks.map((r) => `${name(r.id)} ${r.n - sure.get(r.id)!.size} of ${r.n}`).join('; ')}`, size: unsureRanks.length });
+          if (log) unconfirmed = [...(unconfirmed ?? []), ...unsureRanks.flatMap((r) => [...n.get(r.id)!].filter((x) => !sure.get(r.id)!.has(x)).map((x) => {
+            const e = w.graph.edges.find((y) => !y.confirmed && ((y.from === r.id && y.to === x) || (y.to === r.id && y.from === x)) && (!s.rel || y.rel === s.rel));
+            return { from: e?.from ?? r.id, rel: e?.rel ?? (s.rel as Relation), to: e?.to ?? x, confidence: e?.confidence ?? 0 };
+          }))];
+        }
       } else if (s.op === 'network') {
         const done = networkStep(s, w.network?.(s), name, nodes);
         set = done.set;
@@ -561,6 +636,25 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           for (const id of done.lit) touched.add(id);
         }
         text = '';
+      } else if (s.op === 'links') {
+        // Provenance: the stored links touching the set (or the stars in codes, or the whole graph), with where each came from.
+        const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
+        const pool = coded.length ? new Set(coded) : set.length && steps.indexOf(s) > 0 ? new Set(set) : undefined;
+        const found = w.graph.edges.filter((e) => {
+          if (s.rel && e.rel !== s.rel) return false;
+          if (e.derived && s.rel && !schema.derived.includes(s.rel)) return false;
+          if (pool && !(coded.length > 1 ? pool.has(e.from) && pool.has(e.to) : pool.has(e.from) || pool.has(e.to))) return false;
+          const k = linkKind(e.source);
+          if (s.source ? k !== s.source : k === 'rule' && !(s.rel && schema.derived.includes(s.rel))) return false;
+          return true;
+        });
+        const facts = found.map(linkFact);
+        if (log) linkFacts = [...(linkFacts ?? []), ...facts];
+        set = [...new Set(found.flatMap((e) => [e.from, e.to]))];
+        const what = s.source === 'operator' ? 'added by the operator' : s.source === 'ai' ? 'read by the AI' : s.source === 'form' ? 'from the form' : 'stored';
+        text = `Find the links ${what}${s.rel ? ` (${relWord(s.rel)})` : ''}${pool ? ` touching ${[...pool].slice(0, 3).map(name).join(', ')}${pool.size > 3 ? ` and ${pool.size - 3} more` : ''}` : ''}: ${found.length}`;
+        for (const f of facts.slice(0, 8)) after.push({ text: `${name(f.from)} ${relWord(f.rel)} ${name(f.to)}: ${provenanceWords(f)}`, size: 1 });
+        if (facts.length > 8) after.push({ text: `and ${facts.length - 8} more`, size: facts.length - 8 });
       } else if (s.op === 'count_by') {
         const by = s.by ?? 'type';
         counts = {};
@@ -576,6 +670,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         text = `Count by ${by}`;
       }
       if (log && text) trace.push({ text, size: set.length });
+      if (log) trace.push(...after);
       // A broad scan to start from ("every capability") is not lit when later steps narrow it: only what the query found is.
       const broadStart = s.op === 'stars' && !s.codes?.length && !s.match && !s.last && steps.indexOf(s) < steps.length - 1;
       // The inner search of an intersect only filters; it is not part of the chain shown.
@@ -586,7 +681,38 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
   const final = run(q.steps, true);
   // Nothing found: nothing lit, so an empty answer never looks like a result.
-  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(records?.length ? { records } : {}), ...(aside.length ? { aside } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}), ...(groups ? { groups } : {}), ...(network ? { network } : {}), ...(suggestions ? { suggestions } : {}) };
+  return { final, touched: final.length ? [...touched] : [], trace, ...(ranked ? { ranked } : {}), ...(counts ? { counts } : {}), ...(path ? { path } : {}), ...(hits?.length ? { hits } : {}), ...(records?.length ? { records } : {}), ...(aside.length ? { aside } : {}), ...(peopleFacts?.length ? { people: peopleFacts } : {}), ...(reasons?.length ? { reasons } : {}), ...(groups ? { groups } : {}), ...(network ? { network } : {}), ...(suggestions ? { suggestions } : {}), ...(unconfirmed?.length ? { unconfirmed } : {}), ...(linkFacts ? { links: linkFacts } : {}) };
+}
+
+/** The stated relations on a loop of kinds (KIND_OF aside: the build refuses a loop of kinds); see network.ts cycleRelations. */
+export function cycleCapable(schema: Schema = BUILTIN_SCHEMA): Relation[] {
+  const rels = schema.stated.filter((r) => r !== 'KIND_OF');
+  const next = new Map<string, Set<string>>();
+  for (const r of rels) { const [f, t] = schema.allowed[r]; next.set(f, new Set([...(next.get(f) ?? []), t])); }
+  const reaches = (a: string, b: string) => { const seen = new Set<string>(); const q = [a]; while (q.length) { const x = q.shift()!; if (x === b) return true; if (seen.has(x)) continue; seen.add(x); q.push(...(next.get(x) ?? [])); } return false; };
+  return rels.filter((r) => { const [f, t] = schema.allowed[r]; return f === t || reaches(t, f); });
+}
+
+/** What kind of source a stored link's source string names. */
+export function linkKind(source: string): LinkFact['kind'] {
+  return source.startsWith('operator') ? 'operator' : source.startsWith('ai:') ? 'ai' : source.startsWith('rule:') ? 'rule' : 'form';
+}
+/** A link's provenance as facts: the edit and its date, the AI's field, passage and time, the form's column. */
+export function linkFact(e: GEdge): LinkFact {
+  const kind = linkKind(e.source);
+  const base: LinkFact = { from: e.from, rel: e.rel, to: e.to, source: e.source, kind, confirmed: e.confirmed, confidence: e.confidence, ...(e.ideas?.length ? { ideas: e.ideas } : {}) };
+  if (kind === 'operator') { const m = /^operator:([^@]+)@(.+)$/.exec(e.source); return { ...base, ...(m ? { edit: m[1], at: m[2] } : {}) }; }
+  if (kind === 'ai') { const [, , ...where] = e.source.split(':'); return { ...base, ...(where.length ? { field: where.join(':') } : {}), ...(e.quote ? { quote: e.quote, quoteFound: e.quoteFound !== false } : {}), ...(e.readAt ? { at: e.readAt } : {}) }; }
+  if (kind === 'form') { const [, , ...col] = e.source.split(':'); return { ...base, ...(col.length ? { field: col.join(':') } : {}) }; }
+  return base;
+}
+/** A link's provenance in words, for the trace. */
+export function provenanceWords(f: LinkFact): string {
+  const sure = f.confirmed ? '' : `, not confirmed (${f.confidence}: waiting for your Do it)`;
+  if (f.kind === 'operator') return `added by the operator${f.edit ? ` (${f.edit}${f.at ? `, ${f.at}` : ''})` : ''}${f.ideas?.length ? ` for ${f.ideas.join(', ')}` : ''}${sure}`;
+  if (f.kind === 'ai') return `read by the AI (${f.source.split(':')[1] ?? '?'}) in ${f.field?.replace(/_/g, ' ') ?? 'the idea'}${f.quote ? `: "${f.quote.slice(0, 120)}"${f.quoteFound === false ? ' (not found in the text)' : ''}` : ' (no passage kept: read before passages were kept)'}${f.at ? `, ${f.at.slice(0, 10)}` : ''}, at ${f.confidence}${sure}`;
+  if (f.kind === 'form') return `from the form${f.field ? ` (${f.field})` : ''}`;
+  return `derived by ${f.source.slice('rule:'.length)}${sure}`;
 }
 
 const NETWORK_WORDS: Record<NetworkStepAnalysis, string> = {
@@ -620,14 +746,16 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
   }
   if (analysis === 'clusters') {
     const cs: any[] = r.clusters ?? [];
-    lines.push({ text: `${head}: ${cs.length} cluster${cs.length === 1 ? '' : 's'} of ideas, joined by the stars they share`, size: cs.length });
+    const noGroups = r.verdict === 'no-groups';
+    lines.push({ text: `${head}: ${r.verdictText ?? `modularity ${r.modularity}`}`, size: cs.length });
+    if (noGroups) lines.push({ text: `${cs.length} tentative group${cs.length === 1 ? '' : 's'} (not a finding, shown for reference):`, size: cs.length });
     cs.forEach((c, i) => lines.push({ text: `Cluster ${i + 1}: ${c.ideas.map((x: any) => name(x.id)).join(', ')}${c.binding.length ? `, bound by ${c.binding.slice(0, 4).map((b: any) => name(b.id)).join(', ')}` : ''}`, size: c.ideas.length }));
     if (r.alone?.length) lines.push({ text: `On their own: ${r.alone.map((x: any) => name(x.id)).join(', ')}`, size: r.alone.length });
     const ideas = cs.flatMap((c) => c.ideas.map((x: any) => x.id)).filter(known);
     const binding = cs.flatMap((c) => c.binding.slice(0, 4).map((b: any) => b.id)).filter(known);
     return {
       set: ideas, lit: [...ideas, ...binding], lines, suggestions: [],
-      fact: fact({ clusters: cs.map((c) => ({ ideas: c.ideas.map((x: any) => x.id), boundBy: c.binding.map((b: any) => ({ star: b.id, ideas: b.ideas })) })), alone: (r.alone ?? []).map((x: any) => x.id), modularity: r.modularity }),
+      fact: fact({ verdict: r.verdictText, clearGroups: !noGroups, modularity: r.modularity, ...(noGroups ? { say: 'there are no clear groups; never present these as real groups' } : {}), clusters: cs.map((c) => ({ ideas: c.ideas.map((x: any) => x.id), boundBy: c.binding.map((b: any) => ({ star: b.id, ideas: b.ideas })) })), alone: (r.alone ?? []).map((x: any) => x.id) }),
     };
   }
   if (analysis === 'path') {
@@ -663,6 +791,10 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
   }
   if (analysis === 'cycles') {
     const cs: any[][] = r.cycles ?? [];
+    if (r.applicable === false) {
+      lines.push({ text: `${head}: nothing to look for (${r.why})`, size: 0 });
+      return { set: [], lit: [], lines, suggestions: [], fact: fact({ applicable: false, why: r.why }) };
+    }
     lines.push({ text: `${head} along ${(r.relations ?? []).join(', ')}: ${r.count ? `${r.count} cycle${r.count === 1 ? '' : 's'}` : `none in ${r.links} links`}`, size: r.count });
     for (const c of cs.slice(0, 5)) lines.push({ text: `${c.map((x: any) => name(x.id)).join(' → ')} → ${name(c[0].id)}`, size: c.length });
     const ids = [...new Set(cs.flat().map((x: any) => x.id))].filter(known);
@@ -724,10 +856,13 @@ export function plainReply(results: QueryResult[], name: (id: string) => string,
     else if (r.counts) facts.push(Object.entries(r.counts).map(([k, v]) => `${k}: ${v}`).join(', '));
     else if (r.path?.length) facts.push(r.path.map(name).join(' — '));
     else if (r.network?.length) facts.push(...r.network.map((f) => networkSentence(f, name)).filter(Boolean));
+    else if (r.links) facts.push(r.links.length ? `${r.links.length} link${r.links.length === 1 ? '' : 's'}: ${r.links.slice(0, 8).map((f) => `${name(f.from)} ${relWord(f.rel)} ${name(f.to)} (${provenanceWords(f)})`).join('; ')}` : 'no such link');
     else if (r.final.length && !r.records?.length && !r.hits?.length) facts.push(list(r.final));
     for (const x of r.records ?? []) readings.push(`${name(x.idea)} (${FIELD_WORDS[x.field]}): "${say(x.text).slice(0, 200)}"`);
     if (!r.records?.length) for (const h of (r.hits ?? []).slice(0, 3)) readings.push(`${name(`idea:${h.ideaId}`)} (${h.section.replace(/_/g, ' ')}): "${say(h.text).slice(0, 160)}"`);
   }
+  const unsure = results.flatMap((r) => r.unconfirmed ?? []);
+  if (unsure.length) facts.push(`Not confirmed yet: ${[...new Set(unsure.map((u) => `${name(u.from)} ${relWord(u.rel)} ${name(u.to)}`))].slice(0, 6).join('; ')}`);
   if (!facts.length && !readings.length) return '';
   return `From the graph: ${[facts.length ? `${facts.join('. ')}.` : '', ...readings].filter(Boolean).join(' ')}`.slice(0, 900);
 }
@@ -738,10 +873,12 @@ function networkSentence(f: NetworkFact, name: (id: string) => string): string {
   const x = f.facts as any;
   const by = `(NetworkX, ${f.scope})`;
   if (f.analysis === 'central') return `Holding the most together ${by}: ${x.top.map((t: any) => `${name(t.star)} (${n3(t.betweenness)})`).join(', ')}`;
+  if (f.analysis === 'clusters' && x.clearGroups === false) return `No clear groups ${by}: ${x.verdict}`;
   if (f.analysis === 'clusters') return `Ideas that group together ${by}: ${x.clusters.map((c: any) => `${c.ideas.map(name).join(', ')}${c.boundBy.length ? ` (bound by ${c.boundBy.slice(0, 3).map((b: any) => name(b.star)).join(', ')})` : ''}`).join('; ')}`;
   if (f.analysis === 'path') return x.found ? `Connected ${by}: ${x.paths[0].map((h: any[]) => h.map((l: any) => `${name(l.from)} ${relWord(l.rel)} ${name(l.to)}`).join('; ')).join(', then ')}` : `No path ${by}`;
   if (f.analysis === 'isolated') return x.notConnected.length ? `Not connected to the rest ${by}: ${x.notConnected.map(name).join(', ')}` : `Nothing is cut off from the rest ${by}`;
   if (f.analysis === 'suggest') return x.suggestions.length ? `Probably missing ${by}, as proposals: ${x.suggestions.map((s: any) => `${name(s.from)} ${relWord(s.rel)} ${name(s.to)}`).join(', ')}` : `No link looks missing ${by}`;
+  if (f.analysis === 'cycles' && x.applicable === false) return `No cycle can form in this ontology ${by}`;
   if (f.analysis === 'cycles') return x.count ? `${x.count} dependency cycles ${by}` : `No dependency cycles ${by}`;
   return `${x.stars} stars, ${x.links} links, ${x.components} components ${by}`;
 }

@@ -618,6 +618,7 @@ function networkReply(f: any): string {
   const x = f.facts;
   const c = (code: string) => `[${code}]`;
   if (f.analysis === 'central') return x.top.length ? `By ${by.slice(1, -1)}, ${c(x.top[0].star)} holds the most ideas together (betweenness ${Number(x.top[0].betweenness).toFixed(3)}, ${x.top[0].ideas} ideas)${x.top.length > 1 ? `, then ${x.top.slice(1, 3).map((t: any) => c(t.star)).join(' and ')}` : ''}.` : `Nothing stands out ${by}.`;
+  if (f.analysis === 'clusters' && x.clearGroups === false) return `No clear groups ${by}: ${String(x.verdict ?? '').replace(/^no clear groups: /, '')}.`;
   if (f.analysis === 'clusters') return x.clusters.length ? `${x.clusters.length} group${x.clusters.length === 1 ? '' : 's'} ${by}: ${x.clusters.map((g: any, i: number) => `${i + 1}) ${g.ideas.map(c).join(', ')}, bound by ${g.boundBy.slice(0, 2).map((s: any) => c(s.star)).join(' and ')}`).join('; ')}.` : `No ideas share stars ${by}.`;
   if (f.analysis === 'path') return x.found ? `${x.hops} hop${x.hops === 1 ? '' : 's'} ${by}: ${x.paths[0].map((h: any[]) => h.map((l: any) => `${c(l.from)} ${String(l.rel).toLowerCase().replace(/_/g, ' ')} ${c(l.to)}`).join('; ')).join(', then ')}.` : `No chain of links joins them ${by}.`;
   if (f.analysis === 'isolated') return x.notConnected.length ? `Not connected to the rest ${by}: ${x.notConnected.map(c).join(', ')}.` : `Nothing is cut off: everything is in one connected group ${by}.`;

@@ -34,8 +34,15 @@ SEED = 42
 # Rounds and the division are left out of the analysis graph: a round links every idea in it and the division every
 # team, so they would sit at the centre of everything and join ideas that have nothing else in common.
 LEFT_OUT = {"Round", "Entity"}
-# The relations a dependency cycle could run along (DEPENDS_ON is derived: only there with derived links).
-CYCLE_RELS = {"NEEDS", "USES_DATA", "DEPENDS_ON"}
+# Cycles: the app sends the relations that CAN form one given the ontology (options.cycleRelations): a relation on a
+# loop of kinds (Vendor -> System -> Vendor), never KIND_OF (the build refuses a loop of kinds). With the built-in
+# ontology there is none: NEEDS, USES_DATA and DEPENDS_ON run Idea -> Capability -> System and can never close.
+# The kinds the clusters are read from: what an idea does and what it fixes. Form choices, people and teams are left
+# out: sharing an outcome picked from a short list, or a person on two teams, says nothing about what belongs together.
+CLUSTER_EVIDENCE = {"Capability", "PainPoint"}
+# Modularity below this means the groups are not real structure (Newman: 0.3 is the usual floor for clear communities).
+MODULARITY_CLEAR = 0.3
+MODULARITY_STRONG = 0.5
 # Links an operator can make by hand that link prediction proposes: (from type, relation, to type, evidence types).
 # Two stars are peers on the evidence of the relation's kind only: two ideas by the capabilities and pain points they
 # share, two capabilities by the systems they use. Sharing a person, an outcome or an idea is no evidence that a
@@ -68,17 +75,19 @@ def load(payload):
     for e in data.get("edges", data.get("links", [])):
         s, t = e["source"], e["target"]
         if s in full and t in full:
-            full.add_edge(s, t, key=e.get("key", e.get("rel")), rel=e.get("rel", ""), derived=bool(e.get("derived")))
+            full.add_edge(s, t, key=e.get("key", e.get("rel")), rel=e.get("rel", ""), derived=bool(e.get("derived")),
+                          confirmed=e.get("confirmed", True) is not False)
     g = nx.Graph()
     for n, a in full.nodes(data=True):
         if a["type"] not in LEFT_OUT:
             g.add_node(n, **a)
     for s, t, a in full.edges(data=True):
         if s in g and t in g and s != t:
+            r = {"from": s, "rel": a["rel"], "to": t, "confirmed": a["confirmed"]}
             if g.has_edge(s, t):
-                g[s][t]["rels"].append({"from": s, "rel": a["rel"], "to": t})
+                g[s][t]["rels"].append(r)
             else:
-                g.add_edge(s, t, rels=[{"from": s, "rel": a["rel"], "to": t}])
+                g.add_edge(s, t, rels=[r])
     return full, g
 
 
@@ -134,8 +143,12 @@ def central(full, g, opts):
     def ranked(scores, nodes):
         return sorted(nodes, key=lambda x: (-scores[x], key(x)))
 
+    reach = opts.get("ideaCount") or {}
+
     def row(x):
-        ideas = sum(1 for y in g[x] if g.nodes[y]["type"] == "Idea")
+        # The ideas a star touches: directly, or through what the rules derive (a system's ideas depend on it through a
+        # capability), as the app counted them; the direct neighbours when it sent none.
+        ideas = reach.get(x, sum(1 for y in g[x] if g.nodes[y]["type"] == "Idea"))
         return star(g, x, betweenness=r4(bc[x]), degree=r4(dc[x]), links=g.degree(x), ideas=ideas)
 
     # Ideas are what the programme counts, not what holds it together: the overall lists rank the other stars.
@@ -155,7 +168,7 @@ def central(full, g, opts):
     }
 
 
-def idea_projection(g):
+def idea_projection(g, evidence=None):
     """
     The ideas as a graph of their own: two ideas are joined when they share stars (a capability, a pain point, a
     system, a person, a category ...), each shared star weighted 1 / log(number of ideas it touches), as in
@@ -171,7 +184,7 @@ def idea_projection(g):
     p.add_nodes_from(ideas)
     shared = {}
     for s in sorted(g.nodes):
-        if g.nodes[s]["type"] == "Idea":
+        if g.nodes[s]["type"] == "Idea" or (evidence is not None and g.nodes[s]["type"] not in evidence):
             continue
         around = sorted(y for y in g[s] if g.nodes[y]["type"] == "Idea")
         if len(around) < 2:
@@ -186,12 +199,25 @@ def idea_projection(g):
     return p, shared
 
 
+def verdict(q, n_clusters):
+    if n_clusters < 2:
+        return "no-groups", "no clear groups: the ideas fall into one group or none, so there is nothing to tell apart"
+    if q < MODULARITY_CLEAR:
+        return "no-groups", "no clear groups: modularity %.2f is below 0.3, so the ideas share about as much across these groups as within them; read the groups as a sketch, not a finding" % q
+    if q < MODULARITY_STRONG:
+        return "some-groups", "some grouping: modularity %.2f (0.3 to 0.5): the groups are real but loose" % q
+    return "clear-groups", "clear groups: modularity %.2f (0.5 or more)" % q
+
+
 def clusters(full, g, opts):
-    p, shared = idea_projection(g)
-    method = "Louvain communities over the ideas, joined by the stars they share"
+    evidence = None if opts.get("formChoices") else CLUSTER_EVIDENCE
+    p, shared = idea_projection(g, evidence)
+    over = "every star they share" if evidence is None else "the capabilities and pain points they share (form choices, people and teams left out)"
+    method = "Louvain communities over the ideas, joined by " + over
     if p.number_of_edges() == 0:
         alone = sorted(p.nodes, key=by_label(g))
-        return {"clusters": [], "alone": [star(g, x) for x in alone], "modularity": 0.0, "method": method}
+        k, words = verdict(0.0, 0)
+        return {"clusters": [], "alone": [star(g, x) for x in alone], "modularity": 0.0, "method": method, "verdict": k, "verdictText": words}
     comms = nx.community.louvain_communities(p, weight="weight", seed=SEED, resolution=float(opts.get("resolution", 1.0)))
     modularity = nx.community.modularity(p, comms, weight="weight")
     out, alone = [], []
@@ -214,11 +240,18 @@ def clusters(full, g, opts):
         })
     out.sort(key=lambda c: (-len(c["ideas"]), -c["weight"], c["ideas"][0]["label"].lower()))
     alone.sort(key=lambda s: (s["label"].lower(), s["id"]))
-    return {"clusters": out, "alone": alone, "modularity": r4(modularity), "method": method}
+    k, words = verdict(modularity, len(out))
+    return {"clusters": out, "alone": alone, "modularity": r4(modularity), "method": method, "verdict": k, "verdictText": words,
+            "formChoices": "included" if opts.get("formChoices") else "left out"}
 
 
 def path(full, g, opts):
-    a, b = opts.get("a"), opts.get("b")
+    # Paths avoid the form-choice hubs (an outcome half the ideas picked joins everything to everything) unless asked.
+    a0 = opts.get("a")
+    b0 = opts.get("b")
+    if not opts.get("formChoices") and (a0 not in g or g.nodes[a0]["type"] not in FORM_CHOICES) and (b0 not in g or g.nodes[b0]["type"] not in FORM_CHOICES):
+        g = core(g, opts)
+    a, b = a0, b0
     if a not in full or b not in full:
         return {"found": False, "reason": "not in the graph", "paths": []}
     if a not in g or b not in g:
@@ -237,7 +270,8 @@ def path(full, g, opts):
             rels = sorted(g[x][y]["rels"], key=lambda r: (r["rel"], r["from"]))
             hops.append({"from": x, "to": y, "rels": rels})
         out.append({"stars": [star(g, x) for x in p], "hops": hops})
-    return {"found": True, "length": len(paths[0]) - 1, "count": len(paths), "paths": out}
+    return {"found": True, "length": len(paths[0]) - 1, "count": len(paths), "paths": out,
+            "formChoices": "included" if opts.get("formChoices") else "left out"}
 
 
 def isolated(full, g, opts):
@@ -277,6 +311,11 @@ def suggest(full, g, opts):
     are left out (formChoices: true keeps them). The peers and what each shares are the reason given.
     """
     g = core(g, opts)
+    # Evidence is what the operator stands behind: links waiting for Do it are left out (unconfirmed: true keeps them).
+    sure_only = not opts.get("unconfirmed")
+
+    def holds(x, y, rel=None, frm=None):
+        return any((rel is None or r["rel"] == rel) and (frm is None or r["from"] == frm) and (r["confirmed"] or not sure_only) for r in g[x][y]["rels"])
     top = int(opts.get("top", 10))
     k = int(opts.get("peers", 3))
     min_shared = int(opts.get("minShared", MIN_SHARED))
@@ -286,8 +325,8 @@ def suggest(full, g, opts):
     considered = 0
     for ftype, rel, ttype, evidence in SUGGESTABLE:
         sources = sorted((x for x in g.nodes if g.nodes[x]["type"] == ftype), key=key)
-        linked = {x: {y for y in g[x] if g.nodes[y]["type"] == ttype and any(r["rel"] == rel and r["from"] == x for r in g[x][y]["rels"])} for x in sources}
-        ev = {x: {y for y in g[x] if g.nodes[y]["type"] in evidence} for x in sources}
+        linked = {x: {y for y in g[x] if g.nodes[y]["type"] == ttype and holds(x, y, rel, x)} for x in sources}
+        ev = {x: {y for y in g[x] if g.nodes[y]["type"] in evidence and holds(x, y)} for x in sources}
         # The evidence graph: the sources and their evidence stars, nothing else.
         h = nx.Graph()
         h.add_nodes_from(sources)
@@ -330,13 +369,18 @@ def suggest(full, g, opts):
                 })
     out.sort(key=lambda s: (-s["share"], -s["adamicAdar"], s["from"]["label"].lower(), s["to"]["label"].lower()))
     return {"suggestions": out[:top], "considered": considered, "found": len(out), "peers": k, "minShared": min_shared, "minPeers": min_peers,
-            "formChoices": "included" if opts.get("formChoices") else "left out"}
+            "formChoices": "included" if opts.get("formChoices") else "left out",
+            "evidence": "confirmed links only" if sure_only else "confirmed and unconfirmed links"}
 
 
 def cycles(full, g, opts):
+    rels = sorted(set(opts.get("cycleRelations") or []))
+    if not rels:
+        return {"applicable": False, "cycles": [], "count": 0, "relations": [], "links": 0,
+                "why": "no relation in this ontology can form a cycle: NEEDS, USES_DATA and DEPENDS_ON run Idea -> Capability -> System, and a loop of KIND_OF is refused by the build"}
     d = nx.DiGraph()
     for s, t, a in full.edges(data=True):
-        if a["rel"] in CYCLE_RELS:
+        if a["rel"] in rels:
             d.add_edge(s, t)
     found = []
     for c in itertools.islice(nx.simple_cycles(d), 200):
@@ -344,9 +388,10 @@ def cycles(full, g, opts):
         found.append(c[i:] + c[:i])
     found.sort(key=lambda c: (len(c), c))
     return {
+        "applicable": True,
         "cycles": [[star(full, x) for x in c] for c in found[:20]],
         "count": len(found),
-        "relations": sorted(CYCLE_RELS),
+        "relations": rels,
         "links": d.number_of_edges(),
     }
 

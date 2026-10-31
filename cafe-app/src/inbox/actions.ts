@@ -241,7 +241,7 @@ async function planGraph(root: string, item: InboxItem, idea: Idea, out: Extract
   // Deep read, when it has run: a star that only differs in wording from one already there is reused.
   const matcher = await starMatcher(root, filtered.nodes.map((n) => n.label), graph.nodes);
   // The same threshold as every AI read (settings graph.confirmAt): a link the AI is less sure of waits for Do it.
-  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry, confirmAt: confirmAt(await loadSettings(root).catch(() => ({}))) });
+  const { links } = planAiLinks(idea.id, filtered, graph, previous, provider, { status: 'confirmed', nearest: matcher?.nearest, reuseAt: matcher?.thresholds.reuse, registry, confirmAt: confirmAt(await loadSettings(root).catch(() => ({}))), text: idea as unknown as Record<string, unknown> });
   const sourced = links.map((l) => ({ ...l, source: `ai:${provider}:${item.file}` }));
   return { links: sourced };
 }

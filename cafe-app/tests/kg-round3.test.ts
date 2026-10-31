@@ -473,3 +473,25 @@ describe.skipIf(!PY)('should 10: NetworkX ranks capabilities, systems, people an
     expect(loose.suggestions.some((x: any) => x.from.id === 'capability:key-term-extraction' && x.to.id === 'system:team-onboarding-checklist')).toBe(true);
   });
 });
+
+describe('must 7: why an answer took fifteen minutes, and the hold that stops it', () => {
+  it('on a Mac, an answer keeps the machine awake with caffeinate -i -w <pid> while it runs, and lets it go after', async () => {
+    const { awakeHooks, holdAwake, awakeHolds } = await import('../src/ai/awake');
+    const started: string[][] = []; let killed = 0;
+    const was = awakeHooks.platform;
+    awakeHooks.platform = 'darwin';
+    const before = awakeHooks.setSpawner((cmd, args) => { started.push([cmd, ...args]); const fake: any = { on: () => fake, kill: () => { killed++; } }; return fake; });
+    try {
+      const a = holdAwake({}); const b = holdAwake({});
+      expect(started).toEqual([['/usr/bin/caffeinate', '-i', '-w', String(process.pid)]]);
+      a(); expect(killed).toBe(0);
+      b(); b(); expect(killed).toBe(1);
+      expect(awakeHolds()).toBe(0);
+      holdAwake({ CAFE_NO_CAFFEINATE: '1' })();
+      expect(started).toHaveLength(1);
+      awakeHooks.platform = 'linux';
+      holdAwake({})();
+      expect(started).toHaveLength(1);
+    } finally { awakeHooks.platform = was; awakeHooks.setSpawner(before); }
+  });
+});

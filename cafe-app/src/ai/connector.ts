@@ -8,6 +8,7 @@ import { claudeProvider } from './providers/claude';
 import { copilotProvider } from './providers/copilot';
 import { vscodeProvider } from './providers/vscode';
 import { fakeProvider } from './providers/fake';
+import { holdAwake } from './awake';
 
 export type ProviderId = 'claude' | 'copilot' | 'vscode' | 'fake';
 
@@ -87,7 +88,12 @@ export function createConnector(opts: {
     return null;
   }
 
+  /** Every AI call keeps the machine awake while it runs (a Mac's idle sleep would freeze it with the app). */
   async function runWith<T>(task: Task<T>, input: unknown, run: { timeoutMs?: number } = {}): Promise<{ provider: ProviderId; label: string; output: T }> {
+    const release = holdAwake();
+    try { return await runWithAwake(task, input, run); } finally { release(); }
+  }
+  async function runWithAwake<T>(task: Task<T>, input: unknown, run: { timeoutMs?: number } = {}): Promise<{ provider: ProviderId; label: string; output: T }> {
     const p = await pick();
     if (!p) throw new AiError('No AI available');
     const ms = Math.min(run.timeoutMs ?? task.timeoutMs ?? timeoutMs, ceiling);

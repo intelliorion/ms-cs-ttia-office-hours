@@ -21,6 +21,7 @@ import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
 import { loadRegistry } from '../graph/registryFile';
 import { graphChanges } from '../graph/diff';
+import { holdAwake } from '../ai/awake';
 import { loadSettings } from '../round/store';
 import type { Settings } from '../round/round';
 
@@ -150,6 +151,12 @@ export interface RunOptions {
 export async function runCommand(root: string, text: string, ai: Connector, clock: Clock, opts: RunOptions = {}): Promise<ChatEntry> {
   const message = text.trim().slice(0, COMMAND_MAX);
   if (!message) throw new Error('Type a message first');
+  // The machine stays awake while the answer runs (a Mac's idle sleep froze one for fifteen minutes): see awake.ts.
+  const release = holdAwake();
+  try { return await answer(root, message, ai, clock, opts); } finally { release(); }
+}
+
+async function answer(root: string, message: string, ai: Connector, clock: Clock, opts: RunOptions): Promise<ChatEntry> {
   // One deadline for the whole answer (every step, every AI call, NetworkX): the answer stops at it with what it has.
   const started = Date.now();
   const budget = opts.deadlineMs ?? answerDeadlineMs(await loadSettings(root).catch(() => ({})));

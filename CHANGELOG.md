@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-10-31 (Café app, round 4: the build gates itself, one ontology per build, "not confirmed" everywhere, NetworkX that says what it cannot find, verifiable provenance)
+
+A third adversarial retest scored the graph 7/10. Each fault it logged is now pinned by a test (`tests/kg-round4.test.ts`,
+`tests/sparql-examples.test.ts`, and the ones they extend).
+
+- **The build gates itself, whatever wrote the file.** It refuses, drops from the graph, names in `cafe ontology check`
+  and shows in the banner: a `confirmedBy: operator` with no Do it recorded (the Do it now writes
+  `graph/confirmations.jsonl`, and only it does), a confidence outside 0 to 1, a pending link counted as confirmed, an
+  AI-made BUILT_WITH or Tool star, an operator remove of an idea, team or person and a rename of an idea or person, a
+  KIND_OF self-loop or loop, an `entities.yaml` id whose prefix lies about its section, and an alias that makes a
+  not-approved tool a name of an approved one. Someone who edits two files by hand can still forge a confirmation.
+- **One ontology per build.** `rules/ontology.yaml` is compiled into a frozen value per build and passed to the rules,
+  the check, the assistant's queries, the export and the actions; no shared table changes, so 120 concurrent builds of
+  two workspaces each keep their own declarations (the round-3 race lost the Vendor kind in 10 of 120). Declared kinds
+  code as `[Y1]` (never "undefined1"); a deadline's partial reply shows names; a broken settings file is said as itself.
+- **"Not confirmed" everywhere.** A plain `follow` and a `rank` say which stated links they crossed or counted that wait
+  for Do it; a dependency that holds for another idea only is said not to hold, per idea; the decision AI is sent
+  `confirmed: false`; NetworkX suggests from confirmed links only; the export writes plain triples for confirmed facts
+  only. The Request handling question now names Travel policy assistant's link as not confirmed.
+- **NetworkX, honestly.** Clusters are read from shared capabilities and pain points (form choices, people and teams
+  left out) with a modularity verdict (below 0.3: "no clear groups", said in the pop-out, the assistant and the stages;
+  the practice workspace scores 0.20); cycles run only along relations the ontology lets loop (none in the built-in one,
+  said so); paths keep off form-choice hubs; a system counts the ideas that depend on it. Both round-3 suggestions
+  rested on unconfirmed links: there are none now. Centrality matches an independent NetworkX 3.7 on all 50 rows.
+- **RDF and provenance.** SIMILAR_TO is `owl:SymmetricProperty` and written both ways; aliases are `skos:altLabel`; an AI
+  link carries its quoted passage (checked against the idea's text, the source field moved to where the passage is) and
+  when it was read; `docs/sparql-examples.rq` has the newcomer's queries with the app's answers; the assistant's new
+  `links` step answers "which links did the operator add" and "where did this link come from". The registry wins over
+  containment (Copilot is Microsoft Copilot, not Copilot Studio). pyshacl and rdf-validate-shacl: conforms, as is and
+  after fix.
+- **`cafe ontology fix`** corrects source fields (14 in the practice workspace), lists stale edits with the stars they
+  could point to and changes them only with `--repoint op-N=STAR` or `--retire op-N`, and records a confirmation only
+  with `--confirm line-N`. A capability fact proposed with the idea that needs it is stamped for that idea.
+- **The 66 questions of the retest**, re-asked on fresh copies as is and after `fix --apply`: round 3 had 52 right, 7
+  partly and 6 wrong of 65 answered; round 4 has 65 right and 1 partly as is, and 66 right after fix (one,
+  q17, after the path trace fix). Median 10.1 s, max 34.5 s.
+- **Not done, said plainly:** the tool registry's resolver (`canonicalTool`) is still one per process (one workspace
+  per server is fine; a test that mixes workspaces must load each registry); clusters read unconfirmed links too (only
+  suggestions are confirmed-only); the files are plain files, so two coordinated hand edits can still forge a
+  confirmation; there is no OWL reasoner or SPARQL endpoint, only the export.
+
 ## 2026-10-31 (Café app: every route gated by the ontology, an open schema, RDF with its schema)
 
 A second adversarial retest scored the graph 6/10. Each fault it logged is now pinned by a test

@@ -79,7 +79,7 @@ VS Code helper is an HTTP call on the local machine.
 | Import readers | `pdfjs-dist`, `exceljs`, `csv-parse`, `@kenjiuno/msgreader`, `fflate` | Read what people drop in: PDF, Excel, CSV, Outlook `.msg`, zips |
 | Deck writer | `pptxgenjs` | Writes the roadshow deck |
 | Embeddings | `@huggingface/transformers` (ONNX runtime, CPU) | Deep read's model runs in-process and ships in the repo (`cafe-app/models`, checksummed); the hub, a firm mirror or an import are only for a custom folder or a deleted copy |
-| Tests | vitest, jsdom, playwright-core | About 1,000 server tests and about 370 UI tests; the browser is driven headless for acceptance |
+| Tests | vitest, jsdom, playwright-core | About 1,080 server tests and about 370 UI tests; the browser is driven headless for acceptance |
 
 About 29,000 lines of TypeScript outside the tests.
 
@@ -184,17 +184,30 @@ which the app never reads back. The ontology file says what may link to what, so
 check`; `cafe ontology fix` brings an older workspace in line, dry run first), and the export is JSON-LD that RDF
 tools read as written: the default graph, links as resources with node IRIs, PROV-O for derivation.
 
-Every route into the graph is gated by the ontology, in the build itself: an operator cannot add an idea, a round, a
-person or a tool, nor store a SUBMITTED, LEADS, BUILT_WITH or derived link by hand; an AI link must say which AI read
-it where; nothing below the confidence threshold counts as confirmed without the operator's Do it, whoever wrote the
-file; a NetworkX suggestion is proposed as one only when NetworkX makes it on the graph as it is. One name is one star:
+Every route into the graph is gated by the ontology, in the build itself, so it holds for a hand-edited file too: an
+operator cannot add an idea, a round, a person or a tool, remove an idea, a team or a person, rename an idea or a
+person, make a system a kind of itself or close a loop of kinds, nor store a SUBMITTED, LEADS, BUILT_WITH or derived
+link by hand; an AI link must say which AI read it where, give a confidence from 0 to 1 and never pick a tool; nothing
+below the confidence threshold counts as confirmed without the operator's Do it, which only the Do it records
+(`graph/confirmations.jsonl`), and a pending link never counts as confirmed; an `entities.yaml` id must carry its
+section's kind, and no alias can make a not-approved tool a name of an approved one; a NetworkX suggestion is proposed
+as one only when NetworkX makes it on the graph as it is. Each refusal drops the fact, is named by `cafe ontology
+check` and shown in the app's banner. What it cannot stop: someone who edits two files by hand (an AI link and the
+confirmations) can still forge a confirmation; one edited line cannot. The ontology itself is compiled once per build
+into a frozen value passed down to the rules, the check, the queries and the export, never a table the app shares,
+so builds running at the same time never see each other's. One name is one star:
 the id and the lookup key are one normal form (T&E, T/E, T and E and "Travel & Expenses" are Travel & Expense; people
 by their exact name, accents kept). The schema is open: `ontology.yaml` may declare a new kind or relation and the
 rules may chain it, with no code; `KIND_OF` makes a mailbox count as an email system. The export carries its schema,
 an RDFS vocabulary and SHACL shapes at a configurable base (`https://example.invalid/creators-cafe/` by default), and
-validates against them with pyshacl and rdf-validate-shacl; a per-idea fact is a plain triple only where it holds for
-every idea, so naive SPARQL never reads a fact for an idea it is not true of, and the per-idea consequence (idea
-DEPENDS_ON system) is a plain triple.
+validates against them with pyshacl and rdf-validate-shacl; a plain triple is a confirmed fact (a link waiting for Do
+it is only a reified Link with `cafe:confirmed false`), and a per-idea fact is a plain triple only where it holds for
+every idea, so naive SPARQL never reads a fact for an idea it is not true of; the per-idea consequence (idea
+DEPENDS_ON system) is a plain triple. SIMILAR_TO is symmetric and written both ways, other names are `skos:altLabel`,
+an AI fact carries the passage it was read in (checked against the idea's text) and when, and
+`docs/sparql-examples.rq` gives a newcomer's queries with the app's answers. The assistant can say where any link
+came from (its `links` step), says "not confirmed" for every link it crossed that waits for Do it, and lets the
+registry's names win over a label that merely contains the words (Copilot is Microsoft Copilot, not Copilot Studio).
 
 **Deep read.** The text itself: the challenge, the current process, the emails, the designs, chunked and embedded
 on the CPU with a small local model. It answers "what did people write" and "which ideas read alike", and it keeps
@@ -311,7 +324,7 @@ graph, NetworkX analyses it.**
 | Build the graph: the form, the AI's links, the operator's edits, registry identities, incremental rebuild | Our engine (`src/graph/build.ts`, `registry.ts`) | Provenance on every link (who said it, confidence, which idea) is domain data the app owns |
 | Reason: derived links with their rule and inputs, the ontology, the checks | Our engine (`rules.ts`, `rules/*.yaml`, `check.ts`) | Rules in a fixed order the operator can read, edit and switch off; every derived link explains itself |
 | Answer questions step by step with a trace | Our planner (`src/command/query.ts`) | Every answer, count and lit star comes from steps the operator can read |
-| Whole-network analysis: betweenness and degree centrality, Louvain clusters, shortest paths with the link on each hop, connected components, link prediction (Adamic-Adar, Jaccard), dependency cycles | NetworkX (`py/network.py` via `src/graph/network.ts`) | Standard, well-tested algorithms; no reason to rewrite them |
+| Whole-network analysis: betweenness and degree centrality, Louvain clusters with a modularity verdict, shortest paths with the link on each hop, connected components, link prediction (Adamic-Adar, Jaccard), cycles where the ontology lets a relation loop | NetworkX (`py/network.py` via `src/graph/network.ts`) | Standard, well-tested algorithms; no reason to rewrite them |
 | Layout | `d3-force-3d` | Places the stars |
 
 How it is wired: the app sends its graph as node-link JSON on stdin to `python -I -S py/network.py`, which imports
@@ -328,7 +341,14 @@ used, and only pure-Python algorithms run (no numpy, no scipy). Results are cach
 - **Rankings and suggestions that mean something.** Centrality and link prediction leave the form choices (outcomes,
   support, categories, beneficiaries) out by default (`--with-form-choices` keeps them), so the rankings are
   capabilities, systems, people and teams. Link prediction compares two ideas by the capabilities and pain points they
-  share and two capabilities by the systems they use, needs two shared stars per peer and two peers per suggestion.
+  share and two capabilities by the systems they use, needs two shared stars per peer and two peers per suggestion,
+  and reads confirmed links only. A system's "ideas" are the ideas that depend on it.
+- **Saying what it found, and what it could not.** Clusters are read from shared capabilities and pain points (form
+  choices, people and teams left out) and always come with NetworkX's modularity and a verdict: below 0.3 "no clear
+  groups", and then no cluster is passed on as a finding (the practice workspace scores 0.20: no clear groups). Cycles
+  are looked for only along relations the ontology lets loop; with the built-in one there are none (Idea → Capability
+  → System cannot close, and the build refuses a loop of KIND_OF), so the analysis says so and the UI and assistant do
+  not offer it. Paths keep off outcome, support, category and beneficiary hubs.
 - **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
   `GET /api/network`, a network step in the assistant ("which capability holds the most ideas together", traced as
   "NetworkX betweenness centrality over stored facts"), the Network pop-out, the decision suggestion (the idea's

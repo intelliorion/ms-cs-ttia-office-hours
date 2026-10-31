@@ -554,10 +554,10 @@ access?") is answered from the passages with a trace.
 
 **What.** The app builds the knowledge graph (the form, the AI's links, your edits, the rules) and NetworkX analyses it
 as a whole: which stars hold the most ideas together (betweenness and degree centrality), which ideas naturally group
-together (Louvain communities over the ideas, joined by the stars they share, with the stars that bind each group),
-how two stars are connected (shortest paths, with the link on each hop), what is cut off from the rest (connected
-components), which links are probably missing (link prediction: Adamic-Adar and Jaccard between peers), and whether
-there are dependency cycles.
+together (Louvain communities over the ideas, joined by the capabilities and pain points they share, with a plain
+verdict from the modularity), how two stars are connected (shortest paths, with the link on each hop), what is cut off
+from the rest (connected components), and which links are probably missing (link prediction: Adamic-Adar and Jaccard
+between peers, on confirmed links only).
 
 **Why both.** Building and reasoning stay in the app's own engine, because every link carries who said it, with
 what confidence and for which idea, and every derived link names its rule and inputs; you can read all of it. Whole-
@@ -568,11 +568,11 @@ builds the graph, NetworkX analyses it.*
 cafe network check                     # Python, the vendored NetworkX it will use, and the checksums
 cafe network stats                     # stars, links, density, components, average clustering
 cafe network central [--top N]         # betweenness and degree centrality, top stars, per type
-cafe network clusters                  # Louvain clusters of ideas and what binds them
+cafe network clusters                  # Louvain clusters of ideas, what binds them, and whether they are real groups
 cafe network path "GSS" "Expense system"
 cafe network isolated                  # ideas, teams or systems not connected to the rest
 cafe network suggest                   # links that are probably missing (proposals only)
-cafe network cycles                    # dependency cycles along NEEDS, USES_DATA, DEPENDS_ON
+cafe network cycles                    # loops along relations the ontology lets loop (none with the built-in one)
   [--with-derived] [--json] [--workspace DIR]
 cafe export --format networkx          # node-link JSON for your own notebook (docs/networkx-example.py)
 ```
@@ -591,9 +591,25 @@ that needs the capability), so accepting it gives that idea, and only that idea,
 - **What holds the programme together, not the form's tick boxes.** Centrality and link prediction leave the form
   choices (outcomes, support requested, categories, beneficiaries) out by default, since nearly every idea shares one;
   `--with-form-choices` (`?formChoices=1`) keeps them. The rankings are capabilities, systems, people and teams.
-- **Suggestions need evidence of their own kind.** Two ideas are peers by the capabilities and pain points they share,
+- **Groups only when they are real.** Clusters are read from the capabilities and pain points two ideas share (form
+  choices, people and teams left out: sharing a tick box or a colleague says nothing about what belongs together), and
+  every answer gives NetworkX's modularity with a verdict: below 0.3 "no clear groups" (the pop-out, the assistant and
+  the stages say so and pass no cluster on as a finding), 0.3 to 0.5 "some grouping", 0.5 or more "clear groups". The
+  practice workspace's seven ideas score 0.20: no clear groups, and the app says so.
+- **No analysis that cannot find anything.** With the built-in ontology no relation can form a cycle (NEEDS,
+  USES_DATA and DEPENDS_ON run Idea → Capability → System, and the build refuses a loop of KIND_OF), so `cycles` says
+  it has nothing to look for and the pop-out and the assistant do not offer it. It looks only along relations a
+  workspace's `ontology.yaml` declares on a loop of kinds (a Vendor → System relation beside SUPPLIED_BY System →
+  Vendor).
+- **Paths keep off the tick boxes.** A path (NetworkX's and the assistant's own) does not run through an outcome,
+  support request, category, beneficiary, round or the division, which join everything to everything.
+- **Counts that count.** A star's "ideas" are the ideas it touches directly or through what the rules derive, so a
+  system counts the ideas that depend on it (round 3 said "0 ideas" for every system).
+- **Suggestions need evidence of their own kind, and confirmed.** Two ideas are peers by the capabilities and pain points they share,
   two capabilities by the systems they use (never by a person or an idea they share); a peer must share two such stars
-  and a suggestion needs two such peers. NetworkX's Adamic-Adar and Jaccard score the pairs on that evidence graph.
+  and a suggestion needs two such peers. NetworkX's Adamic-Adar and Jaccard score the pairs on that evidence graph,
+  built from confirmed links only (a link waiting for Do it is no evidence). The practice workspace's two round-3
+  suggestions both rested on unconfirmed links; there are none now.
 - **"Suggested by NetworkX" only when it is.** Propose (the pop-out, `POST /api/network/propose`) checks the link is
   among NetworkX's current suggestions (by id) and only an idea needs a capability or a capability uses a system's
   data; the reason shown is NetworkX's own. The link then passes the same checks as any proposed link, and Do it
@@ -688,10 +704,24 @@ form field it was read in (`ai:claude:challenge`, `ai:claude:current_process`, .
 Import, `ai:<provider>:review-answers` from the review). An AI link below the confidence threshold (`graph:
 confirmAt` in `rules/settings.yaml`, default 0.7) is stored waiting for your Do it, not confirmed, whichever path wrote
 it (a read, an Import, an answer, the inbox); and the build counts a link below it as confirmed only when your Do it
-confirmed it (`confirmedBy: operator`), whatever the file says. The build refuses, and the check names: an operator
-`add` of an idea, round, person or tool (only the form, the Rounds pop-out, a team or the tool picker make those); an
+confirmed it, whatever the file says: Do it writes `graph/confirmations.jsonl` (only it does), and a `confirmedBy:
+operator` in `ai-links.jsonl` with no such record is a confirmation nobody gave, counted as waiting and named. A
+`pending` link is a suggestion whatever its confidence.
+
+**The build gates itself**, so "every route into the graph is gated" holds for a hand-edited file too. It refuses,
+drops from the graph, names in `cafe ontology check` and shows in the banner: an operator `add` of an idea, round,
+person or tool (only the form, the Rounds pop-out, a team or the tool picker make those); an operator `remove` of an
+idea, team, person, round or tool, and a `rename` of an idea, person or round (their names are their records'); an
 operator link of SUBMITTED, LEADS, SPONSORS, BUILDS, RELATED, IN_ROUND or BUILT_WITH (the record's, the round's or the
-tool pick's); a merge of two kinds; an AI link whose source is empty or not an AI read (`ai:<provider>:<where>`).
+tool pick's); a KIND_OF from a system to itself or one that closes a loop; a merge of two kinds; an AI link whose
+source is empty or not an AI read (`ai:<provider>:<where>`), whose confidence is not a number from 0 to 1, that picks
+a tool (BUILT_WITH) or makes a Tool star (only your tool pick does); an `entities.yaml` entry whose id's prefix is not
+its section's (`system:email` under Capability would make Email a capability); and an alias, in `entities.yaml` or an
+edit, that makes a not-approved tool (UiPath, Power Automate …) a name of an approved one. What it cannot stop: the
+files are plain files on your machine, so someone who edits both `ai-links.jsonl` and `confirmations.jsonl`, or sets
+an AI link's confidence to 0.9 by hand, can still make it look confirmed. One edited line no longer can. Also still
+true: the tool registry's resolver is one per process (one workspace per server, as the app runs, is fine), and the
+NetworkX clusters read unconfirmed links too (only its suggestions are confirmed-only).
 `/api/graph` lists each refusal, and a banner over the universe shows them with any `ontology.yaml` or `inference.yaml`
 problem. Aliases cannot make
 one tool another product: "also know Copilot Studio as UiPath" (or Power Automate, or any other tool star) is refused.
@@ -701,6 +731,22 @@ idea's **Similar ideas** block (with the shared stars as the why), and the assis
 relation ("which ideas depend on the expense system", "what does GSS own") all come from here; the trace says "derived
 by <rule> from <the links>". A plain `follow` keeps to stated links.
 
+**"Not confirmed" is said wherever it matters.** A `follow` that crosses a stated link nobody confirmed (an AI link
+waiting for Do it) says so in the trace, "Not confirmed (waiting for your Do it): Travel policy assistant needs Request
+handling (0.6)", and the AI is sent the list and told to say it; a `rank` says how many of each count are not
+confirmed; a dependency that holds for another idea only is said not to hold ("Not followed: Procurement FAQ bot needs
+Policy question answering, which uses the Travel & Expense policy for Travel policy assistant only"), so "no" never
+reads as "it needs nothing that uses it". The decision suggestion's AI is sent `confirmed: false` on each graph fact
+that rests only on such a link, and its basis counts them.
+
+**Where a link came from.** The assistant's `links` step answers "how many links did the operator add, and which?",
+"where does this link come from?" and "what did the AI read for this idea?": each stored link with its source in
+words (the operator's edit and its date and idea; the AI's field, the passage it quoted and when; the form's column).
+
+**Names the registry knows win.** "Copilot" is Microsoft Copilot (an approved tool and its aliases), never Copilot
+Studio because its label contains the word; a name the registry knows for a star no idea has yet starts from nothing
+and the trace says so ("exactly: Microsoft Copilot, known as "Copilot"; no idea's record has it yet").
+
 **How it stays current.** Nothing is rebuilt that did not change: the build keeps one bundle per idea, keyed by a hash
 of the idea's record and the registry's version, and the operator log is folded by its appended lines; a rebuild
 recomputes the bundles of the ideas that changed (an Import, a save, a touch from Deep read's bus) and runs the rules
@@ -708,8 +754,10 @@ in full (cheap at this scale; the bookkeeping for neighbourhood recompute is the
 the idea's Connections say when the AI last read its text and whether the text changed since, with **Read again**.
 
 **The ontology as data.** `rules/ontology.yaml` (written by `init`) is what each kind of star is (label, colour,
-description) and what each link means (from, to, meaning, inverse, derived). The app applies it over the built-in
-ontology, so the panels, the universe and the extraction prompt (which tells the AI what each link means, not only
+description) and what each link means (from, to, meaning, inverse, derived). Each build compiles it over the built-in
+ontology into one frozen value of its own and passes that to the rules, the check, the assistant's queries, the
+export and the actions; no table the whole app shares is changed, so two builds running at once (120 at once in the
+tests, two workspaces mixed) each keep their own declarations. The UI keeps its own copy of the labels and colours. So the panels, the universe and the extraction prompt (which tells the AI what each link means, not only
 which kinds it joins) use your words. The schema is open: a name the ontology does not know is a declaration, with no
 code. A new kind needs a name like `Vendor` and a label (colour and description optional; you make and merge its
 stars in the assistant); a new relation needs from, to, a meaning and `derived: true` or `false`. A stated
@@ -747,8 +795,13 @@ that settles each) and the AI links confirmed below the confidence threshold; `-
 unscoped edit is stamped with the ideas that confirm it (or the one idea that needs its capability; when two or more
 could and none confirms, it is left for you with `--stamp op-9=CAFE-2026-006[,…]`), the edit keeping its id and date
 (`stamped` records when); an AI link confirmed on arrival below the threshold goes back to waiting for your Do it; a
-derived relation stored by hand is switched off (undone, kept in the log); the rules' scopes are written out. It
-prints the derived links that would come, go or wait on an unconfirmed link.
+derived relation stored by hand is switched off (undone, kept in the log); the rules' scopes are written out; an AI
+link whose source names a field its passage is not in gets the field it is in (by its quoted passage, or, for a link
+read before passages were kept, by the star's name in the text: 14 in the practice workspace, the rules spreadsheet
+among them, said `challenge` and is in the additional context). It prints the derived links that would come, go or
+wait on an unconfirmed link. What it never decides alone, it lists with the command: a stale edit (its star is gone)
+with the stars it could point to, `--repoint op-2=capability:document-text-extraction` or `--retire op-2` (switched
+off, kept in the log); an AI link that says you confirmed it with no Do it recorded, `--confirm line-12`.
 
 **Export** writes the graph, or one idea and what it touches, as JSON-LD; the assistant's "export graph [idea]" does
 the same, and routing an idea to CSIC writes its corner of the graph as `csic-handoff.jsonld` beside
@@ -757,7 +810,13 @@ in the default graph and a plain SPARQL query finds the stars. Each star is a re
 properties; each link is also a `cafe:Link` resource whose ends are node IRIs, with its source, confidence, confirmed
 and `statedFor` (the ideas); a derived link has `prov:wasGeneratedBy` its rule (a `prov:Activity`) and
 `prov:wasDerivedFrom` the links it rests on, other ways as `cafe:alternative`; the `cafe:export` node has the scope and
-`prov:generatedAtTime`. The export is local and holds people's names as the files do.
+`prov:generatedAtTime`. An AI link also carries the passage it was read in (`cafe:quote`, checked against the idea's
+text: `cafe:quoteFound`) and when (`cafe:readAt`); a link read before passages were kept has neither, and says so in
+the assistant. A plain triple is a confirmed fact: a link waiting for your Do it, and anything derived from one, is
+only a `cafe:Link` with `cafe:confirmed false`. SIMILAR_TO is `owl:SymmetricProperty` and written both ways. A star's
+other names are `skos:altLabel`, so `?s rdfs:label|skos:altLabel "T&E policy"` finds the Travel & Expense policy.
+`docs/sparql-examples.rq` has the queries a newcomer writes first, each with the app's answer on the practice
+workspace beside it; a test runs them. The export is local and holds people's names as the files do.
 
 **The schema comes with the data.** Beside every export the app writes `<stamp>-vocabulary.ttl`, an RDFS vocabulary
 (a class per kind, a property per relation with `rdfs:domain`, `rdfs:range`, label and the meaning as comment, the

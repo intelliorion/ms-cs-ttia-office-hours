@@ -21,7 +21,7 @@ const links: AiLink[] = [
   ai({ from: 'capability:document-text-extraction', rel: 'USES_DATA', to: 'system:email', idea: 'CAFE-2026-007' }),
 ];
 const graph = buildGraph(ideas, links);
-const PREFIX = 'PREFIX c: <https://creators-cafe.local/ontology#> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX prov: <http://www.w3.org/ns/prov#>';
+const PREFIX = 'PREFIX c: <https://example.invalid/creators-cafe/ontology#> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX prov: <http://www.w3.org/ns/prov#>';
 
 async function store(doc: object) {
   const nq: string = await jsonld.toRDF(doc, { format: 'application/n-quads', safe: true });
@@ -58,14 +58,14 @@ describe('the JSON-LD export as RDF: the default graph, IRIs for provenance, PRO
   });
   it('a hand-off\'s NetworkX analysis is one Analysis node with a JSON literal: in the default graph, never triples about the stars', async () => {
     const doc = exportJsonLd(subgraphOf(graph, 'CAFE-2026-007'), { kind: 'idea', id: 'CAFE-2026-007' });
-    doc['@graph'].push(analysisNode('network', 'NetworkX network analysis (analysis, not stored facts)', { kind: 'analysis', cluster: { otherIdeas: [{ '@id': 'cafe:idea:CAFE-2026-042' }] } }));
+    doc['@graph'].push(analysisNode('network', 'NetworkX network analysis (analysis, not stored facts)', { kind: 'analysis', cluster: { otherIdeas: [{ '@id': 'star:idea:CAFE-2026-042' }] } }));
     const { q } = await store(doc);
     expect(q('SELECT (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } }')[0].get('n').value).toBe('0');
     const lit = q('SELECT ?c WHERE { ?a a c:Analysis ; c:content ?c }');
     expect(lit).toHaveLength(1);
     expect(lit[0].get('c').datatype.value).toBe('http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON');
     // The idea the analysis names is no fact: nothing links to it.
-    expect(q('SELECT ?p WHERE { ?s ?p <https://creators-cafe.local/ontology#idea:CAFE-2026-042> }')).toHaveLength(0);
+    expect(q('SELECT ?p WHERE { ?s ?p <https://example.invalid/creators-cafe/id/idea:CAFE-2026-042> }')).toHaveLength(0);
     expect(q('SELECT ?s WHERE { ?e c:exportScope "CAFE-2026-007" }')).toHaveLength(1);
   });
   it('round-trips through the JSON, derived ways and stated ideas included', () => {

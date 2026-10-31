@@ -9,7 +9,7 @@ import { withTick } from '../checklist/checklist';
 import { suggestion, type StageTarget, type Suggest } from '../ideas/suggest';
 import type { StepDef } from '../rules/stages';
 import { rebuildGraph } from '../graph/store';
-import { analysisNode, exportJsonLd, subgraphOf } from '../graph/jsonld';
+import { analysisNode, exportBase, exportJsonLd, starIri, subgraphOf } from '../graph/jsonld';
 import { ideaNetwork, type IdeaNetwork } from '../graph/network';
 
 export const CRITERIA = [
@@ -123,7 +123,7 @@ export async function saveReview(
     // The idea's corner of the knowledge graph, for the CSIC Repository's own tools, beside the draft.
     const graph = await rebuildGraph(root);
     // With it, what NetworkX finds about the idea across the programme: analysis, labelled as such, apart from the stored facts.
-    const doc = exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`);
+    const doc = exportJsonLd(subgraphOf(graph, idea.id), { kind: 'idea', id: idea.id }, `${today}T00:00:00.000Z`, await exportBase(root));
     const analysis = analysisNode('network', 'NetworkX network analysis (analysis, not stored facts)', handoffNetwork(await ideaNetwork(graph, idea.id)));
     await writeFileAtomic(path.join(dir, 'csic-handoff.jsonld'), JSON.stringify({ ...doc, '@graph': [...doc['@graph'], analysis] }, null, 1));
   }
@@ -144,8 +144,8 @@ export function handoffNetwork(n: IdeaNetwork): Record<string, unknown> {
   if (!n.available) return { kind: 'analysis', note, unavailable: n.reason };
   return {
     kind: 'analysis', note, by: `NetworkX ${n.networkx}`, scope: n.scope,
-    cluster: n.cluster ? { otherIdeas: n.cluster.others.map((x) => ({ '@id': `cafe:${x.id}`, label: x.label })), boundBy: n.cluster.boundBy.map((b) => ({ '@id': `cafe:${b.id}`, '@type': b.type, label: b.label, ideas: b.ideas })) } : null,
-    centrality: n.centrality.map((c) => ({ '@id': `cafe:${c.id}`, '@type': c.type, label: c.label, measure: 'betweenness centrality', score: c.betweenness, rank: c.rank, of: c.of, ideas: c.ideas })),
-    likelyMissingLinks: n.suggestions.map((x) => ({ rel: x.rel, to: { '@id': `cafe:${x.to.id}`, '@type': x.to.type, label: x.to.label }, share: x.share, adamicAdar: x.adamicAdar, jaccard: x.jaccard, peers: x.peers.map((p) => p.label), status: 'suggestion, not applied' })),
+    cluster: n.cluster ? { otherIdeas: n.cluster.others.map((x) => ({ '@id': starIri(x.id), label: x.label })), boundBy: n.cluster.boundBy.map((b) => ({ '@id': starIri(b.id), '@type': b.type, label: b.label, ideas: b.ideas })) } : null,
+    centrality: n.centrality.map((c) => ({ '@id': starIri(c.id), '@type': c.type, label: c.label, measure: 'betweenness centrality', score: c.betweenness, rank: c.rank, of: c.of, ideas: c.ideas })),
+    likelyMissingLinks: n.suggestions.map((x) => ({ rel: x.rel, to: { '@id': starIri(x.to.id), '@type': x.to.type, label: x.to.label }, share: x.share, adamicAdar: x.adamicAdar, jaccard: x.jaccard, peers: x.peers.map((p) => p.label), status: 'suggestion, not applied' })),
   };
 }

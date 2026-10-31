@@ -140,14 +140,14 @@ describe('JSON-LD export', () => {
     expect(doc['@context'].NEEDS).toEqual({ '@id': `${CAFE_VOCAB}NEEDS`, '@type': '@id' });
     expect(doc['@context'].Idea).toBe(`${CAFE_VOCAB}Idea`);
     expect(exportInfo(doc).scope).toBe('all');
-    const idea = doc['@graph'].find((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-004')!;
+    const idea = doc['@graph'].find((n: any) => n['@id'] === 'star:idea:CAFE-2026-004')!;
     expect(idea['@type']).toBe('Idea'); expect(idea.label).toBe('Expense anomaly finder');
-    expect(idea.NEEDS).toEqual([{ '@id': 'cafe:capability:duplicate-claim-spotting' }]);
-    expect(idea.USES).toEqual([{ '@id': 'cafe:tool:dataiku' }]);
+    expect(idea.NEEDS).toEqual([{ '@id': 'star:capability:duplicate-claim-spotting' }]);
+    expect(idea.USES).toEqual([{ '@id': 'star:tool:dataiku' }]);
     // Every link is a Link resource too, its ends IRIs, a derived one saying how in PROV-O.
     expect(doc['@graph'].find((l: any) => l['@type'] === 'Link' && l.rel === 'USES')).toMatchObject({
-      from: 'cafe:idea:CAFE-2026-004', to: 'cafe:tool:dataiku', source: 'rule:needs+built_with', wasGeneratedBy: 'cafe:rule/needs%2Bbuilt_with',
-      wasDerivedFrom: ['cafe:link/idea%3ACAFE-2026-004%7CNEEDS%7Ccapability%3Aduplicate-claim-spotting', 'cafe:link/capability%3Aduplicate-claim-spotting%7CBUILT_WITH%7Ctool%3Adataiku'],
+      from: 'star:idea:CAFE-2026-004', to: 'star:tool:dataiku', source: 'rule:needs+built_with', wasGeneratedBy: 'star:rule/needs%2Bbuilt_with',
+      wasDerivedFrom: ['star:link/idea%3ACAFE-2026-004%7CNEEDS%7Ccapability%3Aduplicate-claim-spotting', 'star:link/capability%3Aduplicate-claim-spotting%7CBUILT_WITH%7Ctool%3Adataiku'],
     });
     const back = fromJsonLd(doc);
     expect(back.nodes).toEqual(graph.nodes);
@@ -173,7 +173,7 @@ describe('JSON-LD export', () => {
     const file = await writeExport(root, { kind: 'idea', id: 'CAFE-2026-004' }, fixedClock('2026-10-26'));
     expect(file).toMatch(/data\/exports\/20261026-\d{6}-CAFE-2026-004\.jsonld$/);
     const doc = JSON.parse(await readFile(file, 'utf8'));
-    expect(doc['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-004')).toBe(true);
+    expect(doc['@graph'].some((n: any) => n['@id'] === 'star:idea:CAFE-2026-004')).toBe(true);
     const all = await writeExport(root, { kind: 'all' }, fixedClock('2026-10-26'));
     expect(all).toMatch(/-all\.jsonld$/);
     expect((await readdir(paths(root).exports)).filter((f) => f.endsWith('.jsonld'))).toHaveLength(2);
@@ -181,7 +181,7 @@ describe('JSON-LD export', () => {
     const dir = await ideaDir(root, 'CAFE-2026-004');
     const handoff = JSON.parse(await readFile(path.join(dir, 'csic-handoff.jsonld'), 'utf8'));
     expect(exportInfo(handoff).scope).toBe('CAFE-2026-004');
-    expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:tool:dataiku')).toBe(true);
-    expect(handoff['@graph'].some((n: any) => n['@id'] === 'cafe:idea:CAFE-2026-006')).toBe(false);
+    expect(handoff['@graph'].some((n: any) => n['@id'] === 'star:tool:dataiku')).toBe(true);
+    expect(handoff['@graph'].some((n: any) => n['@id'] === 'star:idea:CAFE-2026-006')).toBe(false);
   });
 });

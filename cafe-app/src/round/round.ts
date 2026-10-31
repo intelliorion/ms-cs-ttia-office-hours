@@ -38,6 +38,8 @@ export interface Settings {
   graph?: { confirmAt?: number };
   /** The assistant: the most time one answer may take, every step and AI call included (seconds; default 90). */
   assistant?: { deadlineSeconds?: number };
+  /** The RDF export: the base IRI of the vocabulary (<base>ontology#) and of the stars (<base>id/); default https://example.invalid/creators-cafe/. */
+  export?: { base?: string };
 }
 
 export type AiChoice = 'auto' | 'claude' | 'copilot' | 'vscode' | 'none';

@@ -600,6 +600,89 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
     </figure>
   </section>
   <section>
+    <h3>How the engine builds the graph, one idea end to end</h3>
+    <p class="talk">The engine rebuilds the whole graph from files on every read, in five steps, in a fixed order, in milliseconds. NetworkX takes no part in it.</p>
+    <p>Figure 4 follows one real idea, the Travel policy assistant, through the build. Every example in it is a link in the practice workspace today, with the source the graph records for it.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 640" role="img" aria-label="Figure 4. How the engine builds the graph, shown on the Travel policy assistant. Step 1, forms: the record gives Lucía Fernández submitted Travel policy assistant, and GSS has member Lucía Fernández. Step 2, AI links: the AI read the idea's text and found it needs Document text extraction, and that Document text extraction uses data from the Travel and Expense policy; each is checked against the ontology and the confidence threshold. Step 3, the operator's edits: for example the merge of T and E policy into Travel and Expense policy. Throughout steps 1 to 3 the registry gives one star per real thing. Step 4, the rules derive facts nobody wrote, with reasons: Travel policy assistant depends on the Travel and Expense policy, GSS owns Travel policy assistant, it uses Copilot Studio, and it is similar to Procurement FAQ bot. Step 5, the ontology check lists anything wrong. The graph then goes to the universe, the assistant, the stages, and as a copy to NetworkX." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a4b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        </defs>
+        <g font-family="IBM Plex Mono, Menlo, monospace" font-size="11" letter-spacing="1" fill="currentColor" opacity="0.65">
+          <text x="96" y="22">STEP · FILE</text>
+          <text x="330" y="22">WHAT IT ADDS</text>
+          <text x="640" y="22">EXAMPLE: TRAVEL POLICY ASSISTANT</text>
+        </g>
+
+        <!-- registry bar spanning steps 1-3 -->
+        <rect x="20" y="34" width="56" height="292" rx="8" class="f-kg l-kg" stroke-width="1.5"/>
+        <text transform="translate(54,180) rotate(-90)" text-anchor="middle" font-weight="600" class="t-kg">Registry: one name per thing</text>
+
+        <!-- step 1 forms -->
+        <rect x="88" y="34" width="992" height="84" rx="8" class="f-pg l-pg" stroke-width="1.5"/>
+        <text x="104" y="60" font-weight="600" class="t-pg">1 · Forms</text>
+        <text x="104" y="82" fill="currentColor" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.8">ideas/*/idea.yaml</text>
+        <g fill="currentColor"><text x="330" y="60">typed facts as people stated them</text><text x="330" y="82">confidence 1, the form column as source</text></g>
+        <g fill="currentColor"><text x="640" y="60">Lucía Fernández submitted Travel policy assistant</text><text x="640" y="82">GSS has member Lucía Fernández</text><text x="640" y="104" opacity="0.7">source: the form's Submitter and CS Function</text></g>
+        <path d="M584,118 L584,138" stroke="currentColor" stroke-width="1.5" marker-end="url(#a4b)"/>
+
+        <!-- step 2 AI links -->
+        <rect x="88" y="140" width="992" height="84" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="104" y="166" font-weight="600" fill="currentColor">2 · AI links</text>
+        <text x="104" y="188" fill="currentColor" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.8">graph/ai-links.jsonl</text>
+        <g fill="currentColor"><text x="330" y="166">what the AI read in the free text</text><text x="330" y="188">checked: ontology types, quote,</text><text x="330" y="208">confidence; low ones wait for Do it</text></g>
+        <g fill="currentColor"><text x="640" y="166">Travel policy assistant needs Document text extraction</text><text x="640" y="188">Document text extraction uses data from the T&amp;E policy</text><text x="640" y="210" opacity="0.7">source: the AI's read of the idea</text></g>
+        <path d="M584,224 L584,244" stroke="currentColor" stroke-width="1.5" marker-end="url(#a4b)"/>
+
+        <!-- step 3 operator edits -->
+        <rect x="88" y="246" width="992" height="80" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="104" y="272" font-weight="600" fill="currentColor">3 · The operator's edits</text>
+        <text x="104" y="294" fill="currentColor" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.8">graph/operator.jsonl</text>
+        <g fill="currentColor"><text x="330" y="272">links, unlinks, renames, aliases, merges</text><text x="330" y="294">replayed in order; bad ones refused</text></g>
+        <g fill="currentColor"><text x="640" y="272">merge "T&amp;E policy" into "Travel &amp; Expense policy"</text><text x="640" y="294">and keep "T&amp;E policy" as its alias</text><text x="640" y="314" opacity="0.7">source: the operator's edit op-7, 26 October</text></g>
+        <path d="M584,326 L584,350" stroke="currentColor" stroke-width="1.5" marker-end="url(#a4b)"/>
+
+        <!-- step 4 rules -->
+        <rect x="20" y="352" width="1060" height="108" rx="8" class="f-kg l-kg" stroke-width="2"/>
+        <text x="36" y="378" font-weight="600" class="t-kg">4 · Rules, last</text>
+        <text x="36" y="400" fill="currentColor" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.8">rules/inference.yaml</text>
+        <g fill="currentColor"><text x="330" y="378">facts nobody wrote, each with</text><text x="330" y="400">the rule and the facts behind it;</text><text x="330" y="422">never stored, recomputed every build</text></g>
+        <g fill="currentColor"><text x="640" y="378">depends on Travel &amp; Expense policy · needs + uses data</text><text x="640" y="400">GSS owns it · member + submitted</text><text x="640" y="422">uses Copilot Studio · needs + built with</text><text x="640" y="444">similar to Procurement FAQ bot · 2+ shared stars</text></g>
+        <path d="M584,460 L584,484" stroke="currentColor" stroke-width="1.5" marker-end="url(#a4b)"/>
+
+        <!-- step 5 check -->
+        <rect x="20" y="486" width="1060" height="52" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="36" y="517" font-weight="600" fill="currentColor">5 · Ontology check</text>
+        <text x="330" y="517" fill="currentColor">anything that breaks rules/ontology.yaml is listed as a problem and shown in a banner, never silently kept</text>
+        <path d="M584,538 L584,562" stroke="currentColor" stroke-width="1.5" marker-end="url(#a4b)"/>
+
+        <!-- outputs -->
+        <rect x="20" y="564" width="1060" height="52" rx="8" class="f-panel" stroke="currentColor" stroke-opacity="0.6" stroke-dasharray="4 3"/>
+        <text x="550" y="595" text-anchor="middle" fill="currentColor">the graph · to the universe, the assistant, decision and design, the RDF export, and a read-only copy to NetworkX</text>
+      </svg>
+      </div>
+      <figcaption><b>Figure 4. How the engine builds the graph.</b> One real idea through the five steps. The forms give the stated facts. The AI adds what it read, checked before it gets in. The operator's edits are replayed. The registry keeps one star per real thing throughout. The rules run last and add facts nobody wrote, each with its reasons. The check lists anything wrong.</figcaption>
+      <div class="legend">
+        <span><i class="sw pg"></i> stated by the form</span>
+        <span><i class="sw plain"></i> read by the AI, or edited by the operator</span>
+        <span><i class="sw kg"></i> the engine's meaning: registry and rules</span>
+      </div>
+    </figure>
+  </section>
+  <section>
+    <ol>
+      <li><strong>Forms.</strong> Each idea's record becomes typed stars and links: the idea, its submitter, the team, the people and their roles, and the form's choices. These are the facts as people stated them, each naming the form column it came from.</li>
+      <li><strong>AI links.</strong> The AI reads the free text and the emails and proposes links. Each is checked before it gets in: its types must fit the ontology, its quoted passage must be in the field it names, and anything below the confidence threshold waits for the operator's Do it.</li>
+      <li><strong>The operator's edits.</strong> Links added or removed, renames, aliases and merges are replayed in the order they were made. An edit that would break the rules is refused and reported.</li>
+      <li><strong>One name per thing.</strong> Throughout the first three steps, every name passes through the registry before a star is created. That is why "T&amp;E policy", "travel policy" and "Travel &amp; Expense policy" are one star.</li>
+      <li><strong>Rules, last.</strong> The inference rules run over everything above and add the facts nobody wrote, each with the rule and the facts behind it. Then the ontology check lists anything wrong.</li>
+    </ol>
+    <p>Two choices make it trustworthy. Derived facts are never stored, only recomputed, so fixing one wrong fact fixes every conclusion drawn from it. And each source keeps its own file, so it is always clear who said what, and any layer can be rebuilt on its own. The detail of each layer follows.</p>
+  </section>
+  <section>
     <h3><span class="lane-tag pg">Layer 1</span> The property graph: facts as stated</h3>
     <p>Every idea folder contributes a bundle of stars and links that is a pure function of its record: the idea star with its stage, function and region; a star for the submitter with a <code>SUBMITTED</code> link; one link per role for each team member (<code>LEADS</code>, <code>SPONSORS</code>, <code>BUILDS</code>, or plain <code>RELATED</code>); the team and division; the support asked for; and the form's choice columns, so two ideas that picked the same desired outcome share one star. There are thirteen kinds of star and twenty-one kinds of link in the built-in ontology (<code>KIND_OF</code> among them: a mailbox is a kind of email system), of which four are derived; a workspace may declare more. Each form link has confidence 1, is confirmed, and names the form column it came from. This layer is cheap and certain, and it is already enough for counts, lists, "who leads this" and "which stage is it at".</p>
     <h3><span class="lane-tag kg">Layer 2</span> The knowledge graph: meaning, kept as data</h3>
@@ -630,7 +713,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
   <section class="wide">
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1100 620" role="img" aria-label="Figure 4. The three stages. Review and Select: the AI suggests a decision from the form, every email answer, the builder, attendance, flags and the idea's stars; five criteria are suggested and ticked; the decision card offers Select, Reuse, CSIC, Not now or Ask, and a CSIC route writes a hand-off markdown and a JSON-LD subgraph. The design series: understand the data with masked columns kept masked, features and a tool where the pick writes BUILT_WITH links and USES is derived, a brainstorm whose answers are saved, and plan.md with starter kits but never application code. Launch and Learn: photos never sent to the AI, a to-do list of only what the record lacks, and a deck written as a checked structure of six to sixteen slides from which code removes value claims and unknown figures. Below them, the knowledge graph and Deep read: the decision reads the idea's stars and how many other ideas need each; the design writes tool picks into the graph; the roadshow writes answers into the record, which upkeep re-reads." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+      <svg viewBox="0 0 1100 620" role="img" aria-label="Figure 5. The three stages. Review and Select: the AI suggests a decision from the form, every email answer, the builder, attendance, flags and the idea's stars; five criteria are suggested and ticked; the decision card offers Select, Reuse, CSIC, Not now or Ask, and a CSIC route writes a hand-off markdown and a JSON-LD subgraph. The design series: understand the data with masked columns kept masked, features and a tool where the pick writes BUILT_WITH links and USES is derived, a brainstorm whose answers are saved, and plan.md with starter kits but never application code. Launch and Learn: photos never sent to the AI, a to-do list of only what the record lacks, and a deck written as a checked structure of six to sixteen slides from which code removes value claims and unknown figures. Below them, the knowledge graph and Deep read: the decision reads the idea's stars and how many other ideas need each; the design writes tool picks into the graph; the roadshow writes answers into the record, which upkeep re-reads." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
         <defs>
           <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="a4k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-kg"/></marker>
@@ -737,7 +820,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         </g>
       </svg>
       </div>
-      <figcaption><b>Figure 4. Decision, design, roadshow.</b> Three columns, one pattern: gather, code the names, ask, check in code, show, save on a click. The decision reads the graph. The design writes to it. The roadshow writes to the record, which Deep read reads. The CSIC hand-off, written at the decision, is the idea's subgraph in JSON-LD.</figcaption>
+      <figcaption><b>Figure 5. Decision, design, roadshow.</b> Three columns, one pattern: gather, code the names, ask, check in code, show, save on a click. The decision reads the graph. The design writes to it. The roadshow writes to the record, which Deep read reads. The CSIC hand-off, written at the decision, is the idea's subgraph in JSON-LD.</figcaption>
       <div class="legend">
         <span><i class="sw plain"></i> a step</span>
         <span><i class="sw pg"></i> the human decides</span>
@@ -829,12 +912,12 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
   </section>
   <section>
     <h3>How NetworkX works inside the app, in four steps</h3>
-    <p>NetworkX is a Python library that holds a graph in memory and runs well-known algorithms over it. It knows nothing about ideas, capabilities or the Café. The app does the knowing: it builds the graph, decides which links are trustworthy enough to analyse, and turns NetworkX's numbers back into sentences the operator can act on. Figure 5 shows the round trip. It takes well under a second on the practice workspace, and the result is cached until the graph changes.</p>
+    <p>NetworkX is a Python library that holds a graph in memory and runs well-known algorithms over it. It knows nothing about ideas, capabilities or the Café. The app does the knowing: it builds the graph, decides which links are trustworthy enough to analyse, and turns NetworkX's numbers back into sentences the operator can act on. Figure 6 shows the round trip. It takes well under a second on the practice workspace, and the result is cached until the graph changes.</p>
   </section>
   <section class="wide">
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 5. How NetworkX works in the app. Step 1, the app's own engine builds the graph from forms, AI links and operator edits. Step 2, it hands NetworkX a clean copy: stored facts only, form choices left out, confirmed links only for suggestions. Step 3, Python runs the vendored NetworkX with nothing else installed and computes centrality, clusters, paths, components, link prediction and cycles. Step 4, the result comes back as checked JSON and is cached. It then feeds the assistant, the Network panel, the decision, design and the CSIC hand-off. NetworkX never writes the graph: a suggested link becomes a proposal, and only the operator's Do it puts it into the graph." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 6. How NetworkX works in the app. Step 1, the app's own engine builds the graph from forms, AI links and operator edits. Step 2, it hands NetworkX a clean copy: stored facts only, form choices left out, confirmed links only for suggestions. Step 3, Python runs the vendored NetworkX with nothing else installed and computes centrality, clusters, paths, components, link prediction and cycles. Step 4, the result comes back as checked JSON and is cached. It then feeds the assistant, the Network panel, the decision, design and the CSIC hand-off. NetworkX never writes the graph: a suggested link becomes a proposal, and only the operator's Do it puts it into the graph." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
         <defs>
           <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
         </defs>
@@ -913,7 +996,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         <text x="20" y="532" fill="currentColor" opacity="0.8">The operator's Do it is the single gate, as for every other change.</text>
       </svg>
       </div>
-      <figcaption><b>Figure 5. How NetworkX works in the app.</b> Our engine builds the graph and keeps every fact's source. A clean copy goes to NetworkX, which runs inside the repo with nothing installed. Its answer comes back as checked, cached JSON and feeds five places, all read-only. A suggested link can only return to the graph as a proposal the operator accepts.</figcaption>
+      <figcaption><b>Figure 6. How NetworkX works in the app.</b> Our engine builds the graph and keeps every fact's source. A clean copy goes to NetworkX, which runs inside the repo with nothing installed. Its answer comes back as checked, cached JSON and feeds five places, all read-only. A suggested link can only return to the graph as a proposal the operator accepts.</figcaption>
       <div class="legend">
         <span><i class="sw kg"></i> our engine</span>
         <span><i class="sw dr"></i> NetworkX</span>
@@ -925,12 +1008,12 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
 
   <section>
     <h3>What NetworkX sees in the practice workspace</h3>
-    <p>Figure 6 is a simplified slice of the real graph: the seven ideas and the two capabilities NetworkX ranks highest. Four ideas need Request handling. Five need Document text extraction, and two of those five also sit in the first group. Those two capabilities are the bridges: most shortest paths between ideas pass through one of them. That is exactly what betweenness centrality measures, and it is why they top the ranking.</p>
+    <p>Figure 7 is a simplified slice of the real graph: the seven ideas and the two capabilities NetworkX ranks highest. Four ideas need Request handling. Five need Document text extraction, and two of those five also sit in the first group. Those two capabilities are the bridges: most shortest paths between ideas pass through one of them. That is exactly what betweenness centrality measures, and it is why they top the ranking.</p>
   </section>
   <section class="wide">
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1100 430" role="img" aria-label="Figure 6. What NetworkX sees. On the left, four ideas need Request handling: Desk booking assistant, Expense anomaly finder, Travel policy assistant and Procurement FAQ bot. On the right, three ideas need Document text extraction: Vendor contract summariser, Onboarding checklist helper and Meeting notes to actions. Travel policy assistant and Procurement FAQ bot also need Document text extraction, so that capability bridges the two sides. Betweenness: Request handling 0.30, Document text extraction 0.27. Modularity of the two groups is 0.20, below 0.3, so the app reports no clear groups." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+      <svg viewBox="0 0 1100 430" role="img" aria-label="Figure 7. What NetworkX sees. On the left, four ideas need Request handling: Desk booking assistant, Expense anomaly finder, Travel policy assistant and Procurement FAQ bot. On the right, three ideas need Document text extraction: Vendor contract summariser, Onboarding checklist helper and Meeting notes to actions. Travel policy assistant and Procurement FAQ bot also need Document text extraction, so that capability bridges the two sides. Betweenness: Request handling 0.30, Document text extraction 0.27. Modularity of the two groups is 0.20, below 0.3, so the app reports no clear groups." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
         <g font-family="IBM Plex Mono, Menlo, monospace" font-size="11" letter-spacing="1" fill="currentColor" opacity="0.65">
           <text x="40" y="24">TENTATIVE GROUP A</text>
           <text x="870" y="24">TENTATIVE GROUP B</text>
@@ -986,7 +1069,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         <text x="550" y="400" text-anchor="middle" fill="currentColor">Louvain modularity 0.20, below 0.3: the app says "no clear groups", and shows A and B only as tentative.</text>
       </svg>
       </div>
-      <figcaption><b>Figure 6. What NetworkX sees.</b> A simplified slice of the practice workspace, 31 October. Request handling joins four ideas. Document text extraction joins five, and reaches into both tentative groups, so it bridges them. Betweenness centrality picks out exactly these two. The grouping is too weak to call real, and the app says so.</figcaption>
+      <figcaption><b>Figure 7. What NetworkX sees.</b> A simplified slice of the practice workspace, 31 October. Request handling joins four ideas. Document text extraction joins five, and reaches into both tentative groups, so it bridges them. Betweenness centrality picks out exactly these two. The grouping is too weak to call real, and the app says so.</figcaption>
       <div class="legend">
         <span><i class="sw plain"></i> idea</span>
         <span><i class="sw kg"></i> capability, Request handling</span>
@@ -1116,7 +1199,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
   <section class="wide">
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 7. Today and at firm scale, side by side. On the left, the laptop: the browser, the Node process with the AI connector, name coding, schema check, Do it, graph build, registry, rules, ontology check, Deep read, assistant and three stages, then the workspace files behind four writers and the local AI command lines. On the right, the firm version: the same browser and the same Node process, marked unchanged; one arrow now goes from the four writers through a store adapter to Postgres or Snowflake, and one arrow goes from the connector through a new provider file to the Firm AI Gateway over HTTPS. Only those two arrows are labelled as changes." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 8. Today and at firm scale, side by side. On the left, the laptop: the browser, the Node process with the AI connector, name coding, schema check, Do it, graph build, registry, rules, ontology check, Deep read, assistant and three stages, then the workspace files behind four writers and the local AI command lines. On the right, the firm version: the same browser and the same Node process, marked unchanged; one arrow now goes from the four writers through a store adapter to Postgres or Snowflake, and one arrow goes from the connector through a new provider file to the Firm AI Gateway over HTTPS. Only those two arrows are labelled as changes." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
         <defs>
           <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="a5f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-fut"/></marker>
@@ -1196,7 +1279,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         </g>
       </svg>
       </div>
-      <figcaption><b>Figure 7. Today and at firm scale.</b> The right-hand stack is the left-hand stack. The browser and the process are marked unchanged because they are: the stages call the connector and the stores, never a provider or a file path. The two arrows that change are a store adapter behind the four writers and one more provider file on the existing interface.</figcaption>
+      <figcaption><b>Figure 8. Today and at firm scale.</b> The right-hand stack is the left-hand stack. The browser and the process are marked unchanged because they are: the stages call the connector and the stores, never a provider or a file path. The two arrows that change are a store adapter behind the four writers and one more provider file on the existing interface.</figcaption>
       <div class="legend">
         <span><i class="sw plain"></i> built today</span>
         <span><i class="sw pg"></i> unchanged at firm scale</span>

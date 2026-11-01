@@ -225,6 +225,23 @@ under one base URL), a manual import (`cafe model import <folder-or-zip>`) and a
 three ways in. The scale page (x-ray.html, section 9) says the same: the gateway path does not change where the
 model comes from.
 
+### How the engine builds the graph, one idea end to end
+
+The engine rebuilds the whole graph from files on every read, in five steps, in a fixed order, in milliseconds.
+NetworkX takes no part in it. Figure 4 in the full page follows the Travel policy assistant through the build.
+
+| Step | File | What it adds | Example: Travel policy assistant |
+|---|---|---|---|
+| 1. Forms | `ideas/*/idea.yaml` | Typed facts as people stated them, each naming its form column | Lucía Fernández submitted it; GSS has member Lucía Fernández |
+| 2. AI links | `graph/ai-links.jsonl` | What the AI read in the free text, checked for ontology types, quote and confidence; low ones wait for Do it | It needs Document text extraction; Document text extraction uses data from the T&E policy |
+| 3. Operator edits | `graph/operator.jsonl` | Links, unlinks, renames, aliases and merges, replayed in order; bad ones refused | "T&E policy" merged into "Travel & Expense policy" and kept as its alias |
+| Throughout 1 to 3 | `rules/entities.yaml` | The registry: one star per real thing | "T&E policy", "travel policy" and "Travel & Expense policy" are one star |
+| 4. Rules, last | `rules/inference.yaml` | Facts nobody wrote, each with its rule and inputs; never stored | Depends on the Travel & Expense policy; GSS owns it; uses Copilot Studio; similar to Procurement FAQ bot |
+| 5. Check | `rules/ontology.yaml` | Anything wrong is listed and shown in a banner, never silently kept | |
+
+Derived facts are never stored, only recomputed, so fixing one wrong fact fixes every conclusion drawn from it. Each
+source keeps its own file, so it is always clear who said what.
+
 ## 6. The three stages: decision, design, roadshow
 
 An idea moves through Review and Select, the Design series, and Launch and Learn. At each stage the AI reads what
@@ -319,7 +336,7 @@ did all three would be harder to trust and impossible to explain line by line.
 The challenge was "why not NetworkX". The answer now is both, each doing what it is best at: **the app builds the
 graph, NetworkX analyses it.**
 
-How it works, in four steps (Figure 5 in the full page):
+How it works, in four steps (Figure 6 in the full page):
 
 ```mermaid
 flowchart LR

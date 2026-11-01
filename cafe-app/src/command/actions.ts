@@ -276,8 +276,10 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       proposals.push(...checked.proposals);
     } else if (s.op === 'role') {
       const a = star(s.a); const b = star(s.b);
-      // A person not yet in the graph comes by name: the same person if the name matches one, else a new one.
-      const typed = !a && s.name?.trim() ? s.name.trim().replace(/\s+/g, ' ') : '';
+      // A person not yet in the graph comes by name: the same person if the name matches one, else a new one. A name
+      // the model wrote in a instead of name is taken as the name.
+      const typedIn = s.name?.trim() || (!a && s.a && /\s/.test(s.a.trim()) ? s.a.trim() : '');
+      const typed = !a && typedIn ? typedIn.replace(/\s+/g, ' ') : '';
       const same = typed ? ctx.graph.nodes.find((n) => n.type === 'Person' && n.label.toLowerCase() === typed.toLowerCase()) : undefined;
       const person = a ?? same ?? (typed.split(' ').length >= 2 ? typed : undefined);
       if (!person || !b || (typeof person !== 'string' && person.type !== 'Person') || b.type !== 'Idea' || !s.role) {

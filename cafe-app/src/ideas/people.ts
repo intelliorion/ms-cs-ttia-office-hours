@@ -13,6 +13,24 @@ export function cleanRoles(roles: readonly PersonRole[]): PersonRole[] {
 }
 
 /**
+ * "Name One, Name Two, Name Three" in one part is three people when every piece is a full name (two words or more,
+ * brackets aside); "Hao, Johnny" stays one person, last name first, and a comma inside brackets is never a split.
+ */
+export function commaNames(part: string): string[] {
+  const pieces: string[] = []; let depth = 0; let at = 0;
+  for (let i = 0; i < part.length; i++) {
+    const c = part[i];
+    if (c === '(') depth++;
+    else if (c === ')') depth = Math.max(0, depth - 1);
+    else if (c === ',' && depth === 0) { pieces.push(part.slice(at, i)); at = i + 1; }
+  }
+  pieces.push(part.slice(at));
+  const names = pieces.map((p) => p.trim()).filter(Boolean);
+  const words = (p: string) => p.replace(/\([^)]*\)/g, ' ').replace(/^[^:]*:\s*/, '').trim().split(/\s+/).filter(Boolean).length;
+  return names.length > 1 && names.every((p) => words(p) >= 2) ? names : [part];
+}
+
+/**
  * The idea's people as stored now: one entry per person with every role they have. Older records (one `role` per
  * entry, the same person listed twice, a separate `builder` field) come in the same shape.
  */
@@ -23,8 +41,9 @@ export function normalizePeople(raw: unknown): Idea['people'] {
     const name = typeof p?.name === 'string' ? p.name.trim() : '';
     if (!name) continue;
     const roles = [...(Array.isArray(p.roles) ? p.roles : []), ...(isRole(p.role) ? [p.role] : [])] as PersonRole[];
-    team = addPerson(team, {
-      name, roles: roles.length ? roles : ['member'], ...(typeof p.note === 'string' && p.note ? { note: p.note } : {}),
+    // A record imported before names split on commas has "Name One, Name Two" as one person: read as each of them.
+    for (const one of commaNames(name)) team = addPerson(team, {
+      name: one, roles: roles.length ? roles : ['member'], ...(typeof p.note === 'string' && p.note ? { note: p.note } : {}),
       ...(Array.isArray(p.added) ? { added: p.added.filter(isRole) } : {}), ...(p.joined === true ? { joined: true } : {}),
     });
   }

@@ -1654,7 +1654,8 @@ export const ACTIONS_SCHEMA: JsonSchema = {
     type: 'object', additionalProperties: false, required: ['op'],
     properties: {
       op: { type: 'string', enum: COMMAND_OPS },
-      a: CODE, b: CODE,
+      // a takes a person's typed name too when the model puts it there (role); the app reads a non-code a as that name.
+      a: { type: 'string', minLength: 2, maxLength: 60 }, b: CODE,
       // Any relation name: the workspace's ontology (a relation ontology.yaml declares) is checked by the app, per build.
       rel: { type: 'string', minLength: 2, maxLength: 40 },
       role: { type: 'string', enum: COMMAND_ROLES },
@@ -1771,7 +1772,7 @@ export const agentTask: Task<AgentOutput> = {
           '  a query [{"op":"search","match":"current process","last":true}] reads that field from each of their records (records): quote each, per idea.']),
       'Actions (codes without brackets in a, b and ideas):',
       '- link a and b (rel when clear) · unlink a and b · role: person a on idea b as lead, sponsor, member or builder; a person who is not in "stars"',
-      '  goes by name (a full name the operator typed), and is added to the idea · round: put ideas in round b, or a new one by name',
+      '  goes by name (a full name the operator typed, in name with a left out; one role action per person), and is added to the idea · round: put ideas in round b, or a new one by name',
       '  A person written as a code in the message but marked new is still a code: use it as a.',
       '- new_round name · rename star a to name · merge a into b (a is the duplicate) · alias: star a is also known as name (another wording for the same thing) · add_star of type (PainPoint, Capability, System, Support, Outcome, Beneficiary or Category) named name,',
       '  linked to star b · remove_star a with its links (a person: off every team they are on) · grow idea a (read it again and add what it finds) · export: write the graph as a JSON-LD file (idea a and what it touches when a is given, else the whole graph) · stage: a stage move, which the app leaves to',

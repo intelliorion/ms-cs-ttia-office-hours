@@ -1,5 +1,5 @@
 import type { Person, PersonRole } from '../ideas/idea';
-import { addPerson } from '../ideas/people';
+import { addPerson, commaNames } from '../ideas/people';
 
 export type Field =
   | 'title' | 'submitter' | 'function' | 'region' | 'participation' | 'team'
@@ -84,6 +84,7 @@ export function parseTeam(value: string): Person[] {
     .split(/[;\n]+/)
     .map((s) => s.replace(/^#/, '').trim())
     .filter(Boolean)
+    .flatMap(commaNames)
     .map((part) => {
       let text = part; let prefix: string | undefined;
       const pre = ROLE_PREFIX.exec(text);

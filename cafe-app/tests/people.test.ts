@@ -48,3 +48,15 @@ describe('one person, several roles', () => {
     expect(rels).toEqual(['person:person-1 BUILDS', 'person:person-1 LEADS', 'person:person-1 SUBMITTED', 'person:person-2 RELATED']);
   });
 });
+
+describe('several people typed with commas', () => {
+  it('full names split by commas are each a person; a last-name-first name and a comma in brackets are not split', () => {
+    expect(parseTeam('Person One, Person Two, Person Three').map((p) => p.name)).toEqual(['Person One', 'Person Two', 'Person Three']);
+    expect(parseTeam('Hao, Johnny').map((p) => p.name)).toEqual(['Johnny Hao']);
+    expect(parseTeam('Person One (Lead, Builder)')).toEqual([{ name: 'Person One', roles: ['lead', 'builder'], note: 'Lead, Builder' }]);
+  });
+
+  it('a record stored before the split reads as each person', () => {
+    expect(normalizePeople({ team: [{ name: 'Person One, Person Two', roles: ['member'] }] }).team.map((p) => p.name)).toEqual(['Person One', 'Person Two']);
+  });
+});

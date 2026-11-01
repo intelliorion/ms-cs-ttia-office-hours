@@ -71,6 +71,16 @@ describe('the Café assistant: changes', () => {
     expect(entry.problems).toEqual(["An idea and a team can't be linked that way."]);
   });
 
+  it('a new person\'s full name written in a instead of name is still a role, not a failed answer', async () => {
+    const { root, ai } = await setup([(d) => ({
+      next: 'propose', thought: 'Adding three members', reply: 'Adding them.',
+      actions: ['Person Alpha One', 'Person Beta Two', 'Person Gamma Three'].map((a) => ({ op: 'role', a, b: code(d, 'Idea', 'Procurement FAQ bot'), role: 'member' })),
+    })]);
+    const entry = await runCommand(root, 'add Person Alpha One, Person Beta Two and Person Gamma Three as members of the procurement faq bot', ai, clock);
+    expect(entry.problems).toEqual([]);
+    expect(entry.actions.map((a) => a.label)).toEqual(['Person Alpha One', 'Person Beta Two', 'Person Gamma Three'].map((n) => `Make ${n} a team member on Procurement FAQ bot`));
+  });
+
   it('a role, a new round by name, and the app\'s own checks turning bad steps into reasons', async () => {
     const { root, ai } = await setup([(d) => ({
       next: 'propose', thought: 'Working it out', reply: 'You asked for several things.',

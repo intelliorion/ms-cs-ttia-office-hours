@@ -192,8 +192,10 @@ below the confidence threshold counts as confirmed without the operator's Do it,
 (`graph/confirmations.jsonl`), and a pending link never counts as confirmed; an `entities.yaml` id must carry its
 section's kind, and no alias can make a not-approved tool a name of an approved one; a NetworkX suggestion is proposed
 as one only when NetworkX makes it on the graph as it is. Each refusal drops the fact, is named by `cafe ontology
-check` and shown in the app's banner. What it cannot stop: someone who edits two files by hand (an AI link and the
-confirmations) can still forge a confirmation; one edited line cannot. The ontology itself is compiled once per build
+check` and shown in the app's banner. Confirmation is kept per idea, and each link records who confirmed it (the form, the threshold, the
+operator's Do it, or an edit). Each Do it record is signed with a key kept outside the workspace (`~/.cafe-ai/keys/`),
+so editing the files by hand cannot forge one; what it cannot stop is code running as the operator's own account,
+which can read that key. The ontology itself is compiled once per build
 into a frozen value passed down to the rules, the check, the queries and the export, never a table the app shares,
 so builds running at the same time never see each other's. One name is one star:
 the id and the lookup key are one normal form (T&E, T/E, T and E and "Travel & Expenses" are Travel & Expense; people
@@ -340,7 +342,7 @@ How it works, in four steps (Figure 6 in the full page):
 
 ```mermaid
 flowchart LR
-  A["1 · Our engine builds<br/>forms + AI links + operator edits<br/>registry, rules"] --> B["2 · A clean copy<br/>stored facts, no form choices<br/>confirmed links for suggestions"]
+  A["1 · Our engine builds<br/>forms + AI links + operator edits<br/>registry, rules"] --> B["2 · A clean copy<br/>confirmed stored facts<br/>no form choices"]
   B -->|node-link JSON on stdin| C["3 · NetworkX computes<br/>python -I -S, vendored 3.7 / 3.2.1<br/>centrality, clusters, paths,<br/>components, link prediction"]
   C --> D["4 · Checked JSON<br/>cached per graph version"]
   D -->|read-only, labelled as analysis| E["Assistant · Network panel<br/>Decision · Design · CSIC hand-off"]
@@ -348,17 +350,17 @@ flowchart LR
   F -->|the only way back| A
 ```
 
-Eight examples on the practice workspace, 31 October (worked through in full on the HTML page, with Figure 6
+Eight examples on the practice workspace, 1 November (worked through in full on the HTML page, with Figure 6
 showing what NetworkX sees):
 
 | Question | NetworkX runs | Answer | Why it helps |
 |---|---|---|---|
-| Which capability holds the most ideas together? | Betweenness centrality | Request handling 0.30 (4 ideas), Document text extraction 0.27 (5 ideas) | The shared building blocks: the strongest reuse case, and the biggest single point of failure |
+| Which capability holds the most ideas together? | Betweenness centrality | Request handling 0.31 (4 ideas), Document text extraction 0.27 (5 ideas) | The shared building blocks: the strongest reuse case, and the biggest single point of failure |
 | How is GSS connected to the Expense system? | Shortest paths, link named on each hop | 4 hops, 2 paths, via Expense anomaly finder and its two capabilities | Who to talk to before the system changes, and through what |
 | What do Travel policy assistant and Meeting notes to actions share? | Shortest path between two ideas | 2 hops: both need Document text extraction | Two teams, different wording, one shared component |
-| Do the ideas fall into natural groups? | Louvain communities with modularity | Two tentative groups, modularity 0.20: "no clear groups" | The app refuses to present a weak split as real |
+| Do the ideas fall into natural groups? | Louvain communities with modularity | Three tentative groups, modularity 0.19: "no clear groups" | The app refuses to present a weak split as real |
 | Is anything cut off? | Connected components | One component, all 107 analysed stars connected | Catches an idea or system with no links |
-| What links are probably missing? | Link prediction (Adamic-Adar, Jaccard) | None on confirmed evidence (11 considered) | When one fires, it is a proposal with evidence, never a write |
+| What links are probably missing? | Link prediction (Adamic-Adar, Jaccard) | None on confirmed evidence (15 considered) | When one fires, it is a proposal with evidence, never a write |
 | Design: "Record updating process" typed as a new feature | Link prediction across all ideas | Flagged as Record update, already needed by three other ideas | Stops the same capability being built twice |
 | Decision: the AI suggests what to do with an idea | Centrality, grouping verdict, missing links | The suggestion's basis names the network analysis | The decision weighs the whole portfolio |
 
@@ -378,7 +380,9 @@ NetworkX straight from the official wheels vendored in `cafe-app/vendor/networkx
 3.9 to 3.11; checksummed in `MANIFEST.json`, BSD-3). Nothing is downloaded, nothing installed on the machine is
 used, and only pure-Python algorithms run (no numpy, no scipy). Results are cached per graph version.
 
-- **Stored facts by default.** The analysis reads the form, the AI links and the operator's edits; `--with-derived`
+- **Confirmed stored facts by default.** The analysis reads the form, the AI links and the operator's edits, and
+  leaves out every link still waiting for Do it, for every analysis (the pop-out's Waiting links switch, or
+  `--with-unconfirmed`, adds them, and every output says which it read); `--with-derived`
   (or the pop-out's switch) adds what the rules derive. Every output says which, because derived links are
   conclusions, not observations, and an analysis should not count them twice.
 - **Human last control.** NetworkX never writes the graph. A suggested link is a proposal the operator accepts with
@@ -391,13 +395,13 @@ used, and only pure-Python algorithms run (no numpy, no scipy). Results are cach
   and reads confirmed links only. A system's "ideas" are the ideas that depend on it.
 - **Saying what it found, and what it could not.** Clusters are read from shared capabilities and pain points (form
   choices, people and teams left out) and always come with NetworkX's modularity and a verdict: below 0.3 "no clear
-  groups", and then no cluster is passed on as a finding (the practice workspace scores 0.20: no clear groups). Cycles
+  groups", and then no cluster is passed on as a finding (the practice workspace scores 0.19: no clear groups). Cycles
   are looked for only along relations the ontology lets loop; with the built-in one there are none (Idea → Capability
-  → System cannot close, and the build refuses a loop of KIND_OF), so the analysis says so and the UI and assistant do
+  → System cannot close, and the build refuses a loop of KIND_OF, including one a later merge would create), so the analysis says so and the UI and assistant do
   not offer it. Paths keep off outcome, support, category and beneficiary hubs.
 - **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
   `GET /api/network`, a network step in the assistant ("which capability holds the most ideas together", traced as
-  "NetworkX betweenness centrality over stored facts"), the Network pop-out, the decision suggestion (the idea's
+  "NetworkX betweenness centrality over confirmed stored facts"), the Network pop-out, the decision suggestion (the idea's
   cluster, centrality ranks and likely missing links, said in its basis), the design duplicate check (a feature that
   matches a capability other ideas need, NetworkX's prediction lowering the wording bar), the CSIC hand-off JSON-LD
   (one Analysis node, its content a JSON literal, never links between the stars; an accepted capability → system

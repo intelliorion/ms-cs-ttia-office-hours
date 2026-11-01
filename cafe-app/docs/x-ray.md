@@ -115,6 +115,39 @@ and run this prompt. A Firm AI Gateway provider is that file plus an HTTPS call 
 of names, the schema check, the retry and the cards stay exactly as they are. Nothing else in the app knows which
 provider answered.
 
+### The agent harness: the loop around the model
+
+The assistant works in steps for one message: search, read an idea, search again, then answer or propose. The
+harness around the model (`src/command/chat.ts`, `src/ai/tasks.ts`, `src/command/actions.ts`, no agent framework)
+is what keeps that safe. Figure 3 in the full page shows it.
+
+```mermaid
+flowchart LR
+  M["Your message"] --> C["Build the context<br/>codes, not names · ontology · steps left"]
+  C --> L["The model<br/>one turn, no tools of its own"]
+  L --> V["Check the shape<br/>JSON schema · asked once more"]
+  V --> X{"Its next step"}
+  X -- "search, read idea" --> T["Tools the app runs<br/>graph query · read idea · Deep read · NetworkX"]
+  T -- "results, as codes" --> C
+  X -- answer --> R["A reply and a trace<br/>nothing changed"]
+  X -- propose --> K["The app checks it<br/>ontology · approved tools · form-only links"]
+  K --> D["A card, then Do it<br/>the operator's click · a signed record"]
+```
+
+| Part | What it does |
+|---|---|
+| Loop | The model names its next step; the app runs searches and reads and feeds the results back |
+| Tools | The app's own: graph query steps, read one idea, Deep read search, NetworkX. The model runs nothing |
+| Budget | At most 5 steps per message, one 90 s deadline (`assistant.deadlineSeconds`), the Mac kept awake |
+| Structured output | Every reply matches a JSON schema, or is asked for once more with the fault named |
+| Context control | Codes instead of names; idea texts marked as data, not instructions |
+| Checked actions | Ontology, approved tools, form-only links, duplicates; a failure is a plain reason |
+| Human gate | Only Do it changes the graph, as a signed record |
+| Trace | Every step is a line under the answer |
+
+**Not yet.** An evaluation set run against the live model (the tests use the fake provider), and memory across
+conversations.
+
 ## 4. Where the data lives, and how it would scale
 
 Everything is a file in the workspace folder. Idea records are YAML (`idea.yaml`) plus markdown and a history log under `data/ideas/`, one folder
@@ -230,7 +263,7 @@ model comes from.
 ### How the engine builds the graph, one idea end to end
 
 The engine rebuilds the whole graph from files on every read, in five steps, in a fixed order, in milliseconds.
-NetworkX takes no part in it. Figure 4 in the full page follows the Travel policy assistant through the build.
+NetworkX takes no part in it. Figure 5 in the full page follows the Travel policy assistant through the build.
 
 | Step | File | What it adds | Example: Travel policy assistant |
 |---|---|---|---|
@@ -338,7 +371,7 @@ did all three would be harder to trust and impossible to explain line by line.
 The challenge was "why not NetworkX". The answer now is both, each doing what it is best at: **the app builds the
 graph, NetworkX analyses it.**
 
-How it works, in four steps (Figure 6 in the full page):
+How it works, in four steps (Figure 7 in the full page):
 
 ```mermaid
 flowchart LR
@@ -350,7 +383,7 @@ flowchart LR
   F -->|the only way back| A
 ```
 
-Eight examples on the practice workspace, 1 November (worked through in full on the HTML page, with Figure 6
+Eight examples on the practice workspace, 1 November (worked through in full on the HTML page, with Figure 7
 showing what NetworkX sees):
 
 | Question | NetworkX runs | Answer | Why it helps |

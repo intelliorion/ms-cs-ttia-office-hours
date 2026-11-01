@@ -827,6 +827,245 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
     <p class="talk">The app builds the graph; NetworkX analyses it. Each does what it is best at, and the operator keeps the last word.</p>
     <p>Colleagues asked "why not NetworkX". The honest answer is that the question was never either-or. Building this graph is domain work: every link carries who said it, with what confidence and for which idea, the registry keeps one identity per thing, and the rules derive new links in a fixed order with their inputs named. That stays in our TypeScript engine, where the operator can read it line by line. Analysing the finished graph as a whole is algorithm work, and there NetworkX is the standard: centrality, communities, paths, components and link prediction, well tested and well known. So the app now hands its graph to NetworkX for exactly that.</p>
   </section>
+  <section>
+    <h3>How NetworkX works inside the app, in four steps</h3>
+    <p>NetworkX is a Python library that holds a graph in memory and runs well-known algorithms over it. It knows nothing about ideas, capabilities or the Café. The app does the knowing: it builds the graph, decides which links are trustworthy enough to analyse, and turns NetworkX's numbers back into sentences the operator can act on. Figure 5 shows the round trip. It takes well under a second on the practice workspace, and the result is cached until the graph changes.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 5. How NetworkX works in the app. Step 1, the app's own engine builds the graph from forms, AI links and operator edits. Step 2, it hands NetworkX a clean copy: stored facts only, form choices left out, confirmed links only for suggestions. Step 3, Python runs the vendored NetworkX with nothing else installed and computes centrality, clusters, paths, components, link prediction and cycles. Step 4, the result comes back as checked JSON and is cached. It then feeds the assistant, the Network panel, the decision, design and the CSIC hand-off. NetworkX never writes the graph: a suggested link becomes a proposal, and only the operator's Do it puts it into the graph." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <defs>
+          <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+        </defs>
+        <g font-family="IBM Plex Mono, Menlo, monospace" font-size="11" letter-spacing="1" fill="currentColor" opacity="0.65">
+          <text x="20" y="22">INSIDE THE NODE PROCESS</text>
+          <text x="566" y="22">A PYTHON CHILD PROCESS, STARTED ON DEMAND</text>
+        </g>
+        <!-- step 1 -->
+        <rect x="20" y="36" width="250" height="150" rx="8" class="f-kg l-kg" stroke-width="1.5"/>
+        <text x="36" y="62" font-weight="600" class="t-kg">1 · Our engine builds</text>
+        <g fill="currentColor"><text x="36" y="88">forms + AI links + operator edits</text><text x="36" y="110">registry: one star per thing</text><text x="36" y="132">rules: derived links, with reasons</text><text x="36" y="154">108 stars, 173 stored links</text></g>
+        <!-- arrow 1-2 -->
+        <path d="M270,111 L298,111" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <!-- step 2 -->
+        <rect x="300" y="36" width="250" height="150" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="316" y="62" font-weight="600" fill="currentColor">2 · A clean copy to analyse</text>
+        <g fill="currentColor"><text x="316" y="88">stored facts, not conclusions</text><text x="316" y="110">form choices left out</text><text x="316" y="132">suggestions: confirmed links only</text><text x="316" y="154">sent as node-link JSON on stdin</text></g>
+        <!-- arrow 2-3 -->
+        <path d="M550,111 L578,111" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <!-- step 3 -->
+        <rect x="580" y="36" width="250" height="150" rx="8" class="f-dr l-dr" stroke-width="1.5"/>
+        <text x="596" y="62" font-weight="600" class="t-dr">3 · NetworkX computes</text>
+        <g fill="currentColor"><text x="596" y="88">python -I -S, nothing installed</text><text x="596" y="110">NetworkX 3.7 or 3.2.1, in the repo</text><text x="596" y="132">centrality · clusters · paths</text><text x="596" y="154">components · link prediction</text></g>
+        <!-- arrow 3-4 -->
+        <path d="M830,111 L858,111" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <!-- step 4 -->
+        <rect x="860" y="36" width="220" height="150" rx="8" class="f-panel" stroke="currentColor"/>
+        <text x="876" y="62" font-weight="600" fill="currentColor">4 · Back as checked JSON</text>
+        <g fill="currentColor"><text x="876" y="88">fixed seeds, sorted, validated</text><text x="876" y="110">cached per graph version</text><text x="876" y="132">says "stored facts" or not</text><text x="876" y="154">no Python: one plain line</text></g>
+
+        <!-- fan out -->
+        <path d="M970,186 L970,224 M980,224 L120,224 L120,250" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+        <path d="M335,224 L335,250" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <path d="M550,224 L550,250" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <path d="M765,224 L765,250" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <path d="M980,224 L980,250" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <text x="560" y="216" fill="currentColor" opacity="0.8" text-anchor="middle">read-only results, labelled "analysis, not stored facts"</text>
+
+        <g fill="currentColor">
+          <rect x="20" y="252" width="200" height="96" rx="6" class="f-panel" stroke="currentColor" stroke-opacity="0.7"/>
+          <text x="120" y="276" text-anchor="middle" font-weight="600">The assistant</text>
+          <text x="120" y="298" text-anchor="middle" opacity="0.85">a network step in the plan</text>
+          <text x="120" y="318" text-anchor="middle" opacity="0.85">trace names the algorithm</text>
+
+          <rect x="235" y="252" width="200" height="96" rx="6" class="f-panel" stroke="currentColor" stroke-opacity="0.7"/>
+          <text x="335" y="276" text-anchor="middle" font-weight="600">Network panel</text>
+          <text x="335" y="298" text-anchor="middle" opacity="0.85">click a cluster or star</text>
+          <text x="335" y="318" text-anchor="middle" opacity="0.85">it lights up in 3D</text>
+
+          <rect x="450" y="252" width="200" height="96" rx="6" class="f-panel" stroke="currentColor" stroke-opacity="0.7"/>
+          <text x="550" y="276" text-anchor="middle" font-weight="600">Decision</text>
+          <text x="550" y="298" text-anchor="middle" opacity="0.85">centrality and reuse</text>
+          <text x="550" y="318" text-anchor="middle" opacity="0.85">in the AI's suggestion</text>
+
+          <rect x="665" y="252" width="200" height="96" rx="6" class="f-panel" stroke="currentColor" stroke-opacity="0.7"/>
+          <text x="765" y="276" text-anchor="middle" font-weight="600">Design</text>
+          <text x="765" y="298" text-anchor="middle" opacity="0.85">"other ideas already</text>
+          <text x="765" y="318" text-anchor="middle" opacity="0.85">need this capability"</text>
+
+          <rect x="880" y="252" width="200" height="96" rx="6" class="f-panel" stroke="currentColor" stroke-opacity="0.7"/>
+          <text x="980" y="276" text-anchor="middle" font-weight="600">CSIC hand-off</text>
+          <text x="980" y="298" text-anchor="middle" opacity="0.85">network facts, labelled</text>
+          <text x="980" y="318" text-anchor="middle" opacity="0.85">as analysis</text>
+        </g>
+
+        <!-- the only way back -->
+        <path d="M335,348 L335,404" stroke="currentColor" stroke-width="1.5" marker-end="url(#a6)"/>
+        <path d="M120,348 L120,376 L300,376 L300,404" stroke="currentColor" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+        <text x="350" y="380" fill="currentColor" opacity="0.8">a suggested missing link</text>
+        <rect x="230" y="406" width="420" height="64" rx="8" class="f-pg l-pg" stroke-width="2"/>
+        <text x="440" y="432" text-anchor="middle" font-weight="600" class="t-pg">Proposal card → the operator presses Do it</text>
+        <text x="440" y="454" text-anchor="middle" fill="currentColor" opacity="0.85">checked against the ontology and against NetworkX's own list</text>
+        <path d="M650,438 L1090,438 L1090,200 M1090,200 L1090,12 L250,12 L250,34" stroke="var(--pg)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+        <text x="700" y="430" fill="var(--pg)">the only way anything returns to the graph</text>
+        <text x="20" y="510" fill="currentColor" opacity="0.8">NetworkX never writes the graph. It reads a copy, answers, and is gone.</text>
+        <text x="20" y="532" fill="currentColor" opacity="0.8">The operator's Do it is the single gate, as for every other change.</text>
+      </svg>
+      </div>
+      <figcaption><b>Figure 5. How NetworkX works in the app.</b> Our engine builds the graph and keeps every fact's source. A clean copy goes to NetworkX, which runs inside the repo with nothing installed. Its answer comes back as checked, cached JSON and feeds five places, all read-only. A suggested link can only return to the graph as a proposal the operator accepts.</figcaption>
+      <div class="legend">
+        <span><i class="sw kg"></i> our engine</span>
+        <span><i class="sw dr"></i> NetworkX</span>
+        <span><i class="sw pg"></i> the operator's gate</span>
+        <span><i class="sw plain"></i> where results are used</span>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h3>What NetworkX sees in the practice workspace</h3>
+    <p>Figure 6 is a simplified slice of the real graph: the seven ideas and the two capabilities NetworkX ranks highest. Four ideas need Request handling. Five need Document text extraction, and two of those five also sit in the first group. Those two capabilities are the bridges: most shortest paths between ideas pass through one of them. That is exactly what betweenness centrality measures, and it is why they top the ranking.</p>
+  </section>
+  <section class="wide">
+    <figure>
+      <div class="scroll">
+      <svg viewBox="0 0 1100 430" role="img" aria-label="Figure 6. What NetworkX sees. On the left, four ideas need Request handling: Desk booking assistant, Expense anomaly finder, Travel policy assistant and Procurement FAQ bot. On the right, three ideas need Document text extraction: Vendor contract summariser, Onboarding checklist helper and Meeting notes to actions. Travel policy assistant and Procurement FAQ bot also need Document text extraction, so that capability bridges the two sides. Betweenness: Request handling 0.30, Document text extraction 0.27. Modularity of the two groups is 0.20, below 0.3, so the app reports no clear groups." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+        <g font-family="IBM Plex Mono, Menlo, monospace" font-size="11" letter-spacing="1" fill="currentColor" opacity="0.65">
+          <text x="40" y="24">TENTATIVE GROUP A</text>
+          <text x="870" y="24">TENTATIVE GROUP B</text>
+        </g>
+        <!-- group outlines (tentative) -->
+        <rect x="20" y="36" width="330" height="330" rx="14" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="6 5"/>
+        <rect x="770" y="36" width="310" height="330" rx="14" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="6 5"/>
+
+        <!-- links: Request handling (cx 470, cy 200) -->
+        <g stroke="currentColor" stroke-opacity="0.55" stroke-width="1.5">
+          <line x1="300" y1="80" x2="420" y2="190"/>
+          <line x1="300" y1="160" x2="420" y2="196"/>
+          <line x1="300" y1="240" x2="420" y2="204"/>
+          <line x1="300" y1="320" x2="420" y2="210"/>
+        </g>
+        <!-- links: Document text extraction (cx 650, cy 200) -->
+        <g class="l-dr" stroke-width="1.8" stroke-opacity="0.9">
+          <line x1="820" y1="110" x2="700" y2="190"/>
+          <line x1="820" y1="200" x2="700" y2="200"/>
+          <line x1="820" y1="290" x2="700" y2="210"/>
+          <path d="M300,240 C420,300 560,290 620,222" fill="none"/>
+          <path d="M300,320 C440,370 590,330 632,226" fill="none"/>
+        </g>
+
+        <!-- idea nodes, group A -->
+        <g fill="currentColor">
+          <circle cx="290" cy="80" r="9" class="f-panel" stroke="currentColor"/><text x="272" y="85" text-anchor="end">Desk booking assistant</text>
+          <circle cx="290" cy="160" r="9" class="f-panel" stroke="currentColor"/><text x="272" y="165" text-anchor="end">Expense anomaly finder</text>
+          <circle cx="290" cy="240" r="9" class="f-panel" stroke="currentColor"/><text x="272" y="245" text-anchor="end">Travel policy assistant</text>
+          <circle cx="290" cy="320" r="9" class="f-panel" stroke="currentColor"/><text x="272" y="325" text-anchor="end">Procurement FAQ bot</text>
+        </g>
+        <!-- idea nodes, group B -->
+        <g fill="currentColor">
+          <circle cx="830" cy="110" r="9" class="f-panel" stroke="currentColor"/><text x="848" y="115">Vendor contract summariser</text>
+          <circle cx="830" cy="200" r="9" class="f-panel" stroke="currentColor"/><text x="848" y="205">Onboarding checklist helper</text>
+          <circle cx="830" cy="290" r="9" class="f-panel" stroke="currentColor"/><text x="848" y="295">Meeting notes to actions</text>
+        </g>
+        <!-- capability hubs -->
+        <circle cx="470" cy="200" r="50" class="f-kg l-kg" stroke-width="2"/>
+        <text x="470" y="196" text-anchor="middle" font-weight="600" class="t-kg">Request</text>
+        <text x="470" y="214" text-anchor="middle" font-weight="600" class="t-kg">handling</text>
+        <circle cx="650" cy="200" r="50" class="f-dr l-dr" stroke-width="2"/>
+        <text x="650" y="196" text-anchor="middle" font-weight="600" class="t-dr">Document text</text>
+        <text x="650" y="214" text-anchor="middle" font-weight="600" class="t-dr">extraction</text>
+
+        <!-- scores -->
+        <g fill="currentColor">
+          <text x="470" y="140" text-anchor="middle" font-family="IBM Plex Mono, Menlo, monospace" font-size="12">betweenness 0.30</text>
+          <text x="470" y="122" text-anchor="middle" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.7">4 ideas</text>
+          <text x="650" y="140" text-anchor="middle" font-family="IBM Plex Mono, Menlo, monospace" font-size="12">betweenness 0.27</text>
+          <text x="650" y="122" text-anchor="middle" font-family="IBM Plex Mono, Menlo, monospace" font-size="12" opacity="0.7">5 ideas</text>
+        </g>
+        <text x="550" y="400" text-anchor="middle" fill="currentColor">Louvain modularity 0.20, below 0.3: the app says "no clear groups", and shows A and B only as tentative.</text>
+      </svg>
+      </div>
+      <figcaption><b>Figure 6. What NetworkX sees.</b> A simplified slice of the practice workspace, 31 October. Request handling joins four ideas. Document text extraction joins five, and reaches into both tentative groups, so it bridges them. Betweenness centrality picks out exactly these two. The grouping is too weak to call real, and the app says so.</figcaption>
+      <div class="legend">
+        <span><i class="sw plain"></i> idea</span>
+        <span><i class="sw kg"></i> capability, Request handling</span>
+        <span><i class="sw dr"></i> capability, Document text extraction, and its links</span>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h3>Eight examples, with the real answers</h3>
+    <p>Each example below was run on the practice workspace on 31 October. It shows the question as the operator would ask it, what NetworkX computed, the answer, and what the app does with it.</p>
+    <div class="walk">
+      <div>
+        <div class="q">1. "Which capability holds the most ideas together?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> betweenness centrality: for every pair of stars, how often a star lies on the shortest path between them.</li>
+          <li><b>Answer:</b> Request handling 0.30, needed by 4 ideas. Document text extraction 0.27, needed by 5. Then Record update, Summary report generation and Policy question answering.</li>
+          <li><b>Why it helps:</b> these are the shared building blocks. Build one well and several ideas benefit, so they are the strongest reuse case to put to CSIC. They are also the biggest single point of failure if a tool behind them is withdrawn.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">2. "How is the GSS team connected to the Expense system?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> shortest paths, avoiding form-choice hubs, and the app names the link on every hop.</li>
+          <li><b>Answer:</b> 4 hops, 2 paths. GSS has member Ingrid Solberg. She leads and submitted Expense anomaly finder. It needs Anomaly detection in claims, or Policy compliance checking. Both use data from the Expense system.</li>
+          <li><b>Why it helps:</b> it shows who to talk to before the Expense system changes, and through which capability the change would reach the team.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">3. "What do the Travel policy assistant and Meeting notes to actions have in common?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> a shortest path between two ideas.</li>
+          <li><b>Answer:</b> 2 hops. Both need Document text extraction.</li>
+          <li><b>Why it helps:</b> two ideas from different teams, with nothing in common in their wording, turn out to need the same component. That is a conversation the Café can start.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">4. "Do the ideas fall into natural groups?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> Louvain community detection over the capabilities and pain points the ideas share, with a fixed seed, and reports the modularity score.</li>
+          <li><b>Answer:</b> two tentative groups, the four request-and-policy ideas and the three document-and-deadline ideas. Modularity is 0.20, below the 0.3 the app requires, so it says "no clear groups".</li>
+          <li><b>Why it helps:</b> honesty. With seven ideas, any split is weak, and the app refuses to present one as real. At firm scale, a score above 0.3 would point to a genuine programme of related ideas.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">5. "Is anything cut off from the rest?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> connected components.</li>
+          <li><b>Answer:</b> one component, all 107 analysed stars connected. Nothing is isolated.</li>
+          <li><b>Why it helps:</b> an idea imported with no capabilities, or a system nobody links to, would show up here at once. It is a quality check on the graph itself.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">6. "What links are probably missing?"</div>
+        <ol>
+          <li><b>NetworkX runs</b> link prediction (Adamic-Adar and Jaccard): for each idea, its three closest peers, and the links most of them have that it lacks. A suggestion needs two shared stars per peer and two peers agreeing, on confirmed links only.</li>
+          <li><b>Answer today:</b> none. NetworkX considered 11 candidates, and none passed on confirmed evidence. When unconfirmed links were counted, it suggested that Onboarding checklist helper needs Key term extraction. The app now withholds suggestions like that until the links behind them are confirmed.</li>
+          <li><b>Why it helps:</b> when it does fire, the suggestion arrives as a proposal card with its evidence. Nothing enters the graph until the operator presses Do it.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">7. Design: "Record updating process" is typed as a new feature</div>
+        <ol>
+          <li><b>NetworkX runs</b> link prediction across all ideas, not just the one being designed.</li>
+          <li><b>Answer:</b> the design stage flags it as looking like the existing Record update capability, which three other ideas already need: Vendor contract summariser, Desk booking assistant and Procurement FAQ bot. Wording alone would not have caught it.</li>
+          <li><b>Why it helps:</b> it stops the same capability from being built twice under two names.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="q">8. Decision: the AI suggests what to do with an idea</div>
+        <ol>
+          <li><b>NetworkX supplies</b> the centrality rank of the idea's capabilities and systems, the grouping verdict, and any likely missing link, all marked as analysis.</li>
+          <li><b>Answer:</b> the suggestion's "based on" line names the network analysis. In testing, the AI's reason for "reuse" cited the Procurement FAQ bot sharing the same central capabilities.</li>
+          <li><b>Why it helps:</b> the decision weighs the whole portfolio, not just the one form in front of the operator.</li>
+        </ol>
+      </div>
+    </div>
+    <p class="callout">The honest scale note. With seven ideas, an experienced reader can see most of this by eye, and NetworkX adds little that the assistant's own steps could not count. Its value grows with the portfolio. With hundreds of ideas across divisions, nobody can see the bridges, the groups or the missing links by eye, and these same eight questions run unchanged.</p>
+  </section>
   <section class="wide">
     <div class="scroll">
     <table>
@@ -877,7 +1116,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
   <section class="wide">
     <figure>
       <div class="scroll">
-      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 5. Today and at firm scale, side by side. On the left, the laptop: the browser, the Node process with the AI connector, name coding, schema check, Do it, graph build, registry, rules, ontology check, Deep read, assistant and three stages, then the workspace files behind four writers and the local AI command lines. On the right, the firm version: the same browser and the same Node process, marked unchanged; one arrow now goes from the four writers through a store adapter to Postgres or Snowflake, and one arrow goes from the connector through a new provider file to the Firm AI Gateway over HTTPS. Only those two arrows are labelled as changes." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
+      <svg viewBox="0 0 1100 560" role="img" aria-label="Figure 7. Today and at firm scale, side by side. On the left, the laptop: the browser, the Node process with the AI connector, name coding, schema check, Do it, graph build, registry, rules, ontology check, Deep read, assistant and three stages, then the workspace files behind four writers and the local AI command lines. On the right, the firm version: the same browser and the same Node process, marked unchanged; one arrow now goes from the four writers through a store adapter to Postgres or Snowflake, and one arrow goes from the connector through a new provider file to the Firm AI Gateway over HTTPS. Only those two arrows are labelled as changes." xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" font-size="13">
         <defs>
           <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
           <marker id="a5f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="m-fut"/></marker>
@@ -957,7 +1196,7 @@ nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-color: var(-
         </g>
       </svg>
       </div>
-      <figcaption><b>Figure 5. Today and at firm scale.</b> The right-hand stack is the left-hand stack. The browser and the process are marked unchanged because they are: the stages call the connector and the stores, never a provider or a file path. The two arrows that change are a store adapter behind the four writers and one more provider file on the existing interface.</figcaption>
+      <figcaption><b>Figure 7. Today and at firm scale.</b> The right-hand stack is the left-hand stack. The browser and the process are marked unchanged because they are: the stages call the connector and the stores, never a provider or a file path. The two arrows that change are a store adapter behind the four writers and one more provider file on the existing interface.</figcaption>
       <div class="legend">
         <span><i class="sw plain"></i> built today</span>
         <span><i class="sw pg"></i> unchanged at firm scale</span>

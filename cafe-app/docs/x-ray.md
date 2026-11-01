@@ -319,6 +319,35 @@ did all three would be harder to trust and impossible to explain line by line.
 The challenge was "why not NetworkX". The answer now is both, each doing what it is best at: **the app builds the
 graph, NetworkX analyses it.**
 
+How it works, in four steps (Figure 5 in the full page):
+
+```mermaid
+flowchart LR
+  A["1 · Our engine builds<br/>forms + AI links + operator edits<br/>registry, rules"] --> B["2 · A clean copy<br/>stored facts, no form choices<br/>confirmed links for suggestions"]
+  B -->|node-link JSON on stdin| C["3 · NetworkX computes<br/>python -I -S, vendored 3.7 / 3.2.1<br/>centrality, clusters, paths,<br/>components, link prediction"]
+  C --> D["4 · Checked JSON<br/>cached per graph version"]
+  D -->|read-only, labelled as analysis| E["Assistant · Network panel<br/>Decision · Design · CSIC hand-off"]
+  E -->|a suggested link| F["Proposal card<br/>operator presses Do it"]
+  F -->|the only way back| A
+```
+
+Eight examples on the practice workspace, 31 October (worked through in full on the HTML page, with Figure 6
+showing what NetworkX sees):
+
+| Question | NetworkX runs | Answer | Why it helps |
+|---|---|---|---|
+| Which capability holds the most ideas together? | Betweenness centrality | Request handling 0.30 (4 ideas), Document text extraction 0.27 (5 ideas) | The shared building blocks: the strongest reuse case, and the biggest single point of failure |
+| How is GSS connected to the Expense system? | Shortest paths, link named on each hop | 4 hops, 2 paths, via Expense anomaly finder and its two capabilities | Who to talk to before the system changes, and through what |
+| What do Travel policy assistant and Meeting notes to actions share? | Shortest path between two ideas | 2 hops: both need Document text extraction | Two teams, different wording, one shared component |
+| Do the ideas fall into natural groups? | Louvain communities with modularity | Two tentative groups, modularity 0.20: "no clear groups" | The app refuses to present a weak split as real |
+| Is anything cut off? | Connected components | One component, all 107 analysed stars connected | Catches an idea or system with no links |
+| What links are probably missing? | Link prediction (Adamic-Adar, Jaccard) | None on confirmed evidence (11 considered) | When one fires, it is a proposal with evidence, never a write |
+| Design: "Record updating process" typed as a new feature | Link prediction across all ideas | Flagged as Record update, already needed by three other ideas | Stops the same capability being built twice |
+| Decision: the AI suggests what to do with an idea | Centrality, grouping verdict, missing links | The suggestion's basis names the network analysis | The decision weighs the whole portfolio |
+
+At seven ideas most of this can be seen by eye. Its value grows with the portfolio: at hundreds of ideas the same
+questions run unchanged.
+
 | Job | Who does it | Why |
 |---|---|---|
 | Build the graph: the form, the AI's links, the operator's edits, registry identities, incremental rebuild | Our engine (`src/graph/build.ts`, `registry.ts`) | Provenance on every link (who said it, confidence, which idea) is domain data the app owns |

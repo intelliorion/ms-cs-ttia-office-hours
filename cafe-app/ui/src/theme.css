@@ -819,6 +819,16 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .as-mt{font-size:13.5px;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .as-mm{font-size:11.5px;color:var(--muted)}
 .as-menu .hint{padding:8px 10px}
+.as-mi{display:flex;align-items:center;gap:4px}
+.as-mi>button[role=menuitem]{flex:1;min-width:0}
+.as-menu .as-del{width:30px;flex:none;align-items:center;justify-content:center;padding:6px 0;opacity:.45;font-size:13px}
+.as-mi:hover .as-del,.as-menu .as-del:focus-visible{opacity:1}
+.as-menu .as-del:hover{background:rgba(var(--rgb-danger),.18)}
+.as-sure{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;font-size:12.5px;color:var(--text)}
+.as-sure span{flex:1 1 100%}
+.as-menu .as-sure button{width:auto;flex-direction:row;padding:4px 12px;border-radius:999px;border:1px solid var(--panel-border)}
+.as-menu .as-sure .as-del-yes{border-color:rgba(var(--rgb-danger),.7);color:var(--strong)}
+.as-menu .as-sure .as-del-yes:disabled{opacity:.4;cursor:default}
 .as-list{flex:1;min-height:0;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:18px}
 .as-msg{display:flex;flex-direction:column;gap:8px}
 .as-empty{margin:auto 0;display:flex;flex-direction:column;gap:8px}

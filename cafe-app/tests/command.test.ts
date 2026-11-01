@@ -6,7 +6,7 @@ import { createConnector, type Provider } from '../src/ai/connector';
 import { DEFAULT_SETTINGS } from '../src/round/round';
 import { rebuildGraph } from '../src/graph/store';
 import { createRound, listRounds } from '../src/round/store';
-import { runCommand, doActions, cancelActions, undoChatAction, readChat, listThreads, type Progress } from '../src/command/chat';
+import { runCommand, doActions, cancelActions, undoChatAction, readChat, listThreads, deleteThread, type Progress } from '../src/command/chat';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { appendAiLink } from '../src/graph/store';
 import { writeYaml } from '../src/workspace/files';
@@ -204,6 +204,11 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
     expect(two.steps).toEqual([{ kind: 'search', text: 'Leads of those', found: 1 }]);
     expect(two.highlight).toEqual(['idea:CAFE-2026-002', 'person:kwame-mensah']);
     expect((await listThreads(root)).map((t) => ({ title: t.title, count: t.count }))).toEqual([{ title: 'which ideas are GSS?', count: 2 }]);
+    // Deleting the conversation takes its messages with it; deleting it again finds nothing.
+    expect(await deleteThread(root, one.thread)).toEqual({ deleted: true, messages: 2 });
+    expect(await listThreads(root)).toEqual([]);
+    expect((await readChat(root)).filter((e) => e.thread === one.thread)).toEqual([]);
+    expect(await deleteThread(root, one.thread)).toEqual({ deleted: false, messages: 0 });
   });
 
   it('a new conversation starts fresh, and changes left waiting in another one are cancelled with a note', async () => {

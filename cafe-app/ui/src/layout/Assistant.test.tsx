@@ -5,9 +5,9 @@ import { act } from 'react';
 vi.mock('../api', async (orig) => ({
   ...(await orig<typeof import('../api')>()),
   getChat: vi.fn(async () => ({ threads: [], current: { thread: null, entries: [] } })),
-  getThread: vi.fn(), chatStream: vi.fn(), chatPost: vi.fn(),
+  getThread: vi.fn(), chatStream: vi.fn(), chatPost: vi.fn(), deleteThread: vi.fn(async () => ({ deleted: true, messages: 1 })),
 }));
-import { chatPost, chatStream, getThread } from '../api';
+import { chatPost, chatStream, deleteThread, getThread } from '../api';
 import { useStore } from '../state/store';
 import { useChat } from '../state/chat';
 import { Assistant, AssistantLauncher } from './Assistant';
@@ -182,6 +182,25 @@ describe('the Café assistant', () => {
     await act(async () => { (el.querySelector('[data-testid="assistant-threads"] button') as HTMLButtonElement).click(); });
     expect(el.querySelector('.as-thread')?.textContent).toBe('Policy bots');
     expect(el.querySelectorAll('.as-msg.cmd-entry')).toHaveLength(1);
+    act(() => root.unmount()); el.remove();
+  });
+
+  it('an earlier chat is deleted after asking once; Keep leaves it, and the one on screen clears', async () => {
+    const { el, root } = await mount();
+    await act(async () => { useChat.setState({ open: true, thread: { id: 't9', title: 'Policy bots' }, entries: [answer as any], threads: [{ id: 't9', title: 'Policy bots', updated: Date.now(), count: 1 }, { id: 't8', title: 'Rounds', updated: Date.now() - 1000, count: 2 }] }); });
+    await act(async () => { (el.querySelector('[data-action="assistant-history"]') as HTMLButtonElement).click(); });
+    const del = () => el.querySelectorAll('[data-action="thread-delete"]') as NodeListOf<HTMLButtonElement>;
+    expect(del()).toHaveLength(2);
+    await act(async () => { del()[1].click(); });
+    expect(el.querySelector('[data-testid="thread-delete-confirm"]')?.textContent).toContain('Delete this chat?');
+    await act(async () => { (el.querySelector('.as-del-no') as HTMLButtonElement).click(); });
+    expect(vi.mocked(deleteThread)).not.toHaveBeenCalled();
+    await act(async () => { del()[0].click(); });
+    await act(async () => { (el.querySelector('[data-action="thread-delete-yes"]') as HTMLButtonElement).click(); });
+    expect(vi.mocked(deleteThread)).toHaveBeenCalledWith('t9');
+    expect(useChat.getState().threads.map((t) => t.id)).toEqual(['t8']);
+    expect(useChat.getState().thread).toBeNull();
+    expect(useChat.getState().entries).toEqual([]);
     act(() => root.unmount()); el.remove();
   });
 });

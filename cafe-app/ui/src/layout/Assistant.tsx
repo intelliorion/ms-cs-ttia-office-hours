@@ -44,6 +44,7 @@ export function Assistant() {
   const focus = useFocus();
   const list = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
+  const [sure, setSure] = useState<string | null>(null);
 
   useEffect(() => { void useChat.getState().load(); }, []);
   // Ctrl/⌘+K opens or closes the assistant from anywhere.
@@ -104,9 +105,20 @@ export function Assistant() {
           <ul className="as-menu" role="menu" data-testid="assistant-threads">
             {chat.threads.length === 0 && <li className="hint">No earlier chats yet.</li>}
             {chat.threads.map((t) => (
-              <li key={t.id}><button role="menuitem" className={chat.thread?.id === t.id ? 'on' : ''} onClick={() => { setMenu(false); setHighlight(null); void chat.openThread(t.id); }}>
-                <span className="as-mt">{t.title}</span><span className="as-mm">{t.count} message{t.count === 1 ? '' : 's'} · {ago(t.updated)}</span>
-              </button></li>
+              <li key={t.id} className="as-mi">
+                {sure === t.id
+                  ? <div className="as-sure" data-testid="thread-delete-confirm">
+                    <span>Delete this chat? Changes you did from it stay.</span>
+                    <button className="as-del-yes" data-action="thread-delete-yes" disabled={!!chat.running && chat.thread?.id === t.id} onClick={() => { setSure(null); void chat.deleteThread(t.id); }}>Delete</button>
+                    <button className="as-del-no" onClick={() => setSure(null)}>Keep</button>
+                  </div>
+                  : <>
+                    <button role="menuitem" className={chat.thread?.id === t.id ? 'on' : ''} onClick={() => { setMenu(false); setHighlight(null); void chat.openThread(t.id); }}>
+                      <span className="as-mt">{t.title}</span><span className="as-mm">{t.count} message{t.count === 1 ? '' : 's'} · {ago(t.updated)}</span>
+                    </button>
+                    <button className="as-del" data-action="thread-delete" aria-label={`Delete the chat ${t.title}`} title="Delete this chat" onClick={() => setSure(t.id)}>🗑</button>
+                  </>}
+              </li>
             ))}
           </ul>
         )}

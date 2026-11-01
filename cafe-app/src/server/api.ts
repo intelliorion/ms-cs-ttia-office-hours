@@ -45,7 +45,7 @@ import { fitSampleToData } from '../data/kitSample';
 import { addDataQuestion, answerDataStep, confirmData, finishDataByHand, nextDataStep } from '../data/questions';
 import { reviewInput } from '../review/suggestInput';
 import { showNames } from '../command/names';
-import { listThreads, readThread, runCommand, doActions, cancelActions, undoChatAction, proposeLink } from '../command/chat';
+import { listThreads, readThread, deleteThread, runCommand, doActions, cancelActions, undoChatAction, proposeLink } from '../command/chat';
 import { NETWORK_ANALYSES, networkFor, networkMany, type NetworkAnalysis } from '../graph/network';
 import { checkProposals, type ConflictContext } from '../inbox/conflicts';
 import { createDeepRead } from '../memory/job';
@@ -122,6 +122,7 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     return { threads, current: threads[0] ? await readThread(root, threads[0].id) : { thread: null, entries: [] } };
   });
   add('GET', '/api/chat/threads/:id', async ({ params }) => readThread(root, params.id));
+  add('POST', '/api/chat/threads/:id/delete', async ({ params }) => deleteThread(root, params.id));
   add('POST', '/api/chat', async ({ body, progress, stopped }) => runCommand(root, String(body.text ?? ''), ai, clock, {
     focus: Array.isArray(body.focus) ? body.focus.slice(0, 30).map(String) : body.focus ? String(body.focus) : undefined,
     mentions: Array.isArray(body.mentions) ? body.mentions.slice(0, 20).map(String) : [],

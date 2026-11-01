@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { chatPost, chatStream, getChat, getThread } from '../api';
+import { chatPost, chatStream, deleteThread, getChat, getThread } from '../api';
 import type { ChatEntryView } from '../layout/commandHelpers';
 
 export interface ChatStepView { kind: 'search' | 'read'; text: string; found?: number }
@@ -23,6 +23,7 @@ interface ChatState {
   toggle: () => void;
   newChat: () => void;
   openThread: (id: string) => Promise<void>;
+  deleteThread: (id: string) => Promise<void>;
   send: (m: { text: string; focus?: string[] | null; about?: string; mentions?: string[] }) => Promise<ChatEntryView | null>;
   stop: () => void;
   act: (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) => Promise<ChatEntryView | null>;
@@ -44,6 +45,13 @@ export const useChat = create<ChatState>((set, get) => ({
   newChat: () => set((s) => ({ thread: null, entries: [], error: null, focusNonce: s.focusNonce + 1 })),
   openThread: async (id) => {
     try { const r = await getThread(id); set({ thread: r.thread, entries: r.entries, error: null }); } catch (e) { set({ error: (e as Error).message }); }
+  },
+  deleteThread: async (id) => {
+    try {
+      await deleteThread(id);
+      // The one on screen goes too: the panel starts a new chat.
+      set((s) => ({ threads: s.threads.filter((t) => t.id !== id), ...(s.thread?.id === id ? { thread: null, entries: [] } : {}), error: null }));
+    } catch (e) { set({ error: (e as Error).message }); }
   },
   send: async ({ text, focus, about, mentions }) => {
     const t = text.trim();

@@ -145,6 +145,22 @@ export async function readThread(root: string, id: string): Promise<{ thread: { 
   return { thread: t ? { id: t.id, title: t.title } : null, entries: t ? (await readChat(root)).filter((e) => e.thread === id) : [] };
 }
 
+/**
+ * Delete one conversation: its entry in threads.json and every message in it. A change already done from it stays
+ * in the graph (it is in operator.jsonl, signed); only the conversation, and the Undo on its cards, goes.
+ */
+export async function deleteThread(root: string, id: string): Promise<{ deleted: boolean; messages: number }> {
+  return chatLocked(root, async () => {
+    const threads = await readThreads(root);
+    if (!threads.some((t) => t.id === id)) return { deleted: false, messages: 0 };
+    const all = await readChat(root);
+    const kept = all.filter((e) => e.thread !== id);
+    await writeChat(root, kept);
+    await writeFileAtomic(threadsFile(root), JSON.stringify(threads.filter((t) => t.id !== id), null, 1));
+    return { deleted: true, messages: all.length - kept.length };
+  });
+}
+
 /** How many earlier exchanges the agent sees with each message. */
 const HISTORY = 6;
 /** How many stars of a search the agent sees; the total is always given. */

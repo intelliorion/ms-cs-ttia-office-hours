@@ -52,6 +52,7 @@ export const roadshowUpload = (id: string, person: string, file: File) =>
 
 /** The Café assistant: conversations, one conversation's messages, and a message sent with live progress. */
 export const getChat = () => fetch('/api/chat').then((r) => handle<{ threads: any[]; current: { thread: any; entries: any[] } }>(r));
+export const deleteThread = (id: string) => post(`/api/chat/threads/${encodeURIComponent(id)}/delete`);
 export const getThread = (id: string) => fetch(`/api/chat/threads/${encodeURIComponent(id)}`).then((r) => handle<{ thread: any; entries: any[] }>(r));
 export const chatPost = (id: string, what: 'do' | 'cancel' | 'undo', actionId?: string) =>
   post(`/api/chat/${encodeURIComponent(id)}/${what}`, actionId ? { actionId } : {});

@@ -403,6 +403,9 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
               ...(x.lastRead ? { readAt: 'not kept for this link', ideaLastReadByAI: x.lastRead } : {}),
               ...(x.statements ? { statements: x.statements.map((t) => ({ ...(t.idea ? { idea: ideaCode(t.idea) } : { idea: 'none' }), kind: t.kind, confirmed: t.confirmed, ...(t.confirmedBy ? { confirmedBy: t.confirmedBy } : {}), confidence: t.confidence, ...(t.field ? { field: t.field } : {}), ...(t.at ? { at: t.at } : {}) })) } : {}) })), ...(r.links.length > 40 ? { linksTotal: r.links.length } : {}) } : {}),
             // NetworkX's facts in codes, with the stars they name; suggestions are proposals the app shows with Do it.
+            // What the walk did not follow and why, and what a count left out: the trace's own lines, names coded, so the
+            // reply can say "X needs C, but C is built with T for Y only" and never "X does not need C".
+            ...(() => { const n = r.trace.filter((t) => /^(Not followed|Left out of these counts|Not confirmed in these counts)/.test(t.text)).map((t) => coded(t.text)); return n.length ? { notes: n.slice(0, 6) } : {}; })(),
             ...(r.network ? { network: r.network.map((f) => { const c = codeNetwork(f.facts); return { analysis: f.analysis, ...(f.error ? { error: f.error } : { by: `NetworkX ${f.networkx}`, scope: f.scope, facts: c.facts, named: c.named }) }; }) } : {}),
           },
         });

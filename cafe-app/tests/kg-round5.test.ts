@@ -218,6 +218,7 @@ describe.skipIf(!PY)('item 7: NetworkX reads confirmed links by default, and say
     expect(sure.scopeText).toBe('confirmed stored facts');
     expect(sure.results.central.betweenness.map((x: any) => x.id)).not.toContain('capability:hub-thing');
     expect(sure.results.stats.nodes).toBe(g.nodes.length - 1);
+    expect(sure.leftOut).toEqual({ stored: 4, derived: 0, stars: 1 });
     const all = await runNetwork(g, ['central'], { top: 5 }, { withUnconfirmed: true });
     expect(all.scopeText).toBe('stored facts, links waiting for your Do it included');
     expect(all.results.central.betweenness[0].id).toBe('capability:hub-thing');
@@ -331,6 +332,26 @@ describe('item 11: conversation ids never collide', () => {
   });
 });
 
+describe('item 12 (rerun): the AI is sent what a walk did not follow', () => {
+  it('Q24: the "Not followed" line reaches the AI as a note, names coded', async () => {
+    const root = await workspace();
+    const inputs: any[] = [];
+    const c = { status: async () => ({ provider: 'fake', label: 'F' }), choices: async () => [], run: async () => { throw new Error('no'); }, look: async () => { throw new Error('no'); },
+      runWith: async (_t: any, input: any) => {
+        inputs.push(input);
+        if (inputs.length === 1) {
+          const faq = input.stars.find((x: any) => x.label === 'Procurement FAQ bot').code;
+          return { provider: 'fake', label: 'F', output: { next: 'search', thought: 'walk', query: { steps: [{ op: 'stars', codes: [faq] }, { op: 'follow', rel: 'NEEDS', type: 'Capability' }, { op: 'follow', rel: 'BUILT_WITH', type: 'Tool' }] } } };
+        }
+        return { provider: 'fake', label: 'F', output: { next: 'answer', thought: 'answer', reply: 'No.' } };
+      } } as unknown as Connector;
+    await runCommand(root, 'Does the Procurement FAQ bot use Copilot Studio?', c, clock);
+    const notes = JSON.stringify(inputs[1].steps ?? inputs[1].done ?? inputs[1]).match(/"notes":\["((?:[^"\\]|\\.)*)"/)?.[1] ?? '';
+    expect(notes).toMatch(/Not followed \(it holds for other ideas, so it gives these nothing\): \[I\d+\] needs \[C\d+\], but \[C\d+\] built with \[[A-Z]\d+\] is stated for \[I\d+\] only, not for \[I\d+\]/);
+    expect(notes).not.toContain('Procurement FAQ bot');
+  });
+});
+
 describe('item 12: the assistant\'s answers that were wrong because of the app', () => {
   const g = buildGraph(IDEAS, [
     ai({ from: 'capability:document-text-extraction', rel: 'USES_DATA', to: 'system:email', idea: 'CAFE-2026-003', confidence: 0.8, newNodes: EMAIL }),
@@ -348,7 +369,8 @@ describe('item 12: the assistant\'s answers that were wrong because of the app',
   it('Q24: "does the FAQ bot use Copilot Studio?" says by name which link was not followed and why', () => {
     const r = runQuery({ steps: [{ op: 'stars', codes: ['idea:CAFE-2026-007'] }, { op: 'follow', rel: 'NEEDS', type: 'Capability' }, { op: 'follow', rel: 'BUILT_WITH', type: 'Tool' }] } as Query, world());
     expect(r.final).toEqual([]);
-    expect(r.trace.map((t) => t.text)).toContain('Not followed (it holds for other ideas, so it gives these nothing): Policy question answering built with Copilot Studio is stated for Travel policy assistant only, not for Procurement FAQ bot');
+    // The idea's own need is said with it (the round-5 rerun's Q24 read the bare line as "it does not need it").
+    expect(r.trace.map((t) => t.text)).toContain('Not followed (it holds for other ideas, so it gives these nothing): Procurement FAQ bot needs Policy question answering, but Policy question answering built with Copilot Studio is stated for Travel policy assistant only, not for Procurement FAQ bot');
     const back = runQuery({ steps: [{ op: 'stars', codes: ['tool:copilot-studio'] }, { op: 'follow', rel: 'BUILT_WITH', type: 'Capability' }, { op: 'follow', rel: 'NEEDS', type: 'Idea' }] } as Query, world());
     expect(back.final).toEqual(['idea:CAFE-2026-006']);
     expect(back.trace.map((t) => t.text)).toContain('Not followed (it holds for other ideas, so it gives these nothing): Procurement FAQ bot needs Policy question answering, but what led here holds for Travel policy assistant only');
@@ -374,6 +396,17 @@ describe('item 12: the assistant\'s answers that were wrong because of the app',
       { from: 'capability:document-text-extraction', to: 'system:email', rels: [{ from: 'capability:document-text-extraction', rel: 'USES_DATA', to: 'system:email' }] }] }] } } } };
     const r = runQuery({ steps: [{ op: 'network', analysis: 'path', codes: ['idea:CAFE-2026-001', 'system:email'] }] } as Query, world({ network: () => run }));
     expect(r.trace.map((t) => t.text)).toContain('Document text extraction uses data Email (stated for Onboarding checklist helper only)');
+  });
+  it('S22: "how many derived links?" counts them all with links source: rule; a NetworkX count says what it left out', () => {
+    const r = runQuery({ steps: [{ op: 'links', source: 'rule' }] } as Query, world());
+    const derived = g.edges.filter((e) => e.derived);
+    expect(r.links!.length).toBe(derived.length);
+    expect(r.trace[0].text).toBe(`Find the links derived by the rules: ${derived.length}`);
+    expect(derived.some((e) => !e.confirmed)).toBe(true);
+    const run = { ok: { networkx: '3.7', scopeText: 'confirmed stored facts and derived links', unconfirmed: false, leftOut: { stored: 1, derived: 2, stars: 0 }, results: { stats: { nodes: 9, links: 12, density: 0.1, components: 1, largestComponent: 9, averageClustering: 0, byType: {} } } } };
+    const st = runQuery({ steps: [{ op: 'network', analysis: 'stats', derived: true }] } as Query, world({ network: () => run }));
+    expect(st.trace.map((t) => t.text)).toContain('Left out of these counts, waiting for your Do it: 1 stored link, 2 derived links');
+    expect((st.network![0].facts as any).leftOutWaitingForDoIt).toEqual({ stored: 1, derived: 2, stars: 0 });
   });
   it('a star of a kind ontology.yaml declared is proposed through the chat like any other', () => {
     const { schema } = compileOntology({ nodes: { Vendor: { label: 'Vendor' } }, relations: { SUPPLIED_BY: { from: 'Capability', to: 'Vendor', meaning: 'supplied by', derived: false } } });

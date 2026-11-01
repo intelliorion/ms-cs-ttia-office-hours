@@ -173,6 +173,8 @@ export interface NetworkOutput {
   networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string;
   /** Whether links waiting for the operator's Do it were read (never by default). */
   unconfirmed: boolean;
+  /** What the confirmed-only default left out (links waiting for Do it, stored and derived, and the stars only they bring). */
+  leftOut?: { stored: number; derived: number; stars: number };
   results: Partial<Record<NetworkAnalysis, any>>;
   /** True when this came from the cache (same graph, same question). */
   cached?: boolean;
@@ -235,7 +237,13 @@ export async function runNetwork(graph: { nodes: GNode[]; edges: GEdge[]; schema
   if (parsed?.error) throw new NetworkError(`NetworkX could not finish: ${String(parsed.error).slice(0, 300)}`, 'failed');
   if (r.code !== 0 || typeof parsed?.networkx !== 'string' || !parsed.results || typeof parsed.results !== 'object') throw malformed(r);
   for (const a of analyses) if (!parsed.results[a] || typeof parsed.results[a] !== 'object') throw new NetworkError(`NetworkX gave no ${a} result.`, 'failed');
-  const out: NetworkOutput = { networkx: parsed.networkx, python: parsed.python, scope: withDerived ? 'with-derived' : 'stored', scopeText: scopeText(withDerived, withUnconfirmed), unconfirmed: withUnconfirmed, results: parsed.results };
+  const sent = toNodeLink(graph, withDerived, false, withUnconfirmed);
+  const left = withUnconfirmed ? undefined : {
+    stored: graph.edges.filter((e) => !e.derived && !e.confirmed).length,
+    derived: withDerived ? graph.edges.filter((e) => e.derived && !e.confirmed).length : 0,
+    stars: graph.nodes.length - sent.nodes.length,
+  };
+  const out: NetworkOutput = { networkx: parsed.networkx, python: parsed.python, scope: withDerived ? 'with-derived' : 'stored', scopeText: scopeText(withDerived, withUnconfirmed), unconfirmed: withUnconfirmed, ...(left ? { leftOut: left } : {}), results: parsed.results };
   resultCache.set(key, out);
   if (resultCache.size > CACHE_MAX) resultCache.delete(resultCache.keys().next().value!);
   return out;
@@ -307,12 +315,17 @@ const score = (x: number) => x.toFixed(3);
 const named = (s: { label: string; type: string }) => `${s.label} (${s.type})`;
 export const relWords = (r: string) => r.toLowerCase().replace(/_/g, ' ');
 
+/** What the confirmed-only default left out, in words. */
+export const leftOutWords = (l: { stored: number; derived: number; stars: number }) =>
+  [l.stored && `${l.stored} stored link${l.stored === 1 ? '' : 's'}`, l.derived && `${l.derived} derived link${l.derived === 1 ? '' : 's'}`, l.stars && `${l.stars} star${l.stars === 1 ? '' : 's'} only they bring`].filter(Boolean).join(', ');
+
 /** An analysis as plain lines, for the CLI. The last line says which NetworkX and which facts. */
 export function networkLines(o: NetworkAnswer): string[] {
   const r = o.results[o.analysis];
   const L: string[] = [];
   if (o.analysis === 'stats') {
     L.push(`Stars: ${r.nodes}, links: ${r.links} (analysed without rounds and the division: ${r.analysed.nodes} stars, ${r.analysed.links} links)`);
+    if (o.leftOut && (o.leftOut.stored || o.leftOut.derived)) L.push(`Left out, waiting for your Do it: ${leftOutWords(o.leftOut)} (--with-unconfirmed reads them)`);
     L.push(`Density: ${r.density} · components: ${r.components} (largest ${r.largestComponent}) · average clustering: ${r.averageClustering}`);
     L.push(`By type: ${Object.entries(r.byType).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   } else if (o.analysis === 'central') {

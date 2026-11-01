@@ -15,7 +15,7 @@ export type NetworkStepAnalysis = (typeof NETWORK_STEP_ANALYSES)[number];
 export const QUERY_ROLES = ['submitter', 'lead', 'sponsor', 'builder', 'member'] as const;
 export const COUNT_BY = ['stage', 'function', 'region', 'round', 'type'] as const;
 /** Where a stored link came from, for the links step: provenance the assistant can query. */
-export const LINK_SOURCES = ['operator', 'ai', 'form'] as const;
+export const LINK_SOURCES = ['operator', 'ai', 'form', 'rule'] as const;
 /** How many derived links a step names in the trace before "and N more". */
 const DERIVED_TRACE_MAX = 5;
 
@@ -104,6 +104,8 @@ export const QUERY_GUIDE = [
   '  the peers and shared stars behind it (confirmed links only): the app shows them as proposals with Do it, so never propose them yourself and never say they are made;',
   '  stats: size, density, components. Its result lists network: the facts in codes. Say they come from NetworkX. Use rank for "the most linked", network for "holds together".',
   '  clusters gives a verdict from modularity: when it says no clear groups (below 0.3), say so plainly and never present the groups as real.',
+  '  A network result reads confirmed links only unless unconfirmed: true: its counts are not the graph\'s totals (a trace line says what it left out). To count links or derived links in the graph, use links (with rel), never NetworkX stats.',
+  '  A path hop marked "(stated for X only)" is a capability-level fact that holds for X, not for the other ideas on the path: say so for that hop.',
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, System KIND_OF System (a mailbox is a kind of email system), Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
@@ -112,6 +114,7 @@ export const QUERY_GUIDE = [
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
   'A trace line or reason marked "not confirmed", and every link in a result\'s unconfirmed list, rests on a link the operator has not confirmed (an AI link waiting for Do it): say so in the reply for that idea or link, never state it as settled; a count that includes one says how many of it are not confirmed.',
   'A trace line "Not followed, so no depends on link for them: X (needs C, which uses S for Y only)" means X has no such dependency: say "X needs C, which uses S\'s data for Y only, so X does not depend on S", and never say X needs nothing that uses S or that none of X\'s capabilities uses S.',
+  'A result\'s notes are those trace lines, word for word: use them in the reply.',
   'A trace line "Not followed (it holds for other ideas, so it gives these nothing): ..." names the links the walk did not follow and why: say them the same way (C is built with T for Y only, not for X), never that the link does not exist.',
   'In a links result: confirmedBy says who confirmed it (form: the form; threshold: the AI read itself, at or above the confidence threshold; operator: your Do it, with confirmedAt; edit: your edit); say it when asked who confirmed.',
   '  statusFor: the status is for that idea (a fact another idea\'s read confirmed is not confirmed for it). statedFor "no idea" with holdsOnlyFor: the fact names no idea and holds only for those ideas (none: it gives no idea a dependency); never say it is stated for one idea.',
@@ -120,7 +123,7 @@ export const QUERY_GUIDE = [
   '  say that tool (or system) is in no idea yet, that it is not the same as any other star (Copilot is Microsoft Copilot, not Copilot Studio), and never offer to make it another star\'s alias.',
   '- links: provenance. The stored links touching the set (or the stars in codes; two codes: the links between them; neither: the whole graph), narrowed by rel and by source',
   '  (operator: added by hand, with the edit and its date; ai: read by the AI, with the field, the passage it quoted and when; form: from the submission). Its result lists links with where each came from.',
-  '  Use it for "which links did the operator add", "where did this link come from", "what did the AI read for [I1]".',
+  '  Use it for "which links did the operator add", "where did this link come from", "what did the AI read for [I1]". source: rule lists the links the rules derive (all of them, confirmed or not): use it to count derived links.',
   'Which team owns, whose idea, which function or team is behind [I1]: follow OWNS (dir in, type Team) from the idea; it is derived from the submitter\'s team, so it exists even when no lead is recorded.',
   '  Do not work ownership out through a lead\'s HAS_MEMBER link.',
   'A question about what is affected, needs rework, depends on, breaks, or would be hit if a system, data source or tool changes, is retired or is rewritten: start from that star (match by label; the registry\'s aliases',
@@ -157,6 +160,7 @@ export const QUERY_GUIDE = [
   '  then, for more candidates once Deep read has run: [{"op":"similar","codes":["I1"],"limit":5}]',
   '- what did teams say about data access: [{"op":"search","match":"data access"}]',
   '- how many links did the operator add by hand, and which: [{"op":"links","source":"operator"}]; where does [C1] uses data [S1] come from: [{"op":"links","codes":["C1","S1"]}]',
+  '- how many derived links are in the graph: [{"op":"links","source":"rule"}]',
 ];
 
 /**
@@ -203,7 +207,7 @@ export interface QueryMemory {
 /** What a network step's NetworkX run gave, as the app prepared it before the query ran (NetworkX runs out of process). */
 export type NetworkStepRun = { ok: NetworkRun } | { error: string };
 /** The parts of a NetworkX answer the step reads (src/graph/network.ts NetworkOutput). */
-export interface NetworkRun { networkx: string; scopeText: string; results: Record<string, any> }
+export interface NetworkRun { networkx: string; scopeText: string; results: Record<string, any>; leftOut?: { stored: number; derived: number; stars: number } }
 /** A network step's facts, star ids only (the chat codes them for the AI). */
 export interface NetworkFact { analysis: NetworkStepAnalysis; networkx?: string; scope?: string; error?: string; facts?: unknown }
 /** A link NetworkX suggests: a proposal for the operator, never made by the app on its own. */
@@ -513,7 +517,11 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
             if (!notFollowed.has(key)) {
               if (IDEA_SCOPED.includes(e.rel) && !e.derived) {
                 const holds = statedFor(e);
-                notFollowed.set(key, `${name(e.from)} ${relWord(e.rel)} ${name(e.to)} is stated for ${holds.size ? `${ideaNames(holds)} only` : 'no idea'}, not for ${walk ? ideaNames(walk) : 'these ideas'}`);
+                // The idea's own link to the near end, said with it: "X needs C, but C built with T is Y's only" (so the
+                // reply never says X does not need C).
+                const own = walk ? [...walk].filter((i) => w.graph.edges.some((x) => !x.derived && x.from === `idea:${i}` && x.to === a && x.rel === 'NEEDS')) : [];
+                const lead = own.length ? `${ideaNames(own)} ${own.length === 1 ? 'needs' : 'need'} ${name(a)}, but ` : '';
+                notFollowed.set(key, `${lead}${name(e.from)} ${relWord(e.rel)} ${name(e.to)} is stated for ${holds.size ? `${ideaNames(holds)} only` : 'no idea'}, not for ${walk ? ideaNames(walk) : 'these ideas'}`);
               } else if (at.allowed) {
                 const idea = ideaOfStar(b) ? b : a;
                 const other = idea === b ? a : b;
@@ -730,7 +738,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         });
         if (log) linkFacts = [...(linkFacts ?? []), ...facts];
         set = [...new Set(found.flatMap((e) => [e.from, e.to]))];
-        const what = s.source === 'operator' ? 'added by the operator' : s.source === 'ai' ? 'read by the AI' : s.source === 'form' ? 'from the form' : 'stored';
+        const what = s.source === 'operator' ? 'added by the operator' : s.source === 'ai' ? 'read by the AI' : s.source === 'form' ? 'from the form' : s.source === 'rule' ? 'derived by the rules' : 'stored';
         text = `Find the links ${what}${s.rel ? ` (${relWord(s.rel)})` : ''}${pool ? ` touching ${[...pool].slice(0, 3).map(name).join(', ')}${pool.size > 3 ? ` and ${pool.size - 3} more` : ''}` : ''}: ${found.length}`;
         for (const f of facts.slice(0, 8)) after.push({ text: `${name(f.from)} ${relWord(f.rel)} ${name(f.to)}: ${provenanceWords(f)}`, size: 1 });
         if (facts.length > 8) after.push({ text: `and ${facts.length - 8} more`, size: facts.length - 8 });
@@ -920,7 +928,10 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
     return { set: ids, lit: ids, lines, suggestions: [], fact: fact({ count: r.count, relations: r.relations, cycles: cs.map((c) => c.map((x: any) => x.id)) }) };
   }
   lines.push({ text: `${head}: ${r.nodes} stars, ${r.links} links, density ${r.density}, ${r.components} component${r.components === 1 ? '' : 's'}, average clustering ${r.averageClustering}`, size: r.nodes });
-  return { set: [], lit: [], lines, suggestions: [], fact: fact({ stars: r.nodes, links: r.links, density: r.density, components: r.components, largestComponent: r.largestComponent, averageClustering: r.averageClustering, byType: r.byType }) };
+  // What the confirmed-only default left out is part of the count: said, so a total is never read as the graph's.
+  const left = run.ok.leftOut;
+  if (left && (left.stored || left.derived)) lines.push({ text: `Left out of these counts, waiting for your Do it: ${[left.stored && `${left.stored} stored link${left.stored === 1 ? '' : 's'}`, left.derived && `${left.derived} derived link${left.derived === 1 ? '' : 's'}`, left.stars && `${left.stars} star${left.stars === 1 ? '' : 's'} only they bring`].filter(Boolean).join(', ')}`, size: left.stored + left.derived });
+  return { set: [], lit: [], lines, suggestions: [], fact: fact({ stars: r.nodes, links: r.links, density: r.density, components: r.components, largestComponent: r.largestComponent, averageClustering: r.averageClustering, byType: r.byType, ...(left ? { leftOutWaitingForDoIt: left } : {}) }) };
 }
 
 function ideaFilterWords(s: QueryStep): string {

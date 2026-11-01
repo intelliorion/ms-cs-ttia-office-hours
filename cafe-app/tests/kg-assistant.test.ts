@@ -65,9 +65,12 @@ describe('fault 5: a derived link is not unlinked by hand', () => {
   const graph = buildGraph(IDEAS, LINKS);
   it('"unlink 006 from Copilot Studio" names the stored facts and offers to remove the idea\'s own need, never an unlink of the derived link', () => {
     const r = resolveSteps([{ op: 'unlink', a: 'I6', b: 'T1', rel: 'USES' } as any], ctxFor(graph));
-    expect(r.problems).toEqual(['Travel policy assistant → Copilot Studio (uses) is derived by needs+built_with from what the graph holds, so it can\'t be removed by itself: it rests on Travel policy assistant needs Policy question answering and Policy question answering built with Copilot Studio. Change one of those stored facts instead.']);
-    expect(r.proposals.map((p) => p.action)).toEqual([{ t: 'unlink', from: 'idea:CAFE-2026-006', rel: 'NEEDS', to: 'capability:policy-question-answering', source: 'form:CAFE-2026-006:approach.md' }]);
-    expect(r.proposals[0].label).toBe('Remove the link Travel policy assistant → Policy question answering (the stored fact behind Travel policy assistant → Copilot Studio)');
+    // The idea's own need comes from its design's features (the form's): round 5 refuses an unlink of it and says where it changes.
+    expect(r.problems).toEqual([
+      'Travel policy assistant → Copilot Studio (uses) is derived by needs+built_with from what the graph holds, so it can\'t be removed by itself: it rests on Travel policy assistant needs Policy question answering and Policy question answering built with Copilot Studio. Change one of those stored facts instead.',
+      'Travel policy assistant needs Policy question answering comes from the form, so it is not removed by an unlink: it changes in the design\'s features (approach.md).',
+    ]);
+    expect(r.proposals).toEqual([]);
   });
   it('an unlink action on a derived relation is refused if it ever gets to Do it (it used to be logged and do nothing)', async () => {
     const root = await tmpWorkspace();
@@ -80,8 +83,8 @@ describe('fault 10 in the assistant: a tool is never aliased to another product'
   it('"also know Copilot Studio as UiPath" (retired) or "Power Automate" (not approved) is refused; a plain other name is proposed', () => {
     const r = resolveSteps([{ op: 'alias', a: 'T1', name: 'UiPath' } as any, { op: 'alias', a: 'T1', name: 'power automate' } as any, { op: 'alias', a: 'T1', name: 'MCS' } as any], ctxFor(graph));
     expect(r.problems).toEqual([
-      'UiPath is another tool, not on the approved list: it can\'t be another name of Copilot Studio. Approved tools change in rules/entities.yaml.',
-      'Power Automate is another tool, not on the approved list: it can\'t be another name of Copilot Studio. Approved tools change in rules/entities.yaml.',
+      'UiPath is another tool, not on the approved list: it can\'t be another name of Copilot Studio. The approved list is the Café\'s own.',
+      'Power Automate is another tool, not on the approved list: it can\'t be another name of Copilot Studio. The approved list is the Café\'s own.',
     ]);
     expect(r.proposals.map((p) => p.label)).toEqual(['Also know Copilot Studio as "MCS"']);
   });

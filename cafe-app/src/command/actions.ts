@@ -12,6 +12,8 @@ import type { Coded } from './names';
 import type { Connector } from '../ai/connector';
 import { growIdea } from '../ai/grow';
 import { mergeStars, rebuildGraph, setAiLinkStatus } from '../graph/store';
+import { unapprovedTool } from '../graph/registry';
+import { formOwnedWhere } from '../graph/build';
 import { writeExport } from '../graph/jsonld';
 import { dataKey } from '../workspace/paths';
 import type { Registry } from '../graph/registry';
@@ -22,8 +24,8 @@ const sch = (g: { schema?: Schema }): Schema => g.schema ?? BUILTIN_SCHEMA;
 /** What the app will do for one step of a command, once the operator says "Do it". */
 
 /** "An idea and a system or data can't be linked that way.": the kinds in words, each with its article. */
-export function cantLink(a: NodeType, b: NodeType): string {
-  const kind = (t: NodeType) => { const w = NODE_LABELS[t].toLowerCase(); return `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`; };
+export function cantLink(a: NodeType, b: NodeType, schema: Schema = BUILTIN_SCHEMA): string {
+  const kind = (t: NodeType) => { const w = String(schema.labels[t] ?? NODE_LABELS[t] ?? t).toLowerCase(); return `${/^[aeiou]/.test(w) ? 'an' : 'a'} ${w}`; };
   const both = `${kind(a)} and ${kind(b)}`;
   return `${both[0].toUpperCase()}${both.slice(1)} can't be linked that way.`;
 }
@@ -62,7 +64,7 @@ export function linkProposals(
   opts: { named?: string; focus?: string; title?: (id: string) => string; suffix?: string } = {},
 ): { proposals: Proposal[]; note?: string } | { problem: string } {
   const bad = operatorLinkProblem(rel, from.type, to.type, sch(graph));
-  if (bad) return { problem: FORM_ONLY_RELATIONS.includes(rel) || sch(graph).derived.includes(rel) ? `${from.label} → ${to.label}: ${bad}.` : cantLink(from.type, to.type) };
+  if (bad) return { problem: FORM_ONLY_RELATIONS.includes(rel) || sch(graph).derived.includes(rel) ? `${from.label} → ${to.label}: ${bad}.` : cantLink(from.type, to.type, sch(graph)) };
   if (!sch(graph).ideaScoped.includes(rel) && graph.edges.some((e) => e.id === edgeId(from.id, rel, to.id))) return { problem: `${from.label} and ${to.label} are already linked.` };
   const title = opts.title ?? ((i: string) => graph.nodes.find((n) => n.id === `idea:${i}`)?.label ?? i);
   // A capability-level link says which idea it is for: one proposal per idea, each stamped.
@@ -124,7 +126,8 @@ const OWNED_ELSEWHERE: Partial<Record<NodeType, (label: string) => string>> = {
   Entity: () => "The division comes from the ideas' submitters.",
   Round: () => 'Rounds are made in the Rounds pop-out.',
 };
-const word = (t: NodeType) => (t === 'Support' ? 'support request' : NODE_LABELS[t].toLowerCase());
+/** A kind in words; a kind the workspace's ontology.yaml declared goes by its own label. */
+const wordIn = (t: NodeType, schema: Schema = BUILTIN_SCHEMA) => (t === 'Support' ? 'support request' : String(schema.labels[t] ?? NODE_LABELS[t] ?? t).toLowerCase());
 
 export interface ResolveContext {
   codes: Map<string, Coded>;
@@ -143,6 +146,7 @@ export interface ResolveContext {
  */
 export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { proposals: Proposal[]; problems: string[] } {
   const S = sch(ctx.graph);
+  const word = (t: NodeType) => wordIn(t, S);
   const proposals: Proposal[] = []; const problems: string[] = [];
   const nodes = new Map(ctx.graph.nodes.map((n) => [n.id, n]));
   const star = (code?: string): GNode | undefined => {
@@ -161,14 +165,22 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
    * build. Say which stored facts it rests on (every way it is derived), and offer to remove the idea's own fact in
    * each way (its need for the capability), the one the operator can change here; a tool pick changes in the picker.
    */
+  /** A stored fact the form states (one of its statements comes from an idea's record): changed there, never unlinked. */
+  const formSays = (e: GEdge) => (e.sources?.length ? e.sources.some((x) => x.source.startsWith('form:')) : e.source.startsWith('form:'));
   const derivedUnlink = (hit: GEdge) => {
     const ways = [hit.derived!.inputs, ...(hit.derived!.alternatives ?? [])];
     const from = nodes.get(hit.from)?.label ?? hit.from; const to = nodes.get(hit.to)?.label ?? hit.to;
     const rest = ways.map((w) => w.map(factWords).join(' and ')).join('; or ');
     problems.push(`${from} → ${to} (${hit.rel.toLowerCase().replace(/_/g, ' ')}) is derived by ${hit.derived!.rule} from what the graph holds, so it can't be removed by itself: it rests on ${rest}. Change one of those stored facts instead${ways.length > 1 ? `; it goes only when every way (${ways.length}) is gone` : ''}.`);
     const offered = new Set<string>();
+    // The idea's own fact in a way, when the form states it (a design feature): it changes there, never by an unlink.
+    const owned = new Set<string>();
     for (const w of ways) {
-      const own = w.map((id) => edgesById.get(id)).find((e) => e && !e.derived && (e.from === hit.from || e.to === hit.to) && e.rel !== 'BUILT_WITH' && e.rel !== 'SUBMITTED' && (nodes.get(e.from)?.type === 'Idea' || nodes.get(e.to)?.type === 'Idea'));
+      const own = w.map((id) => edgesById.get(id)).find((e) => e && !e.derived && formSays(e) && e.rel !== 'BUILT_WITH' && e.rel !== 'SUBMITTED' && (e.from === hit.from || e.to === hit.to) && (nodes.get(e.from)?.type === 'Idea' || nodes.get(e.to)?.type === 'Idea'));
+      if (own && !owned.has(own.id)) { owned.add(own.id); problems.push(`${factWords(own.id)} comes from the form, so it is not removed by an unlink: it changes in ${formOwnedWhere(own.rel)}.`); }
+    }
+    for (const w of ways) {
+      const own = w.map((id) => edgesById.get(id)).find((e) => e && !e.derived && !formSays(e) && (e.from === hit.from || e.to === hit.to) && e.rel !== 'BUILT_WITH' && e.rel !== 'SUBMITTED' && (nodes.get(e.from)?.type === 'Idea' || nodes.get(e.to)?.type === 'Idea'));
       if (!own || offered.has(own.id)) continue;
       offered.add(own.id);
       proposals.push({
@@ -238,6 +250,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         const hit = ctx.graph.edges.find((e) => ((e.from === a.id && e.to === b.id) || (e.from === b.id && e.to === a.id)) && (!s.rel || e.rel === s.rel));
         if (!hit) { problems.push(`There is no link between ${a.label} and ${b.label}.`); continue; }
         if (hit.derived) { derivedUnlink(hit); continue; }
+        if (formSays(hit)) { problems.push(`${nodes.get(hit.from)!.label} → ${nodes.get(hit.to)!.label} comes from the form, so it is not removed by an unlink: it changes in ${formOwnedWhere(hit.rel)}.`); continue; }
         proposals.push({ label: `Remove the link ${nodes.get(hit.from)!.label} → ${nodes.get(hit.to)!.label}`, action: { t: 'unlink', from: hit.from, rel: hit.rel, to: hit.to, source: hit.source } });
         continue;
       }
@@ -252,7 +265,7 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const choices = (s.rel ? [s.rel] : (Object.keys(S.allowed) as Relation[])).filter(fits).filter((r) => !S.derived.includes(r));
       if (choices.includes('BUILT_WITH')) { problems.push('Tools are picked in the tool picker, so I left that link out.'); continue; }
       const rel = choices.filter((r) => r !== 'IN_ROUND')[0];
-      if (!rel) { problems.push(cantLink(a.type, b.type)); continue; }
+      if (!rel) { problems.push(cantLink(a.type, b.type, S)); continue; }
       const [ft] = S.allowed[rel];
       const [from, to] = a.type === ft ? [a, b] : [b, a];
       const here = S.ideaScoped.includes(rel) ? neededHere.get(from.id) : undefined;
@@ -292,6 +305,9 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const a = star(s.a); const name = s.name?.trim();
       if (!a || !name) { missing(s); continue; }
       if (!RENAMEABLE.includes(a.type)) { problems.push(a.type === 'Round' ? 'Rename rounds in the Rounds pop-out.' : `${a.label} comes from the form, so its name changes there.`); continue; }
+      // A tool's name is the tool: never one that is not on the approved list (it would look approved), never another tool's.
+      const retired = a.type === 'Tool' ? unapprovedTool(name) : undefined;
+      if (retired) { problems.push(`${retired} is not on the approved list, so ${a.label} is not renamed to "${name}": a tool's name would make it look approved. A different tool is picked in the tool picker.`); continue; }
       const taken = ctx.registry?.resolve(a.type, name);
       if (taken && taken.id !== a.id && nodes.has(taken.id)) { problems.push(`"${name}" already names ${nodes.get(taken.id)!.label}: merge ${a.label} into it instead.`); continue; }
       proposals.push({ label: `Rename ${a.label} to ${name}`, action: { t: 'rename', node: a.id, label: name } });
@@ -409,8 +425,8 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       // A tool's other name must never be another product: "Copilot Studio is also UiPath" would make a retired or
       // unapproved tool look approved. The approved list is changed in rules/entities.yaml, not by an alias.
       if (a.type === 'Tool') {
-        const other = KNOWN_UNAPPROVED_TOOLS.find((t) => nameKey(t) === nameKey(name)) ?? ctx.graph.nodes.find((n) => n.type === 'Tool' && n.id !== a.id && nameKey(n.label) === nameKey(name))?.label;
-        if (other) { problems.push(`${other} is another tool, not on the approved list: it can't be another name of ${a.label}. Approved tools change in rules/entities.yaml.`); continue; }
+        const other = unapprovedTool(name) ?? ctx.graph.nodes.find((n) => n.type === 'Tool' && n.id !== a.id && nameKey(n.label) === nameKey(name))?.label;
+        if (other) { problems.push(`${other} is another tool, not on the approved list: it can't be another name of ${a.label}. The approved list is the Café's own.`); continue; }
       }
       proposals.push({ label: `Also know ${a.label} as "${name}"`, action: { t: 'alias', node: a.id, label: name, of: a.label } });
     }
@@ -441,7 +457,12 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
   };
   switch (a.t) {
     case 'link': await linkCheck(a); return edit({ t: 'link', from: a.from, rel: a.rel, to: a.to, ...(a.idea ? { idea: a.idea } : {}) });
-    case 'rename': return edit({ t: 'rename', node: a.node, label: a.label });
+    case 'rename': {
+      // Do it checks again: a tool is never renamed to one that is not approved.
+      const retired = a.node.startsWith('tool:') ? unapprovedTool(a.label) : undefined;
+      if (retired) throw new Error(`Not done: ${retired} is not on the approved list, and a tool's name would make it look approved`);
+      return edit({ t: 'rename', node: a.node, label: a.label });
+    }
     case 'merge': { const r = await mergeStars(root, a.from, a.into, clock); return { inverse: { t: 'edits-off', ids: r.edits } }; }
     case 'alias': return edit({ t: 'alias', node: a.node, label: a.label, of: a.of });
     case 'export': {
@@ -470,7 +491,11 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
     }
     case 'unlink': {
       // A derived link is the rules' to say: an unlink edit would hide it for nothing (it comes back), so it is refused.
-      if ((await rebuildGraph(root)).schema.derived.includes(a.rel)) throw new Error(`${a.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules: remove one of the stored links it rests on instead`);
+      const g = await rebuildGraph(root);
+      if (g.schema.derived.includes(a.rel)) throw new Error(`${a.rel.toLowerCase().replace(/_/g, ' ')} is derived by the rules: remove one of the stored links it rests on instead`);
+      // A fact the form states is its record's: Do it checks again, whatever card it came from.
+      const there = g.edges.find((e) => e.id === edgeId(a.from, a.rel, a.to));
+      if (FORM_ONLY_RELATIONS.includes(a.rel) || there?.sources?.some((x) => x.source.startsWith('form:'))) throw new Error(`Not done: the form states it, so it changes in ${formOwnedWhere(a.rel)}`);
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
       if (isOperatorSource(a.source)) {
         const made = (await readEdits(root)).filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);

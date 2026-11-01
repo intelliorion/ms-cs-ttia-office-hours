@@ -298,15 +298,13 @@ describe('the Café assistant: stars', () => {
     expect((await loadIdea(root, 'CAFE-2026-002')).people.team.map((p) => p.name)).toEqual(['Kwame Mensah', 'Zainab Okafor']);
   });
 
-  it('unlink hides a form link and merge moves links; both undo', async () => {
+  it('an unlink of a form link is refused and says where it changes (round 5); merge moves links and undoes', async () => {
     const { root, ai } = await setup([(d) => (/unlink/.test(d.message)
       ? propose([{ op: 'unlink', a: code(d, 'Entity'), b: code(d, 'Team', 'BSI') }])({})
       : propose([{ op: 'merge', a: code(d, 'Team', 'BSI'), b: code(d, 'Team', 'GSS') }])({}))]);
     const u = await runCommand(root, 'unlink Corporate Services (CS) and BSI', ai, clock);
-    expect(u.actions[0].label).toBe('Remove the link Corporate Services (CS) → BSI');
-    await doActions(root, u.id, undefined, clock);
-    expect(await rels(root)).not.toContain('entity:cs HAS_TEAM team:bsi');
-    await undoChatAction(root, u.id, 'a1', clock);
+    expect(u.actions).toEqual([]);
+    expect(u.problems.join(' ')).toMatch(/Corporate Services \(CS\) → BSI comes from the form.*CS Function/);
     expect(await rels(root)).toContain('entity:cs HAS_TEAM team:bsi');
     const m = await runCommand(root, 'merge BSI into GSS', ai, clock);
     await doActions(root, m.id, undefined, clock);

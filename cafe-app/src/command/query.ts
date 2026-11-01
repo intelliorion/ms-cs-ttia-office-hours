@@ -1,4 +1,4 @@
-import { BUILTIN_SCHEMA, nameKey, type GEdge, type GNode, type NodeType, type Relation, type Schema } from '../graph/ontology';
+import { BUILTIN_SCHEMA, confirmedFor as sureFor, nameKey, type ConfirmedBy, type GEdge, type GNode, type NodeType, type Relation, type Schema } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -30,6 +30,8 @@ export interface QueryStep {
   group?: boolean;
   /** network: which NetworkX analysis, and whether the links the rules derive are included (stored facts only by default). */
   analysis?: NetworkStepAnalysis; derived?: boolean;
+  /** network: also read the links waiting for the operator's Do it (confirmed links only by default). */
+  unconfirmed?: boolean;
   /** links: keep the stored links that came from this source (the operator's edits, an AI read, the form). */
   source?: (typeof LINK_SOURCES)[number];
   with?: QueryStep[];
@@ -54,6 +56,7 @@ export function querySchema(schema: Schema = BUILTIN_SCHEMA): JsonSchema {
     group: { type: 'boolean' },
     analysis: { type: 'string', enum: NETWORK_STEP_ANALYSES },
     derived: { type: 'boolean' },
+    unconfirmed: { type: 'boolean' },
     source: { type: 'string', enum: LINK_SOURCES },
   };
   const INNER_STEP: JsonSchema = { type: 'object', additionalProperties: false, required: ['op'], properties: STEP_PROPS };
@@ -94,7 +97,7 @@ export const QUERY_GUIDE = [
   '- similar: Deep read. From the one star in codes, the nearest stars of its kind by meaning (an idea: the nearest other ideas; a capability: the nearest capabilities),',
   '  or from match text, the nearest ideas (or stars of type). Top limit (default 5). Use it for "ideas like [I1]", "is there a capability like X already".',
   '- A match on stars or filter that finds no label containing the words falls back, once Deep read has run, to the stars nearest in meaning; the trace says "nearest".',
-  '- network: NetworkX analyses the whole graph at once (the stored facts; derived: true adds the links the rules derive). It starts a new set. analysis:',
+  '- network: NetworkX analyses the whole graph at once (the CONFIRMED stored facts; unconfirmed: true adds the links waiting for Do it, derived: true the links the rules derive). It starts a new set. Say which facts it read (the trace says). analysis:',
   '  central: the stars that hold the most ideas together (betweenness centrality), top limit (default 5), type narrows it to Capability, System, Person, Team, Tool or PainPoint;',
   '  clusters: which ideas naturally group together, with the stars that bind each group; path: how the two stars in codes are connected, with the link on each hop;',
   '  isolated: ideas, teams or systems not connected to the rest; suggest: links that are probably missing (an idea and a capability, a capability and a system), each with',
@@ -104,11 +107,15 @@ export const QUERY_GUIDE = [
   'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, System KIND_OF System (a mailbox is a kind of email system), Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
-  'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data),',
+  'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data FOR THAT IDEA: a capability-level fact holds only for the ideas it is stated for),',
   'Idea USES Tool (a capability it needs is built with the tool), Team OWNS Idea (a member submitted it), Idea SIMILAR_TO Idea (they share two or more capabilities, pain points or categories).',
   'Use them for dependencies, pairs and facts ("which ideas depend on the expense system", "which ideas are SIMILAR_TO [I1]", "what does GSS own"): follow or rank with that rel.',
   'A trace line or reason marked "not confirmed", and every link in a result\'s unconfirmed list, rests on a link the operator has not confirmed (an AI link waiting for Do it): say so in the reply for that idea or link, never state it as settled; a count that includes one says how many of it are not confirmed.',
-  'A trace line "Not followed, so no depends on link for them: X (needs C, which uses S for Y only)" means X has no such dependency: say why, and never say X needs nothing that uses S.',
+  'A trace line "Not followed, so no depends on link for them: X (needs C, which uses S for Y only)" means X has no such dependency: say "X needs C, which uses S\'s data for Y only, so X does not depend on S", and never say X needs nothing that uses S or that none of X\'s capabilities uses S.',
+  'A trace line "Not followed (it holds for other ideas, so it gives these nothing): ..." names the links the walk did not follow and why: say them the same way (C is built with T for Y only, not for X), never that the link does not exist.',
+  'In a links result: confirmedBy says who confirmed it (form: the form; threshold: the AI read itself, at or above the confidence threshold; operator: your Do it, with confirmedAt; edit: your edit); say it when asked who confirmed.',
+  '  statusFor: the status is for that idea (a fact another idea\'s read confirmed is not confirmed for it). statedFor "no idea" with holdsOnlyFor: the fact names no idea and holds only for those ideas (none: it gives no idea a dependency); never say it is stated for one idea.',
+  '  readAt "not kept for this link" with ideaLastReadByAI: no time was kept for the link; say when the AI last read the idea instead. statements: each idea\'s own statement of one fact, with its own status.',
   'A trace line "exactly: <name>, known as ..." names the registry\'s star for the words: an approved tool or a registered system. When it says no idea\'s record has it yet,',
   '  say that tool (or system) is in no idea yet, that it is not the same as any other star (Copilot is Microsoft Copilot, not Copilot Studio), and never offer to make it another star\'s alias.',
   '- links: provenance. The stored links touching the set (or the stars in codes; two codes: the links between them; neither: the whole graph), narrowed by rel and by source',
@@ -236,6 +243,16 @@ export interface LinkFact {
   from: string; rel: Relation; to: string; source: string; kind: 'operator' | 'ai' | 'form' | 'rule'; confirmed: boolean; confidence: number;
   /** The operator's edit and its date; the AI read's field, passage and time; the form's column. */
   edit?: string; at?: string; field?: string; quote?: string; quoteFound?: boolean; ideas?: string[];
+  /** Who confirmed it: the form, the threshold (an AI read at or above it), the operator's Do it (and when), an operator edit. */
+  confirmedBy?: ConfirmedBy; confirmedAt?: string;
+  /** The idea this fact was asked about (a capability-level fact stated for several): status and source are that idea's statement. */
+  forIdea?: string;
+  /** A capability-level fact stated for no idea: the ideas it holds for (those whose own facts already reach its far end). */
+  unscoped?: { holdsFor: string[] };
+  /** No time kept on the link (read before times were kept): when the AI last read the idea, from graph/ai-reads.json. */
+  lastRead?: string;
+  /** Every statement, when there is more than one (two ideas' reads, a read and an edit): each with its own idea and status. */
+  statements?: { idea?: string; kind: LinkFact['kind']; confirmed: boolean; confirmedBy?: ConfirmedBy; confidence: number; field?: string; at?: string }[];
 }
 
 export interface QueryWorld {
@@ -254,9 +271,13 @@ export interface QueryWorld {
   schema?: Schema;
   /** The registry (rules/entities.yaml and alias edits): a name it knows wins over a label that merely contains the words. */
   registry?: Pick<Registry, 'resolve'>;
+  /** When the AI last read each idea (graph/ai-reads.json): said for a link that keeps no time of its own. */
+  reads?: Record<string, { at: string }>;
 }
 
 const lc = (s: unknown) => String(s ?? '').trim().toLowerCase();
+/** Lower case with accents aside, for finding a name as people type it ("Lucia Fernandez" finds Lucía Fernández); ids stay apart. */
+const fold = (s: unknown) => lc(s).normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 const PLURAL: Record<NodeType, string> = {
   Entity: 'divisions', Team: 'teams', Person: 'people', Idea: 'ideas', PainPoint: 'pain points', Capability: 'capabilities',
   Tool: 'tools', System: 'systems or data', Round: 'rounds', Support: 'support requests',
@@ -299,7 +320,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   const fits = (id: string, s: QueryStep) => {
     const n = nodes.get(id); if (!n) return false;
     if (s.type && n.type !== s.type) return false;
-    if (s.match && !(lc(n.label).includes(lc(s.match)) || lc(n.attrs?.cafeId) === lc(s.match))) return false;
+    if (s.match && !(fold(n.label).includes(fold(s.match)) || lc(n.attrs?.cafeId) === lc(s.match))) return false;
     return ideaFits(id, s);
   };
   const people = (idea: Idea, role?: string) => [
@@ -313,7 +334,9 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
   /** What a derived link rests on that nobody confirmed (an AI link waiting for Do it), said wherever the link is used. */
   const unconfirmedNote = (e: GEdge) => {
     if (e.confirmed) return '';
-    const waiting = e.derived!.inputs.map((id) => edgeById.get(id)).filter((i): i is GEdge => !!i && !i.confirmed);
+    // Waiting for this idea: an input another idea's read confirmed is still waiting for this one (see confirmedFor).
+    const idea = e.ideas?.length === 1 ? e.ideas[0] : (ideaOfStar(e.from) ?? ideaOfStar(e.to));
+    const waiting = e.derived!.inputs.map((id) => edgeById.get(id)).filter((i): i is GEdge => !!i && !sureFor(i, idea));
     return `; not confirmed: it rests on ${waiting.length ? waiting.map((i) => `${name(i.from)} ${i.rel} ${name(i.to)} (${i.confidence})`).join(', ') : 'a link'} waiting for your Do it`;
   };
   const derivedLine = (e: GEdge): AsideLine => ({
@@ -369,7 +392,11 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
       if (hit) byAlias = true;
       return hit;
     });
-    return { ids, note: ids.length && byAlias ? ` (exactly: ${ids.map(name).join(', ')}, known as "${s.match}")` : '' };
+    if (ids.length) return { ids, note: byAlias ? ` (exactly: ${ids.map(name).join(', ')}, known as "${s.match}")` : '' };
+    // A person typed without the accents of the name on record ("Lucia Fernandez"): found by the name with accents
+    // aside, and said so. The ids stay apart: Lucía Fernández and a Lucia Fernandez on another idea are two people.
+    const folded = from.filter((id) => { const n = nodes.get(id); return !!n && n.type === 'Person' && (!s.type || s.type === 'Person') && fold(n.label).replace(/\s+/g, ' ') === fold(s.match).replace(/\s+/g, ' '); });
+    return { ids: folded, note: folded.length ? ` (by the name with accents aside: ${folded.map(name).join(', ')}; a person is never the same as another of a like name until you merge them)` : '' };
   };
   /** The ideas of a previous answer: its ideas, the ideas of its groups and people, or else the ideas linked to its stars by a stated link. */
   const ideasOf = (ids: string[]): string[] => {
@@ -473,11 +500,36 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         const root = (id: string) => kindOf.get(id) ?? id;
         const reach = (a: string, b: string) => { out.add(b); if (s.group) { const r = root(a); const g = by.get(r); if (g) g.add(b); else by.set(r, new Set([b])); } };
         let dropped = 0;
+        /** The links the walk did not follow because they hold for other ideas: said by name, so "no" says why. */
+        const notFollowed = new Map<string, string>();
+        const ideaNames = (xs: Iterable<string>) => [...xs].map((i) => name(`idea:${i}`)).sort().join(', ');
         const step = (a: string, b: string, e: GEdge) => {
-          const next = cross(carried.get(a) ?? OPEN, e, b);
-          if (!next) { dropped++; return false; }
+          const at = carried.get(a) ?? OPEN;
+          const next = cross(at, e, b);
+          if (!next) {
+            dropped++;
+            const walk = at.allowed ?? at.from;
+            const key = `${e.id}|${a}`;
+            if (!notFollowed.has(key)) {
+              if (IDEA_SCOPED.includes(e.rel) && !e.derived) {
+                const holds = statedFor(e);
+                notFollowed.set(key, `${name(e.from)} ${relWord(e.rel)} ${name(e.to)} is stated for ${holds.size ? `${ideaNames(holds)} only` : 'no idea'}, not for ${walk ? ideaNames(walk) : 'these ideas'}`);
+              } else if (at.allowed) {
+                const idea = ideaOfStar(b) ? b : a;
+                const other = idea === b ? a : b;
+                notFollowed.set(key, `${name(idea)} ${relWord(e.rel)} ${name(other)}, but what led here holds for ${ideaNames(at.allowed)} only`);
+              }
+            }
+            return false;
+          }
           scope.set(b, merge(scope.get(b), next));
           reach(a, b);
+          // Not confirmed for the ideas this walk is about (a fact another idea's read confirmed is no confirmation for these).
+          if (!e.derived) {
+            const ideas = next.allowed ?? next.from;
+            const ok = ideas && e.sources?.length ? [...ideas].some((i) => sureFor(e, i)) : e.confirmed;
+            if (!ok && !waiting.includes(e)) waiting.push(e);
+          }
           return true;
         };
         for (const e of walkable(w.graph.edges, s.rel)) {
@@ -486,7 +538,6 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           if (s.dir !== 'in' && from.has(e.from) && step(e.from, e.to, e)) hit = true;
           if (s.dir !== 'out' && from.has(e.to) && step(e.to, e.from, e)) hit = true;
           if (hit && e.derived) used.push(e);
-          if (hit && !e.derived && !e.confirmed) waiting.push(e);
         }
         const keepType = (id: string) => !s.type || nodes.get(id)?.type === s.type;
         set = [...out].filter(keepType);
@@ -518,8 +569,12 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           const lines = [...misses].sort((a, b) => name(a[0]).localeCompare(name(b[0]))).map(([idea, whys]) => `${name(idea)} (needs ${whys.join('; and ')})`);
           if (lines.length) after.push({ text: `Not followed, so no ${relWord(s.rel)} link for them: ${lines.slice(0, 10).join('; ')}${lines.length > 10 ? `; and ${lines.length - 10} more` : ''}`, size: lines.length });
         }
-        // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace.
+        // A star reached only through another idea's capability-level fact is not part of this walk: said in the trace, by name.
         if (dropped) text += `, kept to the ideas each link is stated for (${dropped} link${dropped === 1 ? '' : 's'} stated for other ideas not followed)`;
+        if (notFollowed.size && log && !(s.dir === 'in' && (s.rel === 'DEPENDS_ON' || s.rel === 'USES'))) {
+          const lines = [...notFollowed.values()];
+          after.push({ text: `Not followed (it holds for other ideas, so it gives these nothing): ${lines.slice(0, 6).join('; ')}${lines.length > 6 ? `; and ${lines.length - 6} more` : ''}`, size: lines.length });
+        }
         if (kindOf.size) text += `, with ${[...kindOf.keys()].map(name).join(', ')} as ${kindOf.size === 1 ? 'a kind' : 'kinds'} of ${[...new Set(kindOf.values())].map(name).join(', ')}`;
         text = `Follow ${relWord(s.rel)} links to ${kinds(s.type)}${text}`;
         if (s.group) {
@@ -643,7 +698,7 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
           }))];
         }
       } else if (s.op === 'network') {
-        const done = networkStep(s, w.network?.(s), name, nodes, edgeById);
+        const done = networkStep(s, w.network?.(s), name, nodes, edgeById, IDEA_SCOPED);
         set = done.set;
         if (log) {
           network = [...(network ?? []), done.fact];
@@ -656,15 +711,23 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
         // Provenance: the stored links touching the set (or the stars in codes, or the whole graph), with where each came from.
         const coded = (s.codes ?? []).map(w.idOf).filter((x): x is string => !!x && nodes.has(x));
         const pool = coded.length ? new Set(coded) : set.length && steps.indexOf(s) > 0 ? new Set(set) : undefined;
+        // An idea's own facts include the capability-level ones stated for it (Record update uses the visitor log, for
+        // 008): they touch no idea star, so they are found by the ideas they are stated for.
+        const poolIdeas = pool && coded.length <= 1 ? [...pool].map(ideaOfStar).filter((x): x is string => !!x) : [];
+        const forIdea = (e: GEdge) => !e.derived && !ideaOfStar(e.from) && !ideaOfStar(e.to) && (e.ideas ?? []).some((i) => poolIdeas.includes(i));
         const found = w.graph.edges.filter((e) => {
           if (s.rel && e.rel !== s.rel) return false;
           if (e.derived && s.rel && !schema.derived.includes(s.rel)) return false;
-          if (pool && !(coded.length > 1 ? pool.has(e.from) && pool.has(e.to) : pool.has(e.from) || pool.has(e.to))) return false;
+          if (pool && !(coded.length > 1 ? pool.has(e.from) && pool.has(e.to) : pool.has(e.from) || pool.has(e.to) || forIdea(e))) return false;
           const k = linkKind(e.source);
-          if (s.source ? k !== s.source : k === 'rule' && !(s.rel && schema.derived.includes(s.rel))) return false;
+          // A source asked for is any statement's (a fact the AI read and the operator also stated is both).
+          if (s.source ? !(k === s.source || e.sources?.some((x) => linkKind(x.source) === s.source)) : k === 'rule' && !(s.rel && schema.derived.includes(s.rel))) return false;
           return true;
         });
-        const facts = found.map(linkFact);
+        const facts = found.map((e) => {
+          const idea = poolIdeas.length === 1 && !ideaOfStar(e.from) && !ideaOfStar(e.to) ? poolIdeas[0] : undefined;
+          return linkFact(e, { idea, holdsFor: [...(confirmedFor.get(e.id) ?? [])].sort(), reads: w.reads, ideaScoped: IDEA_SCOPED });
+        });
         if (log) linkFacts = [...(linkFacts ?? []), ...facts];
         set = [...new Set(found.flatMap((e) => [e.from, e.to]))];
         const what = s.source === 'operator' ? 'added by the operator' : s.source === 'ai' ? 'read by the AI' : s.source === 'form' ? 'from the form' : 'stored';
@@ -713,21 +776,52 @@ export function cycleCapable(schema: Schema = BUILTIN_SCHEMA): Relation[] {
 export function linkKind(source: string): LinkFact['kind'] {
   return source.startsWith('operator') ? 'operator' : source.startsWith('ai:') ? 'ai' : source.startsWith('rule:') ? 'rule' : 'form';
 }
-/** A link's provenance as facts: the edit and its date, the AI's field, passage and time, the form's column. */
-export function linkFact(e: GEdge): LinkFact {
-  const kind = linkKind(e.source);
-  const base: LinkFact = { from: e.from, rel: e.rel, to: e.to, source: e.source, kind, confirmed: e.confirmed, confidence: e.confidence, ...(e.ideas?.length ? { ideas: e.ideas } : {}) };
-  if (kind === 'operator') { const m = /^operator:([^@]+)@(.+)$/.exec(e.source); return { ...base, ...(m ? { edit: m[1], at: m[2] } : {}) }; }
-  if (kind === 'ai') { const [, , ...where] = e.source.split(':'); return { ...base, ...(where.length ? { field: where.join(':') } : {}), ...(e.quote ? { quote: e.quote, quoteFound: e.quoteFound !== false } : {}), ...(e.readAt ? { at: e.readAt } : {}) }; }
-  if (kind === 'form') { const [, , ...col] = e.source.split(':'); return { ...base, ...(col.length ? { field: col.join(':') } : {}) }; }
+/** What a source string says, as facts: the edit and its date, the AI's field, the form's column. */
+const whereOf = (source: string): { kind: LinkFact['kind']; edit?: string; at?: string; field?: string } => {
+  const kind = linkKind(source);
+  if (kind === 'operator') { const m = /^operator:([^@]+)@(.+)$/.exec(source); return { kind, ...(m ? { edit: m[1], at: m[2] } : {}) }; }
+  if (kind === 'ai' || kind === 'form') { const [, , ...where] = source.split(':'); return { kind, ...(where.length ? { field: where.join(':') } : {}) }; }
+  return { kind };
+};
+/**
+ * A link's provenance as facts: the edit and its date, the AI's field, passage and time, the form's column, and who
+ * confirmed it. With `idea` (a capability-level fact asked about for one idea), the status and source are that idea's
+ * own statement: a fact another idea's read confirmed is not confirmed for this one.
+ */
+export function linkFact(e: GEdge, ctx: { idea?: string; holdsFor?: string[]; reads?: Record<string, { at: string }>; ideaScoped?: readonly Relation[] } = {}): LinkFact {
+  const all = e.sources ?? [];
+  const mine = ctx.idea && all.length ? all.filter((x) => x.idea === undefined || x.idea === ctx.idea) : all;
+  const main = (ctx.idea && mine.length ? mine.find((x) => x.confirmed) ?? mine[0] : undefined) ?? all.find((x) => x.source === e.source) ?? all[0];
+  const source = main?.source ?? e.source;
+  const w = whereOf(source);
+  const confirmed = ctx.idea && all.length ? sureFor(e, ctx.idea) : e.confirmed;
+  const base: LinkFact = {
+    from: e.from, rel: e.rel, to: e.to, source, kind: w.kind, confirmed, confidence: main?.confidence ?? e.confidence,
+    ...(e.ideas?.length ? { ideas: e.ideas } : {}), ...(ctx.idea && all.length ? { forIdea: ctx.idea } : {}),
+    ...(confirmed && main?.confirmedBy ? { confirmedBy: main.confirmedBy, ...(main.confirmedAt ? { confirmedAt: main.confirmedAt } : {}) } : {}),
+    ...(all.length > 1 ? { statements: all.map((x) => { const v = whereOf(x.source); return { ...(x.idea ? { idea: x.idea } : {}), kind: v.kind, confirmed: x.confirmed, ...(x.confirmedBy ? { confirmedBy: x.confirmedBy } : {}), confidence: x.confidence, ...(v.field ? { field: v.field } : {}), ...(x.readAt ? { at: x.readAt } : v.at ? { at: v.at } : {}) }; }) } : {}),
+    ...((ctx.ideaScoped ?? BUILTIN_SCHEMA.ideaScoped).includes(e.rel) && !e.derived && !e.ideas?.length ? { unscoped: { holdsFor: ctx.holdsFor ?? [] } } : {}),
+  };
+  if (w.kind === 'operator') return { ...base, ...(w.edit ? { edit: w.edit } : {}), ...(w.at ? { at: w.at } : {}) };
+  if (w.kind === 'ai') {
+    const quote = main?.quote ?? e.quote; const found = main ? main.quoteFound : e.quoteFound; const readAt = main?.readAt ?? e.readAt;
+    const idea = main?.idea ?? e.ideas?.[0] ?? (e.from.startsWith('idea:') ? e.from.slice(5) : e.to.startsWith('idea:') ? e.to.slice(5) : undefined);
+    const last = !readAt && idea ? ctx.reads?.[idea]?.at : undefined;
+    return { ...base, ...(w.field ? { field: w.field } : {}), ...(quote ? { quote, quoteFound: found !== false } : {}), ...(readAt ? { at: readAt } : {}), ...(last ? { lastRead: last } : {}) };
+  }
+  if (w.kind === 'form') return { ...base, ...(w.field ? { field: w.field } : {}) };
   return base;
 }
+const BY_WORDS: Record<ConfirmedBy, string> = { form: 'the form', threshold: 'the AI read itself (at or above the confidence threshold)', operator: 'your Do it', edit: 'your edit' };
 /** A link's provenance in words, for the trace. */
 export function provenanceWords(f: LinkFact): string {
-  const sure = f.confirmed ? '' : `, not confirmed (${f.confidence}: waiting for your Do it)`;
-  if (f.kind === 'operator') return `added by the operator${f.edit ? ` (${f.edit}${f.at ? `, ${f.at}` : ''})` : ''}${f.ideas?.length ? ` for ${f.ideas.join(', ')}` : ''}${sure}`;
-  if (f.kind === 'ai') return `read by the AI (${f.source.split(':')[1] ?? '?'}) in ${f.field?.replace(/_/g, ' ') ?? 'the idea'}${f.quote ? `: "${f.quote.slice(0, 120)}"${f.quoteFound === false ? ' (not found in the text)' : ''}` : ' (no passage kept: read before passages were kept)'}${f.at ? `, ${f.at.slice(0, 10)}` : ''}, at ${f.confidence}${sure}`;
-  if (f.kind === 'form') return `from the form${f.field ? ` (${f.field})` : ''}`;
+  const sure = f.confirmed ? '' : `, not confirmed${f.forIdea ? ` for ${f.forIdea}` : ''} (${f.confidence}: waiting for your Do it)`;
+  const by = f.confirmed && f.confirmedBy && f.kind !== 'form' ? `, confirmed by ${BY_WORDS[f.confirmedBy]}${f.confirmedBy === 'operator' && f.confirmedAt ? ` on ${f.confirmedAt}` : ''}${f.forIdea ? ` for ${f.forIdea}` : ''}` : '';
+  const scope = f.unscoped ? `; stated for no idea, so it holds only for the ideas whose own facts already reach it${f.unscoped.holdsFor.length ? ` (${f.unscoped.holdsFor.join(', ')})` : ' (none: it gives no idea a dependency)'}; cafe ontology fix stamps it` : '';
+  const others = f.statements && f.statements.length > 1 ? `; ${f.statements.length} statements: ${f.statements.map((x) => `${x.idea ?? 'no idea'} ${x.kind === 'ai' ? 'AI read' : x.kind === 'operator' ? 'edit' : x.kind} ${x.confirmed ? `confirmed by ${x.confirmedBy ?? '?'}` : `not confirmed (${x.confidence})`}`).join(', ')}` : '';
+  if (f.kind === 'operator') return `added by the operator${f.edit ? ` (${f.edit}${f.at ? `, ${f.at}` : ''})` : ''}${f.ideas?.length ? ` for ${f.ideas.join(', ')}` : ''}${sure}${scope}${others}`;
+  if (f.kind === 'ai') return `read by the AI (${f.source.split(':')[1] ?? '?'}) in ${f.field?.replace(/_/g, ' ') ?? 'the idea'}${f.quote ? `: "${f.quote.slice(0, 120)}"${f.quoteFound === false ? ' (not found in the text)' : ''}` : ' (no passage kept: read before passages were kept)'}${f.at ? `, ${f.at.slice(0, 10)}` : f.lastRead ? ` (no time kept for this link; the AI last read the idea on ${f.lastRead.slice(0, 10)})` : ''}, at ${f.confidence}${by}${sure}${scope}${others}`;
+  if (f.kind === 'form') return `from the form${f.field ? ` (${f.field})` : ''}${others}`;
   return `derived by ${f.source.slice('rule:'.length)}${sure}`;
 }
 
@@ -739,9 +833,9 @@ const n3 = (x: number) => Number(x).toFixed(3);
 
 /**
  * A network step: NetworkX's answer (run before the query) as the step's set, trace lines and facts. The trace says
- * "NetworkX <algorithm> over stored facts" (or "stored facts and derived links"). Suggestions are only returned.
+ * "NetworkX <algorithm> over confirmed stored facts" (or with links waiting for Do it, or derived links). Suggestions are only returned.
  */
-function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: string) => string, nodes: Map<string, GNode>, edges: Map<string, GEdge> = new Map()):
+function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: string) => string, nodes: Map<string, GNode>, edges: Map<string, GEdge> = new Map(), ideaScoped: readonly Relation[] = BUILTIN_SCHEMA.ideaScoped):
   { set: string[]; lit: string[]; lines: StepTrace[]; fact: NetworkFact; suggestions: NetworkSuggestion[] } {
   const analysis = s.analysis ?? 'central';
   if (!run || 'error' in run) {
@@ -784,6 +878,9 @@ function networkStep(s: QueryStep, run: NetworkStepRun | undefined, name: (id: s
     // A hop along a derived link says how it is derived (its rule and the stated links it rests on), so the reply never guesses.
     const how = (x: any) => {
       const e = edges.get(`${x.from}|${x.rel}|${x.to}`);
+      // A capability-level fact holds for the ideas it is stated for, not for every idea on the path: said on the hop.
+      if (e && !e.derived && ideaScoped.includes(e.rel)) return ` (stated for ${e.ideas?.length ? `${e.ideas.map((i) => name(`idea:${i}`)).join(', ')} only` : 'no idea'}${e.confirmed ? '' : '; not confirmed'})`;
+      if (e && !e.derived && !e.confirmed) return ' (not confirmed: waiting for your Do it)';
       if (!e?.derived) return '';
       return ` (derived by ${e.derived.rule} from ${e.derived.inputs.map((id) => { const i = edges.get(id); return i ? `${name(i.from)} ${i.rel} ${name(i.to)}` : id; }).join(', ')}${e.confirmed ? '' : '; not confirmed'})`;
     };

@@ -20,6 +20,7 @@ import { applyAction, linkProposals, resolveSteps, undoAction, type CommandActio
 import { prepareMemory } from '../memory/lookup';
 import { indexAvailable, summary as memorySummary } from '../memory/index';
 import { loadRegistry } from '../graph/registryFile';
+import { aiReads } from '../ai/reads';
 import { graphChanges } from '../graph/diff';
 import { holdAwake } from '../ai/awake';
 import { loadSettings } from '../round/store';
@@ -100,6 +101,16 @@ async function save(root: string, entry: ChatEntry): Promise<ChatEntry> {
     return entry;
   });
 }
+/** A new entry, its id taken under the lock (the next free one), so two written at once never replace each other. */
+async function addEntry(root: string, entry: ChatEntry): Promise<ChatEntry> {
+  return chatLocked(root, async () => {
+    const all = await readChat(root);
+    entry.id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
+    all.push(entry);
+    await writeChat(root, all);
+    return entry;
+  });
+}
 export async function readThreads(root: string): Promise<ChatThread[]> {
   try { const v = JSON.parse((await readText(threadsFile(root))) ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
@@ -107,6 +118,19 @@ async function saveThread(root: string, t: ChatThread): Promise<void> {
   await chatLocked(root, async () => {
     const all = (await readThreads(root)).filter((x) => x.id !== t.id);
     await writeFileAtomic(threadsFile(root), JSON.stringify([...all, t], null, 1));
+  });
+}
+
+/**
+ * A new conversation, its id taken and written under the chat lock, so two answers that start at once (or a Propose
+ * beside an answer) never share one: each sees the other's reservation.
+ */
+async function newThread(root: string, title: string, clock: Clock, now: number): Promise<ChatThread> {
+  return chatLocked(root, async () => {
+    const all = await readThreads(root);
+    const t: ChatThread = { id: `t${Math.max(0, ...all.map((x) => Number(x.id.slice(1)) || 0)) + 1}`, title, started: clock(), updated: now, codes: [], last: [] };
+    await writeFileAtomic(threadsFile(root), JSON.stringify([...all, t], null, 1));
+    return t;
   });
 }
 
@@ -170,11 +194,10 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
   const all = await readChat(root);
   const threads = await readThreads(root);
   const now = Date.now();
-  const thread: ChatThread = threads.find((t) => t.id === opts.thread)
-    ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: message.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
+  const thread: ChatThread = threads.find((t) => t.id === opts.thread) ?? await newThread(root, message.slice(0, 60), clock, now);
   const id = `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`;
   const graph = await rebuildGraph(root);
-  const [{ ideas }, rounds, registry] = await Promise.all([listIdeas(root), listRounds(root), loadRegistry(root)]);
+  const [{ ideas }, rounds, registry, reads] = await Promise.all([listIdeas(root), listRounds(root), loadRegistry(root), aiReads(root)]);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   // Names to code: every star, plus people the ideas' records name who are not stars yet (a builder named in an email).
   const known = new Set(graph.nodes.filter((n) => n.type === 'Person').map((n) => n.label));
@@ -339,9 +362,10 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         ran.push(key);
         const memory = available ? await prepareMemory(root, output.query as Query, graph) : undefined;
         const idOf = (c: string) => hidden.codes.get(c.replace(/^\[|\]$/g, ''))?.id;
+        const ideaCode = (i: string) => (nodes.get(`idea:${i}`) ? codeFor(hidden.codes, nodes.get(`idea:${i}`)!) : i);
         // NetworkX runs out of process: its answers for the network steps are prepared first, like Deep read's.
         const network = await prepareNetwork(output.query as Query, graph, idOf, { timeoutMs: Math.max(1_000, Math.min(60_000, timeLeft() - LAST_CALL_MIN_MS)) });
-        const r = runQuery(output.query as Query, { graph, schema: graph.schema, registry, ideas, rounds, idOf, last: lastFound, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
+        const r = runQuery(output.query as Query, { graph, schema: graph.schema, registry, ideas, rounds, idOf, last: lastFound, reads, ...(memory ? { memory } : {}), ...(network ? { network } : {}) });
         if (r.suggestions) suggested.push(...r.suggestions);
         // A hit from an idea whose text changed since it was read: said in the trace; upkeep re-reads it, never this reply.
         const stale = [...new Set((r.hits ?? []).map((h) => h.ideaId).filter((id) => staleIdeas.has(id)))];
@@ -372,7 +396,12 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
             // The stated links the walk crossed that nobody confirmed: the reply must say so for each.
             ...(r.unconfirmed ? { unconfirmed: r.unconfirmed.slice(0, 30).map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), rel: x.rel, to: codeFor(hidden.codes, nodes.get(x.to)!), confidence: x.confidence, status: 'not confirmed: waiting for the operator\'s Do it' })) } : {}),
             // Provenance: each link found and where it came from (the operator's edit and date, the AI's field and passage, the form).
-            ...(r.links ? { links: r.links.slice(0, 40).map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), rel: x.rel, to: codeFor(hidden.codes, nodes.get(x.to)!), kind: x.kind, ...(x.edit ? { edit: x.edit } : {}), ...(x.at ? { at: x.at } : {}), ...(x.field ? { field: x.field } : {}), ...(x.quote ? { quote: coded(x.quote), quoteFound: x.quoteFound } : {}), ...(x.ideas ? { ideas: x.ideas.map((i) => (nodes.get(`idea:${i}`) ? codeFor(hidden.codes, nodes.get(`idea:${i}`)!) : i)) } : {}), confirmed: x.confirmed, confidence: x.confidence })), ...(r.links.length > 40 ? { linksTotal: r.links.length } : {}) } : {}),
+            ...(r.links ? { links: r.links.slice(0, 40).map((x) => ({ from: codeFor(hidden.codes, nodes.get(x.from)!), rel: x.rel, to: codeFor(hidden.codes, nodes.get(x.to)!), kind: x.kind, ...(x.edit ? { edit: x.edit } : {}), ...(x.at ? { at: x.at } : {}), ...(x.field ? { field: x.field } : {}), ...(x.quote ? { quote: coded(x.quote), quoteFound: x.quoteFound } : {}), ...(x.ideas ? { ideas: x.ideas.map(ideaCode) } : {}), confirmed: x.confirmed, confidence: x.confidence,
+              ...(x.confirmedBy ? { confirmedBy: x.confirmedBy, ...(x.confirmedAt ? { confirmedAt: x.confirmedAt } : {}) } : {}),
+              ...(x.forIdea ? { statusFor: ideaCode(x.forIdea) } : {}),
+              ...(x.unscoped ? { statedFor: 'no idea', holdsOnlyFor: x.unscoped.holdsFor.map(ideaCode) } : {}),
+              ...(x.lastRead ? { readAt: 'not kept for this link', ideaLastReadByAI: x.lastRead } : {}),
+              ...(x.statements ? { statements: x.statements.map((t) => ({ ...(t.idea ? { idea: ideaCode(t.idea) } : { idea: 'none' }), kind: t.kind, confirmed: t.confirmed, ...(t.confirmedBy ? { confirmedBy: t.confirmedBy } : {}), confidence: t.confidence, ...(t.field ? { field: t.field } : {}), ...(t.at ? { at: t.at } : {}) })) } : {}) })), ...(r.links.length > 40 ? { linksTotal: r.links.length } : {}) } : {}),
             // NetworkX's facts in codes, with the stars they name; suggestions are proposals the app shows with Do it.
             ...(r.network ? { network: r.network.map((f) => { const c = codeNetwork(f.facts); return { analysis: f.analysis, ...(f.error ? { error: f.error } : { by: `NetworkX ${f.networkx}`, scope: f.scope, facts: c.facts, named: c.named }) }; }) } : {}),
           },
@@ -492,8 +521,7 @@ export async function proposeLink(root: string, link: { from: string; rel: strin
   const now = Date.now();
   const relWord = rel === 'NEEDS' ? 'needs' : 'uses the data of';
   const text = `Propose the link NetworkX suggested: ${from.label} ${relWord} ${to.label}`;
-  const thread: ChatThread = threads.find((t) => t.id === link.thread)
-    ?? { id: `t${Math.max(0, ...threads.map((t) => Number(t.id.slice(1)) || 0)) + 1}`, title: text.slice(0, 60), started: clock(), updated: now, codes: [], last: [] };
+  const thread: ChatThread = threads.find((t) => t.id === link.thread) ?? await newThread(root, text.slice(0, 60), clock, now);
   // The reason is NetworkX's own (its peers and what they share), never the words the request carried.
   const entry: ChatEntry = {
     id: `c${Math.max(0, ...all.map((e) => Number(e.id.slice(1)) || 0)) + 1}`, thread: thread.id, at: clock(), ts: now, text, kind: 'command',
@@ -502,7 +530,7 @@ export async function proposeLink(root: string, link: { from: string; rel: strin
     problems: [], steps: [], highlight: [from.id, to.id],
   };
   await saveThread(root, { ...thread, updated: now });
-  return save(root, entry);
+  return addEntry(root, entry);
 }
 
 /**

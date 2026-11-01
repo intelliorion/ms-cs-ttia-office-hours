@@ -50,7 +50,7 @@ describe.skipIf(!PY)('NetworkX feeds the decision suggestion', () => {
     const root = await workspace(); await saveIdea(root, PEER);
     const { input, basis } = await reviewInput(root, 'CAFE-2026-003', [], { network: true });
     const n = input.network as Extract<ReviewSuggestInput['network'], { by: string }>;
-    expect(n.by).toMatch(/^NetworkX 3\.\S+ over stored facts$/);
+    expect(n.by).toMatch(/^NetworkX 3\.\S+ over confirmed stored facts$/);
     // These ideas all share Request handling: one group, which is no grouping; no cluster is passed on as a finding.
     expect(n.grouping).toMatch(/^no clear groups/);
     expect(n.cluster).toBeNull();
@@ -85,7 +85,7 @@ describe.skipIf(!PY)('NetworkX feeds the design duplicate check', () => {
     const root = await workspace(); await saveIdea(root, PEER);
     await saveIdea(root, travel(['Request handling', 'Policy answering', 'Booking amendment process']));
     const r = await similarStarsChecked(root, await loadIdea(root, 'CAFE-2026-003'));
-    expect(r.network).toMatch(/^NetworkX 3\.\S+ over stored facts$/);
+    expect(r.network).toMatch(/^NetworkX 3\.\S+ over confirmed stored facts$/);
     expect(r.similar).toEqual([{
       feature: 'Booking amendment process', featureId: 'capability:booking-amendment-process', star: 'Booking update', starId: 'capability:booking-update',
       ideas: [{ id: 'idea:CAFE-2026-001', label: 'Desk booking assistant' }, { id: 'idea:CAFE-2026-002', label: 'Procurement FAQ bot' }, { id: 'idea:CAFE-2026-005', label: 'Room booking helper' }],
@@ -115,7 +115,7 @@ describe.skipIf(!PY)('NetworkX in the CSIC hand-off', () => {
     expect(node).toMatchObject({ '@id': 'star:analysis/network', label: 'NetworkX network analysis (analysis, not stored facts)' });
     expect(doc['@context'].content).toEqual({ '@id': 'https://example.invalid/creators-cafe/ontology#content', '@type': '@json' });
     const a = node.content;
-    expect(a).toMatchObject({ kind: 'analysis', by: expect.stringMatching(/^NetworkX 3\./), scope: 'stored facts' });
+    expect(a).toMatchObject({ kind: 'analysis', by: expect.stringMatching(/^NetworkX 3\./), scope: 'confirmed stored facts' });
     expect(a.note).toMatch(/^Analysis, not stored facts/);
     expect(a.grouping.verdict).toMatch(/^no clear groups/);
     expect(a.cluster).toBeNull();

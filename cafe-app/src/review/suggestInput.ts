@@ -65,7 +65,7 @@ export async function reviewInput(
   });
   const unsure = graphFacts.filter((f) => f.confirmed === false).length;
 
-  // The decision suggestion also reads what NetworkX finds across the programme (stored facts; names coded like the rest).
+  // The decision suggestion also reads what NetworkX finds across the programme (confirmed stored facts; names coded like the rest).
   const net = opts.network ? await ideaNetwork(graph, idea.id) : undefined;
   const network: ReviewSuggestInput['network'] = !net ? undefined : !net.available ? { unavailable: net.reason } : {
     by: `NetworkX ${net.networkx} over ${net.scope}`,

@@ -15,6 +15,8 @@ import { NETWORK_ANALYSES, barShare, becauseText, clusterIds, footerLine, relTex
 export function NetworkPopout() {
   const { closePopout, select, setHighlight } = useStore();
   const [derived, setDerived] = useState(false);
+  // Links waiting for your Do it are no structure: left out unless asked for, and the footer says which.
+  const [waiting, setWaiting] = useState(false);
   const [v, setV] = useState<NetView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,9 +24,9 @@ export function NetworkPopout() {
   useEffect(() => {
     let live = true;
     setError(null);
-    getNetwork(NETWORK_ANALYSES, derived).then((x) => { if (live) setV(x); }, (e) => { if (live) { setV(null); setError((e as Error).message); } });
+    getNetwork(NETWORK_ANALYSES, derived, waiting).then((x) => { if (live) setV(x); }, (e) => { if (live) { setV(null); setError((e as Error).message); } });
     return () => { live = false; };
-  }, [derived]);
+  }, [derived, waiting]);
 
   const show = (id: string) => { closePopout(); select(id); };
   const light = (ids: string[]) => { closePopout(); setHighlight(ids); };
@@ -48,14 +50,17 @@ export function NetworkPopout() {
   const max = top[0]?.betweenness ?? 0;
   return (
     <Modal title={<><div className="pop-id">Network</div><h2>What NetworkX finds in the graph</h2></>} label="Network" onClose={closePopout} width={900} height={800} className="net-pop"
-      actions={<button className={`pill net-derived${derived ? ' on' : ''}`} data-action="network-derived" aria-pressed={derived} title="Stored facts are the form, the AI's links and your edits; derived links are what the rules add" onClick={() => setDerived(!derived)}>Derived links: {derived ? 'included' : 'left out'}</button>}>
+      actions={<>
+        <button className={`pill net-waiting${waiting ? ' on' : ''}`} data-action="network-unconfirmed" aria-pressed={waiting} title="Every analysis reads confirmed links only; this adds the AI links waiting for your Do it" onClick={() => setWaiting(!waiting)}>Waiting links: {waiting ? 'included' : 'left out'}</button>
+        <button className={`pill net-derived${derived ? ' on' : ''}`} data-action="network-derived" aria-pressed={derived} title="Stored facts are the form, the AI's links and your edits; derived links are what the rules add" onClick={() => setDerived(!derived)}>Derived links: {derived ? 'included' : 'left out'}</button>
+      </>}>
       <div className="pop-single scroll" data-testid="network-popout">
         {!v && !error && <div className="dr-wait">Asking NetworkX…</div>}
         {error && <div className="pop-notice error" role="status" data-testid="network-error">{error}</div>}
         {v && r && (
           <>
             <section className="sec net-stats">
-              <p className="net-lede">The app builds the graph; NetworkX analyses it as a whole. Nothing here changes the graph.</p>
+              <p className="net-lede">The app builds the graph; NetworkX analyses it as a whole, over {v.scopeText}. Nothing here changes the graph.</p>
               <div className="net-line" data-testid="network-stats">{statsLine(v)}</div>
             </section>
 

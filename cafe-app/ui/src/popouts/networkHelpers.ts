@@ -2,7 +2,7 @@
 
 export interface NetStar { id: string; type: string; label: string }
 export interface NetView {
-  networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string;
+  networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string; unconfirmed?: boolean;
   results: {
     stats?: { nodes: number; links: number; density: number; components: number; largestComponent: number; averageClustering: number; analysed: { nodes: number; links: number } };
     central?: { betweenness: (NetStar & { betweenness: number; degree: number; links: number; ideas: number })[]; sampled: boolean };
@@ -18,7 +18,7 @@ export function statsLine(v: NetView): string {
   if (!s) return '';
   return `${s.nodes} stars · ${s.links} links · density ${s.density.toFixed(3)} · ${s.components} component${s.components === 1 ? '' : 's'} · average clustering ${s.averageClustering.toFixed(3)}`;
 }
-/** "NetworkX 3.7, stored facts": the footer, always saying which facts were read. */
+/** "NetworkX 3.7, confirmed stored facts": the footer, always saying which facts were read. */
 export const footerLine = (v: NetView) => `NetworkX ${v.networkx}, ${v.scopeText} · Python ${v.python}`;
 /** What a cluster lights in the universe: its ideas and the stars that bind them. */
 export const clusterIds = (c: { ideas: NetStar[]; binding: NetStar[] }) => [...c.ideas.map((x) => x.id), ...c.binding.slice(0, 4).map((x) => x.id)];

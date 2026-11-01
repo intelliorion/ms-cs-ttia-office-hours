@@ -376,8 +376,21 @@ def suggest(full, g, opts):
 def cycles(full, g, opts):
     rels = sorted(set(opts.get("cycleRelations") or []))
     if not rels:
-        return {"applicable": False, "cycles": [], "count": 0, "relations": [], "links": 0,
-                "why": "no relation in this ontology can form a cycle: NEEDS, USES_DATA and DEPENDS_ON run Idea -> Capability -> System, and a loop of KIND_OF is refused by the build"}
+        # KIND_OF is looked at all the same: the build refuses a loop of kinds (a merge that closes one too) and says so,
+        # so none should be here; if one is, it is reported, never hidden behind "nothing to look for".
+        kind = nx.DiGraph()
+        for s, t, a in full.edges(data=True):
+            if a["rel"] == "KIND_OF":
+                kind.add_edge(s, t)
+        loops = []
+        for c in itertools.islice(nx.simple_cycles(kind), 200):
+            i = c.index(min(c))
+            loops.append(c[i:] + c[:i])
+        if loops:
+            loops.sort(key=lambda c: (len(c), c))
+            return {"applicable": True, "cycles": [[star(full, x) for x in c] for c in loops[:20]], "count": len(loops), "relations": ["KIND_OF"], "links": kind.number_of_edges()}
+        return {"applicable": False, "cycles": [], "count": 0, "relations": [], "links": 0, "kindOfChecked": kind.number_of_edges(),
+                "why": "no relation in this ontology can form a cycle: NEEDS, USES_DATA and DEPENDS_ON run Idea -> Capability -> System; KIND_OF could, but the build refuses and reports any loop of kinds (one a merge closes too), and the %d KIND_OF links here make none" % kind.number_of_edges()}
     d = nx.DiGraph()
     for s, t, a in full.edges(data=True):
         if a["rel"] in rels:

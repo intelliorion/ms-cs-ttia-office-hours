@@ -12,7 +12,7 @@ afterEach(() => { if (root) act(() => root.unmount()); el?.remove(); vi.unstubAl
 
 const star = (id: string, type: string, label: string) => ({ id, type, label });
 const VIEW = (scope: 'stored' | 'with-derived' = 'stored'): NetView => ({
-  networkx: '3.7', python: '3.14.2', scope, scopeText: scope === 'stored' ? 'stored facts' : 'stored facts and derived links',
+  networkx: '3.7', python: '3.14.2', scope, scopeText: scope === 'stored' ? 'confirmed stored facts' : 'confirmed stored facts and derived links',
   results: {
     stats: { nodes: 108, links: 171, density: 0.0291, components: 1, largestComponent: 107, averageClustering: 0, analysed: { nodes: 107, links: 165 } },
     central: { sampled: false, betweenness: [
@@ -47,8 +47,8 @@ describe('network helpers', () => {
   it('the stats line, the footer naming NetworkX and the facts read, a cluster\'s lit stars, the reason for a suggestion', () => {
     const v = VIEW();
     expect(statsLine(v)).toBe('108 stars · 171 links · density 0.029 · 1 component · average clustering 0.000');
-    expect(footerLine(v)).toBe('NetworkX 3.7, stored facts · Python 3.14.2');
-    expect(footerLine(VIEW('with-derived'))).toBe('NetworkX 3.7, stored facts and derived links · Python 3.14.2');
+    expect(footerLine(v)).toBe('NetworkX 3.7, confirmed stored facts · Python 3.14.2');
+    expect(footerLine(VIEW('with-derived'))).toBe('NetworkX 3.7, confirmed stored facts and derived links · Python 3.14.2');
     expect(clusterIds(v.results.clusters!.clusters[0])).toEqual(['idea:CAFE-2026-002', 'idea:CAFE-2026-007', 'capability:request-handling']);
     expect(becauseText(v.results.suggest!.suggestions[0])).toBe('100 % of its closest peers by weight: Procurement FAQ bot (shares Document text extraction)');
     expect(relText('USES_DATA')).toBe('uses the data');
@@ -57,14 +57,14 @@ describe('network helpers', () => {
 });
 
 describe('the Network pop-out', () => {
-  it('shows the stats, the central stars, the clusters, nothing cut off and the suggestion, with "NetworkX 3.7, stored facts" in the footer', async () => {
+  it('shows the stats, the central stars, the clusters, nothing cut off and the suggestion, with "NetworkX 3.7, confirmed stored facts" in the footer', async () => {
     const calls = await mount(() => ({ body: VIEW() }));
     expect(calls[0].url).toBe('/api/network?analysis=stats,central,clusters,isolated,suggest&top=8');
     expect(el.querySelector('[data-testid="network-stats"]')!.textContent).toBe('108 stars · 171 links · density 0.029 · 1 component · average clustering 0.000');
     expect(el.querySelector('[data-testid="network-central"]')!.textContent).toMatch(/Request handling0\.144 · 4 ideas/);
     expect(el.querySelector('[data-cluster="1"]')!.textContent).toMatch(/Cluster 1 · 2 ideas.*Desk booking assistant.*Procurement FAQ bot.*Bound by.*Request handling/);
     expect(el.querySelector('[data-testid="network-isolated"]')!.textContent).toMatch(/No idea, team or system is cut off/);
-    expect(el.querySelector('[data-testid="network-footer"]')!.textContent).toBe('NetworkX 3.7, stored facts · Python 3.14.2');
+    expect(el.querySelector('[data-testid="network-footer"]')!.textContent).toBe('NetworkX 3.7, confirmed stored facts · Python 3.14.2');
   });
 
   it('the derived-links switch asks again with withDerived', async () => {
@@ -73,6 +73,16 @@ describe('the Network pop-out', () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     expect(calls.at(-1)!.url).toContain('&withDerived=1');
     expect(el.querySelector('[data-testid="network-footer"]')!.textContent).toMatch(/stored facts and derived links/);
+  });
+
+  it('every analysis reads confirmed links only; the waiting-links switch asks again with unconfirmed and the footer says so', async () => {
+    const calls = await mount((url) => ({ body: url.includes('unconfirmed=1') ? { ...VIEW(), scopeText: 'stored facts, links waiting for your Do it included', unconfirmed: true } : VIEW() }));
+    expect(calls[0].url).not.toContain('unconfirmed');
+    expect(el.querySelector('.net-lede')!.textContent).toContain('over confirmed stored facts');
+    await act(async () => { (el.querySelector('[data-action="network-unconfirmed"]') as HTMLButtonElement).click(); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(calls.at(-1)!.url).toContain('&unconfirmed=1');
+    expect(el.querySelector('[data-testid="network-footer"]')!.textContent).toBe('NetworkX 3.7, stored facts, links waiting for your Do it included · Python 3.14.2');
   });
 
   it('a cluster lights its ideas and binding stars; a star is selected in the universe; the pop-out closes', async () => {

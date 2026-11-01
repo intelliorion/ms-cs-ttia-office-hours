@@ -458,5 +458,5 @@ export async function similarStarsChecked(root: string, idea: Idea): Promise<{ s
       ...(best.p && net.available ? { networkx: { version: net.networkx, share: best.p.share, peers: best.p.peers.map((x) => x.label) } } : {}),
     });
   }
-  return { similar: out, network: net.available ? `NetworkX ${net.networkx} over stored facts` : `network analysis unavailable: ${net.reason}` };
+  return { similar: out, network: net.available ? `NetworkX ${net.networkx} over ${net.scope}` : `network analysis unavailable: ${net.reason}` };
 }

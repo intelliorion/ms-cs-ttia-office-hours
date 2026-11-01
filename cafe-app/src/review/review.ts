@@ -135,12 +135,12 @@ export async function saveReview(
 }
 
 /**
- * The hand-off's network block: computed by NetworkX over the stored facts of the whole programme when the decision
+ * The hand-off's network block: computed by NetworkX over the confirmed stored facts of the whole programme when the decision
  * was saved. It is analysis, not a fact anyone recorded: one Analysis node whose content is a JSON literal, never
  * triples about the stars, and never a Link.
  */
 export function handoffNetwork(n: IdeaNetwork): Record<string, unknown> {
-  const note = 'Analysis, not stored facts: computed by NetworkX over the stored facts of the whole Café graph when the decision was saved. Held as one JSON literal, never as links between the stars.';
+  const note = 'Analysis, not stored facts: computed by NetworkX over the confirmed stored facts of the whole Café graph when the decision was saved. Held as one JSON literal, never as links between the stars.';
   if (!n.available) return { kind: 'analysis', note, unavailable: n.reason };
   return {
     kind: 'analysis', note, by: `NetworkX ${n.networkx}`, scope: n.scope,

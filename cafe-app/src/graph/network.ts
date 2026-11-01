@@ -16,8 +16,10 @@ import { cycleCapable, type NetworkStepRun, type Query, type QueryStep } from '.
  * nothing is downloaded and nothing the machine has installed is used. It never writes the graph: a suggested link
  * is only ever a proposal the operator accepts with Do it.
  *
- * By default the analysis reads the STORED facts only (the form, the AI links, the operator's edits: every link
- * without `derived`); withDerived adds the links the rules derive. Every result says which.
+ * By default the analysis reads the CONFIRMED STORED facts only (the form, the AI links the operator stands behind,
+ * the operator's edits: every confirmed link without `derived`): a link waiting for Do it is no structure, so a
+ * capability five pending reads point at never tops the centrality. withUnconfirmed adds the links waiting for Do it,
+ * withDerived the links the rules derive. Every result says which (scopeText).
  */
 
 export const NETWORK_ANALYSES = ['stats', 'central', 'clusters', 'path', 'isolated', 'suggest', 'cycles'] as const;
@@ -46,18 +48,23 @@ export interface NodeLink {
 }
 
 /** Which facts an analysis read, in words: said in every output. */
-export const scopeText = (withDerived: boolean) => (withDerived ? 'stored facts and derived links' : 'stored facts');
+export const scopeText = (withDerived: boolean, withUnconfirmed = false) =>
+  `${withUnconfirmed ? 'stored facts, links waiting for your Do it included' : 'confirmed stored facts'}${withDerived ? ' and derived links' : ''}`;
 
 /**
  * The app's graph as node-link JSON (networkx.node_link_graph reads it: directed, multigraph, edges keyed by relation).
- * Stored facts only unless withDerived. `full` keeps the attributes and where each fact came from, for the export.
+ * Stored facts only unless withDerived; confirmed links only unless withUnconfirmed (a star only a waiting link brings
+ * is left out with it). `full` keeps the attributes and where each fact came from, for the export, which keeps every
+ * link, each with its confirmed flag, for the analyst to keep or drop.
  */
-export function toNodeLink(graph: { nodes: GNode[]; edges: GEdge[] }, withDerived: boolean, full = false): NodeLink {
-  const edges = graph.edges.filter((e) => withDerived || !e.derived);
+export function toNodeLink(graph: { nodes: GNode[]; edges: GEdge[] }, withDerived: boolean, full = false, withUnconfirmed = full): NodeLink {
+  const edges = graph.edges.filter((e) => (withDerived || !e.derived) && (withUnconfirmed || e.confirmed));
+  const linked = new Set(edges.flatMap((e) => [e.from, e.to]));
+  const waitingOnly = new Set(withUnconfirmed ? [] : graph.edges.filter((e) => !e.confirmed && (withDerived || !e.derived)).flatMap((e) => [e.from, e.to]).filter((id) => !linked.has(id)));
   return {
     directed: true, multigraph: true,
     graph: { name: 'creators-cafe', scope: withDerived ? 'with-derived' : 'stored' },
-    nodes: graph.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, ...(full && n.attrs ? { attrs: n.attrs } : {}) })),
+    nodes: graph.nodes.filter((n) => !waitingOnly.has(n.id)).map((n) => ({ id: n.id, type: n.type, label: n.label, ...(full && n.attrs ? { attrs: n.attrs } : {}) })),
     edges: edges.map((e) => ({
       source: e.from, target: e.to, key: e.rel, rel: e.rel,
       ...(e.derived ? { derived: true } : {}),
@@ -161,9 +168,11 @@ export async function verifyVendored(dir = VENDOR_DIR): Promise<{ file: string; 
 
 /** formChoices: keep the form choices (outcomes, support, categories, beneficiaries) in central and suggest; left out by default. */
 export interface NetworkOptions { top?: number; a?: string; b?: string; types?: NodeType[]; limit?: number; formChoices?: boolean; unconfirmed?: boolean }
-export interface NetworkRunOptions { withDerived?: boolean; env?: NodeJS.ProcessEnv; timeoutMs?: number }
+export interface NetworkRunOptions { withDerived?: boolean; withUnconfirmed?: boolean; env?: NodeJS.ProcessEnv; timeoutMs?: number }
 export interface NetworkOutput {
   networkx: string; python: string; scope: 'stored' | 'with-derived'; scopeText: string;
+  /** Whether links waiting for the operator's Do it were read (never by default). */
+  unconfirmed: boolean;
   results: Partial<Record<NetworkAnalysis, any>>;
   /** True when this came from the cache (same graph, same question). */
   cached?: boolean;
@@ -200,11 +209,13 @@ function ideaCounts(graph: { nodes: GNode[]; edges: GEdge[] }): Record<string, n
 export async function runNetwork(graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema }, analyses: NetworkAnalysis[], options: NetworkOptions = {}, opts: NetworkRunOptions = {}): Promise<NetworkOutput> {
   for (const a of analyses) if (!NETWORK_ANALYSES.includes(a)) throw new NetworkError(`There is no analysis "${a}". Choose one of ${NETWORK_ANALYSES.join(', ')}.`, 'input');
   const withDerived = !!opts.withDerived;
+  const withUnconfirmed = !!opts.withUnconfirmed;
   const extra = {
+    ...(withUnconfirmed ? { unconfirmed: true } : {}),
     ...(analyses.includes('central') ? { ideaCount: ideaCounts(graph) } : {}),
     ...(analyses.includes('cycles') ? { cycleRelations: cycleRelations(graph.schema) } : {}),
   };
-  const payload = JSON.stringify({ graph: toNodeLink(graph, withDerived), analyses, options: { ...options, ...extra } });
+  const payload = JSON.stringify({ graph: toNodeLink(graph, withDerived, false, withUnconfirmed), analyses, options: { ...options, ...extra } });
   const env = opts.env ?? process.env;
   const py = await findPython(env);
   const key = createHash('sha1').update(`${py.cmd}|${py.version}|${payload}`).digest('hex');
@@ -224,7 +235,7 @@ export async function runNetwork(graph: { nodes: GNode[]; edges: GEdge[]; schema
   if (parsed?.error) throw new NetworkError(`NetworkX could not finish: ${String(parsed.error).slice(0, 300)}`, 'failed');
   if (r.code !== 0 || typeof parsed?.networkx !== 'string' || !parsed.results || typeof parsed.results !== 'object') throw malformed(r);
   for (const a of analyses) if (!parsed.results[a] || typeof parsed.results[a] !== 'object') throw new NetworkError(`NetworkX gave no ${a} result.`, 'failed');
-  const out: NetworkOutput = { networkx: parsed.networkx, python: parsed.python, scope: withDerived ? 'with-derived' : 'stored', scopeText: scopeText(withDerived), results: parsed.results };
+  const out: NetworkOutput = { networkx: parsed.networkx, python: parsed.python, scope: withDerived ? 'with-derived' : 'stored', scopeText: scopeText(withDerived, withUnconfirmed), unconfirmed: withUnconfirmed, results: parsed.results };
   resultCache.set(key, out);
   if (resultCache.size > CACHE_MAX) resultCache.delete(resultCache.keys().next().value!);
   return out;
@@ -386,7 +397,7 @@ export async function prepareNetwork(q: Query, graph: { nodes: GNode[]; edges: G
         if (!a || !b) throw new NetworkError('a path needs two stars in codes', 'input');
         Object.assign(options, { a, b, limit: 3 });
       }
-      runs.set(s, { ok: await runNetwork(graph, [analysis], options, { ...opts, withDerived: !!s.derived }) });
+      runs.set(s, { ok: await runNetwork(graph, [analysis], options, { ...opts, withDerived: !!s.derived, withUnconfirmed: !!s.unconfirmed }) });
     } catch (e) { runs.set(s, { error: (e as Error).message }); }
   }
   return (s) => runs.get(s);
@@ -397,7 +408,7 @@ export async function prepareNetwork(q: Query, graph: { nodes: GNode[]; edges: G
 /** What NetworkX says about one idea, from stored facts: its cluster, the centrality of its capabilities and systems, its likely missing links. */
 export type IdeaNetwork =
   | {
-    available: true; networkx: string; scope: 'stored facts';
+    available: true; networkx: string; scope: 'confirmed stored facts';
     /** The other ideas in its Louvain cluster and the stars that bind the cluster; none when it shares nothing. */
     cluster: { others: { id: string; label: string }[]; boundBy: { id: string; type: NodeType; label: string; ideas: number }[] } | null;
     /** NetworkX's modularity and what it means: below 0.3 the groups are not real structure, and no cluster is given. */
@@ -416,7 +427,7 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
   const me = ideaId.startsWith('idea:') ? ideaId : `idea:${ideaId}`;
   let out: NetworkOutput;
   try {
-    out = await runNetwork(graph, ['central', 'clusters', 'suggest'], { top: ALL, types: ['Capability', 'System'] }, { ...opts, withDerived: false });
+    out = await runNetwork(graph, ['central', 'clusters', 'suggest'], { top: ALL, types: ['Capability', 'System'] }, { ...opts, withDerived: false, withUnconfirmed: false });
   } catch (e) { return { available: false, reason: (e as Error).message }; }
   const { central, clusters, suggest } = out.results as any;
   const mine = new Set<string>();
@@ -437,7 +448,7 @@ export async function ideaNetwork(graph: { nodes: GNode[]; edges: GEdge[] }, ide
   const real = clusters.verdict !== 'no-groups';
   const c = real ? (clusters.clusters as any[]).find((k) => k.ideas.some((x: any) => x.id === me)) : undefined;
   return {
-    available: true, networkx: out.networkx, scope: 'stored facts',
+    available: true, networkx: out.networkx, scope: 'confirmed stored facts',
     grouping: { modularity: clusters.modularity, verdict: clusters.verdict, text: clusters.verdictText },
     cluster: c ? { others: c.ideas.filter((x: any) => x.id !== me).map((x: any) => ({ id: x.id, label: x.label })), boundBy: c.binding.map((b: any) => ({ id: b.id, type: b.type, label: b.label, ideas: b.ideas })) } : null,
     centrality,
@@ -456,5 +467,5 @@ export function ideaNetworkLine(n: IdeaNetwork): string {
     `${n.centrality.length} centrality rank${n.centrality.length === 1 ? '' : 's'}`,
     `${n.suggestions.length} likely missing link${n.suggestions.length === 1 ? '' : 's'}`,
   ];
-  return `NetworkX ${n.networkx} over stored facts (${parts.join(', ')})`;
+  return `NetworkX ${n.networkx} over confirmed stored facts (${parts.join(', ')})`;
 }

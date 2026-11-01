@@ -106,12 +106,12 @@ describe.skipIf(!!SKIP)('NetworkX: the analyses', () => {
   it('stats: size, density, components, clustering; rounds and the division are left out of the analysis', async () => {
     const o = await networkFor(root, 'stats');
     const r = o.results.stats;
-    expect(o.scopeText).toBe('stored facts');
+    expect(o.scopeText).toBe('confirmed stored facts');
     expect(r.nodes).toBe((await rebuildGraph(root)).nodes.length);
     expect(r.analysed.nodes).toBe(r.nodes - (r.byType.Round ?? 0) - (r.byType.Entity ?? 0));
     expect(r.components).toBe(2);
     expect(r.density).toBeGreaterThan(0);
-    expect(networkLines(o).at(-1)).toMatch(/^NetworkX 3\.\S+ \(Python 3\.\d+\.\d+\), stored facts$/);
+    expect(networkLines(o).at(-1)).toMatch(/^NetworkX 3\.\S+ \(Python 3\.\d+\.\d+\), confirmed stored facts$/);
   });
 
   it('central: betweenness and degree, top stars with type and score, and per type', async () => {
@@ -174,8 +174,8 @@ describe.skipIf(!!SKIP)('NetworkX: the analyses', () => {
     expect(stored.results.cycles).toMatchObject({ applicable: false, count: 0, cycles: [], relations: [] });
     expect(stored.results.cycles.why).toMatch(/^no relation in this ontology can form a cycle/);
     expect(networkLines(stored)[0]).toMatch(/^Nothing to look for: no relation in this ontology can form a cycle/);
-    expect(derived.scopeText).toBe('stored facts and derived links');
-    expect(networkLines(derived).at(-1)).toMatch(/stored facts and derived links$/);
+    expect(derived.scopeText).toBe('confirmed stored facts and derived links');
+    expect(networkLines(derived).at(-1)).toMatch(/confirmed stored facts and derived links$/);
   });
 
   it('results are cached per graph version: the same question runs NetworkX once, a changed graph runs it again', async () => {
@@ -271,14 +271,14 @@ describe.skipIf(!!SKIP)('NetworkX: the CLI', () => {
     const root = await workspace();
     const stats = await cafe(['network', 'stats', '--workspace', root]);
     expect(stats.stdout).toMatch(/^Stars: \d+, links: \d+/);
-    expect(stats.stdout.trim().split('\n').at(-1)).toMatch(/^NetworkX 3\.\S+ \(Python [\d.]+\), stored facts$/);
+    expect(stats.stdout.trim().split('\n').at(-1)).toMatch(/^NetworkX 3\.\S+ \(Python [\d.]+\), confirmed stored facts$/);
     const path_ = await cafe(['network', 'path', 'Desk booking assistant', 'Shared mailbox', '--with-derived', '--workspace', root]);
     expect(path_.stdout).toMatch(/Shortest path from Desk booking assistant to Shared mailbox: 1 hop/);
     expect(path_.stdout).toMatch(/Desk booking assistant depends on Shared mailbox/);
-    expect(path_.stdout).toMatch(/stored facts and derived links/);
+    expect(path_.stdout).toMatch(/confirmed stored facts and derived links/);
     await saveIdea(root, PEER);
     const json = JSON.parse((await cafe(['network', 'suggest', '--json', '--workspace', root])).stdout);
-    expect(json).toMatchObject({ analysis: 'suggest', scope: 'stored', scopeText: 'stored facts' });
+    expect(json).toMatchObject({ analysis: 'suggest', scope: 'stored', scopeText: 'confirmed stored facts' });
     expect(json.results.suggest.suggestions.map((x: any) => x.to.id)).toContain('capability:booking-update');
     const all = await cafe(['network', 'central', '--with-form-choices', '--workspace', root]);
     expect(all.stdout).not.toMatch(/form choices \(outcomes, support, categories, beneficiaries\) left out/);
@@ -325,12 +325,12 @@ describe.skipIf(!!SKIP)('NetworkX: the API', () => {
       for (const i of IDEAS) await saveIdea(s.root, i);
       for (const idea of ['CAFE-2026-001', 'CAFE-2026-002', 'CAFE-2026-003']) await appendAiLink(s.root, { ...LINK, idea });
       const one = await (await fetch(`${s.base}/api/network?analysis=central&top=3`)).json() as any;
-      expect(one).toMatchObject({ analysis: 'central', scope: 'stored', scopeText: 'stored facts' });
+      expect(one).toMatchObject({ analysis: 'central', scope: 'stored', scopeText: 'confirmed stored facts' });
       expect(one.results.central.betweenness[0].id).toBe('capability:request-handling');
       const many = await (await fetch(`${s.base}/api/network?analysis=stats,clusters,isolated,suggest&withDerived=1`)).json() as any;
       expect(many.analyses).toEqual(['stats', 'clusters', 'isolated', 'suggest']);
       expect(Object.keys(many.results).sort()).toEqual(['clusters', 'isolated', 'stats', 'suggest']);
-      expect(many.scopeText).toBe('stored facts and derived links');
+      expect(many.scopeText).toBe('confirmed stored facts and derived links');
       const p = await (await fetch(`${s.base}/api/network?analysis=path&a=${encodeURIComponent('Travel policy assistant')}&b=${encodeURIComponent('Shared mailbox')}`)).json() as any;
       expect(p.results.path.found).toBe(true);
       const bad = await fetch(`${s.base}/api/network?analysis=pagerank`);
@@ -369,9 +369,9 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
     const root = await workspace();
     const e = await runCommand(root, 'which capability holds the most ideas together?', ai(), clock);
     expect(e.kind).toBe('question');
-    expect(e.trace![0][0].text).toBe('NetworkX betweenness centrality over stored facts: top 3 capabilities');
+    expect(e.trace![0][0].text).toBe('NetworkX betweenness centrality over confirmed stored facts: top 3 capabilities');
     expect(e.trace![0][1].text).toMatch(/^Request handling: 0\.\d{3} \(3 ideas, \d+ links\)$/);
-    expect(e.reply).toMatch(/^By NetworkX 3\.\S+, stored facts, Request handling holds the most ideas together/);
+    expect(e.reply).toMatch(/^By NetworkX 3\.\S+, confirmed stored facts, Request handling holds the most ideas together/);
     expect(e.highlight).toContain('capability:request-handling');
   }));
 
@@ -379,10 +379,10 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
     const root = await workspace();
     const groups = await runCommand(root, 'which ideas naturally group together?', ai(), clock);
     // One group is no grouping: NetworkX's modularity says so, and the reply says there are no clear groups.
-    expect(groups.trace![0][0].text).toBe('NetworkX Louvain communities over stored facts: no clear groups: the ideas fall into one group or none, so there is nothing to tell apart');
+    expect(groups.trace![0][0].text).toBe('NetworkX Louvain communities over confirmed stored facts: no clear groups: the ideas fall into one group or none, so there is nothing to tell apart');
     expect(groups.trace![0][1].text).toBe('1 tentative group (not a finding, shown for reference):');
     expect(groups.trace![0][2].text).toBe('Cluster 1: Desk booking assistant, Procurement FAQ bot, Travel policy assistant, bound by Request handling, Booking update, Policy answering');
-    expect(groups.reply).toMatch(/^No clear groups \(NetworkX 3\.\S+, stored facts\): the ideas fall into one group or none/);
+    expect(groups.reply).toMatch(/^No clear groups \(NetworkX 3\.\S+, confirmed stored facts\): the ideas fall into one group or none/);
     const alone = await runCommand(root, 'is anything isolated?', ai(), clock);
     expect(alone.reply).toMatch(/Not connected to the rest .*: Lonely ledger tool, TAX\./);
   }));
@@ -391,10 +391,10 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
     const root = await workspace();
     const e = await runCommand(root, 'how is @Avery Chen connected to @Shared mailbox?', ai(), clock, { mentions: ['person:avery-chen', 'system:shared-mailbox'] });
     expect(e.trace![0].map((t) => t.text)).toEqual([
-      'NetworkX shortest paths over stored facts: 3 hops',
+      'NetworkX shortest paths over confirmed stored facts: 3 hops',
       'Avery Chen leads Desk booking assistant; Avery Chen submitted Desk booking assistant',
       'Desk booking assistant needs Request handling',
-      'Request handling uses data Shared mailbox',
+      'Request handling uses data Shared mailbox (stated for Desk booking assistant, Procurement FAQ bot, Travel policy assistant only)',
     ]);
     expect(e.reply).toMatch(/3 hops/);
   }));
@@ -403,7 +403,7 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
     const root = await workspace(); await saveIdea(root, PEER);
     const before = (await rebuildGraph(root)).edges.length;
     const e = await runCommand(root, 'what links are probably missing?', ai(), clock);
-    expect(e.trace![0][0].text).toMatch(/^NetworkX link prediction \(Adamic-Adar, Jaccard\) over stored facts: \d+ links? probably missing, proposals only$/);
+    expect(e.trace![0][0].text).toMatch(/^NetworkX link prediction \(Adamic-Adar, Jaccard\) over confirmed stored facts: \d+ links? probably missing, proposals only$/);
     expect(e.actions.every((a) => a.status === 'proposed' && a.label.endsWith('· suggested by NetworkX'))).toBe(true);
     const travel = e.actions.find((a) => a.action.t === 'link' && a.action.from === 'idea:CAFE-2026-003')!;
     expect(travel).toMatchObject({ status: 'proposed', label: 'Link Travel policy assistant → Booking update (needs) · suggested by NetworkX', action: { t: 'link', from: 'idea:CAFE-2026-003', rel: 'NEEDS', to: 'capability:booking-update' } });
@@ -425,7 +425,7 @@ describe.skipIf(!!SKIP)('NetworkX in the assistant (the fake provider plans the 
       },
     };
     await runCommand(root, 'which person holds the most together?', createConnector({ providers: [provider], settings: DEFAULT_SETTINGS }), clock);
-    expect(prompts[1]).toMatch(/"network":\[\{"analysis":"central","by":"NetworkX 3\.\S+","scope":"stored facts","facts":\{"measure":"betweenness centrality","type":"Person","top":\[\{"star":"P\d+"/);
+    expect(prompts[1]).toMatch(/"network":\[\{"analysis":"central","by":"NetworkX 3\.\S+","scope":"confirmed stored facts","facts":\{"measure":"betweenness centrality","type":"Person","top":\[\{"star":"P\d+"/);
     expect(prompts.join('\n')).not.toMatch(/Avery|Kwame|Zainab|Ingrid/);
   });
 

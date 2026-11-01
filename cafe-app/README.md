@@ -234,7 +234,9 @@ email answers) is not in the graph, so questions about it can't be answered yet.
 
 What a change can do:
 
-- Link or unlink two stars: "link Avery Chen to BSI" (a person to a team), "remove the link between X and Y".
+- Link or unlink two stars: "link Avery Chen to BSI" (a person to a team), "remove the link between X and Y". A link
+  the form states (who submitted, a team's division, a tool pick, a design feature) is never unlinked: the reply says
+  where it changes (the idea's record, the tool picker, the design's features).
 - Set a person's role on an idea: "make Avery Chen sponsor of the procurement FAQ bot" (this changes the idea's team).
 - Put ideas in a round, or create one: "put the travel and procurement bots in a new round called 2026 Q4".
 - Rename a star, or merge a duplicate into another: "merge Policy Q&A into Natural-language policy Q&A".
@@ -573,21 +575,32 @@ cafe network path "GSS" "Expense system"
 cafe network isolated                  # ideas, teams or systems not connected to the rest
 cafe network suggest                   # links that are probably missing (proposals only)
 cafe network cycles                    # loops along relations the ontology lets loop (none with the built-in one)
-  [--with-derived] [--json] [--workspace DIR]
+  [--with-derived] [--with-unconfirmed] [--json] [--workspace DIR]
 cafe export --format networkx          # node-link JSON for your own notebook (docs/networkx-example.py)
 ```
 
-The same analyses are at `GET /api/network?analysis=central&withDerived=0` (read-only), in the **Network** pop-out
+The same analyses are at `GET /api/network?analysis=central&withDerived=0&unconfirmed=0` (read-only), in the **Network** pop-out
 (title bar: clusters and stars light in the universe, suggested links have a Propose button), and in the assistant
 ("which capability holds the most ideas together?", "is anything isolated?"), whose trace says "NetworkX betweenness
-centrality over stored facts". The decision suggestion reads the idea's cluster, centrality ranks and likely missing
+centrality over confirmed stored facts". The decision suggestion reads the idea's cluster, centrality ranks and likely missing
 links (its basis says so); the design duplicate check flags a feature that matches a capability other ideas already
 need; the CSIC hand-off JSON-LD carries one labelled Analysis node (its content a JSON literal, never links between
 the stars). A suggested Capability → System link is proposed for the idea it was suggested for (or one card per idea
 that needs the capability), so accepting it gives that idea, and only that idea, the dependency.
 
-- **Stored facts by default.** The analysis reads every link without `derived` (the form, the AI's links, your
-  edits); `--with-derived` or the pop-out's switch adds what the rules derive. Every output says which.
+- **Confirmed stored facts by default.** Every analysis (stats, centrality, clusters, paths, isolated, suggestions,
+  cycles) reads the stored links you stand behind: the form's, your edits, and the AI's links that are confirmed (at
+  or above the threshold, or by your Do it). A link waiting for your Do it is no structure, and a star only such links
+  bring is left out with them, so a capability five pending reads point at never tops the centrality (round 4's "Hub
+  thing" did). `--with-unconfirmed` (`?unconfirmed=1`, the pop-out's **Waiting links** switch, `unconfirmed: true` in
+  the assistant's network step) adds them; `--with-derived` (the **Derived links** switch) adds what the rules derive.
+  Every output says which: "confirmed stored facts", "stored facts, links waiting for your Do it included", "… and
+  derived links", and the stats say what the default left out ("Left out, waiting for your Do it: 11 stored links, 5
+  derived links"), so a NetworkX count is never read as the graph's total (the assistant counts derived links with
+  `links source: rule`). The stages (decision, design, the CSIC hand-off) read confirmed stored facts only. The analyst's
+  export (`cafe export --format networkx`) keeps every link with its `confirmed` flag. A path hop along a
+  capability-level fact says which ideas it is stated for ("Document text extraction uses data Email (stated for
+  Onboarding checklist helper only)"), so a path is never read as a dependency the rules do not give.
 - **What holds the programme together, not the form's tick boxes.** Centrality and link prediction leave the form
   choices (outcomes, support requested, categories, beneficiaries) out by default, since nearly every idea shares one;
   `--with-form-choices` (`?formChoices=1`) keeps them. The rankings are capabilities, systems, people and teams.
@@ -597,7 +610,8 @@ that needs the capability), so accepting it gives that idea, and only that idea,
   the stages say so and pass no cluster on as a finding), 0.3 to 0.5 "some grouping", 0.5 or more "clear groups". The
   practice workspace's seven ideas score 0.20: no clear groups, and the app says so.
 - **No analysis that cannot find anything.** With the built-in ontology no relation can form a cycle (NEEDS,
-  USES_DATA and DEPENDS_ON run Idea → Capability → System, and the build refuses a loop of KIND_OF), so `cycles` says
+  USES_DATA and DEPENDS_ON run Idea → Capability → System, and the build refuses and reports any loop of KIND_OF, one
+  a merge closes included; `cycles` still looks at the KIND_OF links and would show a loop if one were there), so `cycles` says
   it has nothing to look for and the pop-out and the assistant do not offer it. It looks only along relations a
   workspace's `ontology.yaml` declares on a loop of kinds (a Vendor → System relation beside SUPPLIED_BY System →
   Vendor).
@@ -662,9 +676,20 @@ the last layer of every build, after your edits:
 | `member+submitted` | Team HAS_MEMBER Person, Person SUBMITTED Idea | same-idea-first | Team OWNS Idea |
 | `shared-stars` | two ideas sharing two or more capabilities, pain points or categories | | Idea SIMILAR_TO Idea, confidence n/3 |
 
+A built-in rule the file does not list still runs: leaving it out is not switching it off (a file with one rule of
+its own used to lose OWNS, USES and SIMILAR_TO without a word). The banner and `cafe ontology check` name each one
+("the built-in rule shared-stars is not listed, so it still runs"); write it with `enabled: false` to switch it off.
+
 **Every fact knows which ideas it is stated for.** Each stored link carries `ideas`: the idea whose form, AI read or
 your edit put it there, and every one of them when several did (two ideas whose reads both found that a capability
-reads Email: one link, two ideas). The rules scope by it:
+reads Email: one link, two ideas). Each statement is kept on the link (`sources`): its source, its idea, its own
+confidence and status, who confirmed it (`confirmedBy`: `form`, `threshold` for an AI read at or above it, `operator`
+for your Do it with its date, `edit` for your edit), and an AI read's quote and time. **A fact is confirmed for an
+idea only by that idea's own statement**: a read for 001 waiting at 0.2 that duplicates 003's confirmed one gives 001
+a dependency that is not confirmed (round 4 counted it confirmed); Do it on a link confirms it for the idea it is
+read for (`POST /api/graph/confirm` takes `idea`); the export writes each statement as a `cafe:Statement`, and a
+capability-level fact is a plain triple only where it is stated and confirmed for every idea that needs it. The rules
+scope by it:
 
 - **same-idea**: every link in the chain is stated for one same idea. A tool picked in 008's tool picker is 008's: an
   idea that only shares the feature does not use the tool (Power Apps was "used by 6 ideas", 5 of them false). A
@@ -704,9 +729,20 @@ form field it was read in (`ai:claude:challenge`, `ai:claude:current_process`, .
 Import, `ai:<provider>:review-answers` from the review). An AI link below the confidence threshold (`graph:
 confirmAt` in `rules/settings.yaml`, default 0.7) is stored waiting for your Do it, not confirmed, whichever path wrote
 it (a read, an Import, an answer, the inbox); and the build counts a link below it as confirmed only when your Do it
-confirmed it, whatever the file says: Do it writes `graph/confirmations.jsonl` (only it does), and a `confirmedBy:
-operator` in `ai-links.jsonl` with no such record is a confirmation nobody gave, counted as waiting and named. A
-`pending` link is a suggestion whatever its confidence.
+confirmed it, whatever the file says: Do it writes `graph/confirmations.jsonl` (only it does), one line per fact and
+idea, and a `confirmedBy: operator` in `ai-links.jsonl` with no such record is a confirmation nobody gave, counted as
+waiting and named. A `pending` link is a suggestion whatever its confidence. A threshold below 0.5 (0 would confirm
+every read) is not used: 0.7 applies and the banner and check say so.
+
+**The Do-it records are signed.** Each line of `graph/confirmations.jsonl` carries an HMAC-SHA256 signature with a key
+kept outside the workspace, in `~/.cafe-ai/keys/<workspace id>` (readable by your account only; the id is
+`rules/workspace-id`; `CAFE_KEYS_DIR` moves the folder), chained to the line before it. A line written or changed by
+hand, even with `ai-links.jsonl` edited to match, is not believed (refused, named); a removed line is said where the
+chain breaks; a line from before signing counts as waiting until `cafe ontology fix --apply` signs it (the dry run
+lists each; signing is you vouching for them). A workspace moved to another machine without its key: its records
+count as waiting until `cafe ontology fix --apply --resign`. The honest limit: anyone who can run code as your account
+can read the key and sign a line as the app does; the signature proves the record came from this app on this account,
+not that a person pressed the button. Copying or editing the workspace's files alone can no longer forge one.
 
 **The build gates itself**, so "every route into the graph is gated" holds for a hand-edited file too. It refuses,
 drops from the graph, names in `cafe ontology check` and shows in the banner: an operator `add` of an idea, round,
@@ -717,11 +753,24 @@ tool pick's); a KIND_OF from a system to itself or one that closes a loop; a mer
 source is empty or not an AI read (`ai:<provider>:<where>`), whose confidence is not a number from 0 to 1, that picks
 a tool (BUILT_WITH) or makes a Tool star (only your tool pick does); an `entities.yaml` entry whose id's prefix is not
 its section's (`system:email` under Capability would make Email a capability); and an alias, in `entities.yaml` or an
-edit, that makes a not-approved tool (UiPath, Power Automate …) a name of an approved one. What it cannot stop: the
-files are plain files on your machine, so someone who edits both `ai-links.jsonl` and `confirmations.jsonl`, or sets
-an AI link's confidence to 0.9 by hand, can still make it look confirmed. One edited line no longer can. Also still
-true: the tool registry's resolver is one per process (one workspace per server, as the app runs, is fine), and the
-NetworkX clusters read unconfirmed links too (only its suggestions are confirmed-only).
+edit, that makes a not-approved tool (UiPath, Power Automate …) a name of an approved one.
+
+Round 5 added: a **rename** of a tool to a tool that is not approved, or to another approved tool's name; a **near
+spelling** of an unapproved tool anywhere a tool is named ("UI Path", "UiPath RPA", "UiPath Studio", "Chat GPT",
+"Power-Automate", "Blue Prism RPA", "Zapier.com": spacing, case, accents and words like RPA, Studio and .com aside);
+an `entities.yaml` **Tool entry that is not one of the Café's approved tools** (the list is the app's: Microsoft
+Copilot, Copilot Studio, Power Apps, Dataiku, custom app); an operator **unlink of a fact the form states** (SUBMITTED
+and the other roles, HAS_TEAM and HAS_MEMBER from the CS Function, a tool pick, a design feature's NEEDS, the form's
+choices, IN_ROUND) or of a derived link; a **second idea folder with a Café ID** another folder holds (the one named
+after the idea's slug is read, the other is not, never merged); a **KIND_OF loop a merge closes** (its latest link is
+left out, named with the merge); an AI link whose **quoted passage the idea's text never held** while the text is as
+the AI read it (a passage in another field is read where it is, and fix writes the source so; a text changed since the
+read keeps the link, marked not found), or whose **readAt** is not a date and time (or is in the future); an AI link
+to a star the graph does not hold or between the wrong kinds (said, never silent); and an `ontology.yaml` that
+**re-pairs a built-in relation** so that stored links no longer fit it (one loud line with how many of each source).
+What it still cannot stop: someone who sets an AI link's confidence to 0.9 by hand can make it count as confirmed at
+the threshold (its statement then says `confirmedBy: threshold`, never the operator); the tool registry's resolver is
+one per process (one workspace per server, as the app runs, is fine).
 `/api/graph` lists each refusal, and a banner over the universe shows them with any `ontology.yaml` or `inference.yaml`
 problem. Aliases cannot make
 one tool another product: "also know Copilot Studio as UiPath" (or Power Automate, or any other tool star) is refused.
@@ -740,8 +789,16 @@ reads as "it needs nothing that uses it". The decision suggestion's AI is sent `
 that rests only on such a link, and its basis counts them.
 
 **Where a link came from.** The assistant's `links` step answers "how many links did the operator add, and which?",
-"where does this link come from?" and "what did the AI read for this idea?": each stored link with its source in
-words (the operator's edit and its date and idea; the AI's field, the passage it quoted and when; the form's column).
+"where does this link come from?", "who confirmed it?" and "what did the AI read for this idea?": each stored link with
+its source in words (the operator's edit and its date and idea; the AI's field, the passage it quoted and when; the
+form's column), who confirmed it, and every statement of it when several ideas stated it. Asked for an idea, it
+includes the capability-level facts stated for that idea (Record update uses the visitor log, for 008) and gives that
+idea's own status. A fact stated for no idea says so and names the ideas it holds for ("stated for no idea, so it
+holds only for the ideas whose own facts already reach it (Travel policy assistant)"), never "stated for one idea". A
+link read before times were kept says when the AI last read the idea instead. A person typed without accents
+("Lucia Fernandez") is found as Lucía Fernández, said so, the two ids kept apart. A walk that does not follow a link
+because it holds for another idea names it ("Not followed: Policy question answering built with Copilot Studio is
+stated for Travel policy assistant only, not for Procurement FAQ bot"), so "no" is never "it needs nothing like that".
 
 **Names the registry knows win.** "Copilot" is Microsoft Copilot (an approved tool and its aliases), never Copilot
 Studio because its label contains the word; a name the registry knows for a star no idea has yet starts from nothing
@@ -801,14 +858,18 @@ read before passages were kept, by the star's name in the text: 14 in the practi
 among them, said `challenge` and is in the additional context). It prints the derived links that would come, go or
 wait on an unconfirmed link. What it never decides alone, it lists with the command: a stale edit (its star is gone)
 with the stars it could point to, `--repoint op-2=capability:document-text-extraction` or `--retire op-2` (switched
-off, kept in the log); an AI link that says you confirmed it with no Do it recorded, `--confirm line-12`.
+off, kept in the log); an AI link that says you confirmed it with no Do it recorded, `--confirm line-12`. Round 5:
+it signs the Do-it records written before records were signed (listed in the dry run, each line by its file line and
+idea; their links are not sent back to waiting), and with `--resign` also records whose signature does not match (a
+workspace moved to a machine without its key).
 
 **Export** writes the graph, or one idea and what it touches, as JSON-LD; the assistant's "export graph [idea]" does
 the same, and routing an idea to CSIC writes its corner of the graph as `csic-handoff.jsonld` beside
 `csic-handoff.md`. The document is only `@context` and `@graph`, so a JSON-LD processor (in safe mode) puts every quad
 in the default graph and a plain SPARQL query finds the stars. Each star is a resource with its outgoing links as
 properties; each link is also a `cafe:Link` resource whose ends are node IRIs, with its source, confidence, confirmed
-and `statedFor` (the ideas); a derived link has `prov:wasGeneratedBy` its rule (a `prov:Activity`) and
+and `statedFor` (the ideas), and each of its statements as a `cafe:Statement` (`cafe:statement`: source, the one idea
+it is for, confidence, confirmed, `cafe:confirmedBy`, quote and time); a derived link has `prov:wasGeneratedBy` its rule (a `prov:Activity`) and
 `prov:wasDerivedFrom` the links it rests on, other ways as `cafe:alternative`; the `cafe:export` node has the scope and
 `prov:generatedAtTime`. An AI link also carries the passage it was read in (`cafe:quote`, checked against the idea's
 text: `cafe:quoteFound`) and when (`cafe:readAt`); a link read before passages were kept has neither, and says so in

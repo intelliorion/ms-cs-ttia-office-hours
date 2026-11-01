@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-10-31 (Café app, round 5: a fact confirmed per idea, Do-it records signed, the build says what it drops, NetworkX on confirmed links)
+
+A fourth adversarial retest scored the graph 7.5/10. Each fault it logged is pinned by a test first
+(`tests/kg-round5.test.ts`: 30 of its 31 tests fail on the round-4 code; the one that passes is the control), and the
+tests it extends.
+
+- **Confirmed per (fact, idea).** Each stored link keeps every statement of it (`sources`): its source, idea,
+  confidence, status, who confirmed it (`confirmedBy`: form, threshold, operator with the date, edit), and an AI
+  read's quote and time. A fact is confirmed for an idea only by that idea's own statement: round 4's 0.2 read for
+  001 that duplicated 003's confirmed fact made 001's dependency "confirmed"; it is now waiting. Do it confirms for the
+  idea it is read for (`POST /api/graph/confirm` takes `idea`); the export writes each statement as a
+  `cafe:Statement`; the assistant's `links` step gives who confirmed a fact and each idea's own status.
+- **Do-it records signed.** `graph/confirmations.jsonl` lines carry an HMAC-SHA256 chained signature with a key outside
+  the workspace (`~/.cafe-ai/keys/<workspace id>`); editing both files (A2) is refused and named, a removed line is
+  said where the chain breaks, older lines count as waiting until `cafe ontology fix --apply` signs them
+  (`--resign` for a workspace moved without its key). The limit is said plainly: code running as your account can
+  read the key.
+- **The build refuses and says**: a KIND_OF loop a merge closes (A9b; `cycles` no longer claims a refusal that did not
+  happen); a tool renamed to an unapproved one or to another tool (A21, also in chat); near spellings of unapproved
+  tools ("UI Path", "UiPath RPA", "Chat GPT", "Power-Automate", "Zapier.com": A11a/b/c); an `entities.yaml` Tool entry
+  that is not an approved tool; an unlink of a fact the form states, or of a derived link (U1, also in chat); a second
+  folder with one Café ID (F1: not read, never merged); a quote the text never held and a readAt that is no time (A7);
+  an AI link to a missing star or between the wrong kinds; an `ontology.yaml` that re-pairs a built-in relation (O1:
+  one loud line with the counts); a `confirmAt` below 0.5 (S1: 0.7 used). `cafe ontology check` no longer calls an AI
+  link a merge moved "skipped". The built-in rules a file leaves out still run, and are named.
+- **NetworkX on confirmed links by default**: stats, centrality, clusters, paths, isolated, suggestions and cycles
+  leave out links waiting for Do it (`--with-unconfirmed`, `?unconfirmed=1`, the pop-out's Waiting links switch); the
+  nx1 "Hub thing" no longer tops centrality; every output says which facts it read and what it left out; a path hop
+  along a capability fact says which ideas it holds for. Centrality matches an independent NetworkX 3.7 exactly.
+- **The assistant**: a person typed without accents is found (Q22); a walk names each link it did not follow and the
+  idea's own need (Q24, S24); a fact stated for no idea says so (Q36, Q45); a link with no time gives the idea's last AI
+  read (Q46); an idea's capability-level facts are in its links (008); derived links are counted with `links source:
+  rule` (S22); stars of a declared kind are proposed through chat; conversation ids never collide.
+- **The 92 questions of the retest**, re-asked on fresh copies as is and after `fix --apply`: round 4 had 84 right, 5
+  partly and 3 wrong (Q22, Q24, S24); round 5 has 91 right and 1 partly as is (Q54 gives the path without saying
+  Request handling uses Email for Expense anomaly finder only), and 90 right and 2 partly after fix (Q54, and Q48,
+  which stopped at the 40-link cap of one listing). Median 9.1 s, max 30.8 s as is and 48.4 s after fix (Q48).
+  pyshacl (with and without RDFS inference) and rdf-validate-shacl: conforms; `docs/sparql-examples.rq` gives the
+  round-4 answers on the fixed copy. The practice workspace's graph is unchanged on restart and after fix.
+- **Not done, said plainly:** the tool registry's resolver is still one per process; a hand-set confidence of 0.9
+  still counts as confirmed at the threshold (said as `confirmedBy: threshold`); code running as the operator's account
+  can sign a Do-it record; the UI's Confirm button confirms a fact for every idea it is read for (the API takes one
+  idea); there is no OWL reasoner or SPARQL endpoint, only the export.
+
 ## 2026-10-31 (Café app, round 4: the build gates itself, one ontology per build, "not confirmed" everywhere, NetworkX that says what it cannot find, verifiable provenance)
 
 A third adversarial retest scored the graph 7/10. Each fault it logged is now pinned by a test (`tests/kg-round4.test.ts`,

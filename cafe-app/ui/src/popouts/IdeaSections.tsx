@@ -154,11 +154,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const tags = (xs: string[] | undefined, cls = '') =>
   xs?.length ? <div className="tags">{xs.map((t) => <span key={t} className={`tg ${cls}`}>{t}</span>)}</div> : <span className="none">Not given</span>;
 
-/** A person's roles, the ones given after the form in the "added" colour. */
-function RoleLabels({ p }: { p: any }) {
+/** The same person whatever the case or accents ("Lucia Fernandez" is "Lucía Fernández"). */
+const nameKey = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** A person's roles, the ones given after the form in the "added" colour; the submitter first, from the form. */
+function RoleLabels({ p, submitter }: { p: any; submitter?: boolean }) {
   const roles: string[] = p.roles ?? (p.role ? [p.role] : ['member']);
   const added = new Set<string>(p.added ?? []);
-  return <>{roles.map((r, i) => <em key={r} className={added.has(r) ? 'added-role' : undefined}>{i ? '· ' : ''}{ROLE[r] ?? r}</em>)}</>;
+  // "Member" says nothing more about the submitter, so it gives way to "Submitter".
+  const shown = submitter ? roles.filter((r) => r !== 'member') : roles;
+  return <>{submitter && <em className="submitter-role">Submitter</em>}{shown.map((r, i) => <em key={r} className={added.has(r) ? 'added-role' : undefined}>{i || submitter ? '· ' : ''}{ROLE[r] ?? r}</em>)}</>;
 }
 
 /** Where a saved answer came from, in words. */
@@ -170,6 +175,8 @@ const answerFrom = (source?: string) => (!source ? '' : source === 'review answe
  */
 export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: (a: { question: string; answer: string }) => void }) {
   const team: any[] = idea.people?.team ?? [];
+  const submitter: string | undefined = idea.people?.submitter?.trim() || undefined;
+  const submitterOnTeam = !!submitter && team.some((p) => nameKey(p.name) === nameKey(submitter));
   const builders = team.filter((p) => (p.roles ?? []).includes('builder'));
   const answers: any[] = idea.answers ?? [];
   const was = idea.formWas ?? {};
@@ -194,11 +201,12 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
       </div>
       <Field label="Support requested">{tags(idea.support, 'teal')}</Field>
       {idea.additional_context && <Field label="Additional context">{idea.additional_context}</Field>}
+      {submitter && !submitterOnTeam && team.length > 0 && <Field label="Submitted by"><span className="tg person" data-submitter={submitter}>{submitter}<em>Submitter</em></span></Field>}
       <div className="field-row">
         <Field label="Team">
           {team.length
             ? <div className="tags">{team.map((p) => (
-              <span key={p.name} className={`tg person${p.joined ? ' added' : ''}`} data-person={p.name} title={p.joined ? 'Not on the form: added later' : undefined}>{p.name}<RoleLabels p={p} /></span>
+              <span key={p.name} className={`tg person${p.joined ? ' added' : ''}`} data-person={p.name} title={p.joined ? 'Not on the form: added later' : undefined}>{p.name}<RoleLabels p={p} submitter={!!submitter && nameKey(p.name) === nameKey(submitter)} /></span>
             ))}</div>
             : idea.people?.submitter ? <span>{idea.people.submitter}<em className="role"> Submitter</em></span> : <span className="none">Not given</span>}
         </Field>

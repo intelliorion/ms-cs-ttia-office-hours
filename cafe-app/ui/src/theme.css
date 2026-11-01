@@ -1045,6 +1045,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .added-dot{width:9px;height:9px;border-radius:50%;background:var(--added);flex:none}
 .tg.person.added{border-color:rgba(var(--rgb-added),.7);color:var(--added);border-style:dashed}
 .tg em.added-role{color:var(--added)}
+.tg em.submitter-role{color:var(--teal);font-weight:600}
 .added-v{color:var(--added);font-weight:600}
 .was{color:var(--muted);font-size:13px}
 .learned{margin-top:6px}

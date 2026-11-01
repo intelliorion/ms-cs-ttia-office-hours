@@ -26,7 +26,9 @@ describe('the Submission: what the form said, and what came after', () => {
     expect(el.querySelector('[data-testid="added-legend"]')?.textContent).toBe('In this colour: added after the form.');
     // A role given later, on someone from the form; a person not on the form.
     const p1 = el.querySelector('[data-person="Person 1"]')!;
-    expect([...p1.querySelectorAll('em')].map((e) => [e.textContent, e.className])).toEqual([['Lead', ''], ['· Builder', 'added-role']]);
+    expect([...p1.querySelectorAll('em')].map((e) => [e.textContent, e.className])).toEqual([['Submitter', 'submitter-role'], ['· Lead', ''], ['· Builder', 'added-role']]);
+    // The submitter is on the team, so there is no separate line.
+    expect(el.querySelector('[data-submitter]')).toBeNull();
     expect(el.querySelector('[data-person="Person 2"]')!.className).toBe('tg person');
     expect(el.querySelector('[data-person="Person 3"]')!.className).toBe('tg person added');
     expect(el.querySelector('[data-builder="Person 1"]')!.className).toBe('tg person added');
@@ -68,5 +70,20 @@ describe('the Submission: what the form said, and what came after', () => {
     expect(el.querySelector('[data-feature="Emails"]')!.className).toBe('tg added uncovered');
     expect(el.querySelector('[data-feature="Emails"] em')!.textContent).toBe(' not covered');
     expect(el.querySelector('[data-feature="Check"] em')).toBeNull();
+  });
+});
+
+describe('who submitted the idea', () => {
+  const team = [{ name: 'Lucía Fernández', roles: ['member'] }, { name: 'Person 2', roles: ['lead'] }];
+  it('is tagged in the team, whatever the accents, with Member giving way', () => {
+    render(<Details idea={{ id: 'X', people: { submitter: 'Lucia Fernandez', team } }} />);
+    expect([...el.querySelector('[data-person="Lucía Fernández"]')!.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['Submitter']);
+    expect([...el.querySelector('[data-person="Person 2"]')!.querySelectorAll('em')].map((e) => e.textContent)).toEqual(['Lead']);
+    expect(el.querySelector('[data-submitter]')).toBeNull();
+  });
+  it('gets its own line when not on the team', () => {
+    render(<Details idea={{ id: 'X', people: { submitter: 'Person 9', team } }} />);
+    expect(el.querySelector('[data-submitter="Person 9"]')?.textContent).toBe('Person 9Submitter');
+    expect([...el.querySelectorAll('.f-l')].map((f) => f.textContent)).toContain('Submitted by');
   });
 });

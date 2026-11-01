@@ -1,7 +1,8 @@
 import YAML from 'yaml';
 import { canonId, canonEdit, canonLink, type AiLink, type GEdge, type OperatorEdit } from './ontology';
 import { readEdits, writeEdits } from './operator';
-import { appendConfirmation, readAiLinks, readConfirmations, rebuildGraph, updateAiLinks } from './store';
+import { appendConfirmation, readAiLinks, readConfirmationLines, readConfirmations, rebuildGraph, signConfirmations, updateAiLinks } from './store';
+import { aiReads } from '../ai/reads';
 import { placeQuote } from '../ai/apply';
 import { confirmAt } from '../ai/confirm';
 import { loadSettings } from '../round/store';
@@ -52,11 +53,17 @@ export interface FixPlan {
   fields: { line: number; edge: string; was: string; now: string; by: 'quote' | 'label' }[];
   /** AI links that say the operator confirmed them with no Do it recorded: --confirm line-N records your Do it now. */
   forged: { line: number; edge: string; confidence: number }[];
-  confirm: { line: number; edge: string }[];
+  confirm: { line: number; edge: string; idea?: string }[];
+  /**
+   * Do-it records in graph/confirmations.jsonl to sign with the workspace's key (kept outside the workspace): those
+   * written before records were signed; with --resign also those whose signature does not match (a workspace moved
+   * to a machine without its key). Signing is you vouching for the records as they stand: read the list first.
+   */
+  sign: { line: number; edge: string; idea?: string; why: 'unsigned' | 'bad' }[];
 }
 
 /** The operator's say on stale edits and unrecorded confirmations: repoint, retire, confirm. */
-export interface FixChoices { repoint?: Record<string, string>; retire?: string[]; confirm?: number[] }
+export interface FixChoices { repoint?: Record<string, string>; retire?: string[]; confirm?: number[]; resign?: boolean }
 
 const wordsOf = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2));
 /** How many words two names share (for ordering the stars a stale edit could be repointed to). */
@@ -68,7 +75,11 @@ const words = (id: string) => id.replace(/\|/g, ' ');
 export async function planFix(root: string, stamp: Record<string, string[]> = {}, choices: FixChoices = {}): Promise<FixPlan> {
   const check = await checkWorkspace(root);
   const graph = await rebuildGraph(root);
-  const plan: FixPlan = { stamps: [], ambiguous: [], unconfirm: [], undo: [], rules: [], ids: [], preview: { gone: [], added: [], waiting: [] }, stale: [], repoint: [], retire: [], fields: [], forged: [], confirm: [] };
+  const plan: FixPlan = { stamps: [], ambiguous: [], unconfirm: [], undo: [], rules: [], ids: [], preview: { gone: [], added: [], waiting: [] }, stale: [], repoint: [], retire: [], fields: [], forged: [], confirm: [], sign: [] };
+  for (const l of (await readConfirmationLines(root)).lines) {
+    if (!l.record || l.state === 'signed') continue;
+    if (l.state === 'unsigned' || choices.resign) plan.sign.push({ line: l.line, edge: l.record.edge, ...(l.record.idea ? { idea: l.record.idea } : {}), why: l.state === 'unsigned' ? 'unsigned' : 'bad' });
+  }
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const allEdits = await readEdits(root);
   // Stale edits: listed with what they could be repointed to; changed only as the operator says.
@@ -110,7 +121,10 @@ export async function planFix(root: string, stamp: Record<string, string[]> = {}
     }
     plan.stamps.push({ where: u.where, ...(u.where.startsWith('operator') ? { edit: key } : { line: Number(key.slice(5)) }), edge: u.edge, ideas: [...pick.ideas].sort(), why: pick.why });
   }
-  for (const l of check.lowConfidence ?? []) plan.unconfirm.push({ line: l.line, edge: l.edge, confidence: l.confidence });
+  // A Do it whose record is signed by this fix (one from before records were signed) stands: its link is not sent back.
+  const signing = new Set(plan.sign.map((x) => (x.idea ? `${x.edge}#${x.idea}` : x.edge)));
+  const signed = (edge: string, idea?: string) => signing.has(`${edge}#${idea ?? ''}`) || signing.has(edge);
+  for (const l of check.lowConfidence ?? []) if (!signed(l.edge, l.idea)) plan.unconfirm.push({ line: l.line, edge: l.edge, confidence: l.confidence });
   // AI links whose source names a field the passage (or, read before passages were kept, the star's own name) is not in.
   {
     const { ideas } = await listIdeas(root);
@@ -121,9 +135,9 @@ export async function planFix(root: string, stamp: Record<string, string[]> = {}
     (await readAiLinks(root)).links.forEach((raw, i) => {
       const l = canonLink(raw); const line = lineNos0[i];
       const edge = `${l.from}|${l.rel}|${l.to}`;
-      if (l.status === 'confirmed' && l.confirmedBy === 'operator' && typeof l.confidence === 'number' && l.confidence < threshold && !confirmations.has(edge)) {
+      if (l.status === 'confirmed' && l.confirmedBy === 'operator' && typeof l.confidence === 'number' && l.confidence < threshold && !confirmations.has(`${edge}#${l.idea ?? ''}`) && !confirmations.has(edge) && !signed(edge, l.idea)) {
         plan.forged.push({ line, edge, confidence: l.confidence });
-        if (choices.confirm?.includes(line)) plan.confirm.push({ line, edge });
+        if (choices.confirm?.includes(line)) plan.confirm.push({ line, edge, ...(l.idea ? { idea: l.idea } : {}) });
       }
       const m = /^ai:([^:]+):(.+)$/.exec(String(l.source ?? ''));
       const t = l.idea ? text.get(l.idea) : undefined;
@@ -229,12 +243,12 @@ function changeLink(l: AiLink, line: number, plan: FixPlan): AiLink[] {
 }
 
 async function simulate(root: string, plan: FixPlan): Promise<GEdge[]> {
-  const extra = new Set(plan.confirm.map((c) => c.edge));
+  const extra = new Set([...plan.confirm, ...plan.sign].map((c) => (c.idea ? `${c.edge}#${c.idea}` : c.edge)));
   const { schema } = await loadOntology(root);
   const [{ ideas }, { links }, rounds, edits, rules, confirmations] = await Promise.all([listIdeas(root), readAiLinks(root), listRounds(root), readEdits(root), readRules(root, schema), readConfirmations(root)]);
   const lineNos = await aiLineNumbers(root);
   const e2 = editsAfter(edits, plan);
-  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2, schema), rules: rules.rules, schema, confirmations: new Set([...confirmations, ...extra]) });
+  const g = buildGraph(ideas, linksAfter(links, lineNos, plan), rounds, e2, { registry: await registryFrom(root, e2, schema), rules: rules.rules, schema, confirmations: new Set([...confirmations, ...extra]), reads: await aiReads(root) });
   return g.edges;
 }
 
@@ -249,8 +263,12 @@ async function aiLineNumbers(root: string): Promise<number[]> {
 /** Writes the plan: the operator log, the AI links and the rules file. Returns one line per change made. */
 export async function applyFix(root: string, plan: FixPlan, clock: Clock): Promise<string[]> {
   const done: string[] = [];
+  if (plan.sign.length) {
+    const signed = await signConfirmations(root, plan.sign.some((x) => x.why === 'bad'));
+    for (const x of plan.sign) if (signed.includes(x.line)) done.push(`confirmations.jsonl line ${x.line}: ${words(x.edge)}${x.idea ? ` for ${x.idea}` : ''}: signed (${x.why === 'unsigned' ? 'written before records were signed' : 'its signature did not match; signed again as you said with --resign'})`);
+  }
   for (const c of plan.confirm) {
-    await appendConfirmation(root, { edge: c.edge, at: clock(), by: 'operator', ts: new Date().toISOString() });
+    await appendConfirmation(root, { edge: c.edge, ...(c.idea ? { idea: c.idea } : {}), at: clock(), by: 'operator', ts: new Date().toISOString() });
     done.push(`ai-links.jsonl line ${c.line}: your Do it recorded (cafe ontology fix --confirm)`);
   }
   if (plan.stamps.some((s) => s.edit) || plan.undo.length || plan.ids.some((x) => x.edit) || plan.repoint.length || plan.retire.length) {
@@ -291,7 +309,7 @@ export async function applyFix(root: string, plan: FixPlan, clock: Clock): Promi
 /** What the CLI prints for a plan, dry run or applied. */
 export function fixLines(plan: FixPlan, applied?: string[]): string[] {
   const L: string[] = [];
-  const n = plan.stamps.length + plan.unconfirm.length + plan.undo.length + plan.rules.length + plan.ids.length + plan.repoint.length + plan.retire.length + plan.fields.length + plan.confirm.length;
+  const n = plan.stamps.length + plan.unconfirm.length + plan.undo.length + plan.rules.length + plan.ids.length + plan.repoint.length + plan.retire.length + plan.fields.length + plan.confirm.length + plan.sign.length;
   const waitingOnYou = plan.stale.filter((s) => !plan.repoint.some((r) => r.edit === s.edit) && !plan.retire.some((r) => r.edit === s.edit));
   const forgedLeft = plan.forged.filter((f) => !plan.confirm.some((c) => c.line === f.line));
   if (!n && !plan.ambiguous.length && !waitingOnYou.length && !forgedLeft.length) return ['Nothing to fix: the workspace is in line with the graph\'s reasoning.'];
@@ -308,6 +326,7 @@ export function fixLines(plan: FixPlan, applied?: string[]): string[] {
     for (const r of plan.repoint) L.push(`  operator.jsonl ${r.edit}: repoint ${r.from} → ${r.to} (${r.label}), as you said`);
     for (const r of plan.retire) L.push(`  operator.jsonl ${r.edit}: switch off (${r.what}), as you said; kept in the log`);
     for (const c of plan.confirm) L.push(`  ai-links.jsonl line ${c.line}: ${words(c.edge)}: record your Do it, as you said`);
+    for (const x of plan.sign) L.push(`  confirmations.jsonl line ${x.line}: ${words(x.edge)}${x.idea ? ` for ${x.idea}` : ''}: sign it with this workspace's key (${x.why === 'unsigned' ? 'written before records were signed' : 'its signature does not match: --resign, as you said'})`);
   }
   if (waitingOnYou.length) {
     L.push(`Stale edits, waiting on your say (${waitingOnYou.length}): their star is gone, so the build skips them. Repoint or switch off each:`);

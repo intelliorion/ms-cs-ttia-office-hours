@@ -133,21 +133,22 @@ describe('fault 9: rules files as people write them', () => {
     for (const v of ['yes', 'on', true, undefined]) expect(readRuleList({ rules: [{ name: 'shared-stars', kind: 'shared-stars', enabled: v }] }).rules[0].enabled).toBe(true);
     const odd = readRuleList({ rules: [{ name: 'shared-stars', kind: 'shared-stars', enabled: 'maybe' }] });
     expect(odd.rules[0].enabled).toBe(false);
-    expect(odd.problems).toEqual(['inference.yaml: shared-stars: enabled: "maybe" is not yes or no (the rule is off until it is fixed)']);
+    expect(odd.problems.filter((r) => !/the built-in rule/.test(r))).toEqual(['inference.yaml: shared-stars: enabled: "maybe" is not yes or no (the rule is off until it is fixed)']);
   });
   it('a chain whose types do not line up with its result is dropped and said so', () => {
     const bad = readRuleList({ rules: [{ name: 'x', chain: ['HAS_MEMBER', 'LEADS', 'NEEDS'], then: 'OWNS' }] });
-    expect(bad.rules).toEqual([]);
+    // The built-in rules the file does not list still run (item 13 of round 5): only the file's own rule is dropped.
+    expect(bad.rules.map((r) => r.name)).toEqual(['needs+uses_data', 'needs+built_with', 'member+submitted', 'shared-stars']);
     expect(bad.problems[0]).toBe('inference.yaml: x: the chain goes Team → Capability but OWNS goes Team → Idea (dropped)');
-    expect(readRuleList({ rules: [{ name: 'y', chain: ['NEEDS', 'DEPENDS_ON'], then: 'USES' }] }).problems).toEqual(['inference.yaml: y: DEPENDS_ON is derived: rules read stored facts only (dropped)']);
-    expect(readRuleList({ rules: [{ name: 'z', chain: ['NEEDS', 'SUBMITTED'], then: 'USES' }] }).problems).toEqual(['inference.yaml: z: NEEDS ends at Capability but SUBMITTED starts at Person (dropped)']);
+    expect(readRuleList({ rules: [{ name: 'y', chain: ['NEEDS', 'DEPENDS_ON'], then: 'USES' }] }).problems.slice(0, 1)).toEqual(['inference.yaml: y: DEPENDS_ON is derived: rules read stored facts only (dropped)']);
+    expect(readRuleList({ rules: [{ name: 'z', chain: ['NEEDS', 'SUBMITTED'], then: 'USES' }] }).problems.slice(0, 1)).toEqual(['inference.yaml: z: NEEDS ends at Capability but SUBMITTED starts at Person (dropped)']);
   });
   it('n-step chains run: a three-step chain derives along every link, scoped to the one idea all three are stated for', () => {
     // A workspace ontology may give a derived relation another pair: USES as Team → Capability ("the team's ideas need it").
     const { schema } = compileOntology({ relations: { USES: { from: 'Team', to: 'Capability' } } });
     {
       const r = readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] }, schema);
-      expect(r.problems).toEqual([]);
+      expect(r.problems.filter((x) => !/the built-in rule/.test(x))).toEqual([]);
       expect(r.rules[0]).toMatchObject({ chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], scope: 'same-idea' });
       const g = buildGraph(IDEAS, [], [], [], { rules: [] });
       const out = infer(g.nodes, g.edges, r.rules, schema);
@@ -158,7 +159,7 @@ describe('fault 9: rules files as people write them', () => {
       expect(out.find((e) => e.id === 'team:bsi|USES|capability:deadline-tracking-alerting')!.derived!.inputs[1]).toBe('person:avery-chen|SUBMITTED|idea:CAFE-2026-008');
       expect(out.some((e) => e.id === 'team:bsi|USES|capability:policy-question-answering')).toBe(false);
       // The built-in ontology, read at the same time, is untouched: USES stays Idea → Tool there.
-      expect(readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] }).problems).toHaveLength(1);
+      expect(readRuleList({ rules: [{ name: 'team-needs', chain: ['HAS_MEMBER', 'SUBMITTED', 'NEEDS'], then: 'USES' }] }).problems.filter((x) => !/the built-in rule/.test(x))).toHaveLength(1);
     }
   });
   it('every derivation of an edge is kept: the surest as inputs, the rest as alternatives', () => {

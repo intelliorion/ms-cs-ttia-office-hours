@@ -260,23 +260,26 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
     // Operator edits whose stars are gone: skipped by the build, listed with the problems (never deleted).
     const stale = staleEdits(graph.nodes, await readEdits(root), schema);
     // What waits on the operator: a derived edge waits on its inputs, so it is not counted twice.
-    return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, ontology: ontologyOf(schema), unconfirmed: graph.edges.filter((e) => !e.confirmed && !e.derived).length };
+    return { ...graph, problems: [...graph.problems, ...stale.map((x) => ({ line: 0, message: staleLine(x) }))], stale: stale.length, layout, ontology: ontologyOf(schema), unconfirmed: graph.edges.filter((e) => !e.derived && (e.sources?.length ? e.sources.some((x) => !x.confirmed) : !e.confirmed)).length };
   });
-  // NetworkX analyses the graph the app built: read-only. Stored facts unless withDerived=1. analysis is one name or a
+  // NetworkX analyses the graph the app built: read-only. Confirmed stored facts unless unconfirmed=1 (links waiting for
+  // Do it too) or withDerived=1 (the derived links too). analysis is one name or a
   // comma list (the pop-out's overview); a path takes a and b (ids or labels).
   add('GET', '/api/network', async ({ query }) => {
     const list = String(query?.analysis ?? 'stats').split(',').map((x) => x.trim()).filter(Boolean) as NetworkAnalysis[];
     const bad = list.filter((a) => !NETWORK_ANALYSES.includes(a));
     if (bad.length) throw new Error(`There is no analysis "${bad[0]}". Choose from ${NETWORK_ANALYSES.join(', ')}.`);
     const withDerived = /^(1|true|yes)$/i.test(String(query?.withDerived ?? ''));
+    const withUnconfirmed = /^(1|true|yes)$/i.test(String(query?.unconfirmed ?? ''));
     const top = query?.top ? Math.max(1, Math.min(50, Number(query.top) || 10)) : undefined;
     const options = { ...(top ? { top } : {}), ...(query?.a ? { a: String(query.a) } : {}), ...(query?.b ? { b: String(query.b) } : {}), ...(/^(1|true|yes)$/i.test(String(query?.formChoices ?? '')) ? { formChoices: true } : {}) };
-    if (list.length === 1) return networkFor(root, list[0], options, { withDerived });
-    return { ...(await networkMany(root, list, options, { withDerived })), analyses: list };
+    if (list.length === 1) return networkFor(root, list[0], options, { withDerived, withUnconfirmed });
+    return { ...(await networkMany(root, list, options, { withDerived, withUnconfirmed })), analyses: list };
   });
   // A NetworkX suggestion the operator wants to make: it becomes a proposal in the assistant, done only with Do it.
   add('POST', '/api/network/propose', async ({ body }) => proposeLink(root, { from: String(body.from ?? ''), rel: String(body.rel ?? ''), to: String(body.to ?? ''), why: body.why ? String(body.why) : undefined, thread: body.thread ? String(body.thread) : undefined, idea: body.idea ? String(body.idea) : undefined }, clock));
-  add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed'); return { ok: true }; });
+  // The operator's Do it on an AI link: for one idea when the body names it (a fact two ideas' reads found is confirmed for each on its own).
+  add('POST', '/api/graph/confirm', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'confirmed', undefined, body.idea ? String(body.idea).replace(/^idea:/, '') : undefined); return { ok: true }; });
   add('POST', '/api/graph/remove', async ({ body }) => { await setAiLinkStatus(root, String(body.edgeId), 'removed'); return { ok: true }; });
 
   add('GET', '/api/ai/status', async () => ({ ...(await ai.status()), choices: await ai.choices() }));

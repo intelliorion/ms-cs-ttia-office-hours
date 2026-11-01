@@ -385,6 +385,10 @@ describe('should 8: an open schema, and a system counted with its kinds (KIND_OF
     'rules:',
     '  - { name: needs+uses_data, chain: [NEEDS, USES_DATA], then: DEPENDS_ON, scope: same-idea }',
     '  - { name: needs+supplied_by, chain: [NEEDS, SUPPLIED_BY], then: RELIES_ON_VENDOR, scope: same-idea }',
+    // The other built-ins, listed so the file says what runs (one left out still runs, and check says so: round 5).
+    '  - { name: needs+built_with, chain: [NEEDS, BUILT_WITH], then: USES }',
+    '  - { name: member+submitted, chain: [HAS_MEMBER, SUBMITTED], then: OWNS }',
+    '  - { name: shared-stars, kind: shared-stars, then: SIMILAR_TO, min: 2 }',
   ].join('\n');
 
   it('ontology.yaml declares a kind and two relations; a rule chains them; the operator\'s facts make the derived link; check holds it to the schema', async () => {

@@ -26,9 +26,30 @@ export interface Registry {
   refused: string[];
 }
 
-/** The not-approved tool a name means (UiPath, Power Automate …), compared in the one normal form, or undefined. */
+/**
+ * Words a product name carries that do not change which product it is ("UiPath RPA", "UiPath Studio", "Zapier.com",
+ * "Blue Prism RPA"): dropped before two names are compared. "app" and "apps" are not here: Power Apps is not "Power".
+ */
+const TOOL_NOISE = new Set(['rpa', 'com', 'io', 'net', 'studio', 'cloud', 'platform', 'software', 'inc', 'ltd', 'llc', 'desktop', 'enterprise', 'online', 'suite', 'edition', 'the']);
+/** A tool name with spacing, case, accents, punctuation and the noise words above aside: "UI-Path Studio" is "uipath". */
+export const toolCore = (name: string) => String(name ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .split(/[^\p{L}\p{N}]+/u).filter((w) => w && !TOOL_NOISE.has(w)).join('');
+
+/**
+ * The not-approved tool a name means (UiPath, Power Automate …), or undefined. Compared loosely, so a near spelling
+ * is the same product: "UI Path", "UiPath RPA", "UiPath Studio", "Chat GPT", "Power-Automate", "Zapier.com". A name
+ * that starts with one ("UiPath Orchestrator", "ChatGPT Enterprise") is that product's too.
+ */
 export function unapprovedTool(name: string): string | undefined {
-  return KNOWN_UNAPPROVED_TOOLS.find((t) => nameKey(t, 'Tool') === nameKey(name, 'Tool'));
+  const k = toolCore(name);
+  if (!k) return undefined;
+  return KNOWN_UNAPPROVED_TOOLS.find((t) => { const c = toolCore(t); return k === c || (c.length >= 5 && k.startsWith(c)); });
+}
+
+/** The approved tool a name is (by its label or one of the built-in names), or undefined: the Café's list is fixed (app design section 6). */
+export function approvedTool(name: string): string | undefined {
+  const k = nameKey(name, 'Tool');
+  return APPROVED_TOOLS.find((t) => nameKey(t, 'Tool') === k) ?? (TOOL_ALIASES[String(name).trim().toLowerCase().replace(/\s+/g, ' ')]);
 }
 
 function fnv1a32(str: string): string {
@@ -50,6 +71,9 @@ export function makeRegistry(entries: RegistryEntries, edits: OperatorEdit[], sc
       if (!idMatchesType(e.id.trim(), type)) { refused.push(`entities.yaml: ${type}: "${e.id}" does not start with "${type.toLowerCase()}:" (not used by the build)`); continue; }
       const bad = retired(type, e.label);
       if (bad) { refused.push(`entities.yaml: Tool: "${e.id}" is ${bad}, which is not on the approved list (not used by the build)`); continue; }
+      // A Tool entry is one of the approved tools (with its aliases and reference): the list itself is the Café's, so an
+      // entry for any other tool would make it look approved to the registry while the tool picker never offers it.
+      if (type === 'Tool' && !approvedTool(e.label)) { refused.push(`entities.yaml: Tool: "${e.id}" (${e.label}) is not on the Café's approved list (${APPROVED_TOOLS.join(', ')}): a Tool entry names an approved tool (not used by the build)`); continue; }
       const aliases = (Array.isArray(e.aliases) ? e.aliases : []).map(String).filter((a) => a.trim()).filter((a) => {
         const r = retired(type, a);
         if (r) refused.push(`entities.yaml: Tool: "${e.id}": alias "${a}" names ${r}, which is not on the approved list (not used by the build)`);

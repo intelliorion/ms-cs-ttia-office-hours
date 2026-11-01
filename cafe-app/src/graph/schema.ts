@@ -53,24 +53,30 @@ export function vocabularyTurtle(base?: string, schema: Schema = BUILTIN_SCHEMA)
   out.push(cls('Rule', 'An inference rule of rules/inference.yaml, the activity that generated a derived link.', 'prov:Activity'));
   out.push(cls('Derivation', 'Another way the same derived link is derived: the links it rests on.'));
   out.push(cls('Export', 'This export: its scope and when it was made.'));
+  out.push(cls('Statement', 'One statement of a stored fact: the form\'s column, one AI read or one operator edit, for one idea, with its own confidence, whether it is confirmed and who confirmed it. A fact is confirmed for an idea only by a statement for that idea.'));
   out.push(cls('Analysis', 'An analysis held beside the facts (NetworkX\'s, in a CSIC hand-off): never a fact about the stars.'));
+  // The provenance properties (source, confidence, confirmed, statedFor, quote, readAt) sit on a Link and on each of its
+  // Statements: their domain is left open, so an RDFS reasoner never takes a Statement for a Link.
   const prop = (name: string, kind: 'owl:ObjectProperty' | 'owl:DatatypeProperty', domain: string, range: string, comment: string) =>
     `cafe:${name} a rdf:Property, ${kind} ;\n  rdfs:label ${lit(name)}@en ;\n  rdfs:comment ${lit(comment)}@en ;\n  rdfs:domain ${domain} ;\n  rdfs:range ${range} ;\n  rdfs:isDefinedBy ${onto} .`;
   out.push(prop('from', 'owl:ObjectProperty', 'cafe:Link', 'rdfs:Resource', 'The star a link starts at.'));
   out.push(prop('to', 'owl:ObjectProperty', 'cafe:Link', 'rdfs:Resource', 'The star a link ends at.'));
   out.push(prop('rel', 'owl:ObjectProperty', 'cafe:Link', 'rdf:Property', 'The relation of a link.'));
-  out.push(prop('source', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:string', 'Where a link came from: form:<Café ID>:<column>, ai:<provider>:<where>, operator:<edit>@<date> or rule:<name>.'));
+  out.push(prop('source', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:string', 'Where a link came from: form:<Café ID>:<column>, ai:<provider>:<where>, operator:<edit>@<date> or rule:<name>.'));
   out.push(prop('description', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:string', 'The words a link came with.'));
-  out.push(prop('confidence', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:double', 'How sure the source was, 0 to 1 (the lowest of a derived link\'s inputs).'));
-  out.push(prop('confirmed', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:boolean', 'Whether the link is confirmed: from the form, by the operator, or an AI link at or above the threshold; a derived link when every input is.'));
-  out.push(prop('statedFor', 'owl:ObjectProperty', 'cafe:Link', 'cafe:Idea', 'An idea the fact is stated for; the rules read a capability-level fact for these ideas only.'));
+  out.push(prop('confidence', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:double', 'How sure the source was, 0 to 1 (the lowest of a derived link\'s inputs).'));
+  out.push(prop('confirmed', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:boolean', 'Whether the link is confirmed: from the form, by the operator, or an AI link at or above the threshold; a derived link when every input is.'));
+  out.push(prop('statedFor', 'owl:ObjectProperty', 'rdfs:Resource', 'cafe:Idea', 'An idea the fact is stated for; the rules read a capability-level fact for these ideas only.'));
   out.push(prop('alternative', 'owl:ObjectProperty', 'cafe:Link', 'cafe:Derivation', 'Another way a derived link is derived.'));
   out.push(prop('exportScope', 'owl:DatatypeProperty', 'cafe:Export', 'xsd:string', '"all", or the Café ID of the idea exported with what it touches.'));
   out.push(prop('attrs', 'owl:ObjectProperty', 'rdfs:Resource', 'rdfs:Resource', 'A star\'s attributes (an idea\'s stage, function, region and Café ID).'));
-  out.push(prop('quote', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:string', 'The passage of the idea\'s text an AI read the link in, as the AI quoted it.'));
-  out.push(prop('quoteFound', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:boolean', 'Whether the quote was found in the idea\'s text, in the field the source names (the app moves the source to the field it is in).'));
-  out.push(prop('readAt', 'owl:DatatypeProperty', 'cafe:Link', 'xsd:dateTime', 'When the AI read the link.'));
+  out.push(prop('quote', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:string', 'The passage of the idea\'s text an AI read the link in, as the AI quoted it.'));
+  out.push(prop('quoteFound', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:boolean', 'Whether the quote was found in the idea\'s text, in the field the source names (the app moves the source to the field it is in).'));
+  out.push(prop('readAt', 'owl:DatatypeProperty', 'rdfs:Resource', 'xsd:dateTime', 'When the AI read the link.'));
   out.push(prop('content', 'owl:DatatypeProperty', 'cafe:Analysis', 'rdf:JSON', 'An analysis, as one JSON literal.'));
+  out.push(prop('statement', 'owl:ObjectProperty', 'cafe:Link', 'cafe:Statement', 'A statement of a stored link (a link two ideas\' reads found has one per idea).'));
+  out.push(prop('confirmedBy', 'owl:DatatypeProperty', 'cafe:Statement', 'xsd:string', 'Who confirmed the statement: form, threshold (an AI read at or above it), operator (the Do it) or edit (an operator edit).'));
+  out.push(prop('confirmedAt', 'owl:DatatypeProperty', 'cafe:Statement', 'xsd:string', 'When it was confirmed (the Do it\'s or the edit\'s date).'));
   return `${out.join('\n\n')}\n`;
 }
 
@@ -101,6 +107,15 @@ export function shapesTurtle(base?: string, schema: Schema = BUILTIN_SCHEMA): st
     `  sh:property [ sh:path cafe:statedFor ; sh:nodeKind sh:IRI ; sh:pattern ${lit(`^${data.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}idea:`)} ] ;`,
     '  sh:property [ sh:path prov:wasGeneratedBy ; sh:maxCount 1 ; sh:class cafe:Rule ] ;',
     '  sh:property [ sh:path prov:wasDerivedFrom ; sh:nodeKind sh:IRI ] .',
+  ].join('\n'));
+  out.push([
+    'cafe:StatementShape a sh:NodeShape ;', '  sh:targetObjectsOf cafe:statement ;',
+    '  sh:class cafe:Statement ;',
+    '  sh:property [ sh:path cafe:source ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^(form:|ai:[^:]+|operator(:|$))" ] ;',
+    '  sh:property [ sh:path cafe:confidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:double ; sh:minInclusive 0 ; sh:maxInclusive 1 ] ;',
+    '  sh:property [ sh:path cafe:confirmed ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:boolean ] ;',
+    '  sh:property [ sh:path cafe:confirmedBy ; sh:maxCount 1 ; sh:in ( "form" "threshold" "operator" "edit" ) ] ;',
+    '  sh:property [ sh:path cafe:statedFor ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .',
   ].join('\n'));
   out.push([
     // What rests on other links is another way (a Derivation) or a derived link, which names its rule.

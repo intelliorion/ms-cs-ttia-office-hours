@@ -34,13 +34,14 @@ describe('operator edits on the graph', () => {
     expect(rels(g).filter((r) => r.includes('person:person-2') && r.includes('HAS_MEMBER'))).toEqual([]);
   });
 
-  it('unlink hides a form link; rename relabels a star; an undone edit does nothing', () => {
+  it('an unlink of a form link is refused and said (round 5: the record owns it); rename relabels a star; an undone edit does nothing', () => {
     const g = buildGraph([a], [], [], [
       edit({ t: 'unlink', from: 'person:person-2', rel: 'RELATED', to: 'idea:CAFE-2026-001' }),
       edit({ t: 'rename', node: 'team:bsi', label: 'Business Services & Innovation' }, 2),
       edit({ t: 'rename', node: 'team:bsi', label: 'Ignored' }, 3),
     ].map((e, i) => (i === 2 ? { ...e, status: 'undone' as const } : e)));
-    expect(rels(g)).not.toContain('person:person-2 RELATED idea:CAFE-2026-001');
+    expect(rels(g)).toContain('person:person-2 RELATED idea:CAFE-2026-001');
+    expect(g.refused).toContain("operator.jsonl op-1: unlink person:person-2 RELATED idea:CAFE-2026-001: the form states it, so it changes in the idea's record (its submitter and team), never by an unlink (refused by the build)");
     expect(g.nodes.find((n) => n.id === 'team:bsi')?.label).toBe('Business Services & Innovation');
   });
 

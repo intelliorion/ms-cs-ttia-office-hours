@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { BUILTIN_SCHEMA, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
+import { BUILTIN_SCHEMA, confirmedFor, type FactSource, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
 import { paths } from '../workspace/paths';
 import { writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from './store';
@@ -85,6 +85,8 @@ export function jsonLdContext(base = DEFAULT_BASE, schema: Schema = BUILTIN_SCHE
     alternative: { '@id': `${vocab}alternative`, '@container': '@set' },
     generatedAtTime: { '@id': `${PROV}generatedAtTime`, '@type': `${XSD}dateTime` },
     Analysis: `${vocab}Analysis`, content: { '@id': `${vocab}content`, '@type': '@json' },
+    Statement: `${vocab}Statement`, statement: { '@id': `${vocab}statement`, '@container': '@set' },
+    confirmedBy: `${vocab}confirmedBy`, confirmedAt: `${vocab}confirmedAt`,
   };
 }
 
@@ -95,7 +97,8 @@ export function jsonLdContext(base = DEFAULT_BASE, schema: Schema = BUILTIN_SCHE
 function holdsForAll(e: GEdge, needers: Map<string, Set<string>>, schema: Schema): boolean {
   if (e.derived || !schema.ideaScoped.includes(e.rel)) return true;
   const stated = new Set(e.ideas ?? []);
-  return [...(needers.get(e.from) ?? [])].every((i) => stated.has(i));
+  // Stated for each of them, and confirmed for each: one idea's confirmation is not another's (see confirmedFor).
+  return [...(needers.get(e.from) ?? [])].every((i) => stated.has(i) && confirmedFor(e, i));
 }
 
 export function exportJsonLd(graph: { nodes: GNode[]; edges: GEdge[]; schema?: Schema }, scope: ExportScope, exported = new Date().toISOString(), base = DEFAULT_BASE): JsonLdDoc {
@@ -126,6 +129,12 @@ export function exportJsonLd(graph: { nodes: GNode[]; edges: GEdge[]; schema?: S
     ...(e.quote ? { quote: e.quote, quoteFound: e.quoteFound !== false } : {}),
     ...(e.readAt ? { readAt: e.readAt } : {}),
     ...(e.ideas?.length ? { statedFor: e.ideas.map((i) => iri(`idea:${i}`)) } : {}),
+    // Every statement of a stored fact, each with its own idea, status, confidence and provenance (who confirmed it).
+    ...(e.sources?.length ? { statement: e.sources.map((x) => ({
+      '@type': 'Statement', source: x.source, confidence: x.confidence, confirmed: x.confirmed,
+      ...(x.idea ? { statedFor: [iri(`idea:${x.idea}`)] } : {}), ...(x.confirmedBy ? { confirmedBy: x.confirmedBy } : {}), ...(x.confirmedAt ? { confirmedAt: x.confirmedAt } : {}),
+      ...(x.quote ? { quote: x.quote, quoteFound: x.quoteFound !== false } : {}), ...(x.readAt ? { readAt: x.readAt } : {}),
+    })) } : {}),
     ...(e.derived ? {
       wasGeneratedBy: ruleIri(e.derived.rule), wasDerivedFrom: e.derived.inputs.map(linkIri),
       ...(e.derived.alternatives?.length ? { alternative: e.derived.alternatives.map((w) => ({ '@type': 'Derivation', wasDerivedFrom: w.map(linkIri) })) } : {}),
@@ -157,6 +166,12 @@ export function fromJsonLd(doc: JsonLdDoc, schema: Schema = BUILTIN_SCHEMA): { n
       description: String(l.description), source: String(l.source), confidence: Number(l.confidence), confirmed: l.confirmed === true,
       ...(l.quote ? { quote: String(l.quote), ...(l.quoteFound === false ? { quoteFound: false } : {}) } : {}), ...(l.readAt ? { readAt: String(l.readAt) } : {}),
       ...(l.statedFor ? { ideas: (l.statedFor as string[]).map((x) => unIri(x).replace(/^idea:/, '')) } : {}),
+      ...(Array.isArray(l.statement) ? { sources: (l.statement as Record<string, unknown>[]).map((x): FactSource => ({
+        source: String(x.source), ...(Array.isArray(x.statedFor) && x.statedFor.length ? { idea: unIri(String(x.statedFor[0])).replace(/^idea:/, '') } : {}),
+        confidence: Number(x.confidence), confirmed: x.confirmed === true,
+        ...(x.confirmedBy ? { confirmedBy: String(x.confirmedBy) as FactSource['confirmedBy'] } : {}), ...(x.confirmedAt ? { confirmedAt: String(x.confirmedAt) } : {}),
+        ...(x.quote ? { quote: String(x.quote), ...(x.quoteFound === false ? { quoteFound: false } : {}) } : {}), ...(x.readAt ? { readAt: String(x.readAt) } : {}),
+      })) } : {}),
       ...(l.wasGeneratedBy ? { derived: { rule: decodeURIComponent(String(l.wasGeneratedBy).replace(/^star:rule\//, '')), inputs: (l.wasDerivedFrom as string[]).map(unLink), ...(ways ? { alternatives: ways } : {}) } } : {}),
     };
   });

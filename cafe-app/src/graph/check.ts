@@ -1,12 +1,13 @@
 import { AI_NODE_TYPES, AI_RELATIONS, BUILTIN_SCHEMA, FORM_ONLY_RELATIONS, operatorLinkProblem, aiSourceProblem, canonEdit, canonLink, idMatchesType, nameKey, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
 import { loadOntology } from './ontologyFile';
 import { readEntities } from './registryFile';
-import { REGISTRY_SECTIONS, unapprovedTool } from './registry';
+import { REGISTRY_SECTIONS, approvedTool, unapprovedTool } from './registry';
+import { APPROVED_TOOLS } from './ontology';
 import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 import { readEdits } from './operator';
 import { readAiLinks, readConfirmations, rebuildGraph } from './store';
-import { formOnly, mergeProblem, staleEdits, type StaleEdit } from './build';
+import { formOnly, mergeProblem, mergedInto, staleEdits, type StaleEdit } from './build';
 import { confirmer, readRules, type Rule } from './rules';
 import { confirmAt } from '../ai/confirm';
 import { loadSettings } from '../round/store';
@@ -91,6 +92,7 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
           const retired = section === 'Tool' ? unapprovedTool(String(a)) : undefined;
           if (retired) out.push(`entities.yaml: Tool: "${e.id}": ${a === e.label ? 'is' : `alias "${a}" names`} ${retired}, which is not on the approved list: an approved tool's name would make it look approved (not used by the build; remove it)`);
         }
+        if (section === 'Tool' && !unapprovedTool(e.label) && !approvedTool(e.label)) out.push(`entities.yaml: Tool: "${e.id}" (${e.label}) is not on the Café's approved list (${APPROVED_TOOLS.join(', ')}): a Tool entry names an approved tool (not used by the build; remove it)`);
       });
     }
   } else if ((await readText(paths(root).entities)) !== undefined) out.push('entities.yaml: could not be read (the built-in tools apply)');
@@ -133,6 +135,7 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
     if (!raw.trim()) return;
     try { const v = JSON.parse(raw); if (v && typeof v === 'object' && !Array.isArray(v)) fileLines.push(i + 1); } catch { /* reported above */ }
   });
+  const moved = mergedInto(await readEdits(root), schema);
   links.forEach((l, i) => {
     const line = fileLines[i] ?? i + 1;
     if (l.status === 'removed') return;
@@ -145,16 +148,18 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
       if (!AI_NODE_TYPES.includes(n.type)) out.push(`${at}: new star ${n.id} is a ${String(n.type)}, which the AI may not make (skipped by the build)`);
       else if (!idMatchesType(n.id, n.type)) out.push(`${at}: new star ${n.id} is a ${n.type} but its id does not start with "${n.type.toLowerCase()}:" (skipped by the build)`);
     }
-    const ft = typeOfAny(l.from, extra); const tt = typeOfAny(l.to, extra);
+    // A star merged into another since (an operator merge) is that star now: the build moved the link there.
+    const ft = typeOfAny(l.from, extra) ?? typeOf.get(moved(l.from)); const tt = typeOfAny(l.to, extra) ?? typeOf.get(moved(l.to));
     const unknown = [[l.from, ft], [l.to, tt]].filter(([, t]) => !t).map(([id]) => id);
     if (unknown.length) { out.push(`${at}: ${unknown.join(' and ')} ${unknown.length === 1 ? 'is' : 'are'} not in the graph or among the link's new stars (skipped by the build)`); return; }
     if (ft !== ALLOWED[l.rel][0] || tt !== ALLOWED[l.rel][1]) { out.push(`${at}: ${l.rel} goes ${pair(l.rel)}, not ${ft} → ${tt} (skipped by the build)`); return; }
     const bad = aiSourceProblem(l.source);
     if (bad) { out.push(`${at}: ${bad} (dropped by the build)`); return; }
     if (typeof l.confidence !== 'number' || !Number.isFinite(l.confidence) || l.confidence < 0 || l.confidence > 1) { out.push(`${at}: confidence ${JSON.stringify(l.confidence)} is not a number from 0 to 1 (dropped by the build)`); return; }
-    if (l.status === 'confirmed' && l.confirmedBy === 'operator' && l.confidence < threshold && !confirmations.has(`${l.from}|${l.rel}|${l.to}`)) out.push(`${at}: says the operator confirmed it, but no Do it is recorded for it (graph/confirmations.jsonl): it counts as waiting for your Do it`);
+    const didIt = confirmations.has(`${l.from}|${l.rel}|${l.to}#${l.idea ?? ''}`) || confirmations.has(`${l.from}|${l.rel}|${l.to}`);
+    if (l.status === 'confirmed' && l.confirmedBy === 'operator' && l.confidence < threshold && !didIt) out.push(`${at}: says the operator confirmed it, but no Do it is recorded for it (graph/confirmations.jsonl): it counts as waiting for your Do it`);
     if (scopedRels.includes(l.rel) && !l.idea) unscoped.push({ where: at, edge: `${l.from}|${l.rel}|${l.to}`, from: l.from, rel: l.rel, to: l.to, ...scopeCandidates(graph, l.from, l.to) });
-    if (l.status === 'confirmed' && typeof l.confidence === 'number' && l.confidence < threshold && !(l.confirmedBy === 'operator' && confirmations.has(`${l.from}|${l.rel}|${l.to}`))) lowConfidence.push({ line, edge: `${l.from}|${l.rel}|${l.to}`, confidence: l.confidence, ...(l.idea ? { idea: l.idea } : {}) });
+    if (l.status === 'confirmed' && typeof l.confidence === 'number' && l.confidence < threshold && !(l.confirmedBy === 'operator' && didIt)) lowConfidence.push({ line, edge: `${l.from}|${l.rel}|${l.to}`, confidence: l.confidence, ...(l.idea ? { idea: l.idea } : {}) });
   });
   const edits = (await readEdits(root)).map(canonEdit);
   for (const e of edits) {
@@ -184,11 +189,23 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
   for (const [k, ids] of byName) if (ids.length > 1) out.push(`graph: ${ids.join(' and ')}: two ${k.split('|')[0]} stars with one name ("${k.split('|')[1]}"): merge them`);
   // The build's own refusals that check has not already said in its words (same line, same file place).
   // AI links are named by their file line above; an edit or an entry the check already named is not named twice.
+  // An operator edit already named in check's words is not named again; an AI link the build refused for a reason the
+  // lines above do not cover (a forged quote, a readAt that is no time) is named by its file line.
   const where = (m: string) => m.split(': ')[0];
   for (const m of buildSays) {
-    if (m.startsWith('ai-links.jsonl link ') || m.startsWith('entities.yaml')) continue;
-    if (!out.includes(m) && !out.some((x) => where(x) === where(m))) out.push(m);
+    if (m.startsWith('entities.yaml')) continue;
+    const ai = /^ai-links\.jsonl link (\d+) \([^)]*\): (.*)$/.exec(m);
+    if (ai) {
+      const at = `ai-links.jsonl line ${fileLines[Number(ai[1]) - 1] ?? ai[1]}`;
+      if (!out.some((x) => x.startsWith(`${at}:`))) out.push(`${at}: ${ai[2]}`);
+      continue;
+    }
+    if (out.includes(m)) continue;
+    if (m.startsWith('operator.jsonl ') && out.some((x) => where(x) === where(m))) continue;
+    out.push(m);
   }
+  // What else the build could not take: idea folders, the threshold, the Do-it records (none of them end in a refusal word).
+  for (const m of graph.problems.map((p) => p.message)) if (/^(ideas\/|settings\.yaml:|confirmations\.jsonl)/.test(m) && !out.includes(m)) out.push(m);
   void said;
   return {
     violations: out, stale: staleEdits(graph.nodes, edits, schema), unscoped, lowConfidence,

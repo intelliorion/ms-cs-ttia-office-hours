@@ -13,6 +13,9 @@ import type { Clock } from '../clock';
 import { registryFrom } from './registryFile';
 import { readRules } from './rules';
 import { loadOntology } from './ontologyFile';
+import { keyPath, sameMac, sign, signingKey } from './sign';
+import { aiReads } from '../ai/reads';
+import { confirmAtProblem } from '../ai/confirm';
 
 const file = (root: string, name: string) => path.join(paths(root).graph, name);
 
@@ -51,43 +54,107 @@ export async function appendAiLink(root: string, link: AiLink): Promise<void> {
 
 /**
  * Rewrites ai-links.jsonl with the new status for the link whose edge id matches (ids compared in today's normal
- * form, so a line written with an older id is found). Confirming is the operator's Do it, and is recorded as such:
- * a link below the confidence threshold counts as confirmed only then.
+ * form, so a line written with an older id is found), for one idea when `idea` is given (a fact two ideas' reads
+ * found is confirmed for each on its own), else for every idea it was read for. Confirming is the operator's Do it,
+ * and is recorded as such, one signed record per (fact, idea): a link below the confidence threshold counts as
+ * confirmed only then.
  */
-export async function setAiLinkStatus(root: string, edgeId: string, status: AiLink['status'], at?: string): Promise<void> {
+export async function setAiLinkStatus(root: string, edgeId: string, status: AiLink['status'], at?: string, idea?: string): Promise<void> {
   const lines = await readLines(root);
   const [from, rel, to] = edgeId.split('|');
-  const hit = lines.filter(({ link: l }) => { if (!l) return false; const c = canonLink(l); return c.from === from && c.rel === rel && c.to === to; });
-  if (!hit.length) throw new Error(`No AI link ${edgeId}`);
+  const hit = lines.filter(({ link: l }) => { if (!l) return false; const c = canonLink(l); return c.from === from && c.rel === rel && c.to === to && (idea === undefined || (l.idea ?? '') === idea); });
+  if (!hit.length) throw new Error(`No AI link ${edgeId}${idea ? ` for ${idea}` : ''}`);
   const day = at ?? new Date().toISOString().slice(0, 10);
   for (const l of hit) {
     l.link!.status = status;
     if (status === 'confirmed') { l.link!.confirmedBy = 'operator'; l.link!.confirmedAt = day; } else { delete l.link!.confirmedBy; delete l.link!.confirmedAt; }
   }
-  // The Do it's own record: the build believes a confirmedBy only when this file has it (a hand-written one is refused).
-  if (status === 'confirmed') await appendConfirmation(root, { edge: `${from}|${rel}|${to}`, at: day, by: 'operator', ts: new Date().toISOString() });
+  // The Do it's own record, signed: the build believes a confirmedBy only when this file has it (a hand-written one is refused).
+  if (status === 'confirmed') {
+    for (const i of [...new Set(hit.map((l) => l.link!.idea ?? ''))]) await appendConfirmation(root, { edge: `${from}|${rel}|${to}`, ...(i ? { idea: i } : {}), at: day, by: 'operator', ts: new Date().toISOString() });
+  }
   await writeLines(root, lines);
 }
 
 /**
- * graph/confirmations.jsonl: one line per Do it that confirmed an AI link, written only by setAiLinkStatus. A link in
- * ai-links.jsonl that says confirmedBy: operator with no Do it here is a confirmation nobody gave: the build counts the
- * link as waiting and says so. (Both are plain files on the operator's machine: someone who edits both can still
- * forge one; the point is that one edited line no longer can.)
+ * graph/confirmations.jsonl: one line per Do it that confirmed an AI link (a fact, for an idea), written only by
+ * setAiLinkStatus (and `cafe ontology fix --confirm`). Each line is signed with the workspace's key, kept outside the
+ * workspace (see sign.ts), and chained to the line before it, so a line written or changed by hand, in this file and
+ * ai-links.jsonl together, is not believed, and a removed line breaks the chain where it was. A line from before
+ * lines were signed counts as waiting until `cafe ontology fix --apply` signs it.
  */
-export interface Confirmation { edge: string; at: string; by: 'operator'; ts: string }
+export interface Confirmation { edge: string; idea?: string; at: string; by: 'operator'; ts: string; prev?: string; mac?: string }
 const confirmationsFile = (root: string) => file(root, 'confirmations.jsonl');
+const confirmationFields = (c: Confirmation) => [c.edge, c.idea ?? '', c.at, c.by, c.ts];
+/** One line of the file as read: the record, whether its signature holds, and what is wrong with it. */
+export interface ConfirmationLine { line: number; raw: string; record?: Confirmation; state: 'signed' | 'unsigned' | 'bad' | 'unreadable'; chain: boolean }
+
+export async function readConfirmationLines(root: string): Promise<{ lines: ConfirmationLine[]; key: boolean }> {
+  const key = await signingKey(root);
+  const out: ConfirmationLine[] = [];
+  let prev = '';
+  ((await readText(confirmationsFile(root))) ?? '').split('\n').forEach((raw, i) => {
+    if (!raw.trim()) return;
+    let v: Confirmation | undefined;
+    try { const p = JSON.parse(raw); if (p && typeof p.edge === 'string' && p.by === 'operator') v = p as Confirmation; } catch { /* unreadable */ }
+    if (!v) { out.push({ line: i + 1, raw, state: 'unreadable', chain: true }); return; }
+    if (typeof v.mac !== 'string') { out.push({ line: i + 1, raw, record: v, state: 'unsigned', chain: true }); return; }
+    const ok = !!key && sameMac(sign(key, confirmationFields(v), String(v.prev ?? '')), v.mac);
+    out.push({ line: i + 1, raw, record: v, state: ok ? 'signed' : 'bad', chain: (v.prev ?? '') === prev });
+    if (ok) prev = v.mac;
+  });
+  return { lines: out, key: !!key };
+}
+
+/** The Do-it records the build believes (signed by this workspace's key): `edge#idea`, and `edge` for one made for no idea. */
 export async function readConfirmations(root: string): Promise<Set<string>> {
-  const out = new Set<string>();
-  for (const raw of ((await readText(confirmationsFile(root))) ?? '').split('\n')) {
-    if (!raw.trim()) continue;
-    try { const v = JSON.parse(raw) as Confirmation; if (v && typeof v.edge === 'string' && v.by === 'operator') { const [f, r, t] = v.edge.split('|'); const c = canonLink({ from: f, rel: r as AiLink['rel'], to: t } as AiLink); out.add(`${c.from}|${c.rel}|${c.to}`); } } catch { /* skipped */ }
+  return (await readConfirmationRecords(root)).confirmed;
+}
+/** The believed records, and a line for each record that is not believed or breaks the chain. */
+export async function readConfirmationRecords(root: string): Promise<{ confirmed: Set<string>; problems: string[] }> {
+  const { lines, key } = await readConfirmationLines(root);
+  const confirmed = new Set<string>(); const problems: string[] = [];
+  const at = (l: ConfirmationLine) => `confirmations.jsonl line ${l.line}`;
+  for (const l of lines) {
+    if (l.state === 'unreadable') { problems.push(`${at(l)}: could not be read (skipped)`); continue; }
+    const c = l.record!;
+    const [f, r, t] = c.edge.split('|');
+    const k = canonLink({ from: f, rel: r as AiLink['rel'], to: t } as AiLink);
+    const id = `${k.from}|${k.rel}|${k.to}`;
+    if (l.state === 'unsigned') { problems.push(`${at(l)}: ${c.edge.replace(/\|/g, ' ')}${c.idea ? ` for ${c.idea}` : ''}: not signed (written before Do-it records were signed), so it counts as waiting for your Do it until cafe ontology fix --apply signs it`); continue; }
+    if (l.state === 'bad') { problems.push(`${at(l)}: ${c.edge.replace(/\|/g, ' ')}${c.idea ? ` for ${c.idea}` : ''}: ${key ? 'its signature does not match: it was written or changed by hand, not by a Do it' : `there is no key to check it with (${(await keyPath(root)) ?? '~/.cafe-ai/keys'} is missing)`}, so it counts as waiting for your Do it (refused by the build)`); continue; }
+    if (!l.chain) problems.push(`${at(l)}: a line before it was removed or changed (the chain of Do-it records is broken there)`);
+    confirmed.add(c.idea ? `${id}#${c.idea}` : id);
   }
-  return out;
+  return { confirmed, problems };
 }
 export async function appendConfirmation(root: string, c: Confirmation): Promise<void> {
+  const key = (await signingKey(root, true))!;
+  const { lines } = await readConfirmationLines(root);
+  const prev = [...lines].reverse().find((l) => l.state === 'signed')?.record?.mac ?? '';
+  const rec: Confirmation = { edge: c.edge, ...(c.idea ? { idea: c.idea } : {}), at: c.at, by: 'operator', ts: c.ts };
   const text = (await readText(confirmationsFile(root))) ?? '';
-  await writeFileAtomic(confirmationsFile(root), `${text}${text && !text.endsWith('\n') ? '\n' : ''}${JSON.stringify(c)}\n`);
+  await writeFileAtomic(confirmationsFile(root), `${text}${text && !text.endsWith('\n') ? '\n' : ''}${JSON.stringify({ ...rec, prev, mac: sign(key, confirmationFields(rec), prev) })}\n`);
+}
+/**
+ * Writes the file again with every line the operator vouches for signed and the chain whole: the signed lines as they
+ * are, the unsigned (older) ones signed, and, with `all`, the ones whose signature does not match too (a workspace
+ * moved to a machine without its key). Lines that cannot be read are kept as they were. Returns the lines signed.
+ */
+export async function signConfirmations(root: string, all = false): Promise<number[]> {
+  const key = (await signingKey(root, true))!;
+  const { lines } = await readConfirmationLines(root);
+  let prev = ''; const out: string[] = []; const signed: number[] = [];
+  for (const l of lines) {
+    if (!l.record || (l.state === 'bad' && !all)) { out.push(l.raw); continue; }
+    const { prev: _p, mac: _m, ...rec } = l.record;
+    const mac = sign(key, confirmationFields(rec), prev);
+    if (l.state !== 'signed' || (l.record.prev ?? '') !== prev) signed.push(l.line);
+    out.push(JSON.stringify({ ...rec, prev, mac }));
+    prev = mac;
+  }
+  if (signed.length) await writeFileAtomic(confirmationsFile(root), `${out.join('\n')}\n`);
+  return signed;
 }
 
 /**
@@ -122,17 +189,22 @@ export async function rebuildGraph(root: string): Promise<BuiltGraph> {
   // The workspace's ontology first: the words and pairs every layer below reads. What it could not take is said with
   // the graph's problems, like the rules file's: in the app, never silent.
   const ontology = await loadOntology(root);
-  const { ideas } = await listIdeas(root);
+  const listed = await listIdeas(root);
+  const { ideas } = listed;
   const { links, problems } = await readAiLinks(root);
   const edits = await readEdits(root);
   // The rules file's problems (a broken file, a rule it cannot take) go with the graph's: said in the app, never silent.
   const rules = await readRules(root, ontology.schema);
   const settings = await loadSettings(root).catch(() => ({}));
   const registry = await registryFrom(root, edits, ontology.schema);
-  const { refused, ...graph } = buildGraph(ideas, links, await listRounds(root), edits, { registry, rules: rules.rules, cache: cacheFor(root), confirmAt: confirmAt(settings), schema: ontology.schema, confirmations: await readConfirmations(root) });
+  const signed = await readConfirmationRecords(root);
+  const { refused, ...graph } = buildGraph(ideas, links, await listRounds(root), edits, { registry, rules: rules.rules, cache: cacheFor(root), confirmAt: confirmAt(settings), schema: ontology.schema, confirmations: signed.confirmed, reads: await aiReads(root) });
   await writeFileAtomic(file(root, 'nodes.jsonl'), graph.nodes.map((n) => JSON.stringify(n)).join('\n') + '\n');
   await writeFileAtomic(file(root, 'edges.jsonl'), graph.edges.map((e) => JSON.stringify(e)).join('\n') + '\n');
-  return { ...graph, schema: ontology.schema, problems: [...problems, ...[...ontology.problems, ...rules.problems, ...registry.refused, ...refused].map((message) => ({ line: 0, message }))] };
+  // Every idea folder the build could not take (two folders with one Café ID, an idea.yaml that will not read) is said too.
+  const ideaProblems = listed.problems.map((p) => `ideas/${p.folder}: ${p.message}`);
+  const threshold = confirmAtProblem(settings);
+  return { ...graph, schema: ontology.schema, problems: [...problems, ...[...ontology.problems, ...rules.problems, ...registry.refused, ...ideaProblems, ...(threshold ? [threshold] : []), ...signed.problems, ...refused].map((message) => ({ line: 0, message }))] };
 }
 
 /**

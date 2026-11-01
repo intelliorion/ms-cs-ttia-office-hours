@@ -34,8 +34,8 @@ async function needWorkspace(): Promise<void> {
 }
 const clock = systemClock;
 
-const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--with-form-choices] [--json]> [--workspace DIR] [--port N]';
-const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--with-form-choices] [--json] [--top N] [--workspace DIR]`;
+const USAGE = 'Usage: cafe <init | start | import <file> | ontology check [--strict] | ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] [--resign] | export [--idea ID] [--format networkx] | model <status | import <folder-or-zip> | export <zip>> | network <check | stats | central | clusters | path A B | isolated | suggest | cycles> [--with-derived] [--with-unconfirmed] [--with-form-choices] [--json]> [--workspace DIR] [--port N]';
+const NETWORK_USAGE = `Usage: cafe network <check | ${NETWORK_ANALYSES.map((a) => (a === 'path' ? 'path "<from>" "<to>"' : a)).join(' | ')}> [--with-derived] [--with-unconfirmed] [--with-form-choices] [--json] [--top N] [--workspace DIR]`;
 const MODEL_USAGE = 'Usage: cafe model status | cafe model import <folder-or-zip> | cafe model export <zip>  [--workspace DIR]';
 
 async function main(): Promise<void> {
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'ontology': {
-      if (rest[0] !== 'check' && rest[0] !== 'fix') throw new Error('Usage: cafe ontology check [--strict] | cafe ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] [--workspace DIR]');
+      if (rest[0] !== 'check' && rest[0] !== 'fix') throw new Error('Usage: cafe ontology check [--strict] | cafe ontology fix [--apply] [--stamp op-N=ID[,ID]] [--repoint op-N=STAR] [--retire op-N] [--confirm line-N] [--resign] [--workspace DIR]');
       await needWorkspace();
       if (rest[0] === 'fix') {
         // A dry run unless --apply: what it would change and how the derived links would change.
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
         }
         const retire = flags('retire');
         const confirm = flags('confirm').map((x) => { const m = /^line-(\d+)$/.exec(x); if (!m) throw new Error(`--confirm ${x}: write it as line-12`); return Number(m[1]); });
-        const plan = await planFix(root, stamp, { repoint, retire, confirm });
+        const plan = await planFix(root, stamp, { repoint, retire, confirm, resign: has('resign') });
         const applied = has('apply') ? await applyFix(root, plan, clock) : undefined;
         for (const l of fixLines(plan, applied)) console.log(l);
         return;
@@ -147,7 +147,7 @@ async function main(): Promise<void> {
       }
     }
     case 'network': {
-      // NetworkX analyses the graph the app built: read-only, stored facts unless --with-derived.
+      // NetworkX analyses the graph the app built: read-only, confirmed stored facts unless --with-unconfirmed or --with-derived.
       const what = rest[0];
       if (what === 'check') {
         const { lines, ok } = await networkCheck();
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
       await needWorkspace();
       if (what === 'path' && (!rest[1] || !rest[2])) throw new Error(NETWORK_USAGE);
       const top = flag('top') ? Number(flag('top')) : undefined;
-      const out = await networkFor(root, what as NetworkAnalysis, { ...(what === 'path' ? { a: rest[1], b: rest[2] } : {}), ...(top ? { top } : {}), ...(has('with-form-choices') ? { formChoices: true } : {}) }, { withDerived: has('with-derived') });
+      const out = await networkFor(root, what as NetworkAnalysis, { ...(what === 'path' ? { a: rest[1], b: rest[2] } : {}), ...(top ? { top } : {}), ...(has('with-form-choices') ? { formChoices: true } : {}) }, { withDerived: has('with-derived'), withUnconfirmed: has('with-unconfirmed') });
       if (has('json')) console.log(JSON.stringify(out, null, 2));
       else for (const l of networkLines(out)) console.log(l);
       return;

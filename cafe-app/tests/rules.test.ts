@@ -160,11 +160,13 @@ describe('the rules as a whole', () => {
       { name: 'w', then: 'USES' },
       'not a rule',
     ] });
+    // The file's own rules, then the built-ins it does not list: they still run (round 5, item 13).
     expect(rules).toEqual([
       { name: 'x', kind: 'chain', chain: ['NEEDS', 'USES_DATA'], then: 'DEPENDS_ON', scope: 'same-idea', enabled: true },
       { name: 'z', kind: 'shared-stars', then: 'SIMILAR_TO', min: 3, enabled: true },
+      ...DEFAULT_RULES,
     ]);
-    expect(readRuleList({ rules: [{ name: 'y', chain: ['NEEDS', 'NOPE'], then: 'DEPENDS_ON' }, { name: 'w', then: 'USES' }] }).problems).toEqual([
+    expect(readRuleList({ rules: [{ name: 'y', chain: ['NEEDS', 'NOPE'], then: 'DEPENDS_ON' }, { name: 'w', then: 'USES' }] }).problems.slice(0, 2)).toEqual([
       'inference.yaml: y: unknown relation "NOPE" (dropped)', 'inference.yaml: w: a chain needs two or more relations (dropped)',
     ]);
     expect(parseRules(null)).toEqual(DEFAULT_RULES);

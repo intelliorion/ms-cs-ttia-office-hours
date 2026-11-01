@@ -254,6 +254,30 @@ export interface GEdge {
   derived?: { rule: string; inputs: string[]; alternatives?: string[][] };
   /** An AI link's quoted passage, whether it was found in the idea's text, and when it was read (see AiLink). */
   quote?: string; quoteFound?: boolean; readAt?: string;
+  /**
+   * Every statement of this stored fact, one per (source, idea): the form's column for each idea whose record states
+   * it, each AI read with its own status, confidence, quote and time, each operator edit. A fact two ideas' reads both
+   * found is one link with two statements, and it is confirmed for an idea only when that idea's own statement is
+   * (confirmedFor): a pending read for one idea never rides on another idea's confirmation. Not set on a derived link.
+   */
+  sources?: FactSource[];
+}
+/** Who stands behind a statement of a fact: the form, an AI read at or above the threshold, the operator's Do it, an operator edit. */
+export type ConfirmedBy = 'form' | 'threshold' | 'operator' | 'edit';
+/** One statement of a stored fact (see GEdge.sources). */
+export interface FactSource {
+  source: string; idea?: string; confidence: number; confirmed: boolean;
+  /** Set when confirmed: by the form, by the threshold (an AI read at or above it), by the operator's Do it (and when), by an operator edit. */
+  confirmedBy?: ConfirmedBy; confirmedAt?: string;
+  quote?: string; quoteFound?: boolean; readAt?: string;
+}
+/**
+ * Whether a stored fact is confirmed for an idea: some statement of it for that idea (or for no idea, a fact the
+ * operator stated for all) is. A fact with no statements recorded (an older edge) is as its flag says.
+ */
+export function confirmedFor(e: Pick<GEdge, 'confirmed' | 'sources'>, idea: string | undefined): boolean {
+  if (!e.sources?.length || idea === undefined) return e.confirmed;
+  return e.sources.some((s) => s.confirmed && (s.idea === undefined || s.idea === idea));
 }
 /**
  * A change the operator asked for in the command bar, kept in graph/operator.jsonl and laid over the graph built

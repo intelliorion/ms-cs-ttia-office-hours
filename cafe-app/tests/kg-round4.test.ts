@@ -335,7 +335,7 @@ describe('item 5: newcomer-safe RDF and verifiable provenance', () => {
   it('provenance is queryable: which links the operator added, and where one link came from (q45)', () => {
     const edits = [{ id: 'op-1', at: '2026-10-26', status: 'active' as const, t: 'link' as const, from: 'idea:CAFE-2026-001', rel: 'REPLACES' as const, to: 'painpoint:slow', idea: 'CAFE-2026-001' },
       { id: 'op-0', at: '2026-10-26', status: 'active' as const, t: 'add' as const, node: 'painpoint:slow', type: 'PainPoint' as const, label: 'Slow' }];
-    const g = buildGraph(two, [ai({ from: 'capability:cap-one', rel: 'USES_DATA', to: 'system:email', quote: 'by email', newNodes: EMAIL })], [], [edits[1], edits[0]]);
+    const g = buildGraph(two.map((i) => (i.id === 'CAFE-2026-001' ? { ...i, challenge: 'Requests come in by email.' } : i)), [ai({ from: 'capability:cap-one', rel: 'USES_DATA', to: 'system:email', quote: 'by email', newNodes: EMAIL })], [], [edits[1], edits[0]]);
     const r = runQuery({ steps: [{ op: 'links', source: 'operator' }] } as Query, { graph: g, ideas: two, rounds: [], idOf: (c: string) => c });
     expect(r.links!.map((l) => [l.from, l.rel, l.to, l.edit, l.at])).toEqual([['idea:CAFE-2026-001', 'REPLACES', 'painpoint:slow', 'op-1', '2026-10-26']]);
     expect(r.trace.map((t) => t.text)).toContain('A idea replaces Slow: added by the operator (op-1, 2026-10-26) for CAFE-2026-001');

@@ -1,5 +1,5 @@
 import YAML from 'yaml';
-import { BUILTIN_SCHEMA, edgeId, type GEdge, type GNode, type Relation, type Schema } from './ontology';
+import { BUILTIN_SCHEMA, confirmedFor, edgeId, type GEdge, type GNode, type Relation, type Schema } from './ontology';
 import { paths } from '../workspace/paths';
 import { readText } from '../workspace/files';
 
@@ -102,6 +102,13 @@ export function readRuleList(file: unknown, schema: Schema = BUILTIN_SCHEMA): Pa
     }
     out.push({ name, kind: 'chain', chain: [...rels], then, scope, enabled });
   });
+  // A built-in rule the file does not list still runs: leaving it out of the file is not switching it off (a file with
+  // one rule of its own would otherwise lose OWNS, USES and SIMILAR_TO without a word). Said, so the file can say so.
+  for (const d of DEFAULT_RULES) {
+    if (names.has(d.name)) continue;
+    out.push({ ...d, ...(d.kind === 'chain' ? { chain: [...d.chain] } : {}) } as Rule);
+    problems.push(`inference.yaml: the built-in rule ${d.name} is not listed, so it still runs (write it with enabled: false to switch it off)`);
+  }
   return { rules: out, problems };
 }
 
@@ -248,7 +255,9 @@ export function infer(nodes: GNode[], edges: GEdge[], rules: Rule[], schema: Sch
               edge: {
                 id, from: a.from, to: end, rel: rule.then,
                 description: `via ${path.slice(0, -1).map((e) => label(e.to)).join(' and ')}${kinds.length ? `, ${label(z.to)} being a kind of ${label(end)}` : ''}`, source: `rule:${rule.name}`,
-                confidence: round2(Math.min(...all.map((e) => e.confidence))), confirmed: all.every((e) => e.confirmed),
+                // Confirmed for an idea only when each input is confirmed for it: a fact one idea's read confirmed and
+                // another's only proposed is no confirmed dependency for the second (see confirmedFor).
+                confidence: round2(Math.min(...all.map((e) => e.confidence))), confirmed: shared.length ? shared.some((i) => all.every((e) => confirmedFor(e, i))) : all.every((e) => e.confirmed),
                 ...(fit !== 'loose' ? { ideas: [...shared].sort() } : {}),
                 derived: { rule: rule.name, inputs: all.map((e) => e.id) },
               },

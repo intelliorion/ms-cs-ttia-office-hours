@@ -27,10 +27,26 @@ export function nextId(existing: string[], year: number): string {
   return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
+/**
+ * The one folder an idea is read from and written to. Two folders that hold one Café ID (a folder copied by hand) are
+ * never both read: the one named after the idea's own slug wins (the folder the app made), else the first by name.
+ * listIdeas names the other as a problem; nothing is merged.
+ */
+async function pickFolder(base: string, id: string, names: string[]): Promise<string | undefined> {
+  const mine = names.filter((n) => n === id || n.startsWith(`${id}-`)).sort();
+  if (mine.length <= 1) return mine[0];
+  if (mine.includes(id)) return id;
+  for (const n of mine) {
+    const raw = await readYaml<Partial<Idea>>(path.join(base, n, 'idea.yaml')).catch(() => undefined);
+    if (raw && raw.id === id && n === `${id}-${raw.slug || 'idea'}`) return n;
+  }
+  return mine[0];
+}
+
 async function findFolder(root: string, id: string): Promise<string | undefined> {
   const base = paths(root).ideas;
   const names = await fs.readdir(base).catch(() => [] as string[]);
-  const name = names.find((n) => n === id || n.startsWith(`${id}-`));
+  const name = await pickFolder(base, id, names);
   return name ? path.join(base, name) : undefined;
 }
 
@@ -64,12 +80,17 @@ export async function listIdeas(root: string): Promise<ListResult> {
   const base = paths(root).ideas;
   const names = (await fs.readdir(base).catch(() => [] as string[])).filter((n) => /^CAFE-\d{4}-\d{3}/.test(n)).sort();
   const result: ListResult = { ideas: [], problems: [] };
+  const chosen = new Map<string, string | undefined>();
   for (const folder of names) {
     try {
       const raw = await readYaml<Partial<Idea>>(path.join(base, folder, 'idea.yaml'));
       if (!raw) throw new Error('idea.yaml is missing');
       const idea = normalizeIdea(raw);
       if (!ID_PATTERN.test(idea.id) || !folder.startsWith(idea.id)) throw new Error(`id "${idea.id}" does not match the folder`);
+      // One Café ID, one idea: a second folder holding it (a copy) is not read, and said, never merged into the first.
+      if (!chosen.has(idea.id)) chosen.set(idea.id, await pickFolder(base, idea.id, names));
+      const keep = chosen.get(idea.id);
+      if (keep && keep !== folder) throw new Error(`a second folder with the Café ID ${idea.id}: the idea is read from ${keep}, and this folder is not read; move or remove it (refused by the build)`);
       result.ideas.push(idea);
     } catch (e) {
       result.problems.push({ folder, message: (e as Error).message });

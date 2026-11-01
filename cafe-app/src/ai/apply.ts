@@ -13,23 +13,8 @@ const STOP = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'from', 'in', 'of', '
 const tokens = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const contentWords = (s: string) => tokens(s).filter((w) => !STOP.has(w));
 
-/** The idea's text fields the extract reads: a link names the one it came from, and its source records it. */
-export const FIELDS = ['challenge', 'current_process', 'outcomes', 'business_impact', 'beneficiaries', 'additional_context'];
-
-/** Words only, for comparing a quote with the text it came from (case, accents, punctuation and spacing aside). */
-const plain = (s: string) => ` ${String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' email ').replace(/<email>/g, ' email ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
-/**
- * Where a quoted passage really is in the idea's text: the field the AI named when it is there, else the first field
- * that holds it (the source is corrected to it), else not found (the field the AI named is kept, said not found).
- */
-export function placeQuote(quote: string | undefined, named: string, text: Partial<Record<string, unknown>> | undefined): { field: string; found?: boolean } {
-  const q = plain(quote ?? '');
-  if (!quote || q.trim().length < 3 || !text) return { field: named };
-  const has = (f: string) => plain(Array.isArray(text[f]) ? (text[f] as unknown[]).join(' ') : String(text[f] ?? '')).includes(q);
-  if (has(named)) return { field: named, found: true };
-  const other = FIELDS.find((f) => f !== named && has(f));
-  return other ? { field: other, found: true } : { field: named, found: false };
-}
+export { FIELDS, placeQuote } from '../graph/quote';
+import { FIELDS, placeQuote } from '../graph/quote';
 
 /** What the extract task is told already exists, so it keeps to those labels. */
 export function extractInput(idea: Idea, nodes: GNode[]): ExtractInput {

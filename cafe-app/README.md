@@ -229,8 +229,12 @@ them. **How I found it in the graph** under the answer lists each step and how m
 ideas use data from systems named like expense?", "which capability is needed by the most ideas?", "who leads the
 travel policy assistant?", "how is Zainab Okafor connected to the travel policy assistant?", "highlight what is
 related to GSS". When the graph doesn't hold the answer, it says so and lights nothing. A chip in the bar ("7 stars
-lit ✕") keeps the highlight after the panel closes. **A question never changes anything.** Idea text (the challenge,
-email answers) is not in the graph, so questions about it can't be answered yet.
+lit ✕") keeps the highlight after the panel closes. **A question never changes anything.** Idea text is not in the graph: for what one idea says, the agent's **read_idea**
+step reads its record, names coded: the form and everything the Details show in the added colour (roles given later, a
+field changed from the form, the tool picks, the "Learned since the form" brief, the answers), the review's to-do list,
+the design (features, the tool and why, the design questions and answers), the data (each file's column meanings, codes,
+rules and gaps, and the data questions and answers), the team's email replies and the approach. Texts are capped (600
+characters each, shorter when an idea holds a lot), so the step never floods the prompt.
 
 What a change can do:
 
@@ -403,8 +407,11 @@ ideas/<idea>/notes/       transcripts, notes and documents filed against an idea
 ## Deep read (optional): a local long-term memory
 
 **What.** The universe holds names: ideas, people, capabilities, systems. Everything long stays in each idea's folder:
-the challenge, the current process, the business impact, the context, the team's answers, the emails (sent and filed),
-the review and its to-do list, the design and the approach, the roadshow script, the CSIC hand-off and the history.
+the challenge, the current process, the business impact, the context, the team's answers, what was added after the form
+(the AI's "Learned since the form" brief, a field changed from the form, the tool picks), the emails (sent and filed),
+the review and its to-do list, the design (with the tool's reason) and the approach, the data (what each file is, its
+columns' meanings and codes, its rules, what is still unknown, and the data questions and answers), the roadshow script,
+the CSIC hand-off and the history.
 **Deep read** reads all of it into passages and keeps a map of what each says, on this machine, so the assistant and
 the search can find things by meaning. It is a reading index, not understanding.
 

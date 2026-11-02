@@ -186,6 +186,64 @@ describe('the Café assistant: an agent that works in steps over the graph', () 
     expect(prompts.join('\n')).not.toMatch(NAMES);
   });
 
+  it('read_idea carries what was added after the form: roles, a changed field, tool picks, the brief, the design, the data, replies; names coded', async () => {
+    const { root, prompts, ai } = await setup([
+      (d) => ({ next: 'read_idea', thought: 'Reading [I1]', idea: code(d, 'Idea', 'Procurement FAQ bot') }),
+      () => ({ next: 'answer', thought: 'Answering', reply: 'It reads the desk code.' }),
+    ]);
+    const base = await loadIdea(root, 'CAFE-2026-002');
+    const dir = await saveIdea(root, {
+      ...base, participation: 'Team', formWas: { participation: 'Individual' },
+      people: { ...base.people, team: [...base.people.team.slice(0, 1), { name: 'Zainab Okafor', roles: ['member', 'builder'], added: ['builder'] }] },
+      tools: { 'Answer FAQs': 'Copilot Studio' }, features: ['Answer FAQs'],
+      learned: { at: '2026-10-26', from: 1, points: [{ topic: 'Builder', text: 'Zainab Okafor will build it and attends every session.' }] },
+      ...({ answers: [{ question: 'Who builds it?', answer: 'Zainab Okafor, yes.', source: 'review answers' }] } as object),
+    } as any);
+    await writeYaml(`${dir}/design.yaml`, {
+      version: 1, status: 'designing', features: [{ id: 'f1', name: 'Answer FAQs', what: 'Answers from the policy pages', flags: [] }],
+      tool: { tool: 'Copilot Studio', pathway: 'Citizen-Led', by: 'ai', reason: 'Q&A over approved pages', pros: ['Quick'], cons: ['No live system'], context: [], flags: [], fit: [], evaluatedFor: [], at: '2026-10-26' },
+      steps: [{ n: 1, question: 'Who uses it?', suggested: [], source: 'operator', answer: 'Buyers, as Kwame Mensah said.' }],
+      data: { files: [{ id: 'f1', name: 'faq.csv', file: 'f1-faq.csv', kind: 'input', bytes: 10, type: 'table', at: '2026-10-26', steps: [],
+        understanding: { what: 'One row per question', columns: [{ name: 'cat', meaning: 'The category code', codes: 'P is purchasing' }], points: [], rules: [{ rule: 'Answer only P rows', columns: ['cat'] }], derivations: [], serves: [], issues: [], missing: ['What X means'], looked: [], at: '2026-10-26' } }],
+        steps: [{ n: 1, question: 'How many a week?', suggested: [], source: 'operator', answer: 'About 30.' }] },
+    });
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    await mkdir(`${dir}/emails/in`, { recursive: true });
+    await writeFile(`${dir}/emails/in/2026-10-25-reply.summary.md`, 'Zainab Okafor replied: the FAQ export is weekly.\n');
+    await runCommand(root, 'what does the faq bot data mean?', ai, clock);
+    const second = JSON.parse(prompts[1].slice(prompts[1].indexOf('<<<DATA') + 7, prompts[1].indexOf('DATA>>>')));
+    const r = second.steps[0].result;
+    expect(r.people.team[1]).toMatchObject({ roles: ['builder'], rolesAddedAfterForm: ['builder'] });
+    expect(r.people.team[1].person).toMatch(/^\[P\d+\]$/);
+    expect(r.changedFromForm).toEqual([{ field: 'participation', form: 'Individual', now: 'Team' }]);
+    expect(r.toolPicks).toEqual([{ feature: 'Answer FAQs', tool: 'Copilot Studio' }]);
+    expect(r.learned.points[0].text).toMatch(/^\[P\d+\] will build it and attends every session\.$/);
+    expect(r.answers[0]).toMatchObject({ question: 'Who builds it?', from: 'the operator, at review' });
+    expect(r.design).toMatchObject({ status: 'designing', tool: { tool: 'Copilot Studio', why: 'Q&A over approved pages' }, features: [{ name: 'Answer FAQs' }] });
+    expect(r.design.questions[0].answer).toMatch(/^Buyers, as \[P\d+\] said\.$/);
+    expect(r.data.files[0]).toMatchObject({ file: 'faq.csv', what: 'One row per question', columns: [{ column: 'cat', meaning: 'The category code', codes: 'P is purchasing' }], rules: ['Answer only P rows'], stillUnknown: ['What X means'] });
+    expect(r.data.questions).toEqual([{ question: 'How many a week?', answer: 'About 30.' }]);
+    expect(r.emailReplies[0]).toMatch(/^\[P\d+\] replied: the FAQ export is weekly\.$/);
+    // The agent is told what the step now carries.
+    expect(prompts[0]).toMatch(/toolPicks[\s\S]*learned[\s\S]*column meanings/);
+    expect(prompts.join('\n')).not.toMatch(NAMES);
+  });
+
+  it('read_idea stays bounded: a huge idea is cut to short texts', async () => {
+    const { root, prompts, ai } = await setup([
+      (d) => ({ next: 'read_idea', thought: 'Reading', idea: code(d, 'Idea', 'Procurement FAQ bot') }),
+      () => ({ next: 'answer', thought: 'Answering', reply: 'Long.' }),
+    ]);
+    const base = await loadIdea(root, 'CAFE-2026-002');
+    await saveIdea(root, { ...base, ...({ answers: Array.from({ length: 40 }, (_, i) => ({ question: `Q${i}`, answer: 'word '.repeat(400) })) } as object) } as any);
+    await runCommand(root, 'tell me everything', ai, clock);
+    const second = JSON.parse(prompts[1].slice(prompts[1].indexOf('<<<DATA') + 7, prompts[1].indexOf('DATA>>>')));
+    const r = second.steps[0].result;
+    expect(r.answers).toHaveLength(20);
+    expect(r.shortened).toBeTruthy();
+    expect(JSON.stringify(r).length).toBeLessThan(8000);
+  });
+
   it('a conversation keeps its context: history, the same codes, and follow-ups that start from the last answer', async () => {
     let firstCode = '';
     const { root, prompts, ai } = await setup([

@@ -92,3 +92,35 @@ describe('chunkIdea', () => {
     expect(chunks.filter((c) => c.ideaId === 'CAFE-2026-001')).toHaveLength(17);
   });
 });
+
+describe('chunkIdea: what was added after the form', () => {
+  it('reads the learned brief, a field changed from the form, the tool picks, the data understanding, the data questions and the tool\'s reason', async () => {
+    const root = await tmpWorkspace();
+    const idea = sampleIdea({
+      title: 'Desk booking', participation: 'Team', formWas: { participation: 'Individual' },
+      tools: { 'Desk finder': 'Power Apps' }, features: ['Desk finder', 'Floor map'],
+      learned: { at: '2026-10-26', from: 2, points: [{ topic: 'Data', text: 'Bookings come from the desk register export.' }] },
+    });
+    const dir = await saveIdea(root, idea);
+    await writeFile(path.join(dir, 'design.yaml'), [
+      'version: 1', 'status: designing', 'features: []', 'steps: []',
+      'tool:', '  tool: Power Apps', '  reason: A form over a SharePoint list', '  pros: []', '  cons: []',
+      'data:', '  files:', '    - id: f1', '      name: bookings.csv', '      file: f1-bookings.csv', '      kind: input', '      bytes: 52', '      type: table', '      at: 2026-10-26', '      steps: []',
+      '      understanding:', '        what: One row per desk booking', '        columns:', '          - name: desk', '            meaning: The desk code', '            codes: A is the first floor',
+      '        points: []', '        rules:', '          - rule: A desk is free when booked is no', '            columns: [booked]', '        derivations: []', '        serves: []', '        issues: []',
+      '        missing: [What a desk code of Z means]', '        looked: []', '        at: 2026-10-26',
+      '  steps:', '    - n: 1', '      question: How far ahead can people book?', '      suggested: []', '      source: operator', '      answer: Two weeks ahead.',
+    ].join('\n') + '\n');
+    const chunks = await chunkIdea(root, idea, dir);
+    const text = (section: string) => chunks.find((c) => c.section === section)?.text;
+    expect(text('learned')).toBe('Data: Bookings come from the desk register export.');
+    expect(text('changed from the form')).toBe('participation: Team (the form said Individual)');
+    expect(text('tool picks')).toBe('Desk finder: built with Power Apps\nFloor map: not covered by the tool');
+    expect(text('data f1')).toContain('File: bookings.csv. One row per desk booking');
+    expect(text('data f1')).toContain('Column desk: The desk code (codes: A is the first floor)');
+    expect(text('data f1')).toContain('Rule: A desk is free when booked is no');
+    expect(text('data f1')).toContain('Still unknown: What a desk code of Z means');
+    expect(text('data Q&A')).toBe('Q: How far ahead can people book?\nA: Two weeks ahead.');
+    expect(text('design features')).toBe('Tool: Power Apps. A form over a SharePoint list');
+  });
+});

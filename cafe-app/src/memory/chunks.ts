@@ -6,6 +6,7 @@ import { readText, readYaml } from '../workspace/files';
 import { listIdeas } from '../ideas/store';
 import type { Idea } from '../ideas/idea';
 import { DECISION_LABELS } from '../review/review';
+import { dataOf, meaningOf, whatOf } from '../data/model';
 
 /**
  * What Deep read reads: everything long in an idea folder that never becomes a star, cut into passages ("chunks"),
@@ -85,6 +86,14 @@ export async function chunkIdea(root: string, idea: Idea, dir: string): Promise<
   field('outcomes', idea.outcomes.join('\n'));
   const answers = ((idea as { answers?: { question: string; answer: string }[] }).answers ?? []).map((a) => `Q: ${clean(a.question)}\nA: ${clean(a.answer)}`);
   if (answers.length) out.push(...make(id, 'idea.yaml', 'answers', 'submission', batched(answers)));
+  // What was added after the form: the AI's brief of what the answers add, fields changed from the form, the tool picks.
+  const learned = (idea.learned?.points ?? []).map((p) => `${clean(p.topic)}: ${clean(p.text)}`).filter((l) => l.length > 2);
+  if (learned.length) out.push(...make(id, 'idea.yaml', 'learned', 'submission', batched(learned)));
+  const was = Object.entries(idea.formWas ?? {}).map(([f, v]) => `${f}: ${clean((idea as unknown as Record<string, unknown>)[f])} (the form said ${clean(v) || 'nothing'})`);
+  if (was.length) out.push(...make(id, 'idea.yaml', 'changed from the form', 'submission', [was.join('\n')]));
+  const toolOf = idea.tools ?? {};
+  const picks = (idea.features ?? Object.keys(toolOf)).map((f) => `${clean(f)}: ${toolOf[f] ? `built with ${clean(toolOf[f])}` : 'not covered by the tool'}`);
+  if (picks.length) out.push(...make(id, 'idea.yaml', 'tool picks', 'design', batched(picks)));
 
   if (idea.review || idea.prep) {
     const lines: string[] = [];
@@ -114,14 +123,31 @@ export async function chunkIdea(root: string, idea: Idea, dir: string): Promise<
     if (text) out.push(...make(id, `notes/${name}`, 'note', 'other', [text]));
   }
 
-  const design = await readYaml<{ features?: { name: string; what?: string }[]; tool?: { tool?: string; pros?: string[]; cons?: string[]; why?: string }; steps?: { question: string; answer?: string }[]; summary?: string }>(path.join(dir, 'design.yaml')).catch(() => undefined);
+  const design = await readYaml<{ features?: { name: string; what?: string }[]; tool?: { tool?: string; pros?: string[]; cons?: string[]; why?: string; reason?: string }; steps?: { question: string; answer?: string }[]; summary?: string; data?: unknown }>(path.join(dir, 'design.yaml')).catch(() => undefined);
   if (design) {
     const feats = (design.features ?? []).map((f) => `${clean(f.name)}${f.what ? `: ${clean(f.what)}` : ''}`);
-    const tool = design.tool?.tool ? [`Tool: ${clean(design.tool.tool)}${design.tool.why ? `. ${clean(design.tool.why)}` : ''}`, ...(design.tool.pros ?? []).map((p) => `+ ${clean(p)}`), ...(design.tool.cons ?? []).map((c) => `- ${clean(c)}`)] : [];
+    const tool = design.tool?.tool ? [`Tool: ${clean(design.tool.tool)}${clean(design.tool.reason ?? design.tool.why) ? `. ${clean(design.tool.reason ?? design.tool.why)}` : ''}`, ...(design.tool.pros ?? []).map((p) => `+ ${clean(p)}`), ...(design.tool.cons ?? []).map((c) => `- ${clean(c)}`)] : [];
     if (feats.length || tool.length) out.push(...make(id, 'design.yaml', 'design features', 'design', batched([...feats, ...tool])));
     const qa = (design.steps ?? []).filter((s) => s.answer).map((s) => `Q: ${clean(s.question)}\nA: ${clean(s.answer)}`);
     if (qa.length) out.push(...make(id, 'design.yaml', 'design Q&A', 'design', batched(qa)));
     if (clean(design.summary)) out.push(...make(id, 'design.yaml', 'design summary', 'design', [clean(design.summary)]));
+    // The data understanding: what each file is, its columns' meanings and codes, its rules; then the data questions.
+    const data = dataOf(design.data);
+    for (const f of data?.files ?? []) {
+      const u = f.understanding;
+      const lines = [
+        `File: ${clean(f.name)}${whatOf(f) ? `. ${clean(whatOf(f))}` : ''}`,
+        ...(u?.columns ?? []).map((c) => `Column ${clean(c.name)}: ${clean(meaningOf(f, c.name) ?? c.meaning)}${c.codes ? ` (codes: ${clean(c.codes)})` : ''}`),
+        ...(u?.rules ?? []).map((r) => `Rule: ${clean(r.rule)}`),
+        ...(u?.points ?? []).map((p) => `Point: ${clean(p)}`),
+        ...(u?.derivations ?? []).map((d) => `Output ${clean(d.output)} from ${d.from.join(', ')}: ${clean(d.how)}`),
+        ...(u?.missing ?? []).map((m) => `Still unknown: ${clean(m)}`),
+      ];
+      if (u || f.edits?.what) out.push(...make(id, 'design.yaml', `data ${f.id}`, 'design', batched(lines)));
+    }
+    const dqa = (data?.steps ?? []).filter((s) => clean(s.answer)).map((s) => `Q: ${clean(s.question)}\nA: ${clean(s.answer)}`);
+    if (dqa.length) out.push(...make(id, 'design.yaml', 'data Q&A', 'design', batched(dqa)));
+    if (clean(data?.summary?.text)) out.push(...make(id, 'design.yaml', 'data summary', 'design', [clean(data!.summary!.text)]));
   }
   const approach = clean(await readText(path.join(dir, 'approach.md')));
   if (approach) out.push(...make(id, 'approach.md', 'approach', 'design', [approach]));

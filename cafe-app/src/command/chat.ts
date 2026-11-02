@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readIdeaForAgent } from './readIdea';
 import { paths } from '../workspace/paths';
 import { readText, writeFileAtomic } from '../workspace/files';
 import { rebuildGraph } from '../graph/store';
@@ -433,11 +434,8 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         entry.steps!.push(s); opts.progress?.({ stage: 'step', step: s });
         done.push({
           did: 'read_idea', thought: output.thought,
-          result: {
-            idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), title: idea.title, challenge: coded(idea.challenge), current_process: coded(idea.current_process),
-            outcomes: idea.outcomes, business_impact: coded(idea.business_impact), beneficiaries: idea.beneficiaries, additional_context: coded(idea.additional_context),
-            answers: ((idea as { answers?: { question: string; answer: string }[] }).answers ?? []).slice(-20).map((a) => ({ question: a.question, answer: coded(a.answer) })),
-          },
+          // The form and everything added since (as the Details show it), the design, the data and the replies; names coded.
+          result: { idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), ...(await readIdeaForAgent(root, idea, coded)) },
         });
       } else {
         finalReply = output.reply ?? '';

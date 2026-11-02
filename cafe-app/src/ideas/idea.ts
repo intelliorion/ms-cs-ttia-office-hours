@@ -55,6 +55,12 @@ export interface PrepNeed {
   answer?: string;
   /** When it went to the team in an E2. */
   askedAt?: string;
+  /** How the code read the answer as it was saved (the builder and attendance questions), or why it cannot be used. */
+  check?: { ok: boolean; text: string };
+  /** The answer the last evaluation read: it is checked, so the item waits for a new answer, not for Re-evaluate. */
+  checked?: string;
+  /** Why the last evaluation left it open although it had an answer, in plain words. */
+  why?: string;
 }
 /** The last decision suggestion and its to-do list. Saved on the idea so answers survive a reload; the decision itself is saved only by Save decision. */
 /**
@@ -74,12 +80,23 @@ export interface PrepUpdate {
   from?: UpdateSource;
   label: string;
   status: 'proposed' | 'applied' | 'dismissed';
-  builder?: { name: string; canAttend: boolean; typed?: string; instead?: string[] };
+  /** The builder; `others` when the answer names more than one. */
+  builder?: { name: string; others?: string[]; canAttend: boolean; typed?: string; instead?: string[] };
+  /** The answers it was read from (their words): removing or replacing one of them undoes it. */
+  basis?: string[];
   participation?: string;
   flag?: string;
   facts?: { question: string; answer: string }[];
   link?: { from: string; to: string; rel: string; description: string; confidence: number; source: string; status?: string; idea?: string; newNodes?: { id: string; type: string; label: string }[] };
-  undo?: { team?: Person[]; teamAfter?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string; replaced?: { question: string; answer: string; source?: string }[] };
+  /**
+   * What applying it changed, so taking back the answer it came from undoes exactly that: roles given (`addedRole`),
+   * people added to the team (`joined`), builders it replaced (`removedRole`), steps ticked, the participation before, the
+   * flag cleared, the AI link added, and the answers it replaced. (`team`, `teamAfter`: older records only.)
+   */
+  undo?: {
+    team?: Person[]; teamAfter?: Person[]; ticked?: string[]; participation?: string | null; edgeId?: string; replaced?: { question: string; answer: string; source?: string }[];
+    addedRole?: string[]; joined?: string[]; removedRole?: string[]; flag?: string; formWas?: boolean;
+  };
 }
 
 export interface ReviewPrep {

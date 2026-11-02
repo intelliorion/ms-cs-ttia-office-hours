@@ -71,9 +71,14 @@ function Overview({ part }: { part: 'pipeline' | 'demand' }) {
 function IdeaSubmission({ id }: { id: string }) {
   const idea = useStore((s) => s.state?.ideas?.find((i: any) => i.id === id));
   const { refresh, setNotice } = useStore();
-  const removeAnswer = async (a: { question: string; answer: string }) => {
-    try { await post(`/api/ideas/${encodeURIComponent(id)}/answers/remove`, a); setNotice({ text: 'Answer removed.', kind: 'ok' }); }
-    catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+  // Remove, or replace with `next`: the server takes back what the answer set and re-reads the answers left, then
+  // says in one line what was undone.
+  const removeAnswer = async (a: { question: string; answer: string }, next?: string) => {
+    setNotice({ text: next ? 'Replacing the answer and reading the answers again…' : 'Taking the answer back and reading the answers left…', kind: 'ok' });
+    try {
+      const r: any = await post(`/api/ideas/${encodeURIComponent(id)}/answers/remove`, next ? { ...a, next } : a);
+      setNotice({ text: r?.line ?? (next ? 'Answer replaced.' : 'Answer removed.'), kind: 'ok' });
+    } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
     await refresh();
   };
   if (!idea) return <p className="hint">This idea is no longer in the workspace.</p>;
@@ -81,7 +86,7 @@ function IdeaSubmission({ id }: { id: string }) {
     <div className="ctx-scroll" data-testid="ctx-submission">
       <div className="ctx-title"><span className="iid">{idea.id}</span> {idea.title || 'Untitled idea'}</div>
       {idea.flags?.length > 0 && <ul className="ctx-flags">{idea.flags.map((f: string) => <li key={f}>⚑ {f}</li>)}</ul>}
-      <Details idea={idea} onRemoveAnswer={(a) => void removeAnswer(a)} />
+      <Details idea={idea} onRemoveAnswer={(a) => void removeAnswer(a)} onReplaceAnswer={(a, next) => void removeAnswer(a, next)} />
     </div>
   );
 }

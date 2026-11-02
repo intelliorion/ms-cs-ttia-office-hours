@@ -934,6 +934,13 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .rs-asked{color:var(--amber)}
 .rs-note{font-size:13px;color:var(--teal);margin-top:4px}
 .rs-email{font-size:13px;margin-top:6px;padding:6px 8px;border-left:2px solid var(--amber);background:rgba(var(--rgb-warm),.06)}
+/* Next to an answer: how it was read (muted), or why it cannot be used (danger). */
+.rs-read{font-size:12.5px;color:var(--muted);margin-top:4px}
+.rs-why{font-size:12.5px;color:var(--danger);margin-top:4px;padding:4px 8px;border-left:2px solid var(--danger);background:rgba(var(--rgb-danger,240,140,140),.08)}
+.rs-given{font-size:13px;margin-top:4px}
+.rs-ans-acts{display:flex;gap:10px;margin-top:2px;font-size:12px}
+.learned-edit{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.learned-edit textarea{width:100%;font:inherit;font-size:13px}
 .rs-ans{width:100%;box-sizing:border-box;margin-top:6px;resize:vertical;font:inherit;font-size:13px}
 .rs-acts{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 8px}
 .rs-wait{margin:2px 0 4px}

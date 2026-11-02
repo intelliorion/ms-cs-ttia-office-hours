@@ -125,8 +125,11 @@ export function IdeaDetails({ id }: { id: string }) {
   /** An email went to Outlook (the app opened it there): the notice says so and offers Undo. */
   const opened = (o: any) => { setUndoKey(o.email.key); return o; };
   const answer = async (need: string, text: string) => {
-    try { await post(`/api/ideas/${encodeURIComponent(id)}/prep/answer`, { need, answer: text }); }
-    catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
+    try {
+      const r: any = await post(`/api/ideas/${encodeURIComponent(id)}/prep/answer`, { need, answer: text });
+      // A replaced or removed answer: one line on what went with it.
+      if (r?.line) setNotice({ text: r.line, kind: 'ok' });
+    } catch (e) { setNotice({ text: (e as Error).message, kind: 'error' }); }
     await refresh();
   };
   const openTemplate = (template: string) => void act(

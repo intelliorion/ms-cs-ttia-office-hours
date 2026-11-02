@@ -136,12 +136,26 @@ export function TodoList({ needs, answers, disabled, onAnswer, none }: {
   );
 }
 
+/**
+ * What the page says next to an answer: why the last evaluation left it open (in red), else how the code read it as it
+ * was saved (a builder named, can attend), in red when it cannot be used as it is. Never nothing for a rejected answer.
+ */
+export function answerSays(need: any, status: Status): { text: string; warn: boolean } | undefined {
+  if (status === 'open' && need.why) return { text: need.why, warn: true };
+  if (need.check?.text && need.answer) return { text: need.check.text, warn: !need.check.ok };
+  return undefined;
+}
+
 function Need({ need, answers, disabled, onAnswer }: { need: any; answers: any[]; disabled: boolean; onAnswer: (need: string, answer: string) => Promise<void> }) {
   const [text, setText] = useState(need.answer ?? '');
-  useEffect(() => { setText(need.answer ?? ''); }, [need.id, need.answer]);
+  // A settled item shows its answer; Replace opens the box again.
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setText(need.answer ?? ''); setEditing(false); }, [need.id, need.answer]);
   const status = needStatus(need, answers);
   const emailed = emailAnswerFor(need, answers);
-  const save = () => { if (text.trim() !== (need.answer ?? '').trim()) void onAnswer(need.id, text); };
+  const save = () => { if (text.trim() !== (need.answer ?? '').trim()) void onAnswer(need.id, text); else setEditing(false); };
+  const says = answerSays(need, status);
+  const box = !need.met || editing;
   return (
     <li className={`rs-need st-${status}`} data-need={need.id}>
       <span className="rs-mark" aria-label={status === 'met' ? 'Done' : status === 'answered' ? 'Answered, to re-evaluate' : 'Open'}>
@@ -151,9 +165,17 @@ function Need({ need, answers, disabled, onAnswer }: { need: any; answers: any[]
         <div className="rs-ask">Ask: {need.ask}{need.askedAt && <span className="rs-asked"> · asked {shortDate(need.askedAt)}</span>}</div>
         {need.met && need.note && <div className="rs-note">{need.note}</div>}
         {emailed && !need.answer && <div className="rs-email" data-testid="rs-from-email"><b>From email:</b> {emailed.answer}</div>}
-        {!need.met && (
+        {need.met && need.answer && !editing && <div className="rs-given" data-testid="rs-given"><b>Your answer:</b> {need.answer}</div>}
+        {box && (
           <textarea className="rs-ans" rows={2} placeholder="Paste or type the answer" value={text} disabled={disabled}
             aria-label={`Answer: ${need.need}`} onChange={(e) => setText(e.target.value)} onBlur={save} />
+        )}
+        {says && <div className={says.warn ? 'rs-why' : 'rs-read'} data-testid="rs-says" role={says.warn ? 'alert' : 'status'}>{says.text}</div>}
+        {need.answer && (
+          <div className="rs-ans-acts">
+            {need.met && !editing && <button className="link-btn" data-action="replace-need-answer" disabled={disabled} title="Change this answer: what the old one set is taken back" onClick={() => setEditing(true)}>Replace</button>}
+            <button className="link-btn" data-action="remove-need-answer" disabled={disabled} title="Take this answer back, with everything it set (a builder, a tick, links)" onClick={() => void onAnswer(need.id, '')}>Remove answer</button>
+          </div>
         )}
       </div>
     </li>

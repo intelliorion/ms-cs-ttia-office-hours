@@ -173,7 +173,11 @@ const answerFrom = (source?: string) => (!source ? '' : source === 'review answe
  * What was submitted, and what was learned since. Anything not in the original form (a role or person added later, a
  * field changed from the form's value, the answers) is in the "added" colour.
  */
-export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: (a: { question: string; answer: string }) => void }) {
+export function Details({ idea, onRemoveAnswer, onReplaceAnswer }: {
+  idea: any; onRemoveAnswer?: (a: { question: string; answer: string }) => void;
+  /** Replace an answer with new words: what the old one set is taken back, and the new one is read. */
+  onReplaceAnswer?: (a: { question: string; answer: string }, next: string) => void;
+}) {
   const team: any[] = idea.people?.team ?? [];
   const submitter: string | undefined = idea.people?.submitter?.trim() || undefined;
   const submitterOnTeam = !!submitter && team.some((p) => nameKey(p.name) === nameKey(submitter));
@@ -258,22 +262,42 @@ export function Details({ idea, onRemoveAnswer }: { idea: any; onRemoveAnswer?: 
             <details className="learned-raw">
               <summary>Answers as given <span className="sec-n">{answers.length}</span></summary>
             <ul className="learned-list">
-              {answers.map((a, i) => (
-                <li key={`${i}-${a.question}`} data-answer={i}>
-                  <div className="learned-q">{a.question}</div>
-                  <div className="learned-a">{a.answer}</div>
-                  <div className="learned-m">
-                    {answerFrom(a.source) && <span>From {answerFrom(a.source)}</span>}
-                    {onRemoveAnswer && <button className="link-btn" data-action="remove-answer" title="Take this answer back (wrong, out of date or a duplicate)" onClick={() => onRemoveAnswer({ question: a.question, answer: a.answer })}>Remove</button>}
-                  </div>
-                </li>
-              ))}
+              {answers.map((a, i) => <AnswerAsGiven key={`${i}-${a.question}`} i={i} a={a} onRemove={onRemoveAnswer} onReplace={onReplaceAnswer} />)}
             </ul>
             </details>
           )}
         </div>
       )}
     </section>
+  );
+}
+
+/** One answer as given, with Remove and Replace (edit, then Save): taking it back takes back what it set. */
+function AnswerAsGiven({ i, a, onRemove, onReplace }: {
+  i: number; a: any; onRemove?: (a: { question: string; answer: string }) => void; onReplace?: (a: { question: string; answer: string }, next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(a.answer);
+  const was = { question: a.question, answer: a.answer };
+  const changed = text.trim() && text.trim() !== a.answer.trim();
+  return (
+    <li data-answer={i}>
+      <div className="learned-q">{a.question}</div>
+      {editing
+        ? <div className="learned-edit">
+          <textarea rows={2} value={text} aria-label={`New answer: ${a.question}`} onChange={(e) => setText(e.target.value)} />
+          <div className="learned-m">
+            <button className="link-btn" data-action="save-replace-answer" disabled={!changed} onClick={() => { onReplace?.(was, text.trim()); setEditing(false); }}>Save</button>
+            <button className="link-btn" data-action="cancel-replace-answer" onClick={() => { setText(a.answer); setEditing(false); }}>Cancel</button>
+          </div>
+        </div>
+        : <div className="learned-a">{a.answer}</div>}
+      <div className="learned-m">
+        {answerFrom(a.source) && <span>From {answerFrom(a.source)}</span>}
+        {onReplace && !editing && <button className="link-btn" data-action="replace-answer" title="Give this answer again in other words: what the old one set is taken back" onClick={() => setEditing(true)}>Replace</button>}
+        {onRemove && !editing && <button className="link-btn" data-action="remove-answer" title="Take this answer back (wrong, out of date or a duplicate), with what it set: a builder, a tick, links" onClick={() => onRemove(was)}>Remove</button>}
+      </div>
+    </li>
   );
 }
 

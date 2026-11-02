@@ -86,4 +86,23 @@ describe('who submitted the idea', () => {
     expect(el.querySelector('[data-submitter="Person 9"]')?.textContent).toBe('Person 9Submitter');
     expect([...el.querySelectorAll('.f-l')].map((f) => f.textContent)).toContain('Submitted by');
   });
+
+  it('an answer as given can be replaced: Replace, change it, Save; Cancel keeps it', () => {
+    const replaced: [string, string][] = [];
+    render(<Details idea={idea} onRemoveAnswer={() => {}} onReplaceAnswer={(a, next) => replaced.push([a.answer, next])} />);
+    act(() => (el.querySelector('[data-action="replace-answer"]') as HTMLButtonElement).click());
+    const box = el.querySelector('.learned-edit textarea') as HTMLTextAreaElement;
+    expect(box.value).toBe('Yes, sample data is enough.');
+    // Unchanged: nothing to save.
+    expect((el.querySelector('[data-action="save-replace-answer"]') as HTMLButtonElement).disabled).toBe(true);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'No: the live list is needed.');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    act(() => (el.querySelector('[data-action="save-replace-answer"]') as HTMLButtonElement).click());
+    expect(replaced).toEqual([['Yes, sample data is enough.', 'No: the live list is needed.']]);
+    act(() => (el.querySelector('[data-action="replace-answer"]') as HTMLButtonElement).click());
+    act(() => (el.querySelector('[data-action="cancel-replace-answer"]') as HTMLButtonElement).click());
+    expect(el.querySelector('.learned-a')?.textContent).toBe('Yes, sample data is enough.');
+  });
 });

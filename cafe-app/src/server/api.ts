@@ -14,7 +14,7 @@ import { writeFileAtomic, readHistory, readText, appendHistory } from '../worksp
 import { importExport } from '../import/importRows';
 import { draftEmail, listOutboxChecked, approve, markSent, updateDraft, openEmail, unopenEmail, listOutbox } from '../comms/outbox';
 import { openFolder, openEmailFile } from '../workspace/reveal';
-import { applyAnswerUpdates, removeAnswer, takeInAnswers } from '../review/updates';
+import { applyAnswerUpdates, removeAnswer, takeInAnswers, takenBackLine } from '../review/updates';
 import { suggestPrep, answerNeed, draftNeedsEmail, markAsked, unmarkAsked } from '../review/prep';
 import { saveReview, CRITERIA, DECISION_LABELS, type ReviewInput } from '../review/review';
 import { overdue, needsE2R } from '../reminders/due';
@@ -299,8 +299,19 @@ export function registerApi(add: AddRoute, { root, clock, connector, upkeep: upk
   add('POST', '/api/ai/review-suggest', async ({ body }) => byHand(() =>
     suggestPrep(root, String(body.id), (input) => ai.runWith(reviewSuggestTask, input), clock))());
   // Take back one saved answer (a wrong or duplicate one) from the Submission's "Learned since the form".
-  add('POST', '/api/ideas/:id/answers/remove', async ({ params, body }) => removeAnswer(root, params.id, String(body.question ?? ''), String(body.answer ?? ''), clock));
-  add('POST', '/api/ideas/:id/prep/answer', async ({ params, body }) => answerNeed(root, params.id, String(body.need ?? ''), body.answer));
+  // With "next", the answer is replaced by it. Everything the answer led to goes with it (the builder and tick it set, the
+  // links read from it); then the decision is re-evaluated from the answers left, which rebuilds the learned brief.
+  add('POST', '/api/ideas/:id/answers/remove', async ({ params, body }) => {
+    const next = typeof body.next === 'string' ? body.next : undefined;
+    const out = await removeAnswer(root, params.id, String(body.question ?? ''), String(body.answer ?? ''), clock, next);
+    const idea = await loadIdea(root, params.id);
+    let learned = out.learned;
+    if (idea.prep && !idea.closed && learned === 'out of date') {
+      try { await suggestPrep(root, params.id, (input) => ai.runWith(reviewSuggestTask, input), clock); learned = (await loadIdea(root, params.id)).learned?.stale ? 'out of date' : 'rebuilt'; } catch { /* no AI: the brief stays out of date, and the line says so */ }
+    }
+    return { ...out, learned, line: takenBackLine(next?.trim() ? 'replaced' : 'removed', { ...out, learned }) };
+  });
+  add('POST', '/api/ideas/:id/prep/answer', async ({ params, body }) => answerNeed(root, params.id, String(body.need ?? ''), body.answer, clock));
   // Draft email: the open to-dos become the questions email (E2), opened in Outlook and counted as sent.
   add('POST', '/api/ideas/:id/prep/email', async ({ params }) => {
     const rec = await draftNeedsEmail(root, params.id, clock);

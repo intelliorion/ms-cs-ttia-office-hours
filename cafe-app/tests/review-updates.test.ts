@@ -173,10 +173,14 @@ describe('the brief of what the answers add', () => {
     expect(now.learned).toEqual({ at: '2026-10-23', provider: 'fake', from: 1, points: [
       { topic: 'Builder', text: 'Person 2 builds it and attends every session.' }, { topic: 'Data', text: 'Sample contracts are enough.' },
     ] });
-    await saveIdea(root, { ...now, answers: [{ question: 'Q', answer: 'A', source: REVIEW_SOURCE }] } as any);
+    await saveIdea(root, { ...now, answers: [{ question: 'Q', answer: 'A', source: REVIEW_SOURCE }, { question: 'Q2', answer: 'B', source: REVIEW_SOURCE }] } as any);
     const { removeAnswer } = await import('../src/review/updates');
-    await removeAnswer(root, idea.id, 'Q', 'A', clock);
+    // An answer is left: the brief is out of date until it is rebuilt.
+    expect((await removeAnswer(root, idea.id, 'Q', 'A', clock)).learned).toBe('out of date');
     expect(((await loadIdea(root, idea.id)) as any).learned.stale).toBe(true);
+    // No answer left: the brief goes.
+    expect((await removeAnswer(root, idea.id, 'Q2', 'B', clock)).learned).toBe('cleared');
+    expect(((await loadIdea(root, idea.id)) as any).learned).toBeUndefined();
   });
 });
 

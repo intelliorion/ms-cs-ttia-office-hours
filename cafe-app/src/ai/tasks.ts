@@ -55,7 +55,7 @@ export type ReviewNetwork =
   | { by: string; grouping?: string; cluster: { otherIdeas: string[]; boundBy: string[] } | null; centrality: { star: string; type: string; rank: string; ideas: number }[]; likelyMissing: { link: string; because: string }[] }
   | { unavailable: string };
 /** One thing the operator still needs before deciding: what is needed, the question for the team, and whether DATA now covers it. */
-export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string }
+export interface ReviewNeed { need: string; ask: string; met: boolean; answer?: string; why?: string }
 /**
  * What the answers change in the idea's record, checked and applied by the app at once: a builder, participation, flags the
  * answers settle, the answers as facts, and stars and links for the graph. Empty values when nothing changes.
@@ -74,6 +74,7 @@ export interface ReviewSuggestOutput { criteria: Record<string, boolean>; decisi
 export const NEED_MAX = 120;
 export const ASK_MAX = 220;
 export const NEED_ANSWER_MAX = 200;
+export const NEED_WHY_MAX = 200;
 
 const asObj = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
 
@@ -205,6 +206,7 @@ export const REVIEW_SCHEMA: JsonSchema = {
           ask: { type: 'string', minLength: 1, maxLength: ASK_MAX },
           met: { type: 'boolean' },
           answer: { type: 'string', maxLength: NEED_ANSWER_MAX },
+          why: { type: 'string', maxLength: NEED_WHY_MAX },
         },
       },
     },
@@ -285,6 +287,10 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       'needs: what the operator still needs to know before deciding, as a to-do list. Each item: need (what is needed, a few words,',
       `at most ${NEED_MAX} characters), ask (the one question to send the team for it, plain and friendly, at most ${ASK_MAX} characters),`,
       'met (true only if DATA now covers it), and, when met, answer (what covered it in a few words, such as "Analyst named, attends all sessions").',
+      `When an item has an answer in DATA.answers but is still not met, why (at most ${NEED_WHY_MAX} characters): one plain sentence telling the operator what is missing from that answer,`,
+      'such as "It names the builder but not whether they can attend every session"; the operator reads it next to the answer, so never leave it out then.',
+      'An answer to the builder question that is only a name, or a list of names (codes), names the builder(s): put them all in updates.builder, comma-separated.',
+      'A "yes" or "no" to whether they can attend answers that part: yes sets builderCanAttend.',
       'Keep every item in DATA.todo, in the same words, in the same order, marking each met or not; then add new open items only for real gaps,',
       'at most 5 open items in all. Only ask what changes the decision: never ask for personal, client or third-party data.',
       'If the decision can be made from DATA as it is, every item is met (or there are none).',
@@ -299,6 +305,7 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       const x = asObj(n); if (!x) continue;
       x.need = trimStrings(x.need, NEED_MAX); x.ask = trimStrings(x.ask, ASK_MAX);
       if (x.answer !== undefined) x.answer = trimStrings(x.answer, NEED_ANSWER_MAX);
+      if (x.why !== undefined) x.why = trimStrings(x.why, NEED_WHY_MAX);
     }
   }),
 };

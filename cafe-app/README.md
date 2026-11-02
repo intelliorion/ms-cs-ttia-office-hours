@@ -917,8 +917,27 @@ With no AI, everything above works by hand and nothing breaks. With one, the app
   idea from the team's reply or another section's questions is not saved twice), and links in the universe (a system
   the answers name, say). The AI proposes each change, the app checks it (only real changes, each made once, names
   from their codes) and applies it, and lists it read-only under **Updated from your answers**; each is in the idea's
-  history, by the AI, with the section's answers as its source. There is no Yes, No or Undo: change the record by hand
-  (or with the assistant) if one is wrong. The tool picker, the design questions and the data questions do the same,
+  history, by the AI, with the section's answers as its source. There is no Yes or No: to take a change back, take
+  back the answer it came from (below), or change the record by hand (or with the assistant).
+- **The builder and attendance questions are read by the code, not the AI**, when the answer is simple: a name
+  ("Alex Wang"), several ("Alex Wang, Priya Shah" makes both builders), a first name that fits one person the Café
+  knows ("Priya" is Priya Shah), "yes" or "no" to "can they attend", or both ("Alex Wang - yes he can attend").
+  It is read as soon as you leave the box, and the line under it says how ("Read as: builder Alex Wang. Not said yet:
+  can they attend every session?") or, in red, why it cannot be used ("Give the builder's full name: "Alex" could be
+  Alex Chen or Alex Wang"). Suggest or Re-evaluate applies it before asking the AI, so the AI sees the builder named.
+  Anything longer goes to the AI as before. **An item the evaluation leaves open says why** next to its answer: the
+  AI's reason, or that it gave none; it counts as open again (it goes in the questions email), not as waiting for
+  another Re-evaluate.
+- **Remove and Replace an answer.** Each answer you typed at review has **Remove answer**, and a settled one
+  **Replace**; each answer under "Answers as given" in the Details has **Replace** and **Remove**. What the answer led to
+  goes with it: the builder role it gave (someone it added to the team leaves it; a builder from the form stays), the
+  builders it replaced, the "can attend" tick, participation and flags it changed, the answers saved from it and the AI
+  links read from it (out of `graph/ai-links.jsonl`, so the universe and NetworkX, whose results are cached per graph,
+  lose them). Each undone change is in the idea's history. The learned brief goes when no answer is left, and is
+  otherwise rebuilt: from the Details at once (the decision is re-evaluated when the AI is there), at review by your
+  next Re-evaluate. One line says what was undone ("Answer removed. Undone: Alex Wang as builder, the "can attend"
+  tick, 2 links; the learned brief was rebuilt."). The idea is saved, so Deep read re-reads it, and the assistant's
+  read_idea sees the new state. The tool picker, the design questions and the data questions do the same,
   each with its own list. An older record may still hold a change from before this (shown as not applied): the
   section's next suggestion applies it if the answers still say so; one you said no to then is never made.
 - **The Submission** (right panel) shows the form, and in its own colour what came after it: a role or a person added

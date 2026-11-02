@@ -112,4 +112,41 @@ describe('Review and Select', () => {
     expect(needStatus({ ...builder, answer: 'x' })).toBe('answered');
     expect(needStatus({ ...builder, met: true })).toBe('met');
   });
+
+  it('an answer that cannot be used says why next to it, as it is saved and after Re-evaluate; never silence', async () => {
+    const both = { ...builder, ask: 'Who would build it, and can they attend every session?' };
+    // As saved: the code's reading, in red when it cannot be used.
+    await show(idea(prep([{ ...both, answer: 'Alex', check: { ok: false, text: 'Give the builder\'s full name: "Alex" could be Alex Chen or Alex Wang.' } }])));
+    expect(q('[data-testid="rs-says"]')?.textContent).toBe('Give the builder\'s full name: "Alex" could be Alex Chen or Alex Wang.');
+    expect(q('[data-testid="rs-says"]')?.className).toBe('rs-why');
+    act(() => root.unmount()); el.remove();
+    // A reading that works but leaves a part open: said plainly, not as an error.
+    await show(idea(prep([{ ...both, answer: 'Alex Wang', check: { ok: true, text: 'Read as: builder Alex Wang. Not said yet: can they attend every session? Add "yes" or "no".' } }])));
+    expect(q('[data-testid="rs-says"]')?.className).toBe('rs-read');
+    act(() => root.unmount()); el.remove();
+    // Re-evaluated and still open: open again (not "to re-evaluate"), with the reason.
+    await show(idea(prep([{ ...data, answer: 'Some files', checked: 'Some files', why: 'It does not say which files.' }])));
+    expect(q('[data-testid="rs-count"]')?.textContent).toBe('1 open');
+    expect(q('.rs-mark')?.textContent).toBe('○');
+    expect(q('[data-testid="rs-says"]')?.textContent).toBe('It does not say which files.');
+    expect(q('[data-action="draft-questions"]')).toHaveProperty('disabled', false);
+  });
+
+  it('an answer can be removed, and a settled one replaced: Replace opens the box with it, Remove clears it', async () => {
+    const onAnswer = vi.fn(async () => {});
+    await show(idea(prep([{ ...builder, met: true, note: 'Builder Alex Wang.', answer: 'Alex Wang' }, { ...data, answer: 'Samples' }])), { onAnswer });
+    expect(q('[data-need="n1"] [data-testid="rs-given"]')?.textContent).toBe('Your answer: Alex Wang');
+    expect(q('[data-need="n1"] textarea')).toBeNull();
+    await act(async () => q('[data-need="n1"] [data-action="replace-need-answer"]')!.click());
+    const box = q('[data-need="n1"] textarea') as HTMLTextAreaElement;
+    expect(box.value).toBe('Alex Wang');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Priya Shah, yes');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { box.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    expect(onAnswer).toHaveBeenCalledWith('n1', 'Priya Shah, yes');
+    await act(async () => q('[data-need="n2"] [data-action="remove-need-answer"]')!.click());
+    expect(onAnswer).toHaveBeenCalledWith('n2', '');
+  });
 });

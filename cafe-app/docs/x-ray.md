@@ -175,7 +175,7 @@ flowchart TB
   REC --> L1
 
   subgraph L1["Layer 1 · Property graph (facts as stated)"]
-    F["From the forms and the operator:<br/>Person SUBMITTED Idea · Idea IN_ROUND · Team HAS_MEMBER<br/>stages, decisions, roles, dates"]
+    F["From the forms and the operator:<br/>Person SUBMITTED Idea · Idea IN_ROUND · Team HAS_MEMBER<br/>Person LEADS_DIVISION Division (the operator's)<br/>stages, decisions, roles, dates"]
   end
 
   REC --> X["AI extract (one call per idea)<br/>capabilities · pain points · systems<br/>named at a reusable level"]
@@ -233,7 +233,9 @@ into a frozen value passed down to the rules, the check, the queries and the exp
 so builds running at the same time never see each other's. One name is one star:
 the id and the lookup key are one normal form (T&E, T/E, T and E and "Travel & Expenses" are Travel & Expense; people
 by their exact name, accents kept). The schema is open: `ontology.yaml` may declare a new kind or relation and the
-rules may chain it, with no code; `KIND_OF` makes a mailbox count as an email system. The export carries its schema,
+rules may chain it, with no code; `KIND_OF` makes a mailbox count as an email system; `LEADS_DIVISION` (Person →
+Division, the operator's own statement, several leaders per division and several divisions per person) says who leads a
+division, and a leader on no idea is a person star the operator added, kept only while they lead one. The export carries its schema,
 an RDFS vocabulary and SHACL shapes at a configurable base (`https://example.invalid/creators-cafe/` by default), and
 validates against them with pyshacl and rdf-validate-shacl; a plain triple is a confirmed fact (a link waiting for Do
 it is only a reified Link with `cafe:confirmed false`), and a per-idea fact is a plain triple only where it holds for
@@ -430,7 +432,8 @@ used, and only pure-Python algorithms run (no numpy, no scipy). Results are cach
   choices, people and teams left out) and always come with NetworkX's modularity and a verdict: below 0.3 "no clear
   groups", and then no cluster is passed on as a finding (the practice workspace scores 0.19: no clear groups). Cycles
   are looked for only along relations the ontology lets loop; with the built-in one there are none (Idea → Capability
-  → System cannot close, and the build refuses a loop of KIND_OF, including one a later merge would create), so the analysis says so and the UI and assistant do
+  → System cannot close, the build refuses a loop of KIND_OF, including one a later merge would create, and the org chart
+  (HAS_TEAM, HAS_MEMBER, LEADS_DIVISION) is no dependency), so the analysis says so and the UI and assistant do
   not offer it. Paths keep off outcome, support, category and beneficiary hubs.
 - **Where it shows up:** `cafe network <check|stats|central|clusters|path A B|isolated|suggest|cycles>`,
   `GET /api/network`, a network step in the assistant ("which capability holds the most ideas together", traced as

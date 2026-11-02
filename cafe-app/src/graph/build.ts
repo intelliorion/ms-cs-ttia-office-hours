@@ -2,7 +2,7 @@ import type { Idea, PersonRole } from '../ideas/idea';
 import type { Round } from '../round/round';
 import { CLOSURE_LABELS } from '../ideas/idea';
 import { STAGE_NAMES } from '../rules/stages';
-import { AI_NODE_TYPES, AI_RELATIONS, BUILTIN_SCHEMA, CONFIRMED_AT, FORM_ONLY_RELATIONS, NOT_APPROVED_NOTE, aiSourceProblem, operatorLinkProblem, canonEdit, canonLink, edgeId, foldedPersonId, idMatchesType, nodeId, operatorSource, typeOfId, type AiLink, type FactSource, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation, type Schema } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, BUILTIN_SCHEMA, CONFIRMED_AT, FORM_ONLY_RELATIONS, operatorMayAdd, NOT_APPROVED_NOTE, aiSourceProblem, operatorLinkProblem, canonEdit, canonLink, edgeId, foldedPersonId, idMatchesType, nodeId, operatorSource, typeOfId, type AiLink, type FactSource, type GEdge, type GNode, type NodeType, type OperatorEdit, type Relation, type Schema } from './ontology';
 import { defaultEntries, makeRegistry, unapprovedTool, type Registry } from './registry';
 import { FIELDS, placeQuote } from './quote';
 import { extractTextHash, type AiRead } from '../ai/reads';
@@ -368,7 +368,7 @@ function addIdea(e: GEdge, idea: string): void {
 
 /** Why a star of this kind is not the operator's to add. */
 export const formOnly = (t: NodeType) => (t === 'Idea' ? 'an idea comes only from the form (a Café submission)' : t === 'Round' ? 'a round is made in the Rounds pop-out'
-  : t === 'Tool' ? 'a tool comes only from the tool picker' : t === 'Person' ? 'a person comes only from an idea\'s team' : `a ${t} comes only from the form`);
+  : t === 'Tool' ? 'a tool comes only from the tool picker' : t === 'Person' ? 'a person comes only from an idea\'s team, or with the division they lead' : `a ${t} comes only from the form`);
 /** Why a merge of two stars of different kinds (or of a kind never merged) is refused. */
 export function mergeProblem(from: string, into: string): string {
   const a = from.split(':')[0]; const b = into.split(':')[0];
@@ -423,6 +423,8 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
   };
   const typeOf = (id: string) => nodes.get(id)?.type ?? typeOfId(id, schema);
   const merges: string[] = [];
+  /** People the operator's edits added (no idea names them): each goes again when no link is left to them. */
+  const handPeople = new Map<string, string>();
   for (const raw of edits) {
     if (raw.status !== 'active') continue;
     const e = raw.t === 'merge' ? raw : repoint(raw, merged);
@@ -430,8 +432,12 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
       // A star of a kind the ontology does not know, or whose id lies about its kind, is refused (check names it); so
       // is one of a kind only the form, the rounds or the tool picker make (an idea, a round, a person): no phantom idea.
       if (!schema.types.includes(e.type) || !idMatchesType(e.node, e.type)) { refused.push(`operator.jsonl ${e.id}: add ${e.node}: ${schema.types.includes(e.type) ? `its id does not start with "${e.type === 'Idea' ? 'idea' : e.type.toLowerCase()}:"` : `unknown node type "${String(e.type)}"`} (refused by the build)`); continue; }
-      if (!schema.operatorStars.includes(e.type)) { refused.push(`operator.jsonl ${e.id}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`); continue; }
-      if (!nodes.has(e.node) && e.label.trim()) nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
+      if (!operatorMayAdd(e.type, schema)) { refused.push(`operator.jsonl ${e.id}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`); continue; }
+      if (!nodes.has(e.node) && e.label.trim()) {
+        nodes.set(e.node, { id: e.node, type: e.type, label: e.label.trim() });
+        // A person the operator added (a division's leader on no idea) is kept only while a link holds them (below).
+        if (e.type === 'Person') handPeople.set(e.node, e.id);
+      }
     } else if (e.t === 'remove') {
       // Only a star the operator could have made goes this way: an idea, a team, a person, a round or a tool is the record's.
       const t = typeOf(e.node);
@@ -492,6 +498,13 @@ function applyEdits(nodes: Map<string, GNode>, edges: Map<string, GEdge>, edits:
       nodes.delete(from.id);
     }
     // An alias edit is the registry's: it changes no star or link here.
+  }
+  // A person the operator added leads a division; with no division left to lead (the link undone or removed) the star
+  // has nothing to stand for, and is dropped rather than left floating.
+  for (const [id, editId] of handPeople) {
+    if (!nodes.has(id) || [...edges.values()].some((x) => x.from === id || x.to === id)) continue;
+    nodes.delete(id);
+    refused.push(`operator.jsonl ${editId}: add ${id}: ${formOnly('Person')}, and no division is left for them to lead (refused by the build)`);
   }
   // A merge can close a loop of kinds that no single link made (D KIND_OF E and P KIND_OF D, then E merged into P):
   // the loop's latest KIND_OF link is refused, said with the merge that closed it, until no loop is left.

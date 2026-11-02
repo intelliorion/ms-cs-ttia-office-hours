@@ -30,7 +30,10 @@ const cut = (s: string | undefined, max: number) => {
 };
 const listDir = async (dir: string) => (await fs.readdir(dir).catch(() => [] as string[])).sort();
 
-export async function readIdeaForAgent(root: string, idea: WithAnswers, code: (s: unknown) => string): Promise<Record<string, unknown>> {
+/** The idea's division as the graph holds it: its name and the people who lead it (LEADS_DIVISION). */
+export interface DivisionLed { name: string; leaders: string[] }
+
+export async function readIdeaForAgent(root: string, idea: WithAnswers, code: (s: unknown) => string, division?: DivisionLed): Promise<Record<string, unknown>> {
   const build = async (max: number): Promise<Record<string, unknown>> => {
     const t = (s: unknown) => cut(code(s), max);
     const out: Record<string, unknown> = {
@@ -45,6 +48,8 @@ export async function readIdeaForAgent(root: string, idea: WithAnswers, code: (s
     }));
     out.people = { ...(idea.people.submitter ? { submitter: code(idea.people.submitter) } : {}), team };
     if (idea.participation) out.participation = idea.participation;
+    // The division it came from and who leads it (the operator's statement, not the form's), names coded.
+    if (division) out.division = { name: division.name, leaders: division.leaders.map((l) => code(l)) };
     // A field changed from the form: both values.
     const was = Object.entries(idea.formWas ?? {});
     if (was.length) out.changedFromForm = was.map(([field, form]) => ({ field, form: form || 'not given', now: String((idea as unknown as Record<string, unknown>)[field] ?? '') }));

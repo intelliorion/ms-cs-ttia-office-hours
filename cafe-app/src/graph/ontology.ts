@@ -1,6 +1,6 @@
 export type NodeType = 'Entity' | 'Team' | 'Person' | 'Idea' | 'PainPoint' | 'Capability' | 'Tool' | 'System' | 'Round' | 'Support' | 'Outcome' | 'Beneficiary' | 'Category';
 export type Relation = 'HAS_TEAM' | 'HAS_MEMBER' | 'SUBMITTED' | 'LEADS' | 'SPONSORS' | 'BUILDS' | 'RELATED' | 'REPLACES' | 'NEEDS' | 'BUILT_WITH' | 'USES_DATA' | 'IN_ROUND' | 'ASKS_FOR' | 'WANTS' | 'BENEFITS' | 'IN_CATEGORY'
-  | 'KIND_OF' | 'DEPENDS_ON' | 'USES' | 'OWNS' | 'SIMILAR_TO';
+  | 'KIND_OF' | 'LEADS_DIVISION' | 'DEPENDS_ON' | 'USES' | 'OWNS' | 'SIMILAR_TO';
 
 /**
  * The ontology as data: what each kind of star is and what each link means. The built-in one below is what
@@ -15,9 +15,9 @@ export interface Ontology { nodes: Record<NodeType, NodeDef>; relations: Record<
 
 export const BUILTIN_ONTOLOGY: Ontology = {
   nodes: {
-    Entity: { label: 'Division', colour: '#6366f1', description: 'A division of the firm; its teams sit under it.' },
+    Entity: { label: 'Division', colour: '#6366f1', description: 'A division of the firm; its teams sit under it, and its leaders lead it.' },
     Team: { label: 'Team', colour: '#0ea5e9', description: 'A CS Function: the team an idea came from.' },
-    Person: { label: 'Person', colour: '#8b5cf6', description: 'Someone on one or more ideas: who submitted, leads, sponsors, builds or helps.' },
+    Person: { label: 'Person', colour: '#8b5cf6', description: 'Someone on one or more ideas (who submitted, leads, sponsors, builds or helps), or who leads a division.' },
     Idea: { label: 'Idea', colour: '#f97316', description: 'A submission to the Café: one star per Café ID.' },
     PainPoint: { label: 'Pain point', colour: '#14b8a6', description: 'A problem an idea sets out to fix.' },
     Capability: { label: 'Capability', colour: '#f59e0b', description: 'Something a solution needs to do: tools build it, systems feed it.' },
@@ -47,6 +47,7 @@ export const BUILTIN_ONTOLOGY: Ontology = {
     BENEFITS: { from: 'Idea', to: 'Beneficiary', meaning: 'the submitter said these people would benefit', inverse: 'benefits from', derived: false },
     IN_CATEGORY: { from: 'Idea', to: 'Category', meaning: 'the submitter put the idea in this use case category', inverse: 'holds the idea', derived: false },
     KIND_OF: { from: 'System', to: 'System', meaning: 'the system is a kind of this one (a mailbox is an email system): what depends on it depends on the other too', inverse: 'has the kind', derived: false },
+    LEADS_DIVISION: { from: 'Person', to: 'Entity', meaning: 'the person leads the division (one of its leaders), as the operator stated it', inverse: 'is led by', derived: false },
     DEPENDS_ON: { from: 'Idea', to: 'System', meaning: 'the idea depends on this system: a capability it needs uses the system\'s data (derived)', inverse: 'is depended on by', derived: true },
     USES: { from: 'Idea', to: 'Tool', meaning: 'the idea uses this tool: a capability it needs is built with it (derived)', inverse: 'is used by', derived: true },
     OWNS: { from: 'Team', to: 'Idea', meaning: 'the team owns the idea: one of its members submitted it (derived)', inverse: 'is owned by', derived: true },
@@ -212,6 +213,18 @@ export const ALL_RELATIONS: readonly Relation[] = BUILTIN_SCHEMA.all;
  * tool in the tool pick. An operator link of one of these is refused by the build and named by check.
  */
 export const FORM_ONLY_RELATIONS: Relation[] = ['SUBMITTED', 'LEADS', 'SPONSORS', 'BUILDS', 'RELATED', 'IN_ROUND', 'BUILT_WITH'];
+/**
+ * The org chart: which division has which team, who sits in a team, who leads a division. A loop through it (a
+ * division's leader in one of its own teams) is how an org chart reads, never a dependency cycle.
+ */
+export const ORG_RELATIONS: Relation[] = ['HAS_TEAM', 'HAS_MEMBER', 'LEADS_DIVISION'];
+/**
+ * A person comes from an idea's team, with one exception: someone who leads a division and is on no idea. The operator
+ * adds them with their LEADS_DIVISION link (one Do it, one Undo); the build keeps that star only while it has a link.
+ */
+export const PERSON_BY_HAND: Relation[] = ['LEADS_DIVISION'];
+/** Whether the operator may add a star of this kind by an edit: an operator star, or a person (kept only while linked). */
+export const operatorMayAdd = (type: NodeType, schema: Schema = BUILTIN_SCHEMA) => schema.operatorStars.includes(type) || type === 'Person';
 /** The links NetworkX's link prediction proposes, and so the only ones its Propose route may carry. */
 export const NETWORK_RELATIONS: Relation[] = ['NEEDS', 'USES_DATA'];
 /** Why an operator link of this relation between these kinds is not one the ontology lets anyone store by hand, or undefined. */

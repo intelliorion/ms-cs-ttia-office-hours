@@ -1,4 +1,4 @@
-import { AI_NODE_TYPES, AI_RELATIONS, BUILTIN_SCHEMA, FORM_ONLY_RELATIONS, operatorLinkProblem, aiSourceProblem, canonEdit, canonLink, idMatchesType, nameKey, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
+import { AI_NODE_TYPES, AI_RELATIONS, BUILTIN_SCHEMA, FORM_ONLY_RELATIONS, operatorMayAdd, operatorLinkProblem, aiSourceProblem, canonEdit, canonLink, idMatchesType, nameKey, type GEdge, type GNode, type NodeType, type Relation, type Schema } from './ontology';
 import { loadOntology } from './ontologyFile';
 import { readEntities } from './registryFile';
 import { REGISTRY_SECTIONS, approvedTool, unapprovedTool } from './registry';
@@ -168,7 +168,7 @@ export async function checkWorkspace(root: string): Promise<CheckResult> {
     if (e.t === 'add') {
       if (!isType(e.type)) out.push(`${at}: unknown node type "${String(e.type)}" (refused by the build)`);
       else if (!idMatchesType(e.node, e.type)) out.push(`${at}: ${e.node} is a ${e.type} but its id does not start with "${e.type === 'Idea' ? 'idea' : e.type.toLowerCase()}:" (refused by the build)`);
-      else if (!schema.operatorStars.includes(e.type)) out.push(`${at}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`);
+      else if (!operatorMayAdd(e.type, schema)) out.push(`${at}: add ${e.node}: ${formOnly(e.type)} (refused by the build)`);
     }
     if (e.t === 'merge' && e.from !== e.into) {
       const a = e.from.split(':')[0]; const b = e.into.split(':')[0];

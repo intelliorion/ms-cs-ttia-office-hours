@@ -9,7 +9,11 @@ export interface StarProfile {
   facts: [string, string][];
   /** A person: what they are on each idea. */
   roles: { ideaId: string; title: string; roles: string[] }[];
-  /** Every other star it links to (not ideas: those are on the right), grouped by kind. */
+  /** A person: the divisions they lead (LEADS_DIVISION). */
+  leads: { id: string; label: string }[];
+  /** A division: the people who lead it. */
+  leaders: { id: string; label: string }[];
+  /** Every other star it links to (not ideas: those are on the right, nor a division's leadership: above), grouped by kind. */
   groups: { kind: string; type: string; items: { id: string; label: string; rel: string }[] }[];
 }
 
@@ -43,8 +47,15 @@ export function starProfile(graph: { nodes: any[]; edges: any[] } | null | undef
     return r.length ? [{ ideaId: i.id, title: i.title || 'Untitled idea', roles: r.map((x: string) => ROLE_WORD[x] ?? x) }] : [];
   });
 
+  const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
+  const led = (out: boolean) => links.filter((e) => e.rel === 'LEADS_DIVISION' && (out ? e.from === id : e.to === id))
+    .map((e) => nodes.get(out ? e.to : e.from)).filter((n): n is any => !!n).map((n) => ({ id: n.id, label: n.label })).sort(byLabel);
+  const leads = node.type === 'Person' ? led(true) : [];
+  const leaders = node.type === 'Entity' ? led(false) : [];
+
   const byType = new Map<string, { id: string; label: string; rel: string }[]>();
   for (const e of links) {
+    if (e.rel === 'LEADS_DIVISION') continue;
     const other = nodes.get(e.from === id ? e.to : e.from);
     if (!other || other.type === 'Idea') continue;
     const list = byType.get(other.type) ?? [];
@@ -56,6 +67,6 @@ export function starProfile(graph: { nodes: any[]; edges: any[] } | null | undef
 
   return {
     id, type: node.type, kind: (NODE_LABELS as Record<string, string>)[node.type] ?? node.type, label: node.label,
-    about: STAR_ABOUT[node.type] ?? '', facts, roles, groups,
+    about: STAR_ABOUT[node.type] ?? '', facts, roles, leads, leaders, groups,
   };
 }

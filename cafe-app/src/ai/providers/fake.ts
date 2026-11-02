@@ -537,6 +537,13 @@ function agentFor(prompt: string) {
       const reply = `By shared stars: ${byStars.length ? byStars.map((x) => `[${x.code}] (${x.why})`).join(', ') : 'none'}.${byReading.length ? ` By reading, also: ${byReading.map((c) => `[${c}]`).join(', ')}.` : ''}`;
       return { next: 'answer', thought: 'Answering: the graph first, the reading second', reply, followups: [`What does [${start}] need?`] };
     }
+    // "who leads [E1]?": a division's leaders, along LEADS_DIVISION (an idea's lead is a role; a division's is a link).
+    const division = legend.find((x) => x.code === start && x.type === 'Entity');
+    if (division && /\blead/i.test(cmd)) {
+      if (!data.steps?.length) return { next: 'search', thought: `Looking for who leads [${division.code}]`, query: { steps: [{ op: 'stars', codes: [division.code] }, { op: 'follow', rel: 'LEADS_DIVISION', dir: 'in', type: 'Person' }] } };
+      const found: string[] = (data.steps[0]?.result?.stars ?? []).map((x: { code: string }) => x.code);
+      return { next: 'answer', thought: 'Answering from the LEADS_DIVISION links', reply: found.length ? `[${division.code}] is led by ${found.map((c) => `[${c}]`).join(' and ')}.` : `The graph records no leader of [${division.code}].`, followups: [`Which teams does [${division.code}] have?`] };
+    }
     // "who is [P1]?": their roles per idea from the ideas' records, then their team star, then the answer states both.
     if (start && /who is\b/i.test(cmd)) {
       if (!data.steps?.length) return { next: 'search', thought: `Looking at what [${start}] does on each idea`, query: { steps: [{ op: 'stars', codes: [start] }, { op: 'role' }] } };

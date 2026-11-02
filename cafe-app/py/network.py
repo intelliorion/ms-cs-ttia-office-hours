@@ -88,6 +88,11 @@ def load(payload):
                 g[s][t]["rels"].append(r)
             else:
                 g.add_edge(s, t, rels=[r])
+    # A person whose only links go to a star left out (a division's leader on no idea) is left out with it: alone in
+    # the analysis graph they would read as cut off from the rest, which says nothing about the ideas.
+    for n, a in list(g.nodes(data=True)):
+        if a["type"] == "Person" and g.degree(n) == 0 and full.degree(n) > 0:
+            g.remove_node(n)
     return full, g
 
 

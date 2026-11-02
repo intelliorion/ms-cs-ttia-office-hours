@@ -57,27 +57,27 @@ export interface ScenePalette {
   /** Light backgrounds swallow thin lines: Frost draws them stronger. */
   linkBoost: number;
   ring: Record<string, string>;
-  /** A person's role on an idea: lead, builder and sponsor each in their own colour (member is the link colour, dotted). */
-  roles: Record<'LEADS' | 'BUILDS' | 'SPONSORS', string>;
+  /** A person's role on an idea: lead, builder and sponsor each in their own colour (member is the link colour, dotted); a division's leader in the division's. */
+  roles: Record<'LEADS' | 'BUILDS' | 'SPONSORS' | 'LEADS_DIVISION', string>;
 }
 export const NIGHT: ScenePalette = { frost: false, bg: '#07090b', link: LINK_COLOUR, linkHot: LINK_COLOUR, unconfirmed: UNCONFIRMED_COLOUR, derived: DERIVED_COLOUR, linkBoost: 1, ring: STAGE_RING,
-  roles: { LEADS: '#ffd166', BUILDS: '#60a5fa', SPONSORS: '#f472b6' } };
+  roles: { LEADS: '#ffd166', BUILDS: '#60a5fa', SPONSORS: '#f472b6', LEADS_DIVISION: '#a5b4fc' } };
 export const FROST: ScenePalette = {
   frost: true, bg: '#eef3f8', link: '#8a9bb0', linkHot: '#1f6f5c', unconfirmed: '#b8862b', derived: '#7a5aa8', linkBoost: 2.4,
   ring: { 2: '#b8862b', 3: '#1f6f5c', 4: '#7a5aa8', closed: '#a3b0bd' },
-  roles: { LEADS: '#a16207', BUILDS: '#1d4ed8', SPONSORS: '#be185d' },
+  roles: { LEADS: '#a16207', BUILDS: '#1d4ed8', SPONSORS: '#be185d', LEADS_DIVISION: '#4f46e5' },
 };
 export const BLUEPRINT: ScenePalette = {
   frost: false, blueprint: true, bg: '#2b5f96', link: '#d6e6ff', linkHot: '#ffd166', unconfirmed: '#ffd166', derived: '#e9d5ff', linkBoost: 1.7,
   ring: { 2: '#ffd166', 3: '#8fdcff', 4: '#ffffff', closed: '#6f8db3' },
-  roles: { LEADS: '#ffb703', BUILDS: '#a5f3fc', SPONSORS: '#fbcfe8' },
+  roles: { LEADS: '#ffb703', BUILDS: '#a5f3fc', SPONSORS: '#fbcfe8', LEADS_DIVISION: '#c7d2fe' },
 };
 /** Blueprint draws each kind in its full colour (no lightening): solid stars that stand out on the blue. */
 export const BLUEPRINT_TINT = 0;
 export const WORKSHOP: ScenePalette = {
   frost: false, workshop: true, bg: '#efe3cf', link: '#4a3b2c', linkHot: '#f96302', unconfirmed: '#c77700', derived: '#6d28d9', linkBoost: 2.2,
   ring: { 2: '#f96302', 3: '#2e7d32', 4: '#1f4e8c', closed: '#8a7f73' },
-  roles: { LEADS: '#b45309', BUILDS: '#1d4ed8', SPONSORS: '#be185d' },
+  roles: { LEADS: '#b45309', BUILDS: '#1d4ed8', SPONSORS: '#be185d', LEADS_DIVISION: '#4338ca' },
 };
 export const paletteFor = (theme?: string): ScenePalette =>
   (theme === 'frost' ? FROST : theme === 'blueprint' ? BLUEPRINT : theme === 'workshop' ? WORKSHOP : NIGHT);
@@ -174,13 +174,15 @@ export function edgeStyle(edge: Pick<GEdge, 'from' | 'to' | 'confirmed'> & { rel
   return { opacity: dashed && !derived ? 0.35 : 0.18, dashed, derived, pulse: false };
 }
 
-export type Role = 'lead' | 'builder' | 'sponsor' | 'member';
+export type Role = 'lead' | 'builder' | 'sponsor' | 'member' | 'division lead';
 /** How each role on an idea is drawn: lead the brightest and thickest, builder and sponsor their own colours, member dotted. */
 const ROLE_LOOK: Record<string, { role: Role; width: number; boost: number; dash?: [number, number] }> = {
   LEADS: { role: 'lead', width: 2.4, boost: 1.8 },
   BUILDS: { role: 'builder', width: 1.6, boost: 1.4 },
   SPONSORS: { role: 'sponsor', width: 1.6, boost: 1.4 },
   RELATED: { role: 'member', width: 1, boost: 1, dash: [0.7, 1.3] },
+  // A division's leader: as thick and bright as an idea's lead, in the division's indigo.
+  LEADS_DIVISION: { role: 'division lead', width: 2.4, boost: 1.8 },
 };
 export interface RoleStyle { role: Role; colour: string; width: number; boost: number; dash?: [number, number] }
 /**
@@ -194,8 +196,9 @@ export function roleStyle(rel: string | undefined, palette: ScenePalette, edge: 
   return { ...look, colour };
 }
 /** The roles in the legend, in order, with their relation. */
-export const ROLE_LEGEND: { rel: 'LEADS' | 'BUILDS' | 'SPONSORS' | 'RELATED'; word: string }[] = [
+export const ROLE_LEGEND: { rel: 'LEADS' | 'BUILDS' | 'SPONSORS' | 'RELATED' | 'LEADS_DIVISION'; word: string }[] = [
   { rel: 'LEADS', word: 'lead' }, { rel: 'BUILDS', word: 'builder' }, { rel: 'SPONSORS', word: 'sponsor' }, { rel: 'RELATED', word: 'member' },
+  { rel: 'LEADS_DIVISION', word: 'division lead' },
 ];
 
 /** A thread a chat change just made or changed: it pulses as a selection's would, at least as bright as a link in view. */

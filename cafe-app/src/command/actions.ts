@@ -86,6 +86,8 @@ export type CommandAction =
   | { t: 'link'; from: string; rel: Relation; to: string; idea?: string }
   | { t: 'unlink'; from: string; rel: Relation; to: string; source: string }
   | { t: 'role'; ideaId: string; person: string; role: PersonRole | null; drop?: boolean }
+  /** The person (by name and star id) becomes one of the division's leaders; one who is no star yet is added with the link. */
+  | { t: 'division_lead'; person: string; node: string; division: string }
   | { t: 'round'; ideaIds: string[]; roundId?: string; newName?: string }
   | { t: 'new_round'; name: string }
   | { t: 'rename'; node: string; label: string }
@@ -101,6 +103,7 @@ export type CommandInverse =
   | { t: 'edit-off'; id: string }
   | { t: 'edit-on'; id: string }
   | { t: 'edits-off'; ids: string[] }
+  | { t: 'edits-on'; ids: string[] }
   | { t: 'ai-links-off'; edgeIds: string[] }
   | { t: 'team'; ideaId: string; before: Person[]; after: Person[] }
   | { t: 'rounds'; roundId: string; before: { ideaId: string; round: string }[] };
@@ -113,7 +116,7 @@ export interface Proposal {
 
 const REL_WORD: Partial<Record<Relation, string>> = {
   HAS_TEAM: 'has the team', HAS_MEMBER: 'has the member', REPLACES: 'replaces', NEEDS: 'needs', USES_DATA: 'uses the data', ASKS_FOR: 'asks for',
-  WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category', KIND_OF: 'is a kind of',
+  WANTS: 'wants the outcome', BENEFITS: 'benefits', IN_CATEGORY: 'is in the category', KIND_OF: 'is a kind of', LEADS_DIVISION: 'leads the division',
 };
 const ROLE_WORD: Record<PersonRole, string> = { lead: 'lead', sponsor: 'sponsor', builder: 'builder', member: 'a team member' };
 /** Labels the form owns: ideas and people are renamed in their own files, rounds in the Rounds pop-out. */
@@ -215,6 +218,22 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
     proposals.push({ label: `${person.label} is no longer ${ROLE_WORD[role]} on ${idea.title}`, action: { t: 'role', ideaId: idea.id, person: person.label, role, drop: true } });
   };
 
+  /**
+   * The person becomes one of the division's leaders (a division may have several, a person may lead several). A person
+   * who is no star yet (typed by full name, or picked with @ as new) is added with the link, as a role adds one to a team.
+   */
+  const divisionLeadProposal = (person: GNode | string, division: GNode) => {
+    const name = typeof person === 'string' ? person : person.label;
+    const id = typeof person === 'string' ? nodeId('Person', person) : person.id;
+    if (ctx.graph.edges.some((e) => e.rel === 'LEADS_DIVISION' && e.from === id && e.to === division.id)) return void problems.push(`${name} already leads ${division.label}.`);
+    const isNew = !ctx.graph.edges.some((e) => e.from === id || e.to === id);
+    proposals.push({ label: `Make ${name}${isNew ? ' (new to the graph)' : ''} a leader of ${division.label}`, action: { t: 'division_lead', person: name, node: id, division: division.id } });
+  };
+  const leadershipOff = (hit: GEdge) => proposals.push({
+    label: `${nodes.get(hit.from)?.label ?? hit.from} no longer leads ${nodes.get(hit.to)?.label ?? hit.to}`,
+    action: { t: 'unlink', from: hit.from, rel: hit.rel, to: hit.to, source: hit.source },
+  });
+
   // An idea this message also says needs a capability ("X needs C, and for this idea C uses S"): a capability-level
   // link from C in the same message is for that idea, as if the NEEDS were already there (it is proposed beside it).
   const neededHere = new Map<string, string[]>();
@@ -244,6 +263,14 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         }
         if (s.rel === 'SUBMITTED') { problems.push('Who submitted an idea comes from the form, so I left it as it is.'); continue; }
         roleProposal(person, idea, (s.rel && ROLE_OF_REL[s.rel]) ?? 'member');
+        continue;
+      }
+      const division = [a, b].find((n) => n.type === 'Entity');
+      if (person && division && (!s.rel || s.rel === 'LEADS_DIVISION')) {
+        if (s.op === 'unlink') {
+          const hit = ctx.graph.edges.find((e) => e.rel === 'LEADS_DIVISION' && e.from === person.id && e.to === division.id);
+          if (!hit) problems.push(`${person.label} does not lead ${division.label}.`); else leadershipOff(hit);
+        } else divisionLeadProposal(person, division);
         continue;
       }
       if (s.op === 'unlink') {
@@ -282,9 +309,14 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
       const typed = !a && typedIn ? typedIn.replace(/\s+/g, ' ') : '';
       const same = typed ? ctx.graph.nodes.find((n) => n.type === 'Person' && n.label.toLowerCase() === typed.toLowerCase()) : undefined;
       const person = a ?? same ?? (typed.split(' ').length >= 2 ? typed : undefined);
-      if (!person || !b || (typeof person !== 'string' && person.type !== 'Person') || b.type !== 'Idea' || !s.role) {
+      if (!person || !b || (typeof person !== 'string' && person.type !== 'Person') || (b.type !== 'Idea' && b.type !== 'Entity') || !s.role) {
         if (typed && typed.split(' ').length < 2) { problems.push(`Give the person's full name to add them (or pick them with @).`); continue; }
         missing(s); continue;
+      }
+      // On a division the one role is its leader.
+      if (b.type === 'Entity') {
+        if (s.role !== 'lead') { problems.push(`A division has leaders only: say "make ${typeof person === 'string' ? person : person.label} a leader of ${b.label}", or put them on an idea's team.`); continue; }
+        divisionLeadProposal(person, b); continue;
       }
       roleProposal(person, b, s.role);
     } else if (s.op === 'round') {
@@ -392,7 +424,10 @@ export function resolveSteps(steps: CommandStep[], ctx: ResolveContext): { propo
         const submitted = ctx.ideas.filter((i) => i.people.submitter?.trim().toLowerCase() === a.label.trim().toLowerCase());
         for (const i of on) { const n = nodes.get(`idea:${i.id}`); if (n) roleProposal(a, n, null); }
         for (const i of submitted) problems.push(`${a.label} submitted ${i.title}; the submitter stays, so their star stays too.`);
-        if (!on.length && !submitted.length) problems.push(`${a.label} is not on any idea's team.`);
+        // A division they lead: one card each to take it off (a leader on no idea then goes with the last one).
+        const leads = ctx.graph.edges.filter((e) => e.rel === 'LEADS_DIVISION' && e.from === a.id && !e.derived);
+        for (const hit of leads) leadershipOff(hit);
+        if (!on.length && !submitted.length && !leads.length) problems.push(`${a.label} is not on any idea's team.`);
         continue;
       }
       if (!S.operatorStars.includes(a.type)) {
@@ -500,11 +535,32 @@ export async function applyAction(root: string, a: CommandAction, clock: Clock, 
       if (FORM_ONLY_RELATIONS.includes(a.rel) || there?.sources?.some((x) => x.source.startsWith('form:'))) throw new Error(`Not done: the form states it, so it changes in ${formOwnedWhere(a.rel)}`);
       // A link the operator added is switched off; anything else is hidden by an unlink edit, so the form and AI records stay as they were.
       if (isOperatorSource(a.source)) {
-        const made = (await readEdits(root)).filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);
+        const all = await readEdits(root);
+        const made = all.filter((e) => e.t === 'link' && e.status === 'active' && e.from === a.from && e.rel === a.rel && e.to === a.to);
         for (const e of made) await setEditStatus(root, e.id, 'undone');
+        // A division's leader the operator added goes with their last leadership: their star stood only for it.
+        const added = a.rel === 'LEADS_DIVISION' && made.length && !g.edges.some((e) => (e.from === a.from || e.to === a.from) && e.id !== edgeId(a.from, a.rel, a.to))
+          ? all.filter((e) => e.t === 'add' && e.status === 'active' && e.node === a.from) : [];
+        for (const e of added) await setEditStatus(root, e.id, 'undone');
+        if (added.length) return { inverse: { t: 'edits-on', ids: [made[made.length - 1].id, ...added.map((e) => e.id)] } };
         if (made.length) return { inverse: { t: 'edit-on', id: made[made.length - 1].id } };
       }
       return edit({ t: 'unlink', from: a.from, rel: a.rel, to: a.to });
+    }
+    case 'division_lead': {
+      // Do it checks again: a division that is one, a person who is one, and not a leader of it already.
+      const g = await rebuildGraph(root);
+      const division = g.nodes.find((n) => n.id === a.division);
+      if (division?.type !== 'Entity') throw new Error(`Not done: ${division?.label ?? a.division} is not a division`);
+      const there = g.nodes.find((n) => n.id === a.node);
+      if (there && there.type !== 'Person') throw new Error(`Not done: ${there.label} is not a person`);
+      if (!there && (!a.node.startsWith('person:') || a.person.trim().split(/\s+/).length < 2)) throw new Error('Not done: a new person needs their full name');
+      if (g.edges.some((e) => e.rel === 'LEADS_DIVISION' && e.from === a.node && e.to === a.division)) throw new Error(`Not done: ${there?.label ?? a.person} already leads ${division.label}`);
+      // A person no idea names is added with the link: two edits, done and undone together.
+      const ids: string[] = [];
+      if (!there) ids.push((await edit({ t: 'add', node: a.node, type: 'Person', label: a.person.trim() })).inverse.id);
+      ids.push((await edit({ t: 'link', from: a.node, rel: 'LEADS_DIVISION', to: a.division })).inverse.id);
+      return { inverse: { t: 'edits-off', ids } };
     }
     case 'role': {
       const idea = await loadIdea(root, a.ideaId);
@@ -539,6 +595,7 @@ export async function undoAction(root: string, inv: CommandInverse, clock: Clock
   if (inv.t === 'edit-off') { await setEditStatus(root, inv.id, 'undone'); return undefined; }
   if (inv.t === 'edit-on') { await setEditStatus(root, inv.id, 'active'); return undefined; }
   if (inv.t === 'edits-off') { for (const id of inv.ids) await setEditStatus(root, id, 'undone'); return undefined; }
+  if (inv.t === 'edits-on') { for (const id of inv.ids) await setEditStatus(root, id, 'active'); return undefined; }
   if (inv.t === 'ai-links-off') { for (const id of inv.edgeIds) await setAiLinkStatus(root, id, 'removed').catch(() => {}); return undefined; }
   if (inv.t === 'team') {
     const idea = await loadIdea(root, inv.ideaId);

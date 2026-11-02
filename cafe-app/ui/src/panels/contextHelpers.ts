@@ -17,11 +17,12 @@ export function rightContext(s: { leftView: { kind: string; id?: string }; selec
  * The ideas a star touches: linked to it directly, or one star away (a team's ideas through its people, a system's
  * through the capabilities that use it). Nearest first, then by title.
  */
-export function ideasAround(graph: { nodes: { id: string; type: string; label: string }[]; edges: { from: string; to: string; derived?: unknown }[] }, nodeId: string): { id: string; hops: 1 | 2 }[] {
+export function ideasAround(graph: { nodes: { id: string; type: string; label: string }[]; edges: { from: string; to: string; rel?: string; derived?: unknown }[] }, nodeId: string): { id: string; hops: 1 | 2 }[] {
   const adj = new Map<string, string[]>();
   const add = (a: string, b: string) => { const l = adj.get(a); if (l) l.push(b); else adj.set(a, [b]); };
   // Stated links only: a derived link (an idea DEPENDS_ON a system, say) is a conclusion, not a hop.
-  for (const e of graph.edges) { if (e.derived) continue; add(e.from, e.to); add(e.to, e.from); }
+  // Nor a division's leadership: a leader's own ideas are theirs, not the division's.
+  for (const e of graph.edges) { if (e.derived || e.rel === 'LEADS_DIVISION') continue; add(e.from, e.to); add(e.to, e.from); }
   const type = new Map(graph.nodes.map((n) => [n.id, n.type]));
   const label = new Map(graph.nodes.map((n) => [n.id, n.label]));
   const found = new Map<string, 1 | 2>();

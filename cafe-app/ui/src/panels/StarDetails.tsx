@@ -40,6 +40,27 @@ export function StarDetails({ id }: { id: string }) {
             </ul>
           </section>
         )}
+        {(p.leads.length > 0 || p.type === 'Entity') && (
+          <section className="sec" data-testid={p.type === 'Entity' ? 'star-leaders' : 'star-leads'}>
+            <h3>{p.type === 'Entity' ? 'Led by' : 'Leads the division'} <span className="sec-n">{(p.type === 'Entity' ? p.leaders : p.leads).length}</span></h3>
+            {p.type === 'Entity' && !p.leaders.length
+              ? <p className="hint">No leader recorded yet: ask the assistant to make someone a leader of {p.label}.</p>
+              : (
+                <ul className="sd-list">
+                  {(p.type === 'Entity' ? p.leaders : p.leads).map((x) => {
+                    const t = p.type === 'Entity' ? 'Person' : 'Entity';
+                    return (
+                      <li key={x.id}>
+                        <button className="sd-go" data-go={x.id} onClick={() => followLink(x.id)} onMouseEnter={() => hover(x.id)} onMouseLeave={() => hover(null)}>
+                          <span className="dot" style={{ background: dot(t) }} /><span className="sd-l">{x.label}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+          </section>
+        )}
         {p.groups.map((g) => (
           <section key={g.type} className="sec" data-group={g.type}>
             <h3>{g.kind} <span className="sec-n">{g.items.length}</span></h3>
@@ -54,7 +75,7 @@ export function StarDetails({ id }: { id: string }) {
             </ul>
           </section>
         ))}
-        {!p.roles.length && !p.groups.length && <p className="hint">Linked only to ideas: they are listed on the right.</p>}
+        {!p.roles.length && !p.groups.length && !p.leads.length && p.type !== 'Entity' && <p className="hint">Linked only to ideas: they are listed on the right.</p>}
       </div>
     </div>
   );

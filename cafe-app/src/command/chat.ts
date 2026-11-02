@@ -257,6 +257,16 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
     return h.text;
   };
 
+  /** An idea's division and the people who lead it, as the graph holds them (for read_idea; the names are coded there). */
+  const divisionOf = (ideaId: string) => {
+    const entity = ideas.find((i) => i.id === ideaId)?.entity?.trim();
+    if (!entity) return undefined;
+    const star = [registry.resolve('Entity', entity)?.id, nodeId('Entity', entity)].map((x) => (x ? nodes.get(x) : undefined)).find((n) => n?.type === 'Entity');
+    if (!star) return undefined;
+    const leaders = graph.edges.filter((e) => e.rel === 'LEADS_DIVISION' && e.to === star.id).map((e) => nodes.get(e.from)?.label).filter((l): l is string => !!l).sort();
+    return { name: star.label, leaders };
+  };
+
   const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x && !!x.trim()))].sort();
   const vocabulary = {
     stages: Object.values(STAGE_NAMES), functions: uniq(ideas.map((i) => i.function)), regions: uniq(ideas.map((i) => i.region)), rounds: rounds.map((r) => r.name),
@@ -435,7 +445,7 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
         done.push({
           did: 'read_idea', thought: output.thought,
           // The form and everything added since (as the Details show it), the design, the data and the replies; names coded.
-          result: { idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), ...(await readIdeaForAgent(root, idea, coded)) },
+          result: { idea: codeFor(hidden.codes, nodes.get(`idea:${idea.id}`)!), ...(await readIdeaForAgent(root, idea, coded, divisionOf(idea.id))) },
         });
       } else {
         finalReply = output.reply ?? '';

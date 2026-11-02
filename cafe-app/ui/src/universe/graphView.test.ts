@@ -199,6 +199,14 @@ describe('a person\'s role on an idea, drawn', () => {
     expect(roleStyle('LEADS', NIGHT, { derived: true })).toBeNull();
     expect(roleStyle('LEADS', NIGHT, { confirmed: false })).toBeNull();
   });
+  it('a division\'s leader reads as a lead does (as thick, as bright) in a colour of its own, in every theme', () => {
+    for (const p of [NIGHT, FROST, BLUEPRINT, WORKSHOP]) {
+      const lead = roleStyle('LEADS', p)!; const division = roleStyle('LEADS_DIVISION', p)!;
+      expect(division).toMatchObject({ role: 'division lead', colour: p.roles.LEADS_DIVISION, width: lead.width, boost: lead.boost });
+      expect(new Set([p.roles.LEADS, p.roles.BUILDS, p.roles.SPONSORS, p.roles.LEADS_DIVISION, p.link]).size).toBe(5);
+    }
+    expect(roleStyle('LEADS_DIVISION', NIGHT, { confirmed: false })).toBeNull();
+  });
   it('a changed thread pulses like a selection\'s, at least as bright as a link in view, with nothing selected', () => {
     const e = { id: 'p|LEADS|i', from: 'p', to: 'i', confirmed: true, rel: 'LEADS' };
     const quiet = edgeStyle(e, null);

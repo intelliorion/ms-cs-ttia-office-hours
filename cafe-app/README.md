@@ -618,7 +618,9 @@ that needs the capability), so accepting it gives that idea, and only that idea,
   practice workspace's seven ideas score 0.20: no clear groups, and the app says so.
 - **No analysis that cannot find anything.** With the built-in ontology no relation can form a cycle (NEEDS,
   USES_DATA and DEPENDS_ON run Idea → Capability → System, and the build refuses and reports any loop of KIND_OF, one
-  a merge closes included; `cycles` still looks at the KIND_OF links and would show a loop if one were there), so `cycles` says
+  a merge closes included; `cycles` still looks at the KIND_OF links and would show a loop if one were there; the org
+  chart, HAS_TEAM, HAS_MEMBER and LEADS_DIVISION, loops through a division's leader in one of its own teams, which is no
+  dependency, so it is left out), so `cycles` says
   it has nothing to look for and the pop-out and the assistant do not offer it. It looks only along relations a
   workspace's `ontology.yaml` declares on a loop of kinds (a Vendor → System relation beside SUPPLIED_BY System →
   Vendor).
@@ -836,6 +838,15 @@ relations:
   RELIES_ON_VENDOR: { from: Idea, to: Vendor, meaning: the idea relies on this vendor, derived: true }
 # and in inference.yaml: - { name: needs+supplied_by, chain: [NEEDS, SUPPLIED_BY], then: RELIES_ON_VENDOR }
 ```
+
+**A division's leaders.** `LEADS_DIVISION` (Person → Division) says who leads a division. Only the operator states it,
+in the assistant ("make Jordan Lee a leader of the CS division", or link the person and the division): the card waits
+for Do it, and Undo takes it back. A division may have several leaders and a person may lead several divisions. A
+person who is on no idea is picked with @ as a new person (or typed by full name) and added with the link; their star
+stays only while they lead a division (taking off their last one takes the star too). Unlink the person and the
+division, or remove the person, to take a leadership off. The division's details list "Led by", a person's "Leads the
+division"; the link is drawn as thick as an idea's lead, in indigo. NetworkX leaves the division out (as before), and
+a leader on no idea with it; ask "who leads [the CS division]?" and the assistant follows LEADS_DIVISION.
 
 **Kinds of a system.** `KIND_OF` (System → System) says a system is a kind of another ("the procurement mailbox is
 a kind of email"). A rule's chain that ends at a kind also ends at what it is a kind of, the KIND_OF link among its

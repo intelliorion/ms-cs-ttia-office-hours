@@ -54,8 +54,8 @@ export function TypeFilter() {
             <span><i className="dash" style={{ borderColor: UNCONFIRMED_COLOUR }} />waits on you</span>
             <span><i className="dash" style={{ borderColor: DERIVED_COLOUR }} />derived by a rule</span>
           </div>
-          {/* A person's role on an idea: lead gold and thick, builder and sponsor their own colours, member dotted. */}
-          <div className="tf-legend" data-testid="role-legend" aria-label="A person's role on an idea">
+          {/* A person's role on an idea: lead gold and thick, builder and sponsor their own colours, member dotted; a division's leader in indigo. */}
+          <div className="tf-legend" data-testid="role-legend" aria-label="A person's role on an idea, or as a division's leader">
             {ROLE_LEGEND.map(({ rel, word }) => {
               const r = roleStyle(rel, palette)!;
               return <span key={rel}><i className={r.dash ? 'dot-line' : ''} style={{ borderColor: r.colour, borderTopWidth: Math.max(2, Math.round(r.width * 1.2)) }} />{word}</span>;

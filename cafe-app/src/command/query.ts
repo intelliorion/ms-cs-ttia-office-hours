@@ -1,4 +1,4 @@
-import { BUILTIN_SCHEMA, confirmedFor as sureFor, nameKey, type ConfirmedBy, type GEdge, type GNode, type NodeType, type Relation, type Schema } from '../graph/ontology';
+import { BUILTIN_SCHEMA, ORG_RELATIONS, confirmedFor as sureFor, nameKey, type ConfirmedBy, type GEdge, type GNode, type NodeType, type Relation, type Schema } from '../graph/ontology';
 import type { Idea } from '../ideas/idea';
 import type { Round } from '../round/round';
 import type { JsonSchema } from '../ai/schema';
@@ -106,7 +106,7 @@ export const QUERY_GUIDE = [
   '  clusters gives a verdict from modularity: when it says no clear groups (below 0.3), say so plainly and never present the groups as real.',
   '  A network result reads confirmed links only unless unconfirmed: true: its counts are not the graph\'s totals (a trace line says what it left out). To count links or derived links in the graph, use links (with rel), never NetworkX stats.',
   '  A path hop marked "(stated for X only)" is a capability-level fact that holds for X, not for the other ideas on the path: say so for that hop.',
-  'Links: Entity (the division) HAS_TEAM Team, Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
+  'Links: Entity (the division) HAS_TEAM Team, Person LEADS_DIVISION Entity (the division\'s leaders, as the operator stated them: a division may have several, a person may lead several), Team HAS_MEMBER Person, Person SUBMITTED/LEADS/SPONSORS/BUILDS/RELATED Idea (one link per role: a lead who builds it has LEADS and BUILDS; RELATED is a team member with no other role), Idea REPLACES PainPoint, Idea NEEDS Capability,',
   'Capability BUILT_WITH Tool, Capability USES_DATA System, System KIND_OF System (a mailbox is a kind of email system), Idea IN_ROUND Round, Idea ASKS_FOR Support,',
   'Idea WANTS Outcome (desired outcomes), Idea BENEFITS Beneficiary (who benefits), Idea IN_CATEGORY Category (use case category).',
   'Derived by the rules from the links above (facts nobody typed; dashed in the universe): Idea DEPENDS_ON System (it needs a capability that uses the system\'s data FOR THAT IDEA: a capability-level fact holds only for the ideas it is stated for),',
@@ -145,6 +145,8 @@ export const QUERY_GUIDE = [
   '- the most needed capability: [{"op":"stars","type":"Capability"},{"op":"rank","rel":"NEEDS","dir":"in","limit":3}]',
   '- ideas that use data from systems named like expense: [{"op":"stars","type":"System","match":"expense"},{"op":"follow","rel":"USES_DATA","type":"Capability"},{"op":"follow","rel":"NEEDS","type":"Idea"}]',
   '- who leads [I1]: [{"op":"stars","codes":["I1"]},{"op":"role","role":"lead"}]',
+  '- who leads the division [E1]: [{"op":"stars","codes":["E1"]},{"op":"follow","rel":"LEADS_DIVISION","dir":"in","type":"Person"}]; which division [P1] leads: [{"op":"stars","codes":["P1"]},{"op":"follow","rel":"LEADS_DIVISION","dir":"out","type":"Entity"}]',
+  '  (a division\'s leader is not an idea\'s lead: role lead is about ideas, LEADS_DIVISION about divisions)',
   '- who is [P1]: [{"op":"stars","codes":["P1"]},{"op":"role"}] and, for their team star, [{"op":"stars","codes":["P1"]},{"op":"follow","rel":"HAS_MEMBER","dir":"in","type":"Team"}]',
   '- who is on the most ideas, and in which roles: [{"op":"stars","type":"Person"},{"op":"rank","type":"Idea","limit":3},{"op":"role"}] (distinct ideas per person, ties kept; never rank people by links)',
   '- ideas per stage in round 2026 Q4: [{"op":"stars","type":"Idea","round":"2026 Q4"},{"op":"count_by","by":"stage"}]',
@@ -773,7 +775,8 @@ export function runQuery(q: Query, w: QueryWorld): QueryResult {
 
 /** The stated relations on a loop of kinds (KIND_OF aside: the build refuses a loop of kinds); see network.ts cycleRelations. */
 export function cycleCapable(schema: Schema = BUILTIN_SCHEMA): Relation[] {
-  const rels = schema.stated.filter((r) => r !== 'KIND_OF');
+  // The org chart is left out too: a division's leader in one of its own teams is a loop of kinds, never a cycle that matters.
+  const rels = schema.stated.filter((r) => r !== 'KIND_OF' && !ORG_RELATIONS.includes(r));
   const next = new Map<string, Set<string>>();
   for (const r of rels) { const [f, t] = schema.allowed[r]; next.set(f, new Set([...(next.get(f) ?? []), t])); }
   const reaches = (a: string, b: string) => { const seen = new Set<string>(); const q = [a]; while (q.length) { const x = q.shift()!; if (x === b) return true; if (seen.has(x)) continue; seen.add(x); q.push(...(next.get(x) ?? [])); } return false; };

@@ -38,8 +38,11 @@ export interface ReviewSuggestInput {
   form?: { support?: string[]; maturity?: string; use_case_category?: string[]; experimented?: string; participation?: string; function?: string; region?: string; stage?: string };
   /** The team's answers to our questions, from their emails (names coded). */
   answers?: { question: string; answer: string }[];
-  /** What has happened since the form: a builder named, a reply received, attendance confirmed. */
-  progress?: { builderNamed: boolean; replyReceived: boolean; attendanceConfirmed: boolean };
+  /**
+   * What has happened since the form: a builder named, who builds it now (codes) and whether they can attend every
+   * session, a reply received, attendance confirmed. builders and builderCanAttend are the record as it is now.
+   */
+  progress?: { builderNamed: boolean; builders?: string[]; builderCanAttend?: boolean; replyReceived: boolean; attendanceConfirmed: boolean };
   flags?: string[];
   /** What the knowledge graph holds for the idea: its pain points, capabilities and systems, and how many other ideas need each. */
   graph?: { type: string; label: string; alsoNeededBy?: number; confirmed?: boolean; note?: string }[];
@@ -279,7 +282,11 @@ export const reviewSuggestTask: Task<ReviewSuggestOutput> = {
       '(its cluster of related ideas, how central its capabilities and systems are, links it probably lacks); network is analysis, weigh it for reuse and theme',
       'but never treat a likely missing link as a fact, and if network says unavailable, decide without it. A graph item with confirmed: false rests on an AI link',
       'the operator has not confirmed: weigh it as a possibility, never as a fact. Later information outranks the form: an answer that',
-      'names a builder, the data or a live system changes the criteria. Tick each criterion true only if DATA supports it:',
+      'names a builder, the data or a live system changes the criteria. progress.builders (codes) is who builds it now and progress.builderCanAttend',
+      'whether they can attend every session: the record as it stands, after any answer was replaced, so they win over every answer in DATA.answers;',
+      'an older answer naming someone else as builder is out of date. The learned brief must agree with them: its Builder point names exactly',
+      'progress.builders (or there is none when progress.builders is missing), and never says they can attend unless progress.builderCanAttend is true.',
+      'Tick each criterion true only if DATA supports it:',
       ...CRITERIA.map((c) => `- ${c.id}: ${c.text}`),
       'Suggest one decision:',
       ...Object.entries(DECISION_LABELS).map(([id, label]) => `- ${id}: ${label}`),

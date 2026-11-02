@@ -11,6 +11,7 @@ import { onTouched } from '../src/memory/touch';
 import { chunkIdea } from '../src/memory/chunks';
 import { readIdeaForAgent } from '../src/command/readIdea';
 import { fixedClock } from '../src/clock';
+import { alignBrief } from '../src/review/learnedRoles';
 import type { ReviewSuggestInput, ReviewSuggestOutput, ReviewUpdates } from '../src/ai/tasks';
 
 const clock = fixedClock('2026-11-01');
@@ -244,5 +245,92 @@ describe('taking an answer back', () => {
     const log = (await readHistory(await ideaDir(root, ID))).map((h: any) => h.detail);
     expect(log).toContain('Answer replaced: About 30 a week. → About 50 a week.');
     await expect(removeAnswer(root, ID, 'Volume?', 'About 50 a week.', clock, 'About 50 a week.')).rejects.toThrow(/change it before saving/);
+  });
+});
+
+describe('the learned brief follows the builder after an answer is replaced', () => {
+  const OLD_BRIEF = [{ topic: 'Builder', text: 'Alex Wang builds it and can attend every design session.' }, { topic: 'Volume', text: 'About 30 requests a week.' }];
+  /** Alex Wang named as builder at review, with a brief that says so; then the answer is replaced with Priya Shah. */
+  async function replaced(next = 'Priya Shah - yes she can attend') {
+    const root = await withNeeds([BOTH]);
+    await answerNeed(root, ID, 'n1', 'Alex Wang - yes he can attend', clock);
+    await suggestPrep(root, ID, dumbAi([BOTH], { learned: OLD_BRIEF }).run, clock);
+    expect((await loadIdea(root, ID)).learned!.points[0].text).toMatch(/Alex Wang/);
+    await answerNeed(root, ID, 'n1', next, clock);
+    return root;
+  }
+  const brief = async (root: string) => (await loadIdea(root, ID)).learned?.points ?? [];
+
+  it('Re-evaluate with an AI that writes no brief: the kept brief names the new builder, not the old', async () => {
+    const root = await replaced();
+    await suggestPrep(root, ID, dumbAi([BOTH]).run, clock);
+    expect(await builders(root)).toEqual(['Priya Shah']);
+    const points = await brief(root);
+    expect(JSON.stringify(points)).not.toMatch(/Alex Wang/);
+    expect(points).toContainEqual({ topic: 'Builder', text: 'Priya Shah builds it and can attend every design session.' });
+    expect(points).toContainEqual({ topic: 'Volume', text: 'About 30 requests a week.' });
+  });
+
+  it('Re-evaluate with an AI that writes the old builder again: the code corrects it from the roles', async () => {
+    const root = await replaced();
+    const ai = dumbAi([BOTH], { learned: [{ topic: 'Builder', text: '[P1] builds it and attends every session.' }, { topic: 'Team', text: 'Lucia Fern leads the team. Alex Wang will build the first version.' }] });
+    // The AI writes the code it was given for Alex Wang: a real AI copying an older answer.
+    const run: RunReview = async (input) => {
+      const out = await ai.run(input);
+      return { ...out, output: { ...out.output, learned: out.output.learned!.map((p) => ({ ...p, text: p.text.replace('[P1]', 'Alex Wang') })) } };
+    };
+    await suggestPrep(root, ID, run, clock);
+    const points = await brief(root);
+    expect(JSON.stringify(points)).not.toMatch(/Alex Wang/);
+    expect(points[0]).toEqual({ topic: 'Builder', text: 'Priya Shah builds it and can attend every design session.' });
+    expect(points[1]).toEqual({ topic: 'Team', text: 'Lucia Fern leads the team.' });
+    const log = (await readHistory(await ideaDir(root, ID))).map((h: any) => `${h.action}: ${h.detail}`);
+    expect(log.some((l) => l.startsWith('learned-aligned: '))).toBe(true);
+  });
+
+  it('the AI is told who builds it now and whether they can attend, coded, and no longer reads the replaced answer', async () => {
+    const root = await replaced();
+    // An answer an earlier evaluation saved from the old review answer (no basis, so it was not undone with it).
+    await saveIdea(root, { ...(await loadIdea(root, ID)), answers: [{ question: BOTH.ask, answer: 'Alex Wang will build it.', source: REVIEW_SOURCE }] } as any);
+    const ai = dumbAi([BOTH]);
+    await suggestPrep(root, ID, ai.run, clock);
+    const seen = ai.seen[0];
+    expect(seen.progress?.builders).toHaveLength(1);
+    expect(seen.progress?.builders![0]).toMatch(/^\[P\d+\]$/);
+    expect(seen.progress?.builderCanAttend).toBe(true);
+    expect(JSON.stringify(seen)).not.toMatch(/Alex|Priya/);
+    expect(seen.answers!.map((a) => a.answer)).toEqual([seen.answers!.at(-1)!.answer]);
+    expect(seen.answers!.at(-1)!.answer).toMatch(/^\[P\d+\] - yes she can attend$/);
+  });
+
+  it('as soon as the answer is replaced, the stale brief stops naming the old builder', async () => {
+    const root = await replaced();
+    const idea = await loadIdea(root, ID);
+    expect(idea.learned?.stale).toBe(true);
+    expect(JSON.stringify(idea.learned)).not.toMatch(/Alex Wang/);
+    expect(idea.learned!.points).toEqual([{ topic: 'Volume', text: 'About 30 requests a week.' }]);
+  });
+
+  it('a builder named without "can attend": the brief says so, never that they attend', async () => {
+    const root = await replaced('Priya Shah');
+    await suggestPrep(root, ID, dumbAi([BOTH], { learned: [{ topic: 'Builder', text: 'Priya Shah builds it and attends every session.' }] }).run, clock);
+    expect(await brief(root)).toEqual([{ topic: 'Builder', text: 'Priya Shah builds it; whether they can attend every design session is not said yet.' }]);
+  });
+});
+
+describe('the brief and the roles, by code', () => {
+  const at = { at: '2026-11-01', from: 1 };
+  const idea = (people: any, s2e = false) => sampleIdea({ id: ID, slug: 'x', title: 't', dedupe_key: 'a', people, checklist: s2e ? { s2e: { done: true } } : {} } as any);
+  it('leaves a brief that agrees alone, keeps what else a builder point says, and drops a builder point when no one builds it', () => {
+    const ok = { ...at, points: [{ topic: 'Builder', text: 'Alex Wang builds it in Power Apps.' }] };
+    const alexBuilds = { ...team(), team: team().team.map((p) => (p.name === 'Alex Wang' ? { ...p, roles: ['builder'] } : p)) };
+    expect(alignBrief(ok, idea(alexBuilds), KNOWN)).toBe(ok);
+    const none = alignBrief({ ...at, points: [{ topic: 'Builder', text: 'Alex Wang builds it.' }, { topic: 'Data', text: 'Sample files.' }] }, idea(team()), KNOWN);
+    expect(none.points).toEqual([{ topic: 'Data', text: 'Sample files.' }]);
+  });
+  it('a brief that says they attend when the tick is off (or not when it is on) is written from the roles', () => {
+    const people = { ...team(), team: team().team.map((p) => (p.name === 'Priya Shah' ? { ...p, roles: ['builder'] } : p)) };
+    expect(alignBrief({ ...at, points: [{ topic: 'Builder', text: 'Priya Shah cannot attend every session.' }] }, idea(people, true), KNOWN).points)
+      .toEqual([{ topic: 'Builder', text: 'Priya Shah builds it and can attend every design session.' }]);
   });
 });

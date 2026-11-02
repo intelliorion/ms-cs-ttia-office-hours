@@ -5,6 +5,9 @@ import type { PrepNeed } from '../ideas/idea';
  * Matching the to-do list with what came back. A leaf module (it imports only the question matcher), so the
  * page uses it too.
  */
+/** Where answers saved from the review list say they came from. */
+export const REVIEW_SOURCE = 'review answers';
+
 export interface EmailAnswer { question: string; answer: string; source?: string }
 
 /** The team's emailed answer to this item, if a reply answered its question. */

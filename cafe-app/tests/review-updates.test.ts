@@ -165,7 +165,7 @@ describe('the brief of what the answers add', () => {
       const code = /\[(P\d+)\]/.exec(JSON.stringify(input.answers ?? []))?.[1];
       return { provider: 'fake', output: {
         criteria: { feasible: true, builder: true, data: true, theme: true, reuse: true }, decision: 'select', reason: 'x', needs: [],
-        updates: NONE, learned: [{ topic: 'Builder', text: `[${code}] builds it and attends every session.` }, { topic: 'Data', text: 'Sample contracts are enough.' }],
+        updates: { ...NONE, builder: `[${code}]`, builderCanAttend: true }, learned: [{ topic: 'Builder', text: `[${code}] builds it and attends every session.` }, { topic: 'Data', text: 'Sample contracts are enough.' }],
       } };
     };
     await suggestPrep(root, idea.id, run, clock);

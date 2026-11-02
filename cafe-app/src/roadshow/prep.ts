@@ -14,6 +14,7 @@ import type { EmailRecord } from '../comms/outbox';
 import { draftQuestionsEmail } from '../review/prep';
 import { isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from '../review/needs';
 import { takeInAnswers } from '../review/updates';
+import { alignLearned } from '../review/learnedRoles';
 import type { RoadshowInput, RoadshowPrepOutput } from '../ai/tasks';
 import { readRoadshow, writeRoadshow, type RoadshowState } from './store';
 import { codedRoadshowInput, gatherRoadshow } from './source';
@@ -41,6 +42,7 @@ export async function suggestRoadshowPrep(root: string, id: string, run: RunRoad
   await writeRoadshow(root, id, state);
   const now = await loadIdea(root, id);
   await saveIdea(root, { ...now, ...(await takeInAnswers(root, now, { learned: output.learned }, codes, provider, at, read, 'roadshow')) });
+  await alignLearned(root, id, clock);
   const open = state.prep.needs.filter((n) => isOpenNeed(n, (now as WithAnswers).answers)).length;
   await appendHistory(await ideaDir(root, id), {
     at, action: 'roadshow-suggest', by: 'app', detail: `${prev.length ? 'Re-evaluated' : 'Suggested'} the roadshow to-do list: ${open ? `${open} to do` : 'nothing open'}`,

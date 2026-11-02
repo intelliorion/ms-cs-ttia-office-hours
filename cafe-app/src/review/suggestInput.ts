@@ -9,7 +9,9 @@ import type { ReviewSuggestInput } from '../ai/tasks';
 import type { Idea } from '../ideas/idea';
 import { nodeId, type GNode } from '../graph/ontology';
 import { importedNames, namesInAddresses } from '../inbox/names';
-import { builderOf } from '../ideas/people';
+import { builderOf, withRoleOn } from '../ideas/people';
+import { sameQuestion } from '../inbox/question';
+import { REVIEW_SOURCE } from './needs';
 import { ideaNetwork } from '../graph/network';
 
 /** What review needs from the graph: the idea's pain points, capabilities and systems (its own DEPENDS_ON: systems its capabilities use for it). */
@@ -22,7 +24,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * `basis` says, in the app's words, what the suggestion was based on, so a new email visibly changes it.
  */
 export async function reviewInput(
-  root: string, id: string, added: { question: string; answer: string }[] = [], opts: { skipSource?: string; network?: boolean } = {},
+  root: string, id: string, added: { question: string; answer: string }[] = [], opts: { skipSource?: string; network?: boolean; pasted?: boolean } = {},
 ): Promise<{ input: ReviewSuggestInput; basis: string; waiting: number; codes: Map<string, Coded> }> {
   const loaded = await loadIdea(root, id) as Idea & { answers?: { question: string; answer: string; source?: string }[] };
   // The design questions read their own answers as steps: their copies on the idea are left out for them.
@@ -39,10 +41,16 @@ export async function reviewInput(
   };
 
   // The team's emailed answers, then what the operator pasted against the to-do list.
-  const answers = [...(idea.answers ?? []).slice(-20), ...added].map((a) => ({ question: a.question, answer: coded(a.answer)! }));
-  const emailed = (idea.answers ?? []).slice(-20).length;
+  const own = answersRead(idea, opts.pasted ? added : []);
+  const answers = [...own, ...added].map((a) => ({ question: a.question, answer: coded(a.answer)! }));
+  const emailed = own.length;
+  // Who builds it now and whether they can attend: the record as it stands (an answer replaced at review is gone from
+  // it), sent as such so an older answer naming someone else never wins.
+  const builders = withRoleOn(idea, 'builder').map((p) => coded(p.name));
   const progress = {
     builderNamed: !!builderOf(idea),
+    ...(builders.length ? { builders } : {}),
+    builderCanAttend: !!(idea.checklist.s2e?.done || idea.checklist.s3a?.done),
     replyReceived: !!idea.checklist.s2d?.done,
     attendanceConfirmed: !!idea.checklist.s3a?.done,
   };
@@ -104,6 +112,16 @@ export async function reviewInput(
   const basis = `Based on ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]}`
     + (waiting ? `. ${plural(waiting, 'change')} from the Import still wait${waiting === 1 ? 's' : ''} for your Yes and ${waiting === 1 ? 'is' : 'are'} not read yet` : '');
   return { input, basis, waiting, codes };
+}
+
+/**
+ * The idea's own answers a suggestion reads (the last 20). With the operator's answers to the to-do list (`pasted`),
+ * an answer saved from an earlier review answer to the same question is left out: the one pasted now replaced it.
+ */
+export function answersRead<A extends { question: string; answer: string; source?: string }>(
+  idea: { answers?: A[] }, pasted: { question: string }[] = [],
+): A[] {
+  return (idea.answers ?? []).filter((a) => !(a.source === REVIEW_SOURCE && pasted.some((p) => sameQuestion(p.question, a.question)))).slice(-20);
 }
 
 /** Everyone the graph knows, plus everyone the idea's own record names (a builder named in an email may not be a star yet). */

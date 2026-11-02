@@ -41,7 +41,7 @@ describe('what the decision suggestion reads', () => {
       { question: 'Who will build it?', answer: expect.stringMatching(/^\[P\d+\] can build it in Copilot Studio\.$/) },
       { question: 'What data?', answer: 'Sample FAQ only.' },
     ]);
-    expect(input.progress).toEqual({ builderNamed: true, replyReceived: true, attendanceConfirmed: false });
+    expect(input.progress).toEqual({ builderNamed: true, builders: ['[P2]'], builderCanAttend: false, replyReceived: true, attendanceConfirmed: false });
     expect(input.flags).toEqual(['Answers mention a live SAP system']);
     expect(input.graph).toEqual([{ type: 'Capability', label: 'Policy Q&A', alsoNeededBy: 1 }]);
     expect(JSON.stringify(input)).not.toMatch(/Kwame|Mensah|Zainab|Okafor/);

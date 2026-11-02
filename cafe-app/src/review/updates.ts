@@ -16,14 +16,15 @@ import { edgeId, NODE_LABELS, type AiLink, type NodeType } from '../graph/ontolo
 import type { ReviewUpdates } from '../ai/tasks';
 import { confirmAt } from '../ai/confirm';
 import { loadSettings } from '../round/store';
+import { REVIEW_SOURCE } from './needs';
+import { alignLearned } from './learnedRoles';
 
 
 /** Where a proposal came from; older ones, from before there were sources, came from the decision. */
 export const sourceOf = (u: Pick<PrepUpdate, 'from'>): UpdateSource => u.from ?? 'decision';
 
 type WithAnswers = Idea & { answers?: { question: string; answer: string; source?: string }[] };
-/** Where answers saved from the review list say they came from. */
-export const REVIEW_SOURCE = 'review answers';
+export { REVIEW_SOURCE };
 /** A link, read as a sentence. */
 const REL_WORDS: Record<string, string> = { NEEDS: 'needs', REPLACES: 'replaces the problem', USES_DATA: 'uses data from', BUILT_WITH: 'is built with' };
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -314,7 +315,8 @@ export const ANSWERS_OF: Record<UpdateSource, string> = {
  */
 export async function applyAnswerUpdates(root: string, id: string, from: UpdateSource, clock: Clock, source = REVIEW_SOURCE): Promise<PrepUpdate[]> {
   const waiting = ((await loadIdea(root, id)).updates ?? []).filter((u) => u.status === 'proposed' && sourceOf(u) === from);
-  if (!waiting.length) return [];
+  // The brief follows the roles as they are now, whatever the answers changed (or did not).
+  if (!waiting.length) { await alignLearned(root, id, clock); return []; }
   const at = clock();
   const dir = await ideaDir(root, id);
   const done = new Map<string, PrepUpdate>();
@@ -331,6 +333,7 @@ export async function applyAnswerUpdates(root: string, id: string, from: UpdateS
   }
   const now = await loadIdea(root, id);
   await saveIdea(root, { ...now, updates: (now.updates ?? []).filter((u) => !failed.has(u.id)).map((u) => done.get(u.id) ?? u) });
+  await alignLearned(root, id, clock);
   return [...done.values()];
 }
 
@@ -373,6 +376,8 @@ export async function removeAnswer(root: string, id: string, question: string, a
   const { learned: _l, ...rest } = after;
   const brief = learnedAfter(after);
   await saveIdea(root, { ...rest, ...brief } as Idea);
+  // What is left of the brief may not name a builder the answer no longer gives.
+  await alignLearned(root, id, clock);
   await appendHistory(await ideaDir(root, id), {
     at: clock(), action: replacing ? 'answer-replaced' : 'answer-removed', by: 'operator',
     detail: replacing ? `Answer replaced: ${answer} → ${replacing}` : `Answer removed: ${answer}`, ...(list[i].source ? { source: list[i].source } : {}),

@@ -6,12 +6,13 @@ import { showNames } from '../command/names';
 import { NEED_ANSWER_MAX, type ReviewSuggestInput, type ReviewSuggestOutput } from '../ai/tasks';
 import { addQuestion } from '../design/brainstorm';
 import { draftEmail, updateDraft, type EmailRecord } from '../comms/outbox';
-import { peopleFor, reviewInput } from './suggestInput';
+import { answersRead, peopleFor, reviewInput } from './suggestInput';
 import { applyAnswerUpdates, learnedAfter, planUpdates, takeInAnswers, takenBackLine, undoFromAnswer, undoneWords, REVIEW_SOURCE } from './updates';
 import { emailAnswerFor, givenAnswer, isOpenNeed, mergeNeeds, withAnswer, type EmailAnswer } from './needs';
 import { asksAttend, asksBuilder, builderCheck, readBuilderAnswer, type BuilderCheck } from './builderAnswer';
 import { withRoleOn } from '../ideas/people';
 import { rebuildGraph } from '../graph/store';
+import { alignLearned } from './learnedRoles';
 
 type WithAnswers = Idea & { answers?: EmailAnswer[] };
 export type RunReview = (input: ReviewSuggestInput) => Promise<{ provider: string; output: ReviewSuggestOutput }>;
@@ -65,10 +66,10 @@ export async function suggestPrep(root: string, id: string, run: RunReview, cloc
     await applyAnswerUpdates(root, id, 'decision', clock);
     idea = await loadIdea(root, id) as WithAnswers;
   }
-  const { input, basis, codes } = await reviewInput(root, id, pasted, { network: true });
+  const { input, basis, codes } = await reviewInput(root, id, pasted, { network: true, pasted: true });
   const { provider, output } = await run({ ...input, ...(prev.length ? { todo: prev.map(({ need, ask }) => ({ need, ask })) } : {}) });
   // What the AI's updates were read from: every answer it was given.
-  const read = [...(idea.answers ?? []).slice(-20).map((a) => a.answer), ...pasted.map((a) => a.answer)];
+  const read = [...answersRead(idea, pasted).map((a) => a.answer), ...pasted.map((a) => a.answer)];
   const notes: string[] = [];
   const at = clock();
   const taken = await takeInAnswers(root, idea, output, codes, provider, at, (input.answers ?? []).length, 'decision', { ...(direct ? { direct } : {}), basis: read, notes });
@@ -128,6 +129,8 @@ export async function answerNeed(root: string, id: string, needId: string, raw: 
   const after = { ...idea, prep: next } as WithAnswers;
   const { learned: _l, ...rest } = after;
   await saveIdea(root, (old && old !== nextText ? { ...rest, ...learnedAfter(after) } : after) as Idea);
+  // The brief never names a builder the roles no longer have (the old answer's builder went with it).
+  if (old && old !== nextText) await alignLearned(root, id, clock);
   if (old && old !== nextText && clock) {
     await appendHistory(await ideaDir(root, id), {
       at: clock(), action: nextText ? 'answer-replaced' : 'answer-removed', by: 'operator', source: REVIEW_SOURCE,

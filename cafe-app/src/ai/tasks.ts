@@ -1714,8 +1714,13 @@ export interface AgentOutput {
   actions?: CommandStep[];
   followups?: string[];
 }
-/** The longest reply or answer the assistant shows; a longer one is cut at a sentence, never sent back as invalid. */
+/**
+ * The longest reply or answer the assistant shows. A longer one is not refused as invalid: the chat sends it back once
+ * to be summarised to fit, and cuts it at a sentence only if it is still too long. AGENT_TEXT_CEILING is what the
+ * reply may hold before that (anything past it is cut on reading, so a runaway reply cannot fail the message).
+ */
 export const AGENT_TEXT_MAX = 2000;
+export const AGENT_TEXT_CEILING = 12000;
 export const AGENT_SCHEMA: JsonSchema = {
   type: 'object', additionalProperties: false, required: ['next', 'thought'],
   properties: {
@@ -1724,8 +1729,8 @@ export const AGENT_SCHEMA: JsonSchema = {
     // Checked on its own by the app, so a malformed search is reported back to the agent rather than failing the message.
     query: { type: 'object' },
     idea: CODE,
-    reply: { type: 'string', minLength: 1, maxLength: AGENT_TEXT_MAX },
-    answer: { type: 'string', minLength: 1, maxLength: AGENT_TEXT_MAX },
+    reply: { type: 'string', minLength: 1, maxLength: AGENT_TEXT_CEILING },
+    answer: { type: 'string', minLength: 1, maxLength: AGENT_TEXT_CEILING },
     actions: ACTIONS_SCHEMA,
     followups: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 90 } },
   },
@@ -1822,11 +1827,11 @@ export function cutAtSentence(v: unknown, max: number): unknown {
   return end > max / 2 ? head.slice(0, end + 1) + ' …' : trimStrings(v, max);
 }
 
-/** An over-long text in the agent's reply is cut, not refused: a long answer is still an answer. */
+/** A runaway text in the agent's reply is cut, not refused (the chat asks for a summary of anything over AGENT_TEXT_MAX). */
 function trimAgent(value: unknown): void {
   const o = asObj(value);
   if (!o) return;
-  for (const k of ['reply', 'answer']) if (Object.hasOwn(o, k)) o[k] = cutAtSentence(o[k], AGENT_TEXT_MAX);
+  for (const k of ['reply', 'answer']) if (Object.hasOwn(o, k)) o[k] = cutAtSentence(o[k], AGENT_TEXT_CEILING);
   o.thought = trimStrings(o.thought, 200);
   if (Array.isArray(o.followups)) o.followups = o.followups.slice(0, 3).map((f) => trimStrings(f, 90));
 }

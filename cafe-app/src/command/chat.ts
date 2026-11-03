@@ -6,7 +6,7 @@ import { rebuildGraph } from '../graph/store';
 import { loadIdea } from '../ideas/store';
 import { listIdeas } from '../ideas/store';
 import { listRounds } from '../round/store';
-import { agentTask, AGENT_MAX_STEPS, COMMAND_MAX, type AgentOutput, type AgentStepDone } from '../ai/tasks';
+import { agentTask, cutAtSentence, AGENT_MAX_STEPS, AGENT_TEXT_MAX, COMMAND_MAX, type AgentOutput, type AgentStepDone } from '../ai/tasks';
 import type { Connector } from '../ai/connector';
 import type { Clock } from '../clock';
 import { nodeId, type GNode } from '../graph/ontology';
@@ -361,6 +361,17 @@ async function answer(root: string, message: string, ai: Connector, clock: Clock
       if (silent(output)) {
         const again = (await ask(1, `your last step chose ${output.next} with no reply. Write the reply now from the steps already run; take no new step.`)).output;
         if (again.next === output.next || again.next === 'answer') output = again;
+      }
+      // A reply or answer too long to show: sent back once to be summarised from the same steps (no new step), then cut
+      // at a sentence if it is still too long. What it read is not limited by this, only what it writes.
+      const tooLong = (o: AgentOutput) => (['reply', 'answer'] as const).filter((k) => (o[k]?.length ?? 0) > AGENT_TEXT_MAX);
+      const long = tooLong(output);
+      if (long.length && output.next !== 'search' && output.next !== 'read_idea') {
+        const sizes = long.map((k) => `${k} is ${output[k]!.length} characters`).join(', ');
+        const again = (await ask(1, `your last step's ${sizes}; at most ${AGENT_TEXT_MAX} each. Write it again as a summary that fits: keep what answers the message (numbers exactly as found), drop the rest. Take no new step.`)).output;
+        const kept = again.next === output.next && !silent(again) ? again : output;
+        traces.push({ trace: [{ text: `Asked again: the ${long.join(' and ')} ran past ${AGENT_TEXT_MAX} characters, to be summarised`, size: 0 }] });
+        output = { ...kept, ...Object.fromEntries((['reply', 'answer'] as const).filter((k) => kept[k] !== undefined).map((k) => [k, cutAtSentence(kept[k], AGENT_TEXT_MAX) as string])) };
       }
       // A final answer that claims the step budget is spent while steps remain: sent back once, to take the step it skipped.
       if (output.next === 'answer' && left > 1 && !sentBack.has('steps') && /\b(ran|run|running) out of steps\b|\bstep limit\b|\bno steps left\b|\bout of steps\b/i.test(output.reply ?? '')) {

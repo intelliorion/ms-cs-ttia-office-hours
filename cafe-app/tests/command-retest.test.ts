@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from '../src/round/round';
 import { runCommand } from '../src/command/chat';
 import { fakeProvider } from '../src/ai/providers/fake';
 import { appendAiLink } from '../src/graph/store';
-import { agentTask, type AgentInput } from '../src/ai/tasks';
+import { agentTask, AGENT_TEXT_CEILING, AGENT_TEXT_MAX, type AgentInput } from '../src/ai/tasks';
 import type { AiLink } from '../src/graph/ontology';
 
 // Made-up people only: "Person N".
@@ -171,19 +171,29 @@ describe('adding a system an idea already depends on says so', () => {
   });
 });
 
-describe('a long chat answer', () => {
-  it('is cut at a sentence, not refused', async () => {
-    const { AGENT_TEXT_MAX } = await import('../src/ai/tasks');
-    const long = Array.from({ length: 200 }, (_, i) => `Sentence ${i} about the idea.`).join(' ');
-    const out = agentTask.parse(JSON.stringify({ next: 'answer', thought: 't'.repeat(250), reply: long, followups: ['a', 'b', 'c', 'd'] }));
-    expect(out.reply!.length).toBeLessThanOrEqual(AGENT_TEXT_MAX);
-    expect(out.reply).toMatch(/idea\. …$/);
-    expect(out.thought.length).toBe(200);
-    expect(out.followups).toHaveLength(3);
+describe('a long chat answer is summarised, not refused', () => {
+  const long = Array.from({ length: 120 }, (_, i) => `Sentence ${i} about the idea.`).join(' ');
+  it('an answer over the limit is sent back once to be summarised from the same steps', async () => {
+    const { root, prompts, ai } = await setup([
+      grouped,
+      () => ({ next: 'answer', thought: 'Answering', reply: long }),
+      () => ({ next: 'answer', thought: 'Summarising', reply: 'Both ideas need record update.' }),
+    ]);
+    const e = await runCommand(root, 'which capabilities are shared?', ai, clock);
+    expect(e.reply).toBe('Both ideas need record update.');
+    expect(prompts).toHaveLength(3);
+    expect(dataOf(prompts[2]).stepsLeft).toBe(1);
+    expect(prompts[2]).toMatch(/NOTE FROM THE APP: your last step's reply is \d+ characters; at most 2000 each\. Write it again as a summary/);
+    expect(e.trace!.flat().map((t) => t.text)).toContain('Asked again: the reply ran past 2000 characters, to be summarised');
   });
-
-  it('keeps an answer that fits', () => {
-    const out = agentTask.parse(JSON.stringify({ next: 'answer', thought: 'x', reply: 'a'.repeat(1500) }));
-    expect(out.reply).toHaveLength(1500);
+  it('still too long: cut after its last full sentence that fits', async () => {
+    const { root, ai } = await setup([grouped, () => ({ next: 'answer', thought: 'Answering', reply: long })]);
+    const e = await runCommand(root, 'which capabilities are shared?', ai, clock);
+    expect(e.reply!.length).toBeLessThanOrEqual(AGENT_TEXT_MAX);
+    expect(e.reply).toMatch(/idea\. …$/);
+  });
+  it('a runaway reply past the ceiling is read, not refused; an answer that fits is kept whole', () => {
+    expect(agentTask.parse(JSON.stringify({ next: 'answer', thought: 'x', reply: 'Word. '.repeat(3000) })).reply!.length).toBeLessThanOrEqual(AGENT_TEXT_CEILING);
+    expect(agentTask.parse(JSON.stringify({ next: 'answer', thought: 'x', reply: 'a'.repeat(1500) })).reply).toHaveLength(1500);
   });
 });

@@ -170,3 +170,20 @@ describe('adding a system an idea already depends on says so', () => {
       .toMatch(/^A system links to a capability, not to an idea\./);
   });
 });
+
+describe('a long chat answer', () => {
+  it('is cut at a sentence, not refused', async () => {
+    const { AGENT_TEXT_MAX } = await import('../src/ai/tasks');
+    const long = Array.from({ length: 200 }, (_, i) => `Sentence ${i} about the idea.`).join(' ');
+    const out = agentTask.parse(JSON.stringify({ next: 'answer', thought: 't'.repeat(250), reply: long, followups: ['a', 'b', 'c', 'd'] }));
+    expect(out.reply!.length).toBeLessThanOrEqual(AGENT_TEXT_MAX);
+    expect(out.reply).toMatch(/idea\. …$/);
+    expect(out.thought.length).toBe(200);
+    expect(out.followups).toHaveLength(3);
+  });
+
+  it('keeps an answer that fits', () => {
+    const out = agentTask.parse(JSON.stringify({ next: 'answer', thought: 'x', reply: 'a'.repeat(1500) }));
+    expect(out.reply).toHaveLength(1500);
+  });
+});

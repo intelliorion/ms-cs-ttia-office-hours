@@ -9,7 +9,9 @@ import { parseDrop, type InboxMeta } from '../inbox/parse';
 import { readPending } from '../inbox/triage';
 import { imageKind } from '../roadshow/photos';
 import type { Connector } from '../ai/connector';
-import { DATA_EXTS, DATA_MAX_BYTES, type DataFile } from './model';
+import { DATA_EXTS, dataMaxBytes, type DataFile } from './model';
+import { cfbKind, isZip, zipNames } from './ooxml';
+import { DeckError, readPptx, type DeckMeta } from './pptx';
 
 export class DataError extends Error {}
 
@@ -21,6 +23,10 @@ export interface ReadResult {
   meta: Pick<InboxMeta, 'pages' | 'subject' | 'from' | 'to' | 'cc' | 'attachments' | 'readBy' | 'words'>;
   /** Why it cannot be read at all (a protected PDF, a picture with no AI). */
   unreadable?: string;
+  /** A PowerPoint deck: what was found on its slides. Its tables and charts are in `tables`, its slides' text in `text`. */
+  deck?: DeckMeta;
+  /** What the reader noticed but read anyway (a deck read as plain text). */
+  problems?: string[];
 }
 
 /** Rows read from one table; the rest are counted, not read. */
@@ -31,28 +37,59 @@ export const COLUMNS_MAX = 80;
 export const extOf = (name: string) => (/\.([a-z0-9]+)$/i.exec(name)?.[1] ?? '').toLowerCase();
 const ONLY = `Drop a ${DATA_EXTS.map((e) => `.${e}`).join(', ')} file`;
 
-/** Name, size, then the first bytes: a file that is not what its name says is refused before it is read further. */
+const PASSWORD = (what: string) => `This ${what} is protected with a password: open it, remove the password (File > Info > Protect), save it and drop it again`;
+const OLD_OFFICE: Record<string, string> = {
+  xls: 'Old .xls workbooks are not read: save it as .xlsx and drop it again',
+  ppt: 'Old .ppt presentations are not read: open it in PowerPoint, save it as .pptx (File > Save As > PowerPoint Presentation) and drop it again',
+  doc: 'Old .doc documents are not read: open it in Word, save it as .docx and drop it again',
+};
+/** What each Office format must hold in its zip: the part only that format has. */
+const OOXML_PART: Record<string, { part: string; what: string }> = {
+  pptx: { part: 'ppt/presentation.xml', what: 'presentation' }, docx: { part: 'word/document.xml', what: 'document' }, xlsx: { part: 'xl/workbook.xml', what: 'workbook' },
+};
+
+/**
+ * Name, size, then the contents: a file that is not what its name says is refused before it is read further. An
+ * Office file is told apart by what is inside it: a zip holding its own main part (a .pptx has ppt/presentation.xml),
+ * a password-protected one (an encrypted package in an OLE container), or an old binary one renamed.
+ */
 export function checkDataFile(name: string, bytes: Uint8Array): string {
   const ext = extOf(name);
   if (!(DATA_EXTS as readonly string[]).includes(ext)) {
-    if (ext === 'xls') throw new DataError('Old .xls workbooks are not read: save it as .xlsx and drop it again');
+    if (OLD_OFFICE[ext]) throw new DataError(OLD_OFFICE[ext]);
     throw new DataError(`Can't read a .${ext || '(no extension)'} file. ${ONLY}`);
   }
   if (!bytes.length) throw new DataError('That file is empty');
-  if (bytes.length > DATA_MAX_BYTES) throw new DataError('That file is over 10 MB: drop a smaller sample');
+  const max = dataMaxBytes(ext);
+  if (bytes.length > max) throw new DataError(`That file is over ${max / 1048576} MB: ${ext === 'pptx' ? 'compress its pictures (File > Compress Pictures) or drop a smaller copy' : 'drop a smaller sample'}`);
   const at = (i: number, ...xs: number[]) => xs.every((x, k) => bytes[i + k] === x);
-  const zip = at(0, 0x50, 0x4b, 0x03, 0x04);
-  const ok = ext === 'xlsx' || ext === 'docx' ? zip
-    : ext === 'pdf' ? at(0, 0x25, 0x50, 0x44, 0x46)
-      : ext === 'msg' ? at(0, 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1)
-        : ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext) ? Boolean(imageKind(bytes))
-          // Text files: no NUL byte at the start (a binary file renamed .csv is not read).
-          : !bytes.subarray(0, 8192).includes(0);
+  const office = OOXML_PART[ext];
+  if (office) {
+    const cfb = cfbKind(bytes);
+    if (cfb === 'encrypted') throw new DataError(PASSWORD(office.what));
+    if (cfb === 'ppt' || cfb === 'doc' || cfb === 'xls') throw new DataError(`${OLD_OFFICE[cfb].replace(/ are not read:/, ' renamed .' + ext + ' are not read:')}`);
+    if (!isZip(bytes)) throw new DataError(`That file is not a real .${ext}: its contents do not match its name`);
+    // The .pptx is sniffed by its parts, not only its first bytes (a zip of anything starts the same way).
+    if (ext === 'pptx') {
+      const names = zipNames(bytes);
+      if (!names) throw new DataError('That .pptx is damaged: it could not be opened. Open it in PowerPoint, save it again and drop it again');
+      if (!names.includes(office.part)) {
+        const other = Object.entries(OOXML_PART).find(([, o]) => names.includes(o.part));
+        throw new DataError(other ? `That file is a ${other[1].what} (.${other[0]}), not a presentation: rename it .${other[0]}` : 'That file is not a real .pptx: it has no slides in it');
+      }
+    }
+    return ext;
+  }
+  const ok = ext === 'pdf' ? at(0, 0x25, 0x50, 0x44, 0x46)
+    : ext === 'msg' ? at(0, 0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1)
+      : ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext) ? Boolean(imageKind(bytes))
+        // Text files: no NUL byte at the start (a binary file renamed .csv is not read).
+        : !bytes.subarray(0, 8192).includes(0);
   if (!ok) throw new DataError(`That file is not a real .${ext}: its contents do not match its name`);
   return ext;
 }
 
-const typeOf = (ext: string): DataFile['type'] => (['csv', 'tsv', 'xlsx'].includes(ext) ? 'table'
+const typeOf = (ext: string): DataFile['type'] => (['csv', 'tsv', 'xlsx'].includes(ext) ? 'table' : ext === 'pptx' ? 'presentation'
   : ['eml', 'msg'].includes(ext) ? 'email' : ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext) ? 'picture' : 'document');
 export { typeOf as dataTypeOf };
 
@@ -152,6 +189,14 @@ export async function readDataFile(file: string, name: string, bytes: Uint8Array
     let tables: ReadTable[];
     try { tables = await readXlsx(bytes); } catch (e) { return { type, meta: {}, unreadable: `Couldn't open this workbook (${(e as Error).message})` }; }
     return tables.length ? { type, tables, meta: {} } : { type, meta: {}, unreadable: 'No table found in any sheet: each needs a header row' };
+  }
+  if (ext === 'pptx') {
+    let deck: ReturnType<typeof readPptx>;
+    try { deck = readPptx(bytes); } catch (e) { return { type, meta: {}, unreadable: e instanceof DeckError ? e.message : `Couldn't open this presentation (${(e as Error).message})` }; }
+    if (!deck.text.replace(/^## Slide \d+.*$/gm, '').trim() && !deck.tables.length) {
+      return { type, meta: {}, deck: deck.meta, unreadable: `No text, table or chart found on any slide${deck.meta.hidden ? ` (${deck.meta.hidden} hidden slide${deck.meta.hidden === 1 ? ' was' : 's were'} skipped)` : ''}` };
+    }
+    return { type, ...(deck.tables.length ? { tables: deck.tables } : {}), text: deck.text, meta: {}, deck: deck.meta, ...(deck.problems.length ? { problems: deck.problems } : {}) };
   }
   const first = parseDrop(name, bytes);
   if (first.unreadable) return { type, meta: {}, unreadable: first.unreadable };

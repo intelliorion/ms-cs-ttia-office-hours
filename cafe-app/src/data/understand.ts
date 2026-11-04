@@ -27,6 +27,7 @@ import {
 } from './model';
 import { checkDataFile, dataTypeOf, readDataFile, type ReadResult } from './read';
 import { checkRead, heldWords } from './check';
+import { deckWords } from './pptx';
 import { docExcerpt, lookAt, profileDoc, profileTable, type LookResult } from './profile';
 import { copyName, copyPath, dataFolder, DataStepError, fileOf, nextFileId, readData, removeCopy, reopenData, updateData } from './store';
 
@@ -40,6 +41,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 
 /** What Read found, in a few words. */
 export function readWords(r: ReadResult): string {
+  if (r.deck) {
+    const words = (r.text ?? '').split(/\s+/).filter(Boolean).length;
+    const notes = (r.problems ?? []).filter((x) => !/^Read as plain text/.test(x)).map((x) => `. ${x}`).join('');
+    return `Presentation: ${deckWords(r.deck)}; ${plural(words, 'word')}${r.deck.cut ? ' (cut: the rest is too long to read)' : ''}${notes}`;
+  }
   if (r.tables?.length) {
     const what = r.tables.length > 1 ? `Workbook, ${plural(r.tables.length, 'sheet')}` : 'Table';
     const rows = r.tables.reduce((n, t) => n + t.total, 0);
@@ -54,6 +60,9 @@ export function readWords(r: ReadResult): string {
 
 /** What Profile found, in a few words ("12 columns: 2 dates, 3 amounts, 4 categories; 2 issues"). */
 export function profileWords(f: Pick<DataFile, 'tables' | 'doc'>): string {
+  const slides = f.doc?.slides !== undefined ? `${plural(f.doc.slides, 'slide')}, ${plural(f.doc.headings.length, 'title')}` : '';
+  if (slides && !f.tables?.length) return `${slides}, ${plural(f.doc!.words, 'word')}`;
+  if (slides) return `${slides}; ${profileWords({ tables: f.tables })}`;
   if (f.tables?.length) {
     const cols = columnsOf(f);
     const n = (t: string[], word: string, many?: string) => { const k = cols.filter((c) => t.includes(c.type)).length; return k ? plural(k, word, many) : ''; };
@@ -178,9 +187,11 @@ async function runSteps(
   if (from !== 'understand') {
     await mark(root, id, fid, { id: 'profile', status: 'running', detail: 'Profiling…' }, progress);
     const tables = read.tables?.map((t) => profileTable(t, masked, known));
-    const doc = read.tables?.length ? undefined : profileDoc(read);
+    // A deck is both: its tables and charts are profiled like a sheet, its slides' text like a document.
+    const doc = read.tables?.length && !read.deck ? undefined : profileDoc(read);
     f = await mark(root, id, fid, { id: 'profile', status: 'done', detail: profileWords({ tables, doc }), ms: ms(t0) }, progress, (x) => {
-      if (tables) { x.tables = tables; delete x.doc; } else { x.doc = doc; delete x.tables; }
+      if (tables?.length) x.tables = tables; else delete x.tables;
+      if (doc) x.doc = doc; else delete x.doc;
     });
   }
 
@@ -291,8 +302,10 @@ export function checkUnderstanding(
   // A document or a picture has no profiled columns: a table the AI read in it (a report's columns) is one of its
   // facts, not a column the code drops as "not in the file".
   const docColumns = own.size ? [] : out.columns.map((c) => one(c.name, 40)).filter(Boolean);
+  // Several tables (a workbook's sheets, a deck's tables and charts) may share a column name: the AI's table says which.
+  const byTable = new Map(columnsOf(f).map((c) => [`${c.table.toLowerCase()}\u0001${c.name.toLowerCase()}`, c]));
   for (const c of own.size ? out.columns : []) {
-    const hit = find(own, c.name);
+    const hit = (c.table?.trim() ? byTable.get(`${c.table.trim().toLowerCase()}\u0001${c.name.trim().toLowerCase()}`) : undefined) ?? find(own, c.name);
     if (!hit) { dropped.push(c.name); continue; }
     const key = `${hit.table}\u0001${hit.name}`;
     if (seen.has(key)) continue;
@@ -346,7 +359,11 @@ async function understandWithAi(
         })),
       })),
     } : {}),
-    ...(f.doc ? { doc: { words: f.doc.words, headings: f.doc.headings, tables: f.doc.tables, ...(f.doc.pages ? { pages: f.doc.pages } : {}), ...(f.doc.subject ? { subject: f.doc.subject } : {}), ...(f.doc.attachments ? { attachments: f.doc.attachments } : {}), text: docExcerpt(read.text ?? '', known) } } : {}),
+    ...(f.doc ? { doc: {
+      words: f.doc.words, headings: f.doc.headings, tables: f.doc.tables, ...(f.doc.pages ? { pages: f.doc.pages } : {}), ...(f.doc.subject ? { subject: f.doc.subject } : {}), ...(f.doc.attachments ? { attachments: f.doc.attachments } : {}),
+      ...(f.doc.slides !== undefined ? { slides: f.doc.slides, ...(f.doc.hiddenSlides ? { hiddenSlides: f.doc.hiddenSlides } : {}), ...(f.doc.charts ? { charts: f.doc.charts } : {}), ...(f.doc.notes ? { notesOn: f.doc.notes } : {}) } : {}),
+      text: docExcerpt(read.text ?? '', known),
+    } } : {}),
   };
   const base: Omit<DataUnderstandInput, 'looks' | 'lookAllowed'> = await codeValue(root, id, {
     idea: { ...seen.idea, business_impact: undefined },

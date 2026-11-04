@@ -157,6 +157,8 @@ export function checkRead(r: ReadResult, fileName: string, known: string[]): Dat
     const all = r.tables.map((t) => checkTable(t, knownSet));
     const qualify = r.tables.length > 1;
     const findings = all.flatMap((x, i) => x.findings.map((f) => ({ ...f, ...(qualify ? { column: `${r.tables![i].name}: ${f.column}` } : {}) })));
+    // A deck has text around its tables (titles, bullets, speaker notes): it is screened like a document too.
+    if (r.deck && r.text) findings.push(...checkText(r.text, r, fileName, known));
     return { status: findings.length ? 'held' : 'clear', findings, masked: [...new Set(all.flatMap((x) => x.masked))], notes: [...new Set(all.flatMap((x) => x.notes))] };
   }
   const findings = checkText(r.text ?? '', r, fileName, known);

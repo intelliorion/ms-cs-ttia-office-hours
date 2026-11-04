@@ -1038,21 +1038,34 @@ after the tool was evaluated (features first, data later), the tool picker, appr
 the evaluation is out of date for the data and offer **Re-evaluate the tool**: an evaluation records which
 confirmation it saw.
 
-0. **Understand the data**. Drop the team's files on the section (or pick them): CSV, Excel, PDF, Word, text,
-   an email (.eml, .msg) or a picture of a report, up to 10 MB each and 12 per idea. Each waits with a drop-down
+0. **Understand the data**. Drop the team's files on the section (or pick them): CSV, Excel, PDF, Word, PowerPoint
+   (.pptx), text, an email (.eml, .msg) or a picture of a report, up to 10 MB each (a deck up to 20 MB) and 12 per
+   idea. Each waits with a drop-down
    saying what it is (guessed from the name; you decide): **Sample input**, **Sample output** (what it should
    produce), **Today's output or report**, **Rules or reference**, **Process document**, **Example email** or
    **Other**. **Read and understand** sends them up one by one and shows each file's five step cards as they run
    (the Import's dots):
    - **Read**: the name, size and first bytes are checked before anything else; the file is copied into the idea
      folder's `data-files/` (never anywhere else) and read with the Import's readers; a spreadsheet or CSV as tables
-     (every sheet).
+     (every sheet). A PowerPoint deck is read by its structure (`src/data/pptx.ts`, no extra dependency): the slides
+     in presentation order, each slide's title apart from its text, the text in reading order (top to bottom, left to
+     right, grouped shapes by their group, a placeholder where its layout puts it) with bullet levels and numbering,
+     picture alt text, SmartArt as an outline and the speaker notes; its tables become tables like a sheet's (merged
+     cells filled in, a two-row header such as "Q1" over "Actual" and "Plan" read as "Q1 Actual", "Q1 Plan") and so
+     does each chart's data (its type, series, categories and values from the chart's cache, a percentage or date as
+     the chart shows it), each named by its slide ("S3 Costs by team"). Hidden slides are counted and skipped; footers,
+     dates and slide numbers are never content. A deck is checked by what is inside it, not only its name: an old
+     .ppt (or one renamed .pptx) is refused with "save it as .pptx", a password-protected one with "remove the
+     password", a damaged one with "save it again"; its parts are unzipped under a size guard (25 MB a part, 80 MB in
+     all), and a deck whose structure is too odd to follow is read as plain text from its slides.
    - **Check**: the Café data rule in code. Email addresses, phone, card and bank numbers, employee or account
      numbers, a column of people's names, the Café's own people and sensitive details hold the file: **It is masked /
      synthetic — continue** goes on (the flagged columns stay masked in everything the AI sees), **Remove** deletes
      it. Nothing in a held file reaches the AI. Made-up stand-ins ("Person 3", EMP-****1, hashes) are noted, not held.
    - **Profile**: by code: each column's type, how full, distinct values, ranges, the commonest values, shapes, a few
-     example rows (masked), and the issues the code sees; a document's words, headings and tables.
+     example rows (masked), and the issues the code sees; a document's words, headings and tables. A deck is both:
+     its tables and charts profiled like sheets, its slides like a document (the slide titles as its headings); its
+     text is checked for personal data like a document's, its tables column by column.
    - **Understand**: the AI, names coded, with the Café data guide (`skills/cafe-data.md`). It may first ask to look
      closer at up to three unclear columns (twice at most), then says what the file is, what every column means
      (and its codes), the rules it implies, how an output derives from the input, the features it serves, its issues

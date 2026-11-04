@@ -35,7 +35,7 @@ export function guessKind(name: string): DataKind {
   if (ext === 'eml' || ext === 'msg') return 'email';
   if (/rule|polic|lookup|mapping|reference|limits?|caps?\b|thresholds?/.test(n)) return 'rules';
   // A written-down process says so in its name even when it also says "today" (process-how-it-works-today.txt).
-  if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n) && ['pdf', 'docx', 'txt', 'md'].includes(ext)) return 'process';
+  if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n) && ['pdf', 'docx', 'pptx', 'txt', 'md'].includes(ext)) return 'process';
   if (/today|current|manual|as[-_ ]is|report/.test(n)) return 'today';
   if (/output|result|expected|flagged|target|to[-_ ]be/.test(n)) return 'output';
   if (/process|procedure|how[-_ ]to|guide|sop|steps/.test(n)) return 'process';
@@ -47,8 +47,11 @@ export function guessKind(name: string): DataKind {
 export const isDataKind = (k: unknown): k is DataKind => typeof k === 'string' && (DATA_KINDS as readonly string[]).includes(k);
 
 /** The file types the Data step reads. */
-export const DATA_EXTS = ['csv', 'tsv', 'xlsx', 'pdf', 'docx', 'txt', 'md', 'eml', 'msg', 'png', 'jpg', 'jpeg', 'gif', 'webp'] as const;
+export const DATA_EXTS = ['csv', 'tsv', 'xlsx', 'pdf', 'docx', 'pptx', 'txt', 'md', 'eml', 'msg', 'png', 'jpg', 'jpeg', 'gif', 'webp'] as const;
 export const DATA_MAX_BYTES = 10 * 1024 * 1024;
+/** A deck carries its pictures: it may be as big as the app takes in one drop. */
+export const DECK_MAX_BYTES = 20 * 1024 * 1024;
+export const dataMaxBytes = (ext: string) => (ext === 'pptx' ? DECK_MAX_BYTES : DATA_MAX_BYTES);
 export const DATA_FILES_MAX = 12;
 /** The idea folder's sub-folder holding the copies. */
 export const DATA_DIR = 'data-files';
@@ -78,7 +81,11 @@ export interface ColumnProfile {
   masked?: FindingKind;
 }
 export interface TableProfile { name: string; rows: number; columns: ColumnProfile[]; examples: string[][]; issues: string[] }
-export interface DocProfile { chars: number; words: number; lines: number; headings: string[]; tables: number; pages?: number; subject?: string; attachments?: string[]; readBy?: 'ai' }
+export interface DocProfile {
+  chars: number; words: number; lines: number; headings: string[]; tables: number; pages?: number; subject?: string; attachments?: string[]; readBy?: 'ai';
+  /** A deck: its slides (hidden ones skipped), charts, SmartArt, pictures and slides with notes; its headings are the slide titles. */
+  slides?: number; hiddenSlides?: number; charts?: number; smartArt?: number; pictures?: number; notes?: number;
+}
 
 export type FindingKind = 'email' | 'phone' | 'name' | 'id' | 'card' | 'bank' | 'sensitive';
 export const FINDING_WORDS: Record<FindingKind, string> = {
@@ -130,7 +137,7 @@ export interface DataFile {
   file: string;
   kind: DataKind;
   bytes: number;
-  type: 'table' | 'document' | 'email' | 'picture';
+  type: 'table' | 'document' | 'presentation' | 'email' | 'picture';
   at: string;
   steps: DataStepCard[];
   check?: DataCheck;
@@ -255,6 +262,12 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString
 
 /** "1,000 rows, 12 columns" or "3 pages, 820 words". */
 export function sizeWords(f: Pick<DataFile, 'tables' | 'doc'>): string {
+  if (f.doc?.slides !== undefined) {
+    const d = f.doc;
+    const rows = (f.tables ?? []).reduce((n, t) => n + t.rows, 0);
+    const parts = [d.tables ? plural(d.tables, 'table') : '', d.charts ? plural(d.charts, 'chart') : ''].filter(Boolean).join(' and ');
+    return [plural(d.slides ?? 0, 'slide'), parts ? `${parts} (${plural(rows, 'row')})` : '', plural(d.words, 'word')].filter(Boolean).join(', ');
+  }
   if (f.tables?.length) {
     const rows = f.tables.reduce((n, t) => n + t.rows, 0);
     const cols = f.tables.reduce((n, t) => n + t.columns.length, 0);

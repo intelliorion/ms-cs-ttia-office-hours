@@ -49,9 +49,9 @@ export function dataPhase(d: { files?: any[]; steps?: any[]; summary?: unknown; 
 }
 
 /** A file's columns as the card lists them: name, type and meaning (the operator's when they wrote one). */
-export function columnRows(f: any): { name: string; type: string; meaning: string; mine: boolean; codes?: string }[] {
+export function columnRows(f: any): { name: string; table: string; type: string; meaning: string; mine: boolean; codes?: string }[] {
   return columnsOf(f).map((c) => ({
-    name: c.name, type: c.type, meaning: meaningOf(f, c.name) ?? '', mine: Boolean(f.edits?.columns?.[c.name]),
+    name: c.name, table: c.table, type: c.type, meaning: meaningOf(f, c.name) ?? '', mine: Boolean(f.edits?.columns?.[c.name]),
     ...(f.understanding?.columns?.find((x: any) => x.name === c.name)?.codes ? { codes: f.understanding.columns.find((x: any) => x.name === c.name).codes } : {}),
   }));
 }

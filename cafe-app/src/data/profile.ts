@@ -124,8 +124,13 @@ export function profileDoc(r: ReadResult): DocProfile {
     if (cells >= 2 && cells === last) { run++; if (run === 2) tables++; } else run = 0;
     last = cells;
   }
+  const d = r.deck;
   return {
-    chars: text.length, words: text.split(/\s+/).filter(Boolean).length, lines: lines.filter((l) => l.trim()).length, headings, tables,
+    chars: text.length, words: text.split(/\s+/).filter(Boolean).length, lines: lines.filter((l) => l.trim()).length,
+    // A deck's headings are its slide titles; its tables are the ones on its slides.
+    headings: d ? lines.filter((l) => /^## Slide \d+: /.test(l)).map((l) => maskText(l.replace(/^## /, '')).slice(0, 72)).slice(0, 40) : headings,
+    tables: d ? d.tables : tables,
+    ...(d ? { slides: d.slides - d.hidden, ...(d.hidden ? { hiddenSlides: d.hidden } : {}), ...(d.charts ? { charts: d.charts } : {}), ...(d.smartArt ? { smartArt: d.smartArt } : {}), ...(d.pictures ? { pictures: d.pictures } : {}), ...(d.notes ? { notes: d.notes } : {}) } : {}),
     ...(r.meta.pages ? { pages: r.meta.pages } : {}), ...(r.meta.subject ? { subject: maskText(r.meta.subject) } : {}),
     ...(r.meta.attachments?.length ? { attachments: r.meta.attachments.slice(0, 10) } : {}), ...(r.meta.readBy ? { readBy: r.meta.readBy } : {}),
   };

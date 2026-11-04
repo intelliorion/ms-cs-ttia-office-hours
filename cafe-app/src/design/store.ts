@@ -240,9 +240,10 @@ export function renderDataMd(d: DataState): string[] {
     if (f.check?.masked.length) out.push(`Masked (never shown to the AI): ${f.check.masked.map((c) => `\`${c}\``).join(', ')}.`, '');
     const cols = columnsOf(f);
     if (cols.length) {
+      const several = (f.tables?.length ?? 0) > 1;
       for (const c of cols.slice(0, 60)) {
         const codes = f.understanding?.columns.find((x) => x.name === c.name)?.codes;
-        out.push(`- \`${c.name.replace(/`/g, "'")}\` (${c.type}): ${stop(mdLine(meaningOf(f, c.name)) || '(meaning not said)', !!codes)}${codes ? ` Codes: ${mdLine(codes)}` : ''}`);
+        out.push(`- \`${c.name.replace(/`/g, "'")}\` (${c.type}${several && c.table ? `, in ${mdLine(c.table)}` : ''}): ${stop(mdLine(meaningOf(f, c.name)) || '(meaning not said)', !!codes)}${codes ? ` Codes: ${mdLine(codes)}` : ''}`);
       }
       out.push('');
     }

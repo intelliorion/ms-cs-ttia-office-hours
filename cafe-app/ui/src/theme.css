@@ -424,6 +424,7 @@ html,body,#root{height:100%;margin:0;background:var(--bg);color:var(--text);font
 .da-mine{font-size:11.5px;color:var(--cream)}
 .da-cols code,.da-list code,.da-edit-col code{font-family:var(--mono);font-size:12.5px;color:var(--cream)}
 .da-type{font-size:11px;color:var(--muted);margin-left:4px}
+.da-table{font-size:11px;margin-left:6px}
 .card-list.da-cols li{display:block}.da-cols .card-k{display:block}.da-cols .card-v{display:block;color:var(--text)}
 .da-k{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:2px 0}
 .da-k.warn{color:var(--amber)}

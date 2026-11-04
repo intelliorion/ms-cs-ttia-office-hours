@@ -128,7 +128,7 @@ function FileCard({ file, count, off, aiOff, readOnly, onKind, onRelease, onRemo
             {cols.length > 0 && (
               <ul className="card-list da-cols" aria-label={`Columns of ${file.name}`}>
                 {cols.map((c) => (
-                  <li key={`${c.name}`}><span className="card-k"><code>{c.name}</code> <span className="da-type">{c.type}</span></span>
+                  <li key={`${c.table}\u0001${c.name}`}><span className="card-k"><code>{c.name}</code> <span className="da-type">{c.type}</span>{(file.tables?.length ?? 0) > 1 && c.table && <span className="hint da-table"> {c.table}</span>}</span>
                     <span className="card-v">{c.meaning || <span className="hint">(meaning not said)</span>}{c.mine && <span className="da-mine"> (yours)</span>}{c.codes && <span className="hint">{c.meaning && !/[.!?:)]$/.test(c.meaning) ? '.' : ''} Codes: {c.codes}</span>}</span></li>
                 ))}
               </ul>
@@ -238,7 +238,7 @@ export function DataSection({ idea, design, busy, aiWorking, noAi, call, onSendQ
         onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); if (!off) stage(e.dataTransfer?.files); }}>
         <div className="dz-t">{over ? 'Let go to add' : 'Drop data files here'}</div>
-        <div className="hint">CSV, Excel, PDF, Word, text, email (.eml, .msg) or a picture of a report; up to 10 MB each. Each is copied into the idea folder and checked for personal data before anything else.</div>
+        <div className="hint">CSV, Excel, PDF, Word, PowerPoint (.pptx: its slides, tables, charts and notes), text, email (.eml, .msg) or a picture of a report; up to 10 MB each (a deck up to 20 MB). Each is copied into the idea folder and checked for personal data before anything else.</div>
         <input ref={input} type="file" multiple accept={ACCEPT} data-testid="data-file-input" aria-label="Choose data files" disabled={off}
           onChange={(e) => { stage(e.target.files); e.target.value = ''; }} />
       </div>

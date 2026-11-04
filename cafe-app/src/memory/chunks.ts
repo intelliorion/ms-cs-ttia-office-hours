@@ -135,9 +135,12 @@ export async function chunkIdea(root: string, idea: Idea, dir: string): Promise<
     const data = dataOf(design.data);
     for (const f of data?.files ?? []) {
       const u = f.understanding;
+      const several = (f.tables?.length ?? 0) > 1;
       const lines = [
         `File: ${clean(f.name)}${whatOf(f) ? `. ${clean(whatOf(f))}` : ''}`,
-        ...(u?.columns ?? []).map((c) => `Column ${clean(c.name)}: ${clean(meaningOf(f, c.name) ?? c.meaning)}${c.codes ? ` (codes: ${clean(c.codes)})` : ''}`),
+        // A deck's slide titles say what it covers; its tables and charts are named by their slides.
+        ...(f.doc?.slides !== undefined && f.doc.headings.length ? [`Slides: ${f.doc.headings.map(clean).join('; ')}`] : []),
+        ...(u?.columns ?? []).map((c) => `Column ${clean(c.name)}${several && c.table ? ` (${clean(c.table)})` : ''}: ${clean(meaningOf(f, c.name) ?? c.meaning)}${c.codes ? ` (codes: ${clean(c.codes)})` : ''}`),
         ...(u?.rules ?? []).map((r) => `Rule: ${clean(r.rule)}`),
         ...(u?.points ?? []).map((p) => `Point: ${clean(p)}`),
         ...(u?.derivations ?? []).map((d) => `Output ${clean(d.output)} from ${d.from.join(', ')}: ${clean(d.how)}`),

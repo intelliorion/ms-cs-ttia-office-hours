@@ -12,7 +12,7 @@ import { useStore } from '../state/store';
 import { DataSection, DataCard, uploadNotice } from './DataSection';
 import type { DesignCall } from './DesignSection';
 import { dataGate } from './stageGate';
-import { columnRows, currentCard, dataPhase, glyphOf, mergeFiles, stepCards } from './dataHelpers';
+import { ACCEPT, columnRows, currentCard, dataPhase, glyphOf, mergeFiles, stepCards } from './dataHelpers';
 import { pointRows } from '../popouts/designPack';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,6 +67,27 @@ describe('the Data step\'s small rules', () => {
     expect(dataPhase({ files: [FILE], summary: {} }).word).toBe('complete, not confirmed');
     expect(dataPhase({ files: [FILE], confirmedAt: '2026-10-20' }).word).toBe('confirmed 2026-10-20');
     expect(columnRows({ ...FILE, edits: { columns: { claim_id: 'Mine' } } })[0]).toMatchObject({ name: 'claim_id', meaning: 'Mine', mine: true });
+  });
+  it('a PowerPoint deck: accepted, its tables\' columns listed each with its table, a shared column name twice', async () => {
+    expect(ACCEPT.split(',')).toContain('.pptx');
+    const col = (name: string, type = 'number') => ({ name, type, filled: 3, emptyPct: 0, distinct: 3 });
+    const deck = {
+      ...FILE, id: 'f3', name: 'review.pptx', file: 'f3-review.pptx', kind: 'today', type: 'presentation',
+      tables: [{ ...TABLE, name: 'S2 Costs by team', columns: [col('Category', 'category'), col('Q1')] }, { ...TABLE, name: 'S3 Claims by month', columns: [col('Category', 'category'), col('2026')] }],
+      doc: { chars: 400, words: 80, lines: 12, headings: ['Slide 1: Review', 'Slide 2: Costs by team'], tables: 1, slides: 3, charts: 1 },
+      understanding: { ...FILE.understanding, columns: [{ name: 'Category', table: 'S2 Costs by team', meaning: 'The team' }] },
+    };
+    expect(columnRows(deck).map((c) => `${c.table}/${c.name}`)).toEqual(['S2 Costs by team/Category', 'S2 Costs by team/Q1', 'S3 Claims by month/Category', 'S3 Claims by month/2026']);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await mount({ files: [deck], steps: [] });
+    expect(el.textContent).toContain('PowerPoint (.pptx');
+    expect(el.textContent).toContain('3 slides, 1 table and 1 chart (80 rows), 80 words');
+    const items = [...el.querySelectorAll('.da-cols li')].map((li) => li.textContent);
+    expect(items).toHaveLength(4);
+    expect(items[2]).toContain('S3 Claims by month');
+    // No two rows share a React key (the same column name in two tables).
+    expect(errors.mock.calls.some((c) => /same key/.test(String(c[0])))).toBe(false);
+    errors.mockRestore();
   });
   it('the pack\'s build points read the confirmed data after the answers', () => {
     const rows = pointRows({ steps: [], data: { confirmedAt: '2026-10-20', points: { 'input-shape': 'expenses.csv: claim_id' } } }, 'build');

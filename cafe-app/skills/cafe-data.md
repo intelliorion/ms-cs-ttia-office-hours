@@ -9,7 +9,10 @@ it feeds the features, the tool, the design, the kits and the roadshow, so it mu
 
 - One file at a time, already read and checked by the app: its kind (as the operator chose it), and for a table its
   profile (columns, types, how full, distinct values, ranges, the commonest values, the value shapes and a few example
-  rows); for a document its text. Values the app found personal are masked (`<email>`, `<phone>`, `<name>`, `<id>`):
+  rows); for a document its text. A presentation (.pptx) gives both: its tables and its charts' data as tables, each
+  named by its slide ("S3 Costs by team"), and its slides' text in order (titles, bullets, where each table or chart
+  sits, picture descriptions, SmartArt, speaker notes). Read each table with the slide around it: the title and the
+  notes often say what the numbers are. Values the app found personal are masked (`<email>`, `<phone>`, `<name>`, `<id>`):
   never guess what they hide, and never ask for them.
 - The other files the team gave, by name, kind and columns, so you can see how they fit together.
 - The idea and its feature list, when there is one.

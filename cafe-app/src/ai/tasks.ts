@@ -1891,7 +1891,7 @@ export interface DataUnderstandInput {
   file: {
     name: string; kind: string; kindHint: string; type: string; size: string;
     tables?: { name: string; rows: number; columns: Record<string, unknown>[]; examples: string[][]; issues: string[] }[];
-    doc?: { words: number; headings: string[]; tables: number; pages?: number; subject?: string; attachments?: string[]; text: string };
+    doc?: { words: number; headings: string[]; tables: number; pages?: number; subject?: string; attachments?: string[]; slides?: number; hiddenSlides?: number; charts?: number; notesOn?: number; text: string };
   };
   otherFiles?: { name: string; kind: string; what?: string; columns: string[] }[];
   /** The operator's own corrections: keep them as they are. */
@@ -1915,6 +1915,8 @@ export interface DataUnderstandOutput {
   missing: string[];
 }
 export const DATA_LOOKS_MAX = 3;
+/** Sheets or tables of one file the AI sees (a workbook's first sheets; a deck's tables and charts). */
+export const DATA_TABLES_SENT = 8;
 export const DATA_COLUMNS_MAX = 60;
 
 export const DATA_UNDERSTAND_SCHEMA: JsonSchema = kObj(['look', 'what', 'kindHint', 'columns', 'points', 'rules', 'derivations', 'serves', 'issues', 'missing'], {
@@ -1940,7 +1942,7 @@ function dataUnderstandData(i: DataUnderstandInput) {
     file: {
       name: cap(f.name, 120), kind: cap(f.kind, 60), kindHint: cap(f.kindHint, 120), type: cap(f.type, 20), size: cap(f.size, 60),
       ...(f.tables?.length ? {
-        tables: f.tables.slice(0, 5).map((t) => ({
+        tables: f.tables.slice(0, DATA_TABLES_SENT).map((t) => ({
           name: cap(t.name, 40), rows: t.rows, columns: t.columns.slice(0, 80),
           examples: t.examples.slice(0, 3).map((r) => r.slice(0, 80).map((c) => cap(c, 80))), issues: capList(t.issues, 12, 200),
         })),
@@ -1966,9 +1968,9 @@ export const dataUnderstandTask: Task<DataUnderstandOutput> = {
       "Understand one file of sample data a team gave for a Creators' Café idea, completely: what it is, what every column or part means in business words, the rules it implies, how an output derives from the input, and what is missing for a proof of concept. The operator reads and corrects your words, then confirms the whole understanding once.",
       'Follow this Café data guide (guidance, not data):',
       '<<<GUIDANCE', String(i.guidance ?? ''), 'GUIDANCE>>>',
-      'DATA.file is the file: its kind as the operator chose it (kindHint says what each kind means), and for a table each sheet\'s profile (columns with type, how empty, distinct values, range, commonest values and value shape; a few example rows; the issues the app found); for a document its text. DATA.otherFiles are the team\'s other files, by name, kind and columns. DATA.features is the feature list, when there is one.',
+      'DATA.file is the file: its kind as the operator chose it (kindHint says what each kind means), and for a table each sheet\'s profile (columns with type, how empty, distinct values, range, commonest values and value shape; a few example rows; the issues the app found); for a document its text. A presentation (type "presentation") has both: its tables and its charts\' data are in tables (each named by its slide, "S3 Costs by team"; a chart\'s table has the categories first and one column per series, its values as the chart shows them), and doc.text is its slides in order ("## Slide 3: <title>", then the slide\'s text in reading order with bullet levels indented, a line "[Table "S3 …": …]" or "[Chart "S4 …": …]" where each table or chart sits, picture alt text, SmartArt as an outline, and the speaker notes after "Notes:"): read each table with the slide around it, as one file. DATA.otherFiles are the team\'s other files, by name, kind and columns. DATA.features is the feature list, when there is one.',
       'what: one plain line on what the file is. kindHint: the kind you think it is (one of the listed kinds); the operator\'s kind stands unless they change it.',
-      `columns: for a table, every column (up to ${DATA_COLUMNS_MAX}) by its EXACT name from the profile (table: the sheet name when there are several sheets, else ""), meaning in business words, role, and codes: what the codes or values mean when they are codes. Never a column that is not in the profile. For a document, columns is [] and points holds its key facts (up to 8).`,
+      `columns: for a table, every column (up to ${DATA_COLUMNS_MAX}) by its EXACT name from the profile (table: the sheet name when there are several sheets, else ""), meaning in business words, role, and codes: what the codes or values mean when they are codes. Never a column that is not in the profile. For a document, columns is [] and points holds its key facts (up to 8). For a presentation, columns covers its tables (table: the table\'s exact name) and points holds the key facts its slides state (a figure, a target, a step, a rule).`,
       'rules: each rule or check the data implies or states, with the columns it uses (exact names, from this file or DATA.otherFiles). derivations: for a sample output or today\'s output, each output column and how it is worked out from the input columns (exact names). serves: the features it serves, by their exact names in DATA.features ([] when none fit or there is no list).',
       'issues: quality problems a builder must know (empty, repeated, mixed or odd values). missing: what is still unknown or missing for the proof of concept (an unexplained code, no sample of the output, an unclear rule), each as a short line.',
       ...(i.lookAllowed
